@@ -26,7 +26,7 @@ class LockSetupMixin:
         # contended, and off the cores the camera pump needs. The two share
         # the chip through HailoRT's scheduler (`detection/hailo.py`); in the
         # composed graph, 17.65 ms p50 in-graph over 378 calls on archive
-        # footage (tools/composed_lock_harness.py).
+        # footage (tools/studies/composed_lock_harness.py).
         #
         # Cross-backend equivalence checked before flipping this: 875/888/878
         # of 1024 keypoints match between the ONNX and HEF descriptors, so a
@@ -50,7 +50,7 @@ class LockSetupMixin:
         # its sparse maths.
         self.declare_parameter('anchor_semi_dense', False)
         # A bank built BEFORE the run, from practice footage or stills:
-        # `tools/build_practice_bank.py`. Measured 2026-09-24 -- references
+        # `tools/pool/build_practice_bank.py`. Measured 2026-09-24 -- references
         # from one run clear the trust bar on 92-100 % of frames of a DIFFERENT
         # run of the same prop, so the anchor need not wait for a confident
         # live detection to have something to match against. Which matters
@@ -312,8 +312,7 @@ class LockSetupMixin:
                     continue
                 self._cls_pinned = new
                 if new:
-                    self._cls = new
-                    self._retarget_width()
+                    self._switch_target(new)
                     self.get_logger().info(
                         f'[LOCK ] target_class pinned to {new!r}')
                 else:
@@ -343,10 +342,36 @@ class LockSetupMixin:
         names = [n.strip() for n in str(msg.data).split(',') if n.strip()]
         if len(names) != 1 or names[0] == self._cls:
             return
-        self._cls = names[0]
-        self._retarget_width()
+        self._switch_target(names[0])
         self.get_logger().info(
             f'[LOCK ] following {self._cls!r} (from classes_filter)')
+
+    def _switch_target(self, new: str) -> None:
+        """Aim at another class, and forget everything about the old one (#75).
+
+        Changing `_cls` alone left the old detection box, the follower's
+        points, the anchor's pose and label and the world memory in place,
+        so until a detection of the new class arrived the ladder kept
+        publishing the OLD target, now read against the new class's width.
+        The anchor's bank keeps its references: they are labelled by class,
+        and the search is restricted to the new one.
+        """
+        with self._lock:
+            self._gen += 1
+            self._cls = new
+            self._forget_target_locked()
+        self._retarget_width()
+
+    def _forget_target_locked(self) -> None:
+        """Drop all per-target state. Call with `self._lock` held."""
+        self._det_box, self._det_conf, self._det_cls = None, 0.0, ''
+        self._det_t, self._det_header = 0.0, None
+        if self._follower is not None:
+            self._follower.drop()
+        self._anchor_pose, self._anchor_header, self._anchor_label = None, None, ''
+        self._anchor_inliers, self._anchor_best = 0, None
+        if self._world is not None:
+            self._world = type(self._world)()
 
     def _retarget_width(self):
         """Re-resolve the committed width for the class we now follow.

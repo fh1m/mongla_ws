@@ -512,6 +512,8 @@ class SetupMixin:
         self.create_timer(0.2, self._stamp_executor_alive,
                           callback_group=self._liveness_group)
         self._mission = {'attached': False, 'name': '', 'seen': 0.0}
+        # Undecided until the board's first heartbeat says armed or not (#98).
+        self._boot_latch = 'pending'
         from std_msgs.msg import String as _String
         self.create_subscription(_String, '/mongla/mission_alive',
                                  self._on_mission_alive, 10,

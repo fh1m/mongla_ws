@@ -39,7 +39,7 @@ working, and nobody could have rebuilt it:
 |---|---|---|
 | `~/.zshrc` sourced nothing; only `~/.bashrc` sourced ROS | the login shell is **zsh**, so every ssh terminal started without ROS | `kutum/env.sh`, sourced from both rc files, picks the right ROS setup file per shell |
 | `hailo-web.service` restarted every 3 s, forever | its program had been deleted, and its *stop* command kills whatever holds `/dev/video0` and `/dev/hailo0` | `setup.sh --system` disables any unit whose program is gone and files it in the attic; the doctor FAILs on one |
-| `~/mongla_ws` was a hand-rsynced copy | it still carried a deleted package, old tools and agent tooling; nothing said which commit it was | `deploy.sh` is the only way in: clean sync, clean build, and a stamp naming the commit |
+| `~/mongla_ws` was a hand-rsynced copy | it still carried a deleted package, old tools and agent tooling; nothing said which commit it was | `deploy.sh` is the only way in: a new release per deploy, built from clean beside the live one, switched atomically, with a manifest naming the commit, models and packages (#64) |
 | HailoRT, its driver and its firmware were built by hand | from public source at v4.24.0, but nothing recorded how | `setup.sh --system` step 2, one version pinned in one place |
 | The compiled XFeat artifacts existed only on the vehicle | one dead card and they were gone | `backup.sh` pulls them, and everything else made on the vehicle, to the dev box |
 | `wpasupplicant` had been removed | Wi-Fi could not join anything | `setup.sh --system` installs it and writes the network you name; `mongla.local` answers on Wi-Fi and Ethernet |
@@ -54,7 +54,7 @@ Everything Kutum does is one of five files. Each one is safe to run again.
 |---|---|---|
 | `sudo kutum/setup.sh --system` | on the vehicle, once per machine | the machine: apt packages, the Hailo driver, firmware and runtime, udev and systemd files, passwordless sudo, then the user half |
 | `kutum/setup.sh` | on the vehicle | your account only: pinned Python packages, the HailoRT bindings, the rc-file line. No sudo |
-| `kutum/deploy.sh fh1m@mongla.local` | on the dev box, after every change | the workspace: sync, doctor, clean build, stamp, then the vehicle's own gate |
+| `kutum/deploy.sh fh1m@mongla.local` | on the dev box, after every change | the workspace: refuse if the stack runs or the board is armed, stage a release, doctor, build, switch, then the vehicle's own gate. `--rollback`, `--list` |
 | `kutum/doctor.sh` | either (`ssh fh1m@mongla.local bash -s < kutum/doctor.sh`) | nothing. It reads every layer back and exits 1 on a FAIL |
 | `kutum/backup.sh fh1m@mongla.local` | on the dev box | nothing on the vehicle. Pulls what only the vehicle has |
 
@@ -97,7 +97,9 @@ After the tidy, everything in `~` on the vehicle is one of these. The names the 
 are marked; moving one of those is a code change.
 
 ```
-~/mongla_ws/          the workspace. Only deploy.sh writes here.       (read by env.sh)
+~/mongla_ws/          a symlink to the active release                  (read by env.sh)
+~/mongla/releases/    one built tree per deploy; only deploy.sh writes  (kutum/release.sh)
+~/mongla/previous     the release --rollback returns to
 ~/mongla_runs/        one folder per run: bags, logs, scorecards        (MONGLA_RUN_DIR default)
 ~/hailo_models/       compiled artifacts kept outside the workspace,
                       so a clean build cannot delete them               (MONGLA_HEF_DIR)

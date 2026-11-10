@@ -169,6 +169,7 @@ COMMANDS = {
     #
     #   final_value codes: 0=ALIGNED/REACHED 1=LOST 2=TIMEOUT
     #                      3=NO_CAMERA 4=ABORTED 5=DRIFTED
+    #                      pass-through move: 6=ESTIMATED_CROSSING 7=COMMIT_UNVERIFIED
     #
     # gain = hard max-speed cap (% thrust); the P-controller output is
     # clamped to it so the AUV never exceeds it on any axis.

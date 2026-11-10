@@ -107,3 +107,68 @@ def test_the_doctor_runs_after_the_sync():
     first; gating before the sync made a fresh machine undeployable."""
     deploy = (KUTUM / 'deploy.sh').read_text()
     assert deploy.index('rsync -az') < deploy.index('kutum/doctor.sh" ||')
+
+
+def _verdict(doctor_rc: int, reboot: str):
+    """Run setup.sh's own `verdict` function, lifted out of the file."""
+    fn = re.search(r'^verdict\(\) \{\n.*?^\}\n', (KUTUM / 'setup.sh').read_text(),
+                   flags=re.S | re.M)
+    assert fn, 'setup.sh no longer defines verdict()'
+    return subprocess.run(['bash', '-c', fn.group(0) + f'verdict {doctor_rc} "{reboot}"'],
+                          capture_output=True, text=True)
+
+
+@pytest.mark.parametrize('rc,reboot,want', [
+    (0, '', 0),
+    (0, ' rtc-charging', 0),
+    (1, '', 1),
+    (1, ' netplan', 3),
+])
+def test_setup_returns_the_doctors_verdict(rc, reboot, want):
+    """Issue #69: `--system` swallowed a doctor FAIL and exited 0, so a machine
+    that could not run the stack read as provisioned. A FAIL is never 0; one
+    that a pending reboot may explain gets its own code and an instruction."""
+    r = _verdict(rc, reboot)
+    assert r.returncode == want, r.stdout + r.stderr
+    if want == 3:
+        assert 'Reboot, then run kutum/doctor.sh' in r.stderr
+
+
+def test_setup_hands_the_doctor_result_to_verdict():
+    """The function is only half of it: the call site must not discard the code."""
+    s = (KUTUM / 'setup.sh').read_text()
+    assert 'doctor.sh" || true' not in s
+    assert 'doctor.sh" || rc=$?' in s and 'verdict "$rc" "$REBOOT"' in s
+
+
+# Root units that listen on nothing: each one a oneshot that sets something and
+# exits. Anything else Kutum installs is a service, and runs confined (#67).
+_ROOT_ONESHOTS = {'cpu-performance.service'}
+_CONFINED = ('NoNewPrivileges=yes', 'ProtectSystem=strict', 'PrivateTmp=yes')
+
+
+def _unconfined(unit: Path) -> list:
+    text = unit.read_text()
+    if unit.name in _ROOT_ONESHOTS:
+        return [] if 'Type=oneshot' in text else ['not a oneshot']
+    user = re.search(r'^User=(\S+)', text, flags=re.M)
+    # Its own user: not root, and not the operator, whose sudo needs no password.
+    bad = [] if user and user.group(1) not in ('root', 'fh1m') else ['no own User=']
+    return bad + [k for k in _CONFINED if k not in text]
+
+
+def test_every_kutum_service_is_confined(tmp_path):
+    """The operator keeps passwordless sudo (#67, owner's call), so a service
+    that ran as the operator or as root would hand that to whoever compromised
+    it. Every unit Kutum installs is a known root oneshot, or confined."""
+    units = sorted((KUTUM / 'system/systemd').glob('*.service'))
+    assert units
+    bad = {u.name: _unconfined(u) for u in units if _unconfined(u)}
+    assert not bad, bad
+    # Injection: a deck service as the operator, unhardened, is refused.
+    rogue = tmp_path / 'deck.service'
+    rogue.write_text('[Service]\nUser=deck\nExecStart=/bin/true\n')
+    assert _unconfined(rogue) == [*_CONFINED]
+    for who in ('', 'User=root\n', 'User=fh1m\n'):
+        rogue.write_text(f'[Service]\n{who}ExecStart=/bin/true\n')
+        assert 'no own User=' in _unconfined(rogue), who

@@ -137,8 +137,8 @@ Convert to a playable `.mp4` for offline use (optional — ROS bag replay is
 also supported, see below):
 
 ```bash
-# Install ros2_video_converter or use ffmpeg on the bag's extracted frames.
-# Simplest: use the ros2bag → mp4 script in scripts/ (if present).
+# No converter ships with the stack: replay the bag itself (option B below),
+# or extract the frames and join them with ffmpeg.
 ```
 
 ### 2. Replay through the pipeline

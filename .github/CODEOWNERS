@@ -1,0 +1,21 @@
+# Who answers for which paths. Review by a code owner is NOT required by
+# branch protection: this is a one-maintainer repository, and a required
+# review nobody else can give would block every merge (#96). The file marks
+# the paths where a change can arm, move or keep the vehicle armed, or
+# change what CI checks, so a second reviewer, when there is one, knows
+# where to look first.
+
+*                         @fh1m
+
+# The board link, the safety latches and the verbs.
+/src/mongla_control/      @fh1m
+/src/mongla_manager/      @fh1m
+
+# The vehicle's computer: services, sudo, deploy.
+/kutum/                   @fh1m
+
+# What CI and the merge gate check.
+/.github/                 @fh1m
+/tools/ci/ci_contract.py     @fh1m
+/tools/ci/provenance_check.py @fh1m
+/tools/ci/run_repo_integrity.py @fh1m

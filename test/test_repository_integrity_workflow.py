@@ -1,141 +1,193 @@
-"""The mandatory fast CI gate must actually run the existing anti-drift guards.
+"""The two required checks must run what they claim, and nothing may skip them.
 
-The project has extensive orphan/documentation checks but until this workflow
-they were not required to execute on pull requests. A guard without a real
-GitHub Actions caller is itself an unintegrated capability. These tests examine
-the parsed workflow (not a comment or README promise), then inject regressions.
+`tools/ci/ci_contract.py` is an allowlist for both required workflows, and
+`tools/ci/run_repo_integrity.py` is the one list of guards. These tests run the
+real contract against the real workflows, then against each way of quietly
+disabling a gate that #93 named: every mutation must be refused.
 
-Full ROS Jazzy/Humble build/integration remains a separate requirement, #65.
+Full ROS Jazzy/Humble build and test are a separate requirement, #65.
 """
 from __future__ import annotations
 
-import shlex
+import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / ".github/workflows/repository-integrity.yml"
-
-# Real source/documentary entrypoint tests. If any test file moves, update this
-# contract and CI in the SAME change; a missing test cannot silently disappear.
-REQUIRED_TESTS = frozenset({
-    "test/test_repository_integrity_workflow.py",
-    "test/test_wiki_edits_pass_pr_gate.py",
-    "test/test_claims_say_where_they_came_from.py",
-    "test/test_no_capability_is_unreachable_anywhere.py",
-    "test/test_the_retired_stack_stays_retired.py",
-    "test/test_package_xml_declares_imports.py",
-    "test/test_tools_point_at_files_that_exist.py",
-    "src/mongla_control/test/test_doc_drift.py",
-    "src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py",
-    "src/mongla_vision/test/test_no_function_is_built_and_uncalled.py",
-    "src/mongla_manager/test/test_docs_contract.py",
-    "src/mongla_manager/test/test_ledger_claims.py",
-})
 
 
-def contract_errors(workflow_text: str) -> list[str]:
-    """Validate the actual YAML job and command tokens, never comments."""
-    try:
-        doc = yaml.load(workflow_text, Loader=yaml.BaseLoader)
-    except yaml.YAMLError as exc:
-        return [f"invalid workflow YAML: {exc}"]
-    if not isinstance(doc, dict):
-        return ["workflow must be a mapping"]
-    errors = []
-    triggers = doc.get("on")
-    if not isinstance(triggers, dict):
-        triggers = {}
-    for trigger in ("pull_request", "push"):
-        if trigger not in triggers:
-            errors.append(f"missing required event {trigger!r}")
-    if doc.get("permissions", {}).get("contents") != "read":
-        errors.append("workflow requires permissions: contents: read")
-    job = doc.get("jobs", {}).get("source-integrity")
-    if not isinstance(job, dict):
-        return errors + ["missing source-integrity job"]
-    if job.get("continue-on-error") == "true":
-        errors.append("job failure must not be ignored")
-    if job.get("if") in ("false", "${{ false }}"):
-        errors.append("job must not be disabled")
-    steps = job.get("steps", [])
-    if not isinstance(steps, list):
-        return errors + ["source-integrity must have steps"]
-    tests = set()
-    saw_pytest = False
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        if step.get("continue-on-error") == "true":
-            errors.append("step may not ignore failures")
-        shell = str(step.get("run", ""))
-        if not shell:
-            continue
-        if "|| true" in shell or "|| :" in shell:
-            errors.append("shell command may not convert test failure to success")
-        try:
-            tokens = shlex.split(shell, comments=True)
-        except ValueError as exc:
-            errors.append(f"invalid shell syntax: {exc}")
-            continue
-        if "-m" in tokens and "pytest" in tokens:
-            saw_pytest = True
-            tests.update(t for t in tokens if t.endswith(".py"))
-            if "--continue-on-collection-errors" in tokens:
-                errors.append("collection errors must fail")
-    if not saw_pytest:
-        errors.append("no executable python -m pytest command")
-    for rel in sorted(REQUIRED_TESTS - tests):
-        errors.append(f"required guard absent from pytest invocation: {rel}")
-    return errors
+def _load(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / 'tools' / 'ci' / f'{name}.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
-def test_actual_workflow_really_executes_every_guard():
-    assert WORKFLOW.is_file()
-    assert not contract_errors(WORKFLOW.read_text()), "\n".join(
-        contract_errors(WORKFLOW.read_text())
-    )
-    missing = [p for p in REQUIRED_TESTS if not (ROOT / p).is_file()]
-    assert not missing, f"guard removed from repository: {sorted(missing)}"
+contract = _load('ci_contract')
+runner = _load('run_repo_integrity')
+
+INTEGRITY = (ROOT / contract.INTEGRITY).read_text()
+PROVENANCE = (ROOT / contract.PROVENANCE).read_text()
+GATE_STEP = '      - name: Run the integrity guards\n'
+GATE_RUN = '        run: python tools/ci/run_repo_integrity.py\n'
 
 
-def test_injection_a_removed_orphan_guard_makes_ci_contract_fail():
-    original = WORKFLOW.read_text()
-    bad = original.replace(
-        "            test/test_no_capability_is_unreachable_anywhere.py \\\n", "", 1
-    )
-    assert bad != original
-    assert any("test_no_capability_is_unreachable_anywhere.py" in e
-               for e in contract_errors(bad))
+def test_the_real_workflows_keep_the_contract():
+    assert contract.errors(ROOT) == []
+    assert subprocess.run([sys.executable, str(ROOT / 'tools/ci/ci_contract.py')],
+                          capture_output=True).returncode == 0
 
 
-def test_injection_a_disabled_pull_request_trigger_is_detected():
-    original = WORKFLOW.read_text()
-    bad = original.replace("  pull_request:\n", "  workflow_dispatch:\n", 1)
-    assert bad != original
-    assert any("pull_request" in e for e in contract_errors(bad))
+def test_every_guard_the_runner_names_exists_and_includes_these_checks():
+    assert all((ROOT / g).is_file() for g in runner.GUARDS)
+    assert len(set(runner.GUARDS)) == len(runner.GUARDS)
+    for me in ('test/test_repository_integrity_workflow.py', 'test/test_provenance_check.py'):
+        assert me in runner.GUARDS
 
 
-def test_injection_a_suppressed_test_failure_is_detected():
-    original = WORKFLOW.read_text()
-    bad = original.replace(
-        "      - name: Run code reachability, docs, provenance and CI-contract guards\n",
-        "      - name: Run code reachability, docs, provenance and CI-contract guards\n"
-        "        continue-on-error: true\n", 1
-    )
-    assert bad != original
-    assert any("ignore failures" in e for e in contract_errors(bad))
+def _sub(text, old, new):
+    assert old in text, f'fixture drifted: {old!r}'
+    return text.replace(old, new, 1)
+
+
+INTEGRITY_MUTATIONS = {
+    'job if, false by expression':
+        lambda t: _sub(t, '    runs-on: ubuntu-24.04\n',
+                       '    if: ${{ always() && false }}\n    runs-on: ubuntu-24.04\n'),
+    'step if':
+        lambda t: _sub(t, GATE_RUN, GATE_RUN + "        if: github.actor == 'nobody'\n"),
+    'echo instead of running':
+        lambda t: _sub(t, GATE_RUN, '        run: echo python -m pytest test/x.py\n'),
+    'or true':
+        lambda t: _sub(t, GATE_RUN, '        run: python tools/ci/run_repo_integrity.py || true\n'),
+    'chained command':
+        lambda t: _sub(t, GATE_RUN, '        run: python tools/ci/run_repo_integrity.py; exit 0\n'),
+    'job continue-on-error':
+        lambda t: _sub(t, '    timeout-minutes: 15\n',
+                       '    timeout-minutes: 15\n    continue-on-error: true\n'),
+    'step continue-on-error':
+        lambda t: _sub(t, GATE_RUN, GATE_RUN + '        continue-on-error: true\n'),
+    'gate step removed':
+        lambda t: _sub(t, GATE_STEP + GATE_RUN, ''),
+    'pull_request trigger removed':
+        lambda t: _sub(t, '  pull_request:\n', '  workflow_dispatch:\n'),
+    'path filter hides changes':
+        lambda t: _sub(t, '    types: [opened, synchronize, reopened, ready_for_review]\n',
+                       '    types: [opened, synchronize, reopened, ready_for_review]\n'
+                       "    paths: ['docs/**']\n"),
+    'push filter widened':
+        lambda t: _sub(t, '    branches: [main]\n', "    branches: [main]\n    paths-ignore: ['src/**']\n"),
+    'job id renamed':
+        lambda t: _sub(t, '  source-integrity:\n', '  source-integrity-old:\n'),
+    'job name renamed':
+        lambda t: _sub(t, '    name: Source integrity / active-code and documentation\n',
+                       '    name: Source integrity\n'),
+    'second job':
+        lambda t: t + '  other:\n    runs-on: ubuntu-24.04\n    steps: []\n',
+    'PYTEST_ADDOPTS on the gate':
+        lambda t: _sub(t, GATE_RUN, GATE_RUN + "        env:\n          PYTEST_ADDOPTS: '-k nothing'\n"),
+    'workflow-level env':
+        lambda t: _sub(t, 'permissions:\n', "env:\n  PYTEST_ADDOPTS: '-k nothing'\npermissions:\n"),
+    'checkout of another commit':
+        lambda t: _sub(t, '          persist-credentials: false\n',
+                       '          persist-credentials: false\n          ref: main\n'),
+    'unknown action replaces the gate':
+        lambda t: _sub(t, GATE_RUN, '        uses: someone/always-green@v1\n'),
+    'action by tag, not SHA':
+        lambda t: _sub(t, 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+                       'actions/checkout@v7'),
+    'write permission':
+        lambda t: _sub(t, '  contents: read\n', '  contents: write\n'),
+}
+
+
+@pytest.mark.parametrize('name', sorted(INTEGRITY_MUTATIONS))
+def test_each_way_to_quietly_disable_the_gate_is_refused(name):
+    bad = INTEGRITY_MUTATIONS[name](INTEGRITY)
+    assert bad != INTEGRITY
+    assert contract.integrity_errors(bad) + contract.pin_errors(bad), f'{name}: accepted'
+
+
+PROVENANCE_MUTATIONS = {
+    'job if':
+        lambda t: _sub(t, '    runs-on: ubuntu-24.04\n', "    if: false\n    runs-on: ubuntu-24.04\n"),
+    'provenance step removed':
+        lambda t: _sub(t, '        run: python3 tools/ci/provenance_check.py\n', '        run: true\n'),
+    'contract step removed':
+        lambda t: _sub(t, '        run: python3 tools/ci/ci_contract.py\n', '        run: echo skipped\n'),
+    'body pasted into the shell':
+        lambda t: _sub(t, '        run: python3 tools/ci/provenance_check.py\n',
+                       '        run: echo "${{ github.event.pull_request.body }}"\n'),
+    'comment step widened to always':
+        lambda t: _sub(t, '        if: failure()\n', '        if: always()\n'),
+    'author taken from the body':
+        lambda t: _sub(t, 'PR_AUTHOR: ${{ github.event.pull_request.user.login }}',
+                       'PR_AUTHOR: ${{ github.event.pull_request.body }}'),
+    'edited trigger dropped':
+        lambda t: _sub(t, 'reopened, edited,', 'reopened,'),
+}
+
+
+@pytest.mark.parametrize('name', sorted(PROVENANCE_MUTATIONS))
+def test_each_way_to_quietly_disable_the_provenance_check_is_refused(name):
+    bad = PROVENANCE_MUTATIONS[name](PROVENANCE)
+    assert bad != PROVENANCE
+    assert contract.provenance_errors(bad), f'{name}: accepted'
+
+
+def test_the_contract_reads_the_parsed_yaml_not_comments():
+    """A comment naming the gate command is not the gate."""
+    bad = _sub(INTEGRITY, GATE_STEP + GATE_RUN,
+               '      # run: python tools/ci/run_repo_integrity.py\n')
+    assert any('exactly one step' in e for e in contract.integrity_errors(bad))
+    assert yaml.load(INTEGRITY, Loader=yaml.BaseLoader)['on']['pull_request']
+
+
+def _run_runner(tmp_path, files):
+    for rel, body in files.items():
+        (tmp_path / rel).write_text(body)
+    code = ('import importlib.util, sys, pathlib\n'
+            f'spec = importlib.util.spec_from_file_location("r", {str(ROOT / "tools/ci/run_repo_integrity.py")!r})\n'
+            'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n'
+            f'sys.exit(m.main(guards={tuple(files)!r}, root=pathlib.Path({str(tmp_path)!r})))\n')
+    return subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
+
+
+def test_the_runner_passes_real_guards(tmp_path):
+    r = _run_runner(tmp_path, {'test_a.py': 'def test_a():\n    assert True\n'})
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+@pytest.mark.parametrize('body, why', [
+    ('import pytest\ndef test_a():\n    pass\n@pytest.mark.skip("off")\ndef test_b():\n    pass\n',
+     'FAIL skipped'),
+    ('import pytest\n@pytest.mark.parametrize("x", [])\ndef test_a(x):\n    pass\n'
+     'def test_b():\n    pass\n', 'FAIL skipped'),
+    ('def helper():\n    pass\n', 'FAIL no passing test'),
+    ('def test_a():\n    assert False\n', 'FAIL'),
+])
+def test_the_runner_fails_a_guard_that_checks_nothing(tmp_path, body, why):
+    r = _run_runner(tmp_path, {'test_a.py': 'def test_ok():\n    pass\n', 'test_b.py': body})
+    assert r.returncode != 0 and why in r.stdout, r.stdout
+
+
+def test_the_runner_fails_a_missing_guard(tmp_path):
+    r = subprocess.run(
+        [sys.executable, '-c',
+         'import importlib.util, sys, pathlib\n'
+         f'spec = importlib.util.spec_from_file_location("r", {str(ROOT / "tools/ci/run_repo_integrity.py")!r})\n'
+         'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n'
+         f'sys.exit(m.main(guards=("test_gone.py",), root=pathlib.Path({str(tmp_path)!r})))\n'],
+        capture_output=True, text=True)
+    assert r.returncode == 1 and 'missing' in r.stdout
 
 
 def test_ai_provenance_rechecks_when_pr_body_is_edited():
-    """A contributor can repair a missing AI Provenance section without a code push.
-
-    A CI check required by branch protection that only runs on 'opened' and
-    'synchronize' stays permanently red after the PR description is fixed.
-    """
-    policy = ROOT / ".github/workflows/poc-check.yml"
-    assert policy.is_file()
-    doc = yaml.load(policy.read_text(), Loader=yaml.BaseLoader)
-    events = doc["on"]["pull_request"]["types"]
-    assert {"opened", "synchronize", "reopened", "edited"} <= set(events)
+    """A required check that only ran on push would stay red after the
+    description is fixed; the contract requires `edited` too."""
+    doc = yaml.load(PROVENANCE, Loader=yaml.BaseLoader)
+    assert {'opened', 'synchronize', 'reopened', 'edited'} <= set(doc['on']['pull_request']['types'])

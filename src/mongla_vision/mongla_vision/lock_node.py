@@ -88,6 +88,7 @@ class _Tick(NamedTuple):
     det_cls: object
     live_s: float
     now: float
+    gen: int = 0
 
 
 class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
@@ -168,6 +169,15 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
         # the two is how a lock starts following the floor.
         if self._closer_on:
             self._place_tick(f.gray, f.header, f.now)
+        # The target changed while this tick ran (#75): what it computed is
+        # about the old one. Clear what it may have written and publish
+        # nothing; the next tick starts on the new target.
+        with self._lock:
+            stale = f.gen != self._gen
+            if stale:
+                self._forget_target_locked()
+        if stale:
+            return
         self._arbitrate_and_publish(f, fb, fc, ab, ac, anchor_ran)
 
     def _take_frame(self):
@@ -186,6 +196,7 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
                                         self._det_t)
             det_cls = self._det_cls
             live_s = live_window(self._det_dt)
+            gen = self._gen
         now = time.monotonic()
         # Grey only when this tick reads it. Every use below is
         # behind one of these: a detection to reseed on, a follower to
@@ -216,7 +227,7 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
             return None
         return _Tick(gray=gray, header=header, det_header=det_header,
                      det_box=det_box, det_conf=det_conf, det_t=det_t,
-                     det_cls=det_cls, live_s=live_s, now=now)
+                     det_cls=det_cls, live_s=live_s, now=now, gen=gen)
 
     def _follow_rung(self, f):
         """The fast rung: reseed LK on a detection, else step it. -> (box, conf)."""
@@ -278,7 +289,7 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
     def destroy_node(self):
         """Stop the ladder thread BEFORE the publishers go.
 
-        Found by tools/composed_lock_harness.py: destroyed while its thread
+        Found by tools/studies/composed_lock_harness.py: destroyed while its thread
         was mid-tick, the ladder published on a destroyed handle and logged
         `ladder fault #1 ... InvalidHandle` on every shutdown -- an ERROR on
         every Ctrl-C, which teaches an operator to ignore that line.

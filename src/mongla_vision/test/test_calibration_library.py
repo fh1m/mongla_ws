@@ -150,7 +150,7 @@ def test_the_shipped_calibrations_are_all_loadable_and_named_by_medium(g):
 def test_the_guide_never_imports_its_own_PACKAGE(g):
     """The calibration tool must run without a ROS environment.
 
-    `tools/fov_calibrate_web.py` loads this module BY PATH for exactly that
+    `tools/pool/fov_calibrate_web.py` loads this module BY PATH for exactly that
     reason. A `from mongla_vision...` anywhere in it -- including inside a
     function, which is where it slipped in -- re-enters
     `mongla_vision/__init__.py`, which imports `preflight`, which imports
@@ -226,3 +226,35 @@ def test_the_installed_layout_finds_the_source_tree(g, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert os.path.realpath(g.default_calibration_dir()) == \
         os.path.realpath(real)
+
+
+@pytest.mark.parametrize('profile, medium', [
+    ('../../escaped', 'air'),           # out of the calibration folder
+    ('/tmp/escaped', 'air'),
+    ('pi_forward/../../escaped', 'air'),
+    ('', 'air'),
+    ('pi_forward', '../escaped'),       # the medium comes from the file
+    ('pi_forward', 'brine'),
+])
+def test_apply_refuses_a_name_that_could_leave_the_folder(g, tmp_path, monkeypatch,
+                                                          profile, medium):
+    """The guide listens on every interface with no login, and both names
+    become part of a path (CodeQL py/path-injection). Nothing may be written
+    outside the calibration folder, and the refusal must say why."""
+    cal = tmp_path / 'cal'
+    cal.mkdir()
+    _write(str(cal), 'src_1280x720.json', medium=medium)
+    monkeypatch.setattr(g.files, 'camera_identity', lambda dev: {
+        'usb_vid': '1bcf', 'usb_pid': '2c99'})
+    before = set(tmp_path.rglob('*'))
+    name, err = g.apply_calibration(str(cal), 'src_1280x720.json', '/dev/video7', profile)
+    assert name is None and err
+    assert set(tmp_path.rglob('*')) == before, 'a file was written'
+
+
+def test_a_switch_to_a_bad_profile_is_refused_before_a_path_is_made(g):
+    with pytest.raises(ValueError):
+        g.files.capture_dir('../../home', 'air')
+    with pytest.raises(ValueError):
+        g.files.capture_dir('pi_forward', 'water/../../x')
+    assert g.files.capture_dir('pi_forward', 'water').endswith('calib_pi_forward_water')

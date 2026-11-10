@@ -19,7 +19,8 @@ import sys
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / 'tools'))
+sys.path.insert(0, str(ROOT / 'tools'))  # shared libraries
+sys.path.insert(0, str(ROOT / 'tools' / 'ci'))
 import command_lint  # noqa: E402
 from launch_render import render, source_tree  # noqa: E402
 

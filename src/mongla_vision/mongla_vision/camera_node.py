@@ -49,6 +49,7 @@ from mongla_vision import (
 )
 from mongla_vision.calibration.binding import calibration_for_profile
 from mongla_vision.cameras.discover import discover_cameras
+from mongla_vision.cameras.reopen import ABSENT, GAVE_UP, REOPEN, CameraWatch
 
 
 class CameraNode(Node):
@@ -98,7 +99,7 @@ class CameraNode(Node):
         # default, which left the node's own default able to do it again.
         self.declare_parameter('fps',             0)
         self.declare_parameter('frame_id',        '')
-        # Path to a calibration.json from tools/fov_calibrate.py. Empty (the
+        # Path to a calibration.json from tools/pool/fov_calibrate.py. Empty (the
         # default) keeps the historical behaviour EXACTLY: size-only CameraInfo
         # with K and D left zero. Nothing changes until a real calibration
         # exists for this camera.
@@ -370,8 +371,16 @@ class CameraNode(Node):
         that arrives while the timer is busy REPLACES the one waiting; it never
         queues behind it.
         """
+        # The source says what it is; a fake without a kind is never reopened.
+        watch = CameraWatch(str(getattr(self._cam, 'source_kind', '')))
+        next_watch = 0.0
         try:
             while rclpy.ok():
+                now = time.monotonic()
+                if now >= next_watch:
+                    next_watch = now + self._WATCH_PERIOD_S
+                    if not self._watch_camera(watch, now):
+                        return
                 # The rate gate comes before the read, because `read()` is
                 # where the JPEG is DECODED.
                 #
@@ -435,6 +444,67 @@ class CameraNode(Node):
                 self.get_logger().error(
                     f'[CAM  ] capture loop died: {exc!r} -- this node is now '
                     f'publishing NOTHING')
+
+    # How often the capture thread asks whether its camera is lost.
+    _WATCH_PERIOD_S = 0.5
+
+    def _watch_camera(self, watch: CameraWatch, now: float) -> bool:
+        """Reopen a lost device camera (`cameras/reopen.py`). False: stop the loop.
+
+        Runs on the capture thread, which owns `self._cam`, so the swap never
+        races a `read()`.
+        """
+        if not watch.enabled:          # not a device: nothing to reopen
+            return True
+        kind = self._cam.source_kind
+        device = str(self._cam.info().get('device') or '')
+        # A path that is gone means the lead is out: not an attempt. An int
+        # index cannot be checked, so it counts as present.
+        present = not device.startswith('/dev/') or os.path.exists(device)
+        verdict = watch.step(self._cam.is_healthy(), now, present=present)
+        if verdict == ABSENT and not getattr(self, '_absent_logged', False):
+            self._absent_logged = True
+            self.get_logger().error(
+                f'[CAM  ] ERROR: {self._cam_name}: {device} is GONE (lead out, or '
+                f'the hub re-enumerating). Publishing nothing; it reopens when '
+                f'the device comes back')
+        elif verdict != ABSENT:
+            self._absent_logged = False
+        if verdict == REOPEN:
+            self.get_logger().warning(
+                f'[CAM  ] WARNING: {self._cam_name} delivered nothing for '
+                f'{watch.lost_after_s:.0f} s past its health limit; reopening '
+                f'({watch.reopens}/{watch.max_reopens})')
+            try:
+                self._cam.close()
+            except Exception as exc:   # noqa: BLE001 -- the device is already gone
+                self.get_logger().debug(f'[CAM  ] close of the lost camera: {exc!r}')
+            try:
+                fresh = self._build_camera()
+            except Exception as exc:   # noqa: BLE001 -- counted as a failed attempt
+                self.get_logger().error(f'[CAM  ] reopen failed: {exc}')
+                return True
+            if fresh.source_kind != kind:
+                # The factory falls back to the OpenCV source when the mailbox
+                # will not open -- right on a dev box, wrong here: 396 ms stale
+                # against 17 ms (measured-bars §3), for the rest of the run.
+                self.get_logger().error(
+                    f'[CAM  ] reopen gave a {fresh.source_kind} source, not the '
+                    f'{kind} it replaces; refused, counted as a failed attempt')
+                try:
+                    fresh.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                return True
+            self._cam = fresh
+            self.get_logger().warning(
+                f'[CAM  ] {self._cam_name} reopened ({kind}); frames resume')
+        elif verdict == GAVE_UP:
+            self.get_logger().error(
+                f'[CAM  ] ERROR: {self._cam_name} LOST: {watch.max_reopens} '
+                f'reopens failed; it stays down for this run and publishes NOTHING')
+            return False
+        return True
 
     def _time_to_next_slot(self) -> float:
         """Seconds until the next publish is due; <=0 means now.
@@ -525,7 +595,7 @@ class CameraNode(Node):
         return h
 
     def _load_calibration(self) -> dict | None:
-        """Load intrinsics measured by tools/fov_calibrate.py, if any.
+        """Load intrinsics measured by tools/pool/fov_calibrate.py, if any.
 
         Returns None when unset or unreadable -- a missing calibration must
         never stop the camera. It is published as a WARN, not an exception,

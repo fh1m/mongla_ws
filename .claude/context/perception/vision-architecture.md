@@ -230,7 +230,7 @@ canary line the detector logs at startup:
 the class allowlist is empty and every frame returns a silent `[]`, with the
 pipeline looking perfectly healthy.
 
-Measured on the vehicle (`tools/hailo_stages.py`, synthetic frames): letterbox
+Measured on the vehicle (`tools/bench/hailo_stages.py`, synthetic frames): letterbox
 0.65 ms, inference 9.54 ms, decode 0.02 ms → **10.20 ms, 98.0 Hz**, against
 `hailortcli benchmark --hw-only` reporting 97.9 FPS for the same model. The
 Python pipeline is at the chip's own ceiling; NMS runs on-chip, which is why
@@ -393,6 +393,7 @@ mongla_control.motion_vision.align_loop   (move_loop for vision_move)
   +-- 50 Hz  fc.manual(fwd, lat, yaw) -- one MANUAL_CONTROL frame, STABILIZE
   +-- gain clamps every axis (hard max-speed cap)
   +-- returns Outcome code: ALIGNED / LOST / TIMEOUT / NO_CAMERA / ABORTED / DRIFTED
+      (a pass-through move: ESTIMATED_CROSSING / COMMIT_UNVERIFIED, never ALIGNED)
 ```
 
 Why the loop is in the manager, not the client:

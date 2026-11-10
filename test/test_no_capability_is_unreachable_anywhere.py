@@ -90,11 +90,12 @@ DEFERRED = {
         'RESULT: THE BIGGEST ONE, and it is the allocator for the hull actually being '
         'built: measured moment arms, roll refused rather than rounded, a dead '
         'thruster expressible. Nothing that flies imports it -- only its own test '
-        'and tools/control_bench, which are off the mission path. The live path is '
-        '`allocation.py`, an 8x6 matrix of +-1 that describes the COMPETITION '
-        'vehicle, and motion_vision imports that one at runtime for its '
-        'anti-windup. Waits on the board reporting FRAME_CLASS on the wire (now in '
-        'the upstream allocator patch, unsent) so srot_fc can read which '
+        'and tools/bench/control_bench, which are off the mission path. The live path is '
+        '`allocation.py`, an 8x6 matrix of +-1 that mirrors what the firmware '
+        'mixes today (the old Dubomini vehicle), and motion_vision imports that '
+        'one at runtime for its anti-windup. Waits on the board reporting '
+        'FRAME_CLASS on the wire, which srot-control-board#39 adds (open, '
+        're-checked 2026-11-10), so srot_fc can read which '
         'allocation is live and hand motion_vision the matching one. Until then '
         'wiring it would mean GUESSING which hull the board is flying, which is '
         'the whole defect it exists to fix.'),
@@ -107,12 +108,13 @@ DEFERRED = {
         'hull, find the ballast that hovers), after which the measured value is '
         'what gets shipped and this stays a cross-check rather than a source.'),
     'mongla_control/mongla_control/nav_filter.py': (
-        'a complementary/heading filter superseded by mongla_localization: the '
-        'RIEKF in `inekf.py` plus `heading_anchor.py` own fusion now, and '
-        '`yaw_source=mavlink_ahrs` reads the board directly. Kept only because no '
-        'one has confirmed the DVL-era callers are all gone. WARNING: DELETE IT or name '
-        'its consumer -- 138 lines of superseded estimator reads as current and '
-        'gets copied, which is exactly how draw_strip.py became a problem.'),
+        'alpha-beta smoothing for the OPERATOR CONSOLE, not the vehicle: '
+        '`tools/pool/srot_console_server.py` and `tools/pool/srot_replay.py` import its '
+        'DepthFilter and HeadingFilter to steady the displayed readings and to '
+        're-tune them against a recorded dive. No node imports it, so it is not '
+        'WIRED. Vehicle fusion is the RIEKF in mongla_localization and heading '
+        'is the board\'s own (`yaw_source.BoardYaw`); do not reach for this as an '
+        'estimator.'),
     'mongla_manager/mongla_manager/estimator/thrust_model.py': (
         'maps commanded thrust to expected RPM so a demand can be checked against '
         'what the thrusters actually did. Blocked on ROADMAP G2: 958/958 ESC '
@@ -153,10 +155,10 @@ def _modules():
 
 def _load_orphan_sweep():
     """The ONE answer to "what imports this module" lives in
-    `tools/orphan_sweep.py`. Two copies of it is how a stem match hid
+    `tools/ci/orphan_sweep.py`. Two copies of it is how a stem match hid
     `anchor/draw.py` here while the repo-wide guard resolved dotted names."""
     import importlib.util
-    path = pathlib.Path(__file__).resolve().parents[1] / 'tools' / 'orphan_sweep.py'
+    path = pathlib.Path(__file__).resolve().parents[1] / 'tools' / 'ci' / 'orphan_sweep.py'
     spec = importlib.util.spec_from_file_location('_orphan_sweep', path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -188,13 +190,15 @@ def test_the_two_registers_do_not_overlap():
         assert f"'{rel}'" not in vision, f'{rel} is registered in BOTH guards'
 
 
-@pytest.mark.parametrize('rel,consumer', sorted(WIRED.items()))
-def test_a_wired_capability_really_is_imported(rel, consumer):
-    hits = _imported_by(rel)
-    assert hits, (
-        f'{rel} is listed as wired into {consumer} but NOTHING imports it. '
-        f"That is this repo's oldest defect: the code is correct, the tests "
-        f'pass, and the capability does not exist on the vehicle.')
+def test_a_wired_capability_really_is_imported():
+    # One loop, not a parametrize: an empty register must pass as true, not
+    # skip, because the integrity gate fails on any skip (#93).
+    unwired = [f'{rel} (listed as wired into {consumer})'
+               for rel, consumer in sorted(WIRED.items()) if not _imported_by(rel)]
+    assert not unwired, (
+        'NOTHING imports: ' + ', '.join(unwired) + ". That is this repo's oldest "
+        'defect: the code is correct, the tests pass, and the capability does '
+        'not exist on the vehicle.')
 
 
 @pytest.mark.parametrize('rel,reason', sorted(DEFERRED.items()))

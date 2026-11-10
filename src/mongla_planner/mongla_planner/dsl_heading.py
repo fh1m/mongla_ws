@@ -59,11 +59,15 @@ class HeadingMixin:
             raise RuntimeError(
                 'anchor_on() needs a course: call use_course(<name>) first')
         bearing = course.bearing_of(prop)      # raises when unmeasured
+        # The bearing is THIS prop's, so the pose must be too: a fused pose of
+        # another prop would write a heading zero off by the angle between
+        # their faces (#76). Unknown when the course names no detect class.
         return self.anchor_heading(bearing_deg=bearing, camera=camera,
-                                   timeout=timeout)
+                                   timeout=timeout,
+                                   target_class=course.prop(prop).detect_class or '')
 
     def anchor_heading(self, *, bearing_deg: float, camera: str | None = None,
-                       timeout: float = 6.0) -> object:
+                       timeout: float = 6.0, target_class: str = '') -> object:
         """Re-zero the heading against a prop whose world bearing is known.
 
         What this buys. The BNO is deliberately magnetometer-free, so its yaw
@@ -87,11 +91,15 @@ class HeadingMixin:
         inherit it. Returns an `Anchor` whose `ok` is False with a stated
         reason rather than a number, and does NOT change what `turn()` means --
         a mission opts in by converting explicitly.
+
+        `target_class` restricts it to a pose solved for that class (#76);
+        `anchor_on` always passes the course's own `detect_class`.
         """
         from mongla_localization.heading_anchor import anchor_from
 
         cam = str(camera or self.camera).strip().lower()
-        fused = self._wait_fused_pose(cam, timeout=timeout)
+        fused = self._wait_fused_pose(cam, timeout=timeout,
+                                      target_class=target_class)
         if fused is None:
             from mongla_localization.heading_anchor import Anchor
             return Anchor(False, reason=f'no fused pose on {cam} within '
@@ -161,7 +169,8 @@ class HeadingMixin:
             return float(absolute_deg)
         return float(absolute_deg) - float(off)
 
-    def _wait_fused_pose(self, camera: str, *, timeout: float):
+    def _wait_fused_pose(self, camera: str, *, timeout: float,
+                         target_class: str = ''):
         """Latest DECIDED fused pose for `camera`, or None.
 
         Subscribes lazily: a mission that never anchors pays nothing, and a
@@ -196,6 +205,8 @@ class HeadingMixin:
             if entry is None:
                 return None
             msg, arrived = entry
+            if target_class and getattr(msg, 'target_label', '') != target_class:
+                return None                     # another prop's pose (#76)
             return msg if _time.monotonic() - arrived <= FUSED_POSE_MAX_AGE_S else None
 
         deadline = _time.monotonic() + float(timeout)
@@ -215,6 +226,11 @@ class HeadingMixin:
         if msg is not None:
             return Fused(decided=False, reason=str(msg.reason))
         entry = self._fused_pose.get(camera)
+        label = getattr(entry[0], 'target_label', '') if entry is not None else ''
+        if entry is not None and target_class and label != target_class:
+            return Fused(decided=False, reason=(
+                f'the fused pose on {camera} is of {label or "an unlabelled target"!r}, '
+                f'not {target_class!r}: refusing to anchor on another prop'))
         if entry is not None:
             return Fused(decided=False, reason=(
                 f'last fused pose on {camera} is '

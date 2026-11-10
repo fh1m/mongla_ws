@@ -21,7 +21,7 @@ date — and a **state**. The states are not blurred:
 A capability map that hides the last two is marketing. The blocked rows are listed in full at
 the bottom, and **no row in this document is yet** — this platform has not been in water.
 
-<!-- site-only: the site runs this; the wiki leaves it out (tools/wiki_build.py) -->
+<!-- site-only: the site runs this; the wiki leaves it out (tools/ci/wiki_build.py) -->
 <figure class="tally" id="tally" aria-live="polite">
   <noscript>The tally below counts this page's rows by state; it needs JavaScript.</noscript>
 </figure>
@@ -135,7 +135,7 @@ IMU, the depth sensor and the downward camera. Without it, a distance move is a 
 | Refusing to guess | 727 static intervals produced **zero** velocity reports: an unmeasurable interval is never published as "0 m/s" | `measured-bars.md` §10 | BENCH |
 | Height above the floor | from a single pixel on a known plane | `mongla_localization/floor_plane.py` | BUILT |
 | Pose filter | a right-invariant EKF over IMU, depth, flow, heading and fixes | `mongla_localization/inekf.py` | BUILT |
-| Late measurements | replayed at the instant they describe, with the tail re-run | `mongla_localization/retro.py`, `test_retro.py` | BUILT |
+| Late measurements | replayed at the instant they describe, with the tail re-run, behind `retrodict` (off by default) | `mongla_localization/retro.py`, `test_retro.py` | BUILT |
 | Absolute position | a fix from a prop whose location is known, or resection from two bearings | `course_map.py`, `resection.py`, `pnp_node.py` | BUILT |
 | Prop positions | where each prop really stands, from the vehicle's own sightings, written to the deck course file (`mission survey_course`) | `prop_placement.py`, `place_prop` | BUILT |
 | Absolute heading | from a prop of known bearing, from pool lane lines, or from the floor tile grating | `heading_anchor.py`, `pool_lines.py`, `tile_grating.py` | BUILT |

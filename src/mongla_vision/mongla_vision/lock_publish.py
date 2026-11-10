@@ -1,5 +1,8 @@
 """LockNode's outputs: the /lock box, its decomposition, the pose
 correspondences, and what the node remembers about where the target was.
+
+The /lock box names its rung in the hypothesis and the class it follows in
+`Detection2D.id`, so a consumer can refuse a box for another target (#74).
 """
 import math
 import time
@@ -72,7 +75,9 @@ class LockPublishMixin:
         if header is not None:
             m.header = header
         m.camera = self._cam
-        m.target_label = self._cls or ''
+        # What the anchor enrolled on, not the class the mission asked for:
+        # the pose downstream is trusted as a pose OF this label (#76).
+        m.target_label = self._anchor_label or ''
         m.source = 'anchor'
         m.optics = TargetCorrespondences.OPTICS_RAW
         # The anchor matches in its BACKEND's pixels, not the camera's full
@@ -108,12 +113,31 @@ class LockPublishMixin:
         if st.have_target:
             x1, y1, x2, y2 = st.xyxy
             dets.append(Detection(class_id=0, class_name=st.rung.value,
-                                  score=float(st.confidence),
+                                  score=float(st.authority),
                                   xyxy=(x1, y1, x2, y2)))
             self._note_visibility(x1, y1, x2, y2)
             self._remember_world(x1, y1, x2, y2)
+        # The score is the AUTHORITY, not rung trust times authority (#78).
+        # A rung's own confidence is a gate (`MIN_RUNG_CONF`, applied in
+        # `arbitrate`), the same job a live detection's score does against
+        # `ctrl_conf`. Multiplied in, a carried detection at an underwater
+        # score of 0.3 steered at 30 % on a lock the ladder trusted fully.
         if header is not None:
-            self._pub.publish(detections_to_array(dets, header))
+            arr = detections_to_array(dets, header)
+            # The class the ladder is following, beside the rung name: the
+            # consumer refuses a box whose identity is not the class it asked
+            # for (#74). The anchor answers for what it enrolled on; the
+            # detection and follow rungs for the last real detection.
+            for d in arr.detections:
+                d.id = self._lock_identity(st)
+            self._pub.publish(arr)
+
+    def _lock_identity(self, st) -> str:
+        """What was OBSERVED, never what was asked for: a pinned class the
+        ladder has not seen is not evidence that it holds one."""
+        if st.rung.value == 'anchor':
+            return self._anchor_label or ''
+        return self._det_cls or ''
 
     def _publish_decomposition(self, pose, header) -> None:
         """theta, scale and the range they imply -- the anchor's other outputs.

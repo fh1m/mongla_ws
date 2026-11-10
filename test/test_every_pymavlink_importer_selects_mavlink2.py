@@ -23,8 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _importers():
-    for p in sorted([*ROOT.glob('src/*/**/*.py'), *ROOT.glob('tools/*.py'),
-                     *ROOT.glob('scripts/*.py')]):
+    for p in sorted([*ROOT.glob('src/*/**/*.py'), *ROOT.glob('tools/**/*.py')]):
         if 'install' in p.parts or 'build' in p.parts:
             continue
         text = p.read_text(encoding='utf-8')

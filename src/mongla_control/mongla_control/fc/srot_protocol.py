@@ -421,7 +421,7 @@ MIXER_CENTRE_EPS = 0.005
 # as whichever class happens to be first.
 #
 # Why this exists at all: our two senders disagreed. `auv_manager_node`'s uplink
-# tick sent a hardcoded `target_num=0` while `tools/srot_uplink_check.py` sent
+# tick sent a hardcoded `target_num=0` while `tools/pool/srot_uplink_check.py` sent
 # `d.class_id` -- the detector's own index, which is a property of whichever
 # model happens to be loaded and means something different for every one. So
 # the field was either meaningless or model-dependent, and neither is a wire

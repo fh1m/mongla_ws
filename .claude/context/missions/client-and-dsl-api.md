@@ -88,6 +88,7 @@ carries what the camera last saw:
 ```python
 res = mongla.vision.align('hole', lat=0, duration=25)
 res.status        # 'ALIGNED' | 'LOST' | 'TIMEOUT' | 'NO_CAMERA' | 'ABORTED' | 'DRIFTED' | 'FAILED'
+                  # a pass-through move: 'ESTIMATED_CROSSING' | 'COMMIT_UNVERIFIED'
 res.saw_target    # was it ever seen?
 res.x_px, res.y_px  # signed pixels from centre at the last sighting; NaN if never seen
 res.last_err_px   # residual from the goal
@@ -115,7 +116,10 @@ mongla.hfov_water_deg()            # this camera's real field of view, in water
 ```
 
 Every one of these goes through the measured calibration and the flat-port refraction
-correction. They return `None` rather than a guess when the inputs are not there.
+correction. They return `None` rather than a guess when the inputs are not there. Before a
+camera's CameraInfo arrives, range and bearing run the same port model on its measured
+field of view, and a fix built from them carries the extra 1.264 deg of an unknown
+principal point; `floor_range` refuses until the calibration is live.
 
 ## Navigating to something known
 

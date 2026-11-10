@@ -122,7 +122,7 @@ class XFeatONNX:
         if not os.path.exists(model_path):
             raise FileNotFoundError(
                 f'XFeat ONNX not found: {model_path}. Export it with '
-                f'tools/xfeat_export.py -- the anchor cannot run without it.')
+                f'tools/bench/xfeat_export.py -- the anchor cannot run without it.')
         so = ort.SessionOptions()
         so.intra_op_num_threads = int(max(1, threads))
         so.inter_op_num_threads = 1

@@ -89,8 +89,10 @@ def _node(armed, surface_heard=None):
     n.mongla.disarm.return_value = SimpleNamespace(success=False,
                                                    message='UNCONFIRMED')
     n.get_logger = lambda: MagicMock()
+    # A manager that came up on a DISARMED board; the boot tests set 'pending'.
+    n._boot_latch = None
     for name in ('_kill_watch_tick', '_recovery_tick', '_request_surface',
-                 '_heard_since', '_armed_now', '_executor_alive',
+                 '_heard_since', '_armed_now', '_executor_alive', '_boot_tick',
                  '_heartbeat_allowed', 'safety_latch_reason'):
         setattr(n, name, getattr(M.AUVManagerNode, name).__get__(n))
     return n
@@ -218,9 +220,22 @@ def test_the_kill_latch_holds_until_the_board_says_disarmed():
     assert node_support.kill_latch(latch, True, False, now=5.0) == (None, 'resolved')
 
 
-def test_the_kill_retries_are_bounded():
-    latch = {'tries': node_support.KILL_MAX_TRIES, 'last': 0.0}
-    assert node_support.kill_latch(latch, True, True, now=100.0) == (latch, 'none')
+def test_kill_retries_never_stop_and_the_last_bounded_one_withholds():
+    """Issue #98: after KILL_MAX_TRIES the old rule went quiet for good while
+    the heartbeat stayed healthy. Now that try withholds the heartbeat, once,
+    and the disarm keeps being re-sent."""
+    latch, action = node_support.kill_latch(None, True, True, now=0.0)
+    actions = [action]
+    t = 0.0
+    for _ in range(node_support.KILL_MAX_TRIES + 3):
+        t += node_support.KILL_RETRY_S
+        latch, action = node_support.kill_latch(latch, True, True, now=t)
+        actions.append(action)
+    n = node_support.KILL_MAX_TRIES
+    assert actions[:n - 1] == ['disarm'] * (n - 1)
+    assert actions[n - 1] == 'withhold'
+    assert actions[n:] == ['disarm'] * (len(actions) - n), 'retries never stop'
+    assert latch['withholding'] is True
 
 
 def test_a_failed_kill_disarm_is_retried_on_a_later_tick():
@@ -253,3 +268,71 @@ def test_no_second_board_never_disarms():
     for _ in range(3):
         M.AUVManagerNode._mission_watchdog_tick(n)
     n.mongla.disarm.assert_not_called()
+
+
+def test_an_unconfirmed_kill_disarm_ends_in_a_silent_heartbeat():
+    """Issue #98, at the node: kill while armed, every DISARM refused. Within
+    the bounded tries the heartbeat gate closes, so the board's link-loss
+    failsafe ends the move; it reopens only on a confirmed DISARMED."""
+    n = _node(armed=True)
+    n._mission['attached'] = False
+    n.kill = True
+    t0 = time.monotonic()
+    _tick(n, t0)
+    assert n._heartbeat_allowed()
+    for k in range(1, node_support.KILL_MAX_TRIES):
+        _tick(n, t0 + k * (node_support.KILL_RETRY_S + 0.1))
+    assert not n._heartbeat_allowed(), 'the heartbeat keeps the failsafe silent'
+    calls = n.mongla.disarm.call_count
+    _tick(n, t0 + 60.0)
+    assert n.mongla.disarm.call_count == calls + 1, 'DISARM is still re-sent'
+    n.armed = False
+    _tick(n, t0 + 61.0)
+    assert n._heartbeat_allowed() and n.safety_latch_reason() == ''
+
+
+@pytest.mark.parametrize('heard, want_latch, want', [
+    (None, 'pending', 'none'),      # nothing heard yet: no verdict
+    (False, None, 'none'),          # disarmed at start-up: clear
+    (True, 'armed', 'latched'),     # armed at start-up: latch
+])
+def test_the_boot_rule(heard, want_latch, want):
+    assert node_support.boot_latch('pending', heard) == (want_latch, want)
+
+
+def test_a_restart_on_an_armed_board_refuses_ordinary_verbs_until_disarmed():
+    """Issue #98: the latches lived in memory, so restarting the manager
+    cleared them while the board could still be armed with a move running.
+    A board heard ARMED at start-up now latches the new manager."""
+    n = _node(armed=True)
+    n._mission['attached'] = False
+    n._boot_latch = 'pending'
+    _tick(n, time.monotonic())
+    assert 'ARMED when this manager started' in n.safety_latch_reason()
+    _tick(n, time.monotonic() + 30.0)
+    assert n.safety_latch_reason(), 'time alone never clears it'
+    n.armed = False
+    _tick(n, time.monotonic() + 31.0)
+    assert n.safety_latch_reason() == '' and n._boot_latch is None
+    n.armed = True                    # a deliberate arm after that is not a restart
+    _tick(n, time.monotonic() + 32.0)
+    assert n.safety_latch_reason() == ''
+
+
+def test_our_own_arm_before_the_first_tick_is_not_read_as_a_restart():
+    """The end-to-end run caught this: an arm sent before the first watchdog
+    tick made the next tick see ARMED and latch the manager against its own
+    arm. The goal path decides the boot latch from the board first."""
+    n = _node(armed=False)
+    n._mission['attached'] = False
+    n._boot_latch = 'pending'
+    assert n.safety_latch_reason() == '' and n._boot_latch is None
+    n.armed = True                    # the arm we just allowed
+    _tick(n, time.monotonic())
+    assert n.safety_latch_reason() == ''
+
+
+def test_no_heartbeat_yet_refuses_rather_than_guesses():
+    n = _node(armed=None)
+    n._boot_latch = 'pending'
+    assert 'no heartbeat' in n.safety_latch_reason()

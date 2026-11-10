@@ -10,4 +10,4 @@
 pymavlink==2.4.49
 filterpy==1.4.5
 scipy==1.17.1          # dependency of filterpy; pinned so a fresh machine resolves the same
-onnxruntime==1.29.0
+onnxruntime==1.31.1
