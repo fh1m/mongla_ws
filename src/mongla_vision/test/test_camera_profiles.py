@@ -218,6 +218,7 @@ def test_the_webcam_fallback_carries_the_format_too():
 
 
 @pytest.mark.parametrize('name,expect_fps', (('pi_forward', 60),
+                                             ('pi_forward_global_shutter', 210),
                                              ('pi_downward', 210)))
 def test_the_pi_profiles_carry_the_MEASURED_rate(name, expect_fps):
     """Pinned to hardware, because both numbers were wrong and wrong in the
@@ -228,18 +229,10 @@ def test_the_pi_profiles_carry_the_MEASURED_rate(name, expect_fps):
     FORWARD one. Asking pi_downward for 90 was asking the wrong camera for a
     rate neither of them has.
 
-    pi_forward's 15 is retracted (2026-09-09). This test asserted 15 was
-    "the MEASURED rate" and config.py's comment called it the camera's
-    ceiling; the 15 was the config line itself, and each defended the other.
-    Re-measured on the vehicle by counting DISTINCT header stamps -- a topic
-    `hz` cannot separate a real frame from a republished one, which is how a
-    self-imposed cap reads as hardware:
-
-        requested 15 -> 14.63 Hz      requested 60 -> 30.18 Hz
-        requested 30 -> 28.03 Hz      requested 90 -> 30.18 Hz
-
-    Identity confirmed against the calibration's USB VID/PID and serial
-    (1d6c:0103, YGR80PU1200F23081120), so this is the Fantech answering.
-    End to end it took detections 14.67 -> 29.12 Hz for ~6 points of one
-    core. 60 rather than 30 because the request saturates at the ceiling."""
+    pi_forward asks for 60 and the Fantech delivers 15.0 (raw
+    `v4l2-ctl --stream-mmap` on Kutum, 2026-11-10; the 30.18 Hz of
+    2026-09-09 does not reproduce). The request is pinned anyway: it costs
+    nothing when the camera ignores it, and a 15 here once read as the
+    hardware ceiling and was defended as one. The global-shutter profile is
+    the measured 210."""
     assert CAMERA_PROFILES[name]['fps'] == expect_fps
