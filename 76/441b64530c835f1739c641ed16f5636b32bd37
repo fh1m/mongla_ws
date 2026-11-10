@@ -1,0 +1,28 @@
+.claude/context/ROADMAP.md
+  h_f1b9066eb9899c 63,123-124
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 2920-2921
+.claude/context/upstream/README.md
+  h_f1b9066eb9899c 39,77-78,105,151-158
+.claude/context/upstream/control-only-swim.md
+  h_f1b9066eb9899c 16-23
+.claude/context/upstream/pr-x-sensor-health-and-time.md
+  h_f1b9066eb9899c 1-108
+.claude/context/upstream/review-2026-09-24/README.md
+  h_f1b9066eb9899c 7,11,96,98-101,103-148
+.claude/context/upstream/review-2026-09-24/srot-control-board/issues/35-esc-pwm-frequency-in-pinger-band.md
+  h_f1b9066eb9899c 7-8,51,54,72
+.claude/context/upstream/review-2026-09-24/srot-esc-flasher/issues/02-bluejay-pwm-frequency-pinger-band.md
+  h_f1b9066eb9899c 7-8,35,38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "76441b64530c835f1739c641ed16f5636b32bd37",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
