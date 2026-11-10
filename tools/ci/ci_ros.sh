@@ -57,6 +57,13 @@ req="$(mktemp)"
 grep -v -E '^(trackers|pytest)' requirements.txt > "$req"
 python3 -m pip install -q -r "$req" -c kutum/constraints.txt
 python3 -m pip install -q --no-deps "$(grep -E '^trackers' requirements.txt | cut -d'#' -f1 | tr -d ' ')"
+# The nodes were built with the system Python, so `ros2 launch` starts them
+# under /usr/bin/python3, which cannot see this venv: a launched manager died
+# on `import pymavlink` while every in-process test passed. The vehicle
+# installs with `pip --user`, which the system Python does see; this puts the
+# venv on the same footing.
+PYTHONPATH="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH
 python3 - <<'EOF'
 import numpy, sys
 print(f'python {sys.version.split()[0]}, numpy {numpy.__version__}')
