@@ -2917,8 +2917,8 @@ Bar30 is independent and is usually fine); `get_angular_rates()` and
 `_effective_yaw_deg`, which used to pass NaN straight through on srot because
 that backend has no second AHRS to fall back to.
 
-Requested upstream as
-`Mongla_others/srot-control-board/PR_SENSOR_HEALTH_AND_TIME_2026-09-11.md`.
+Requested upstream as `upstream/pr-x-sensor-health-and-time.md`, filed as
+[srot-control-board#76](https://github.com/RakibulIslam1/srot-control-board/issues/76).
 
 ### Inertial data we had been discarding
 
