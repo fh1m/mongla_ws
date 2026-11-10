@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import time
 
-from . import health as _health, health_reporters as _hr
+import shutil
+
+from . import health as _health, health_reporters as _hr, kutum_health as _kutum
 from .node_support import (EXECUTOR_STALE_S, KILL_MAX_TRIES, MISSION_SILENT_S, boot_latch,
                            SURFACE_MAX_TRIES, _load_sensor_offsets, kill_latch,
                            mission_recovery, mission_watchdog)
@@ -270,6 +272,10 @@ class HealthMixin:
         self._health.register('target_pose', lambda: _hr.target_pose(
             (lambda vs: vs.target_pose() if vs is not None else None)(
                 self._live_vision_state())))
+        # Kutum, the Pi and its Hailo-8: report-only, sampled off the executor
+        # (kutum_health).
+        self._kutum_sampler = _kutum.register(self._health,
+                                            is_pi=shutil.which('vcgencmd') is not None)
         # `target_lock` stays UNREGISTERED, deliberately. It wants the ladder's
         # decayed `authority` (0..1); `/lock` carries the rung name and a
         # CONFIDENCE in class_id/score, which is a different quantity. Deriving
