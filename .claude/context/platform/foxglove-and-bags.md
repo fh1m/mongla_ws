@@ -17,14 +17,14 @@ telemetry, the bag, and the per-verb scorecard together.
 
 Every run becomes fully reviewable: **live** in Foxglove while it happens, and **offline**
 from one folder afterwards (MCAP bag + scorecard + node logs + `software.txt`). One helper —
-`scripts/pool_session.sh` — pins that folder so you don't hand-juggle env vars, and writes
+`tools/pool/pool_session.sh` — pins that folder so you don't hand-juggle env vars, and writes
 which software ran into `software.txt`: the Kutum release's `release.json`, or the commit
 and whether it was dirty. A result is evidence only for the code that produced it.
 
 **Pin the run folder in EVERY terminal** (same label = same folder):
 ```bash
 cd ~/Ros_workspaces/mongla_ws && source install/setup.bash
-source scripts/pool_session.sh gate_am     # exports MONGLA_RUN_DIR + ROS_LOG_DIR
+source tools/pool/pool_session.sh gate_am     # exports MONGLA_RUN_DIR + ROS_LOG_DIR
 ```
 
 **Terminal 1 — preflight + vehicle + telemetry + live viz** (the launch file is the
@@ -40,7 +40,7 @@ ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
 
 **Terminal 2 — record the run** (MCAP, into the pinned folder):
 ```bash
-scripts/pool_record.sh record gate_am         # Ctrl-C to stop + finalize the bag
+tools/pool/pool_record.sh record gate_am         # Ctrl-C to stop + finalize the bag
 ```
 
 **Terminal 3 — drive it** (mission OR CLI — scorecard auto-writes into the folder):
@@ -54,14 +54,14 @@ ros2 run mongla_planner mission sauvc_qualification
 
 **After the run — one folder has everything:**
 ```bash
-scripts/pool_record.sh list                   # bags + recent scorecards
+tools/pool/pool_record.sh list                   # bags + recent scorecards
 ls ~/mongla_runs/gate_am/                      # bag_gate_am_<ts>/  <mission>_<ts>.json  logs/
 ```
 
 **Offline replay-to-tune (bench, no pool time):**
 ```bash
-source scripts/pool_session.sh gate_am
-scripts/pool_record.sh replay ~/mongla_runs/gate_am/bag_gate_am_<ts>
+source tools/pool/pool_session.sh gate_am
+tools/pool/pool_record.sh replay ~/mongla_runs/gate_am/bag_gate_am_<ts>
 # other terminal: ros2 run mongla_vision vision_display   (or drag the .mcap into Foxglove)
 # then: ros2 param set /mongla_detector_forward conf 0.45  and watch the effect
 ```
@@ -130,7 +130,7 @@ login prompt would bite you — hence the Lichtblick choice.)
 
 ---
 
-## 2. rosbag record / replay — `scripts/pool_record.sh`
+## 2. rosbag record / replay — `tools/pool/pool_record.sh`
 
 `ros2 bag record` is built into Humble (zero code). The helper wraps it with a **topic
 allowlist** (keeps bags small — off the raw-image firehose) and the shared run tree.
@@ -142,10 +142,10 @@ custom `MonglaState` renders), or `replay` it into a live `foxglove_bridge`; a r
 run reviews exactly like a live one.
 
 ```bash
-scripts/pool_record.sh record gate_run        # debug allowlist → ~/mongla_runs/bag_gate_run_<ts>
-scripts/pool_record.sh record --full gate_run  # + raw image_raw/camera_info (BIG; only if needed)
-scripts/pool_record.sh replay ~/mongla_runs/bag_gate_run_20260710_141530
-scripts/pool_record.sh list                    # runs + sizes + recent scorecards
+tools/pool/pool_record.sh record gate_run        # debug allowlist → ~/mongla_runs/bag_gate_run_<ts>
+tools/pool/pool_record.sh record --full gate_run  # + raw image_raw/camera_info (BIG; only if needed)
+tools/pool/pool_record.sh replay ~/mongla_runs/bag_gate_run_20260710_141530
+tools/pool/pool_record.sh list                    # runs + sizes + recent scorecards
 ```
 Default allowlist: `state`, `imu_rates`, `move` action feedback/status, and per-camera
 `detections` / `tracks` / `image_debug` / `vis_range` / `distance`. Ctrl-C stops and
@@ -180,11 +180,11 @@ never raises on pool day.
 rclpy/rcl already writes a per-process log tree; point it at the run folder so the
 **manager** terminal (`[STATE]`/`[ARDUB]`/`[RC ]`/`[ACT]` telemetry) **and** the mission
 terminal both land in one place — more complete than an in-process tee (which would only
-see the mission terminal). `scripts/pool_session.sh` sets both `MONGLA_RUN_DIR` and
+see the mission terminal). `tools/pool/pool_session.sh` sets both `MONGLA_RUN_DIR` and
 `ROS_LOG_DIR` for you; **source it (same label) in every terminal**:
 
 ```bash
-source scripts/pool_session.sh 2026-champs     # → MONGLA_RUN_DIR=~/mongla_runs/2026-champs, ROS_LOG_DIR=.../logs
+source tools/pool/pool_session.sh 2026-champs     # → MONGLA_RUN_DIR=~/mongla_runs/2026-champs, ROS_LOG_DIR=.../logs
 # terminal 1:
 ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true 2>&1 | tee $MONGLA_RUN_DIR/manager_console.log
 # terminal 2 (same `source pool_session.sh 2026-champs`):
@@ -241,7 +241,7 @@ dev box (that's why it's robust across the network).
 **Dry practice with NO AUV (a recorded run on the dev box):** the bridge runs here too, so
 you can rehearse the whole Foxglove workflow against a real bag before pool day:
 ```bash
-scripts/pool_record.sh replay ~/mongla_runs/bag_<run>_<ts>      # terminal 1
+tools/pool/pool_record.sh replay ~/mongla_runs/bag_<run>_<ts>      # terminal 1
 ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765   # terminal 2
 # then Lichtblick → ws://localhost:8765
 ```
@@ -252,7 +252,7 @@ so the bag, scorecard, and logs come together:
 ```bash
 rsync -av fh1m@mongla.local:~/mongla_runs/  ~/mongla_runs/     # or scp -r
 # replay locally (needs the MCAP plugin above + mongla_interfaces built here):
-scripts/pool_record.sh replay ~/mongla_runs/bag_gate_run_<ts>
+tools/pool/pool_record.sh replay ~/mongla_runs/bag_gate_run_<ts>
 # then Lichtblick → ws://localhost:8765 sees the replayed topics.
 ```
 **Two distinct replay paths — don't conflate them:**

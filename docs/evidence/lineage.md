@@ -1,8 +1,8 @@
 # Water lineage
 
-*Generated from [`water.json`](water.json) by `tools/gen_lineage.py`; edit the registry, not this page.*
+*Generated from [`water.json`](water.json) by `tools/ci/gen_lineage.py`; edit the registry, not this page.*
 
-Every time a vehicle in this project's lineage was in water, and what that does and does not prove about the code here today. Read by tools/gen_lineage.py (which writes lineage.md) and by test/test_water_claims_have_a_scope.py. A status is earned by the evidence listed with it, never inherited: code that descends from a water-tested predecessor has its own status, in docs/capability-map.md.
+Every time a vehicle in this project's lineage was in water, and what that does and does not prove about the code here today. Read by tools/ci/gen_lineage.py (which writes lineage.md) and by test/test_water_claims_have_a_scope.py. A status is earned by the evidence listed with it, never inherited: code that descends from a water-tested predecessor has its own status, in docs/capability-map.md.
 
 **Key point:** the vehicles before this one were in water; this platform has not been. A status belongs to the platform and code it was earned on. Code here that descends from a water-tested predecessor carries its own state in [`capability-map.md`](../capability-map.md).
 

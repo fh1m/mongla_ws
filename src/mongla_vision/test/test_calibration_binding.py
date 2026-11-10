@@ -158,7 +158,7 @@ def test_every_tool_naming_a_calibration_names_one_that_EXISTS():
         pytest.skip('tools/ not present')
     missing = []
     seen = 0
-    for py in sorted(tools.glob('*.py')):
+    for py in sorted(tools.rglob('*.py')):
         for name in re.findall(r"calibration/([A-Za-z0-9_.-]+\.json)",
                                py.read_text()):
             seen += 1

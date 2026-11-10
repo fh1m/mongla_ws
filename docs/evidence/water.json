@@ -1,5 +1,5 @@
 {
-  "about": "Every time a vehicle in this project's lineage was in water, and what that does and does not prove about the code here today. Read by tools/gen_lineage.py (which writes lineage.md) and by test/test_water_claims_have_a_scope.py. A status is earned by the evidence listed with it, never inherited: code that descends from a water-tested predecessor has its own status, in docs/capability-map.md.",
+  "about": "Every time a vehicle in this project's lineage was in water, and what that does and does not prove about the code here today. Read by tools/ci/gen_lineage.py (which writes lineage.md) and by test/test_water_claims_have_a_scope.py. A status is earned by the evidence listed with it, never inherited: code that descends from a water-tested predecessor has its own status, in docs/capability-map.md.",
   "statuses": {
     "HISTORICAL_WATER": "in water, on an earlier vehicle, firmware or stack than the current platform",
     "RECORDED_WATER_REPLAY": "real underwater footage, recorded on an earlier vehicle, replayed through the current code",

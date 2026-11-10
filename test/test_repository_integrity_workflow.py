@@ -1,7 +1,7 @@
 """The two required checks must run what they claim, and nothing may skip them.
 
-`tools/ci_contract.py` is an allowlist for both required workflows, and
-`tools/run_repo_integrity.py` is the one list of guards. These tests run the
+`tools/ci/ci_contract.py` is an allowlist for both required workflows, and
+`tools/ci/run_repo_integrity.py` is the one list of guards. These tests run the
 real contract against the real workflows, then against each way of quietly
 disabling a gate that #93 named: every mutation must be refused.
 
@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load(name):
-    spec = importlib.util.spec_from_file_location(name, ROOT / 'tools' / f'{name}.py')
+    spec = importlib.util.spec_from_file_location(name, ROOT / 'tools' / 'ci' / f'{name}.py')
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -33,12 +33,12 @@ runner = _load('run_repo_integrity')
 INTEGRITY = (ROOT / contract.INTEGRITY).read_text()
 PROVENANCE = (ROOT / contract.PROVENANCE).read_text()
 GATE_STEP = '      - name: Run the integrity guards\n'
-GATE_RUN = '        run: python tools/run_repo_integrity.py\n'
+GATE_RUN = '        run: python tools/ci/run_repo_integrity.py\n'
 
 
 def test_the_real_workflows_keep_the_contract():
     assert contract.errors(ROOT) == []
-    assert subprocess.run([sys.executable, str(ROOT / 'tools/ci_contract.py')],
+    assert subprocess.run([sys.executable, str(ROOT / 'tools/ci/ci_contract.py')],
                           capture_output=True).returncode == 0
 
 
@@ -63,9 +63,9 @@ INTEGRITY_MUTATIONS = {
     'echo instead of running':
         lambda t: _sub(t, GATE_RUN, '        run: echo python -m pytest test/x.py\n'),
     'or true':
-        lambda t: _sub(t, GATE_RUN, '        run: python tools/run_repo_integrity.py || true\n'),
+        lambda t: _sub(t, GATE_RUN, '        run: python tools/ci/run_repo_integrity.py || true\n'),
     'chained command':
-        lambda t: _sub(t, GATE_RUN, '        run: python tools/run_repo_integrity.py; exit 0\n'),
+        lambda t: _sub(t, GATE_RUN, '        run: python tools/ci/run_repo_integrity.py; exit 0\n'),
     'job continue-on-error':
         lambda t: _sub(t, '    timeout-minutes: 15\n',
                        '    timeout-minutes: 15\n    continue-on-error: true\n'),
@@ -116,11 +116,11 @@ PROVENANCE_MUTATIONS = {
     'job if':
         lambda t: _sub(t, '    runs-on: ubuntu-24.04\n', "    if: false\n    runs-on: ubuntu-24.04\n"),
     'provenance step removed':
-        lambda t: _sub(t, '        run: python3 tools/provenance_check.py\n', '        run: true\n'),
+        lambda t: _sub(t, '        run: python3 tools/ci/provenance_check.py\n', '        run: true\n'),
     'contract step removed':
-        lambda t: _sub(t, '        run: python3 tools/ci_contract.py\n', '        run: echo skipped\n'),
+        lambda t: _sub(t, '        run: python3 tools/ci/ci_contract.py\n', '        run: echo skipped\n'),
     'body pasted into the shell':
-        lambda t: _sub(t, '        run: python3 tools/provenance_check.py\n',
+        lambda t: _sub(t, '        run: python3 tools/ci/provenance_check.py\n',
                        '        run: echo "${{ github.event.pull_request.body }}"\n'),
     'comment step widened to always':
         lambda t: _sub(t, '        if: failure()\n', '        if: always()\n'),
@@ -142,7 +142,7 @@ def test_each_way_to_quietly_disable_the_provenance_check_is_refused(name):
 def test_the_contract_reads_the_parsed_yaml_not_comments():
     """A comment naming the gate command is not the gate."""
     bad = _sub(INTEGRITY, GATE_STEP + GATE_RUN,
-               '      # run: python tools/run_repo_integrity.py\n')
+               '      # run: python tools/ci/run_repo_integrity.py\n')
     assert any('exactly one step' in e for e in contract.integrity_errors(bad))
     assert yaml.load(INTEGRITY, Loader=yaml.BaseLoader)['on']['pull_request']
 
@@ -151,7 +151,7 @@ def _run_runner(tmp_path, files):
     for rel, body in files.items():
         (tmp_path / rel).write_text(body)
     code = ('import importlib.util, sys, pathlib\n'
-            f'spec = importlib.util.spec_from_file_location("r", {str(ROOT / "tools/run_repo_integrity.py")!r})\n'
+            f'spec = importlib.util.spec_from_file_location("r", {str(ROOT / "tools/ci/run_repo_integrity.py")!r})\n'
             'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n'
             f'sys.exit(m.main(guards={tuple(files)!r}, root=pathlib.Path({str(tmp_path)!r})))\n')
     return subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
@@ -179,7 +179,7 @@ def test_the_runner_fails_a_missing_guard(tmp_path):
     r = subprocess.run(
         [sys.executable, '-c',
          'import importlib.util, sys, pathlib\n'
-         f'spec = importlib.util.spec_from_file_location("r", {str(ROOT / "tools/run_repo_integrity.py")!r})\n'
+         f'spec = importlib.util.spec_from_file_location("r", {str(ROOT / "tools/ci/run_repo_integrity.py")!r})\n'
          'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n'
          f'sys.exit(m.main(guards=("test_gone.py",), root=pathlib.Path({str(tmp_path)!r})))\n'],
         capture_output=True, text=True)

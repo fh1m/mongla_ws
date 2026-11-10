@@ -67,7 +67,7 @@ would look excellent on a plot and be wrong in the same reference-dependent way.
 
 ## The scorer is already written, and it changed the problem statement
 
-`tools/tau_from_scale.py --self-test` runs the ranking against synthetic
+`tools/studies/tau_from_scale.py --self-test` runs the ranking against synthetic
 sources whose bias we chose, so a bug in the scorer cannot be mistaken for a
 bias in a sensor on the day — when re-running costs a pool session. It found
 two things before any water:

@@ -5,8 +5,8 @@
 > chosen so that a failure early invalidates the tests after it — do not
 > reorder to get to the interesting part.
 
-**Record every run.** `scripts/pool_record.sh record --full <label>` and
-`tools/record_session.sh`. A number nobody can replay is a number nobody can
+**Record every run.** `tools/pool/pool_record.sh record --full <label>` and
+`tools/pool/record_session.sh`. A number nobody can replay is a number nobody can
 check, and three results were retracted this week for exactly that.
 
 **Warning: `/tmp` is a RAM disk on the dev box.** Bags land in `MONGLA_RUN_DIR`
@@ -76,7 +76,7 @@ been taken on a person in a room.**
 Same runs as §2 — no extra work, just the analysis:
 
 ```
-tools/continuity_from_bag.py <bag> --label pool_<prop>
+tools/studies/continuity_from_bag.py <bag> --label pool_<prop>
 ```
 
 **Compare against the air recording:** 338 gaps, p50 116 ms, p90 1.12 s,

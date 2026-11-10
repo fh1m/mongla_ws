@@ -4,7 +4,7 @@ name: Backlog drift
 # (BUGS.md, ROADMAP.md, every page citing an upstream item) with what GitHub
 # says now, and rewrite the one `drift-report` issue (#88). A report, not a
 # merge gate: each finding needs a person to decide whether the doc or the
-# issue is wrong. Everything it does is tools/backlog_drift.py.
+# issue is wrong. Everything it does is tools/ci/backlog_drift.py.
 on:
   schedule:
     - cron: '17 6 * * 1'
@@ -32,4 +32,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: python3 tools/backlog_drift.py --write-issue
+        run: python3 tools/ci/backlog_drift.py --write-issue

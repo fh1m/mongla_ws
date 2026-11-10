@@ -29,7 +29,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / 'docs/evidence/water.json'
-sys.path.insert(0, str(ROOT / 'tools'))
+sys.path.insert(0, str(ROOT / 'tools' / 'ci'))
 import gen_lineage  # noqa: E402
 
 STATUSES = {'HISTORICAL_WATER', 'RECORDED_WATER_REPLAY', 'CURRENT_WATER', 'NOT_YET'}
@@ -138,7 +138,7 @@ def test_the_validator_refuses_each_broken_registry(break_it, needle):
 
 def test_the_lineage_page_is_generated_from_the_registry():
     page = (ROOT / 'docs/evidence/lineage.md').read_text()
-    assert page == gen_lineage.render(_registry()), 'run tools/gen_lineage.py'
+    assert page == gen_lineage.render(_registry()), 'run tools/ci/gen_lineage.py'
 
 
 def test_the_record_keeps_the_predecessors_and_the_current_platform_honest():
