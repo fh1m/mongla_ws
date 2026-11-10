@@ -12,7 +12,7 @@ It read `BAND_LO = 0.25, BAND_HI = 0.45` and cited section 23 -- but section 23
 measured against sqrt(box area) IN PIXELS, reported by quartile, and this
 module compares against `box_height / frame_height`. Those are different
 quantities and nothing recorded a conversion between them. Re-measured in the
-controller's own unit (`tools/approach_band.py`, 4 archive clips, 13 668
+controller's own unit (`tools/studies/approach_band.py`, 4 archive clips, 13 668
 detections through the shipped `gate_rescue_repair` graph, conf >= 0.05):
 
     class        peak bin (box_h / frame_h)   mean conf at peak   n
@@ -28,7 +28,7 @@ best view the detector ever gets.
 So the band is per class, and a class with no measurement gets no advice.
 `advise()` needs the class name. Given one that is not in the table it returns
 HOLD and says why -- never a default band, because a default band is exactly
-what was wrong here. Re-measure with `tools/approach_band.py` when the model
+what was wrong here. Re-measure with `tools/studies/approach_band.py` when the model
 changes; class ids belong to one graph and do not transfer.
 
 And evidence accumulates ACROSS viewpoints, not ACROSS frames. Fifty frames
@@ -40,7 +40,7 @@ from dataclasses import dataclass
 import math
 
 # Fraction of frame HEIGHT the target should occupy, per class, from
-# `tools/approach_band.py` on the shipped gate_rescue_repair graph. These are
+# `tools/studies/approach_band.py` on the shipped gate_rescue_repair graph. These are
 # the measured peak bins -- not a band anyone chose the look of.
 #
 # `repair` is MONOTONIC to the frame edge over the range the archive covers,
@@ -80,7 +80,7 @@ def advise(box_h_px: float, frame_h_px: float, class_name: str = '',
     if band is None:
         return Approach(HOLD,
                         f'no measured band for {class_name!r} -- holding. '
-                        f'Run tools/approach_band.py; a default band is what '
+                        f'Run tools/studies/approach_band.py; a default band is what '
                         f'was wrong before. Measured: {sorted(table)}')
     lo, hi = band
     if not (frame_h_px > 0) or box_h_px is None or box_h_px <= 0:

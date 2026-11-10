@@ -540,7 +540,7 @@ class TestDeRotationSignConvention:
 
       * §12 fitted `-1.150` and measured it WORKING -- false velocity under
         pure rotation fell 575.7 -> 57.1 mm/s (-90 %);
-      * `tools/flow_derot_calibrate.py` fitted `+1.058`, held-out rms 4.23 px
+      * `tools/bench/flow_derot_calibrate.py` fitted `+1.058`, held-out rms 4.23 px
         against 14.42 for predicting zero, and a three-arm A/B ranked the
         shipped `-1` as clearly worst.
 

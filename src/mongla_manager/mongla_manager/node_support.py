@@ -124,9 +124,12 @@ def mission_watchdog(attached: bool, last_seen: float, now: float,
 
 # A kill disarm that is not confirmed is retried this often. One attempt waits
 # up to 2 s for the board's 1 Hz heartbeat; the gap keeps attempts from
-# overlapping on the wire.
+# overlapping on the wire. After KILL_MAX_TRIES the heartbeat is withheld as
+# well, the same bounded end as an unconfirmed mission-loss SURFACE (#98), and
+# the disarm keeps being re-sent: a retry costs nothing, giving up costs a move
+# that resumes when the knob comes back.
 KILL_RETRY_S = 3.0
-KILL_MAX_TRIES = 10
+KILL_MAX_TRIES = 3
 
 
 def kill_latch(latch, killed, armed, now: float,
@@ -135,8 +138,8 @@ def kill_latch(latch, killed, armed, now: float,
 
     `armed` is True / False / None, where None is "no fresh heartbeat" and is
     treated as possibly armed. `latch` is None, or a dict of attempts.
-    Actions: 'disarm' (send one), 'resolved' (a fresh heartbeat says disarmed),
-    'none'.
+    Actions: 'disarm' (send one), 'withhold' (send one, and from now on withhold
+    the heartbeat), 'resolved' (a fresh heartbeat says disarmed), 'none'.
 
     Why the host acts at all: the switch cuts thruster power on the second
     board, and the control board treats it as display-only (firmware
@@ -148,15 +151,43 @@ def kill_latch(latch, killed, armed, now: float,
     refused or unanswered disarm left the vehicle armed while the switch was
     engaged, and restoring power would resume the move. The latch holds until
     the board itself reports DISARMED, whatever the knob does in between.
+
+    Issue #98. It then stopped after ten attempts and kept the heartbeat
+    healthy, so the board's own link-loss failsafe never fired either: a
+    bounded number of tries ended in nothing at all. Now the tries never stop,
+    and the max_tries-th one also withholds the heartbeat, for good.
     """
     if latch is None:
         if killed is True and armed is not False:
-            return {'tries': 1, 'last': now}, 'disarm'
+            return {'tries': 1, 'last': now, 'withholding': False}, 'disarm'
         return None, 'none'
     if armed is False:
         return None, 'resolved'
-    if latch['tries'] < max_tries and now - latch['last'] >= retry_s:
-        return {'tries': latch['tries'] + 1, 'last': now}, 'disarm'
+    if now - latch['last'] < retry_s:
+        return latch, 'none'
+    tries = latch['tries'] + 1
+    withhold = tries >= max_tries and not latch.get('withholding')
+    nxt = {'tries': tries, 'last': now,
+           'withholding': bool(latch.get('withholding')) or withhold}
+    return nxt, ('withhold' if withhold else 'disarm')
+
+
+def boot_latch(latch, armed):
+    """(latch, action) for a manager that has just started; pure.
+
+    A restart used to clear every latch, while the board might still be armed
+    and running a move the previous manager left behind -- a kill it never
+    confirmed, a mission that died (#98). The first fresh heartbeat decides:
+    DISARMED clears it; ARMED latches, and ordinary verbs are refused until the
+    board reports DISARMED. `latch` is 'pending' (nothing heard yet), 'armed',
+    or None (clear). Actions: 'latched', 'resolved', 'none'.
+    """
+    if latch == 'pending':
+        if armed is None:
+            return 'pending', 'none'
+        return ('armed', 'latched') if armed else (None, 'none')
+    if latch == 'armed' and armed is False:
+        return None, 'resolved'
     return latch, 'none'
 
 

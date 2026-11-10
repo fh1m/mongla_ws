@@ -39,7 +39,7 @@ it. The remaining 1.51 ms of host work is letterbox + buffer copy + NMS decode.
 **Any C extension called at rate must be checked for GIL behaviour before
 anything else in the process is blamed.** The blocking Hailo call held it for
 its whole 10 ms and the symptom was a *camera* that looked 13.8 ms stale. Two
-hypotheses about the camera died first. `tools/gil_audit.py` audits the whole
+hypotheses about the camera died first. `tools/bench/gil_audit.py` audits the whole
 set; run it after any dependency change.
 
 **A fixed-rate consumer polling an asynchronous producer wastes half a period.**

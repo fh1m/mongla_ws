@@ -14,6 +14,8 @@ from ..motion_rates import VISION_LOOP_HZ as LOOP_HZ
 from .control import (
     ABORTED,
     ALIGNED,
+    COMMIT_UNVERIFIED,
+    ESTIMATED_CROSSING,
     KP_FORWARD_DEFAULT,
     KP_LAT_DEFAULT,
     NO_CAMERA,
@@ -26,6 +28,7 @@ from .control import (
     _brake_axis,
     _camera_ready,
     _clamp,
+    _crossing_evidence,
     _ema_step,
     _fill,
     _present,
@@ -34,6 +37,7 @@ from .control import (
 )
 from .freshness import (
     _authority,
+    _is_evidence,
     _warn_low_fps,
 )
 from .srot_drive import (
@@ -82,9 +86,13 @@ def move_loop(*,
       ``move(fwd=None)``): drive forward at ``gain`` while the target is
       visible; once the target has been seen and then leaves the frame,
       keep driving for a commit window (``hold_s`` if given, else
-      ``_PASSTHROUGH_COMMIT_S``) and report ALIGNED -- this carries the
-      hull *through* the gate. If the target is never seen, falls back to
-      the normal loss path (LOST -> mission fallback search).
+      ``_PASSTHROUGH_COMMIT_S``, and never past ``duration``) to carry the
+      hull *through* the gate. It reports what it can stand behind (#79):
+      ESTIMATED_CROSSING when the last live box surrounded the camera axis
+      and ran off the frame, COMMIT_UNVERIFIED otherwise -- never ALIGNED,
+      because losing a gate is not seeing the hull cross it. If the target
+      is never seen, falls back to the normal loss path (LOST -> mission
+      fallback search).
 
     ``maintain_on`` holds a lateral pixel offset (``maintain_px``) while
     driving; depth and yaw are never commanded (the board holds both). Returns an Outcome -- never
@@ -117,6 +125,8 @@ class _Move(_VisionLoop):
         self.g_lat = c.gain if c.gain_lat is None else c.gain_lat
         self.reached_at: Optional[float] = None
         self.commit_until: Optional[float] = None
+        # (ex, half-width) of the last LIVE box: what the crossing verdict reads.
+        self.last_live_box: Optional[Tuple[float, float]] = None
         self.fwd_ema = 0.0   # trailing EMA of forward command -> brake proxy (fill-stop)
         self.lat_ema = 0.0   # trailing EMA of the maintain strafe command -> brake proxy
         # Pass-through commit window: hold_s overrides the module default.
@@ -153,6 +163,10 @@ class _Move(_VisionLoop):
         if c.abort_fn and c.abort_fn():
             return self.outcome(ABORTED, "aborted", now)
         if now >= self.deadline:
+            if self.commit_until is not None:
+                # The commit was under way: duration bounds it, and what the
+                # hull was doing is still a crossing verdict, not a timeout.
+                return self.crossing(now, cut_short=True)
             if not self.seen:
                 reason = self.never_seen()
             else:
@@ -185,7 +199,8 @@ class _Move(_VisionLoop):
                               f"lat={x_off:+.0f}px ] ['{c.target_class}'] -> clear gate")
             return None
 
-        out = self.approach(now, fill, fresh, lat_pct)
+        out = self.approach(now, fill, fresh, lat_pct,
+                            evidence=_is_evidence(sample, fresh))
         if out is not None:
             return out
         if self.log_due(now):
@@ -212,10 +227,14 @@ class _Move(_VisionLoop):
         moves coast normally.
         """
         c = self.c
+        # The lock ladder, too: a follower or anchor box keeps the gate
+        # "present" for up to its 2.5 s horizon after the detector lost it,
+        # and the commit would start that much late -- inside the gate.
         eff_coast = 0.0 if c.passthrough else c.coast_s
+        eff_lock = 0.0 if c.passthrough else c.lock_s
         return c.vision_state.bbox_error(
             c.target_class, locked_id=self.locked_id, coast_s=eff_coast,
-            lock_s=c.lock_s)
+            lock_s=eff_lock)
 
     def commit(self, now: float) -> Optional[Outcome]:
         """Pass-through trigger: the target was seen and has now left the frame.
@@ -230,10 +249,29 @@ class _Move(_VisionLoop):
             self.log.debug(f"[VIS  ] move: {c.target_class!r} cleared frame -- "
                            f"committing {self.commit_s:.1f}s to pass through")
         if now >= self.commit_until:
-            c.writers.neutral()
-            return self.outcome(ALIGNED, "passed through", now)
+            return self.crossing(now)
         self.drive(c.gain, 0.0)   # no detection -> no lateral, just drive on
         return None
+
+    def crossing(self, now: float, cut_short: bool = False) -> Outcome:
+        """End a pass-through commit with the verdict the last live box supports."""
+        self.c.writers.neutral()
+        why = (f"{self.commit_s:.1f}s commit" if not cut_short
+               else "commit cut short by duration")
+        box = self.last_live_box
+        if box is not None and _crossing_evidence(*box):
+            return self.outcome(
+                ESTIMATED_CROSSING,
+                f"gate surrounded the camera axis and ran off the frame "
+                f"(ex {box[0]:+.2f}, width {box[1] * 2:.2f} of frame); {why} -- "
+                f"an estimate, not an observed crossing", now)
+        seen = ("never seen live" if box is None else
+                f"last live box ex {box[0]:+.2f}, width {box[1] * 2:.2f} of frame, "
+                f"did not run off the frame around the axis")
+        return self.outcome(
+            COMMIT_UNVERIFIED,
+            f"gate lost before any sign of crossing ({seen}); {why} ran "
+            f"open-loop", now)
 
     def acquire(self, sample, now: float) -> Tuple[float, float]:
         """The target is present: ``(fill, freshness)`` for this tick."""
@@ -241,6 +279,8 @@ class _Move(_VisionLoop):
         self.seen = True
         self.lost_since = None
         self.commit_until = None
+        if not getattr(sample, 'coasted', False):
+            self.last_live_box = (sample.ex, sample.w_frac)
         fill = _fill(sample, c.mode)
         self.fill = fill
         self.note_frame(sample, now)
@@ -263,8 +303,13 @@ class _Move(_VisionLoop):
         return lat_pct
 
     def approach(self, now: float, fill: float, fresh: float,
-                 lat_pct: float) -> Optional[Outcome]:
-        """Fill-stop: drive toward ``fwd_fill``, then hold and brake on arrival."""
+                 lat_pct: float, evidence: bool = True) -> Optional[Outcome]:
+        """Fill-stop: drive toward ``fwd_fill``, then hold and brake on arrival.
+
+        Arrival needs evidence (#78). A predicted or zero-authority box at the
+        fill stops forward drive -- never closer on a guess -- but neither
+        starts nor completes the arrival hold; the next real sighting does.
+        """
         c = self.c
         if fill < c.fwd_fill:
             self.reached_at = None
@@ -273,6 +318,10 @@ class _Move(_VisionLoop):
             fwd_pct = _clamp((c.fwd_fill - fill) * c.kp_forward, 0.0, c.gain) * fresh
             self.drive(fwd_pct, lat_pct)
             self.fwd_ema = _ema_step(self.fwd_ema, fwd_pct, self.dt)
+            return None
+        if not evidence:
+            self.drive(0.0, lat_pct)
+            self.fwd_ema = _ema_step(self.fwd_ema, 0.0, self.dt)
             return None
         if self.reached_at is None:
             self.reached_at = now

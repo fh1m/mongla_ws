@@ -313,8 +313,8 @@ class VisionState(ChoiceMixin):
 
     def _on_lock(self, msg) -> None:
         """Latest ladder output. Kept whole; the rung name and confidence ride
-        in `class_id`/`score`, so nothing here needs to know how many rungs
-        exist."""
+        in `class_id`/`score` and the followed class in `Detection2D.id`
+        (#74), so nothing here needs to know how many rungs exist."""
         with self._lock:
             self._lock_array = msg
             self._lock_stamp = self._capture_monotonic(msg)
@@ -324,17 +324,25 @@ class VisionState(ChoiceMixin):
             self._pose = msg
             self._pose_stamp = self._capture_monotonic(msg)
 
-    def target_pose(self, max_age_s: float = 1.0):
-        """The latest 6-DoF target pose, or None if absent/stale/refused."""
+    def target_pose(self, max_age_s: float = 1.0, class_name: str = ''):
+        """The latest 6-DoF target pose, or None if absent/stale/refused.
+
+        With `class_name`, only a pose solved FOR that class (#76): a valid
+        pose of the previous target is not a pose of this one, and an
+        unlabelled pose cannot be shown to be.
+        """
         with self._lock:
             m, t = self._pose, self._pose_stamp
         if m is None or not m.ok:
+            return None
+        if class_name and getattr(m, 'target_label', '') != class_name:
             return None
         if max_age_s > 0.0 and (time.monotonic() - t) > max_age_s:
             return None
         return m
 
-    def square_within(self, tol_deg: float, max_age_s: float = 1.0) -> bool:
+    def square_within(self, tol_deg: float, max_age_s: float = 1.0,
+                      class_name: str = '') -> bool:
         """Is the target square to us within `tol_deg`, ALLOWING for the flip?
 
         The gate. Both flip branches are legitimate answers, so squareness only
@@ -347,14 +355,15 @@ class VisionState(ChoiceMixin):
         False. For a firing gate the fail-safe direction is "do not fire", and
         this is the only place that choice is made.
         """
-        m = self.target_pose(max_age_s)
+        m = self.target_pose(max_age_s, class_name)
         if m is None:
             return False
         worst = float(m.off_axis_deg) + max(float(m.yaw_spread_deg),
                                             float(m.pitch_spread_deg))
         return worst <= float(tol_deg)
 
-    def tool_offset_px(self, tool: str, max_age_s: float = 1.0):
+    def tool_offset_px(self, tool: str, max_age_s: float = 1.0,
+                       class_name: str = ''):
         """Signed (du, dv) px that puts the target on TOOL's axis, or None.
 
         The miss equals the offset at every range. An align centres the
@@ -384,13 +393,13 @@ class VisionState(ChoiceMixin):
         K, _D = self.calibration()
         if not K or len(K) < 6 or not (K[0] > 0.0 and K[4] > 0.0):
             return None
-        m = self.target_pose(max_age_s)
+        m = self.target_pose(max_age_s, class_name)
         if m is None or not getattr(m, 'ok', False):
             return None
         return pixel_offset(tool, fx=float(K[0]), fy=float(K[4]),
                             range_m=float(m.range_m))
 
-    def obliquity_deg(self, max_age_s: float = 1.0):
+    def obliquity_deg(self, max_age_s: float = 1.0, class_name: str = ''):
         """Worst-case angle between the target's face and our axis, or None.
 
         The honest primitive under `square_within`, which collapses "no pose"
@@ -403,7 +412,7 @@ class VisionState(ChoiceMixin):
         both are legitimate answers to a planar pose, and reading the point
         estimate alone believes the lucky one.
         """
-        m = self.target_pose(max_age_s)
+        m = self.target_pose(max_age_s, class_name)
         if m is None:
             return None
         return float(m.off_axis_deg) + max(float(m.yaw_spread_deg),

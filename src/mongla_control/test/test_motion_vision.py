@@ -19,7 +19,7 @@ from mongla_control.motion_vision import (
     VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S, VISION_FRESH_ZERO_MAX_S,
     VISION_RANGE_GAIN_FILL_LO, VISION_RANGE_GAIN_FILL_HI, VISION_LOCK_GATE_NORM,
     FWD_BAND,
-    ALIGNED, LOST, TIMEOUT, NO_CAMERA,
+    ALIGNED, LOST, TIMEOUT, NO_CAMERA, COMMIT_UNVERIFIED,
 )
 
 
@@ -554,15 +554,19 @@ def test_align_lateral_zero_when_blind():
         'a frame past the freshness-zero age must command neutral lateral (no blind drive)')
 
 
-def test_align_yaw_not_decayed_by_freshness():
-    # Yaw is excluded from freshness-decay (yaw is a rate command the board integrates). Even a
-    # stale frame still drives full yaw -- so yaw authority is unchanged by age.
-    pix = _FakeBoard()
-    _align(_FakeVision(_sample(ex=1.0, age_s=0.30)), pix=pix,
+def test_align_yaw_fades_with_freshness():
+    """#77. Yaw is a RATE demand: a stale bearing re-commanded every tick keeps
+    the hull turning past a target it already reached. It fades with the same
+    authority as lateral, and a fresh frame still gets the full cap."""
+    fresh = _FakeBoard()
+    _align(_FakeVision(_sample(ex=1.0, age_s=0.0)), pix=fresh,
            axes={'yaw'}, kp_yaw=60.0, gain=30.0, duration=0.2)
-    cap = (30.0)
-    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 0) != 0]
-    assert yaw and max(yaw) == cap, 'yaw must NOT be freshness-decayed (full authority)'
+    assert max(c.get('yaw', 0) for c in fresh.rc) == 30.0, 'a fresh frame lost yaw'
+    blind = _FakeBoard()
+    _align(_FakeVision(_sample(ex=1.0, age_s=VISION_FRESH_ZERO_MAX_S + 0.05)),
+           pix=blind, axes={'yaw'}, kp_yaw=60.0, gain=30.0, duration=0.2)
+    assert all(c.get('yaw', 0) == 0 for c in blind.rc), \
+        'a blind frame must not keep the hull turning'
 
 
 def test_move_forward_decays_when_sample_stale():
@@ -815,13 +819,13 @@ def test_move_brake_fires_forward_on_fill_stop():
 
 
 def test_move_passthrough_never_brakes():
-    # Pass-through is defined to COAST through the gate: seen then gone -> ALIGNED
-    # with NO brake kick (a brake would defeat carrying the hull through).
+    # Pass-through is defined to COAST through the gate: seen then gone -> a
+    # commit with NO brake kick (a brake would defeat carrying the hull through).
     seen = _sample(w_frac=0.5, h_frac=0.5)
     vis = _FakeVision([seen, seen, None])
     out, _, writers = _move(vis, passthrough=True, hold_s=0.1,
                             lost_grace_s=5.0, duration=1.0)
-    assert out.code == ALIGNED
+    assert out.code == COMMIT_UNVERIFIED
     assert not writers.forwards, 'pass-through must never brake -- it must coast'
 
 
@@ -856,14 +860,15 @@ def test_move_hold_through_loss_never_reports_lost():
 # --------------------------------------------------------------------------- #
 #  move_loop -- pass-through (fwd=None / fwd_fill<=0)                          #
 # --------------------------------------------------------------------------- #
-def test_move_passthrough_seen_then_lost_reaches():
-    # Gate is seen for a couple of ticks, then leaves the frame -> after the
-    # commit window the verb reports ALIGNED ("passed through").
+def test_move_passthrough_seen_then_lost_commits_but_never_claims_aligned():
+    # Gate is seen for a couple of ticks, then vanishes while still inside the
+    # frame -> the commit runs, and the verdict says it was not a crossing
+    # (#79; test_pass_through_crossing.py has the five sequences).
     seen = _sample(w_frac=0.5, h_frac=0.5)
     vis = _FakeVision([seen, seen, None])   # present, present, then gone
     out, _, writers = _move(vis, passthrough=True, hold_s=0.1,
                             lost_grace_s=5.0, duration=1.0)
-    assert out.code == ALIGNED
+    assert out.code == COMMIT_UNVERIFIED
     assert writers.neutralised >= 1
 
 

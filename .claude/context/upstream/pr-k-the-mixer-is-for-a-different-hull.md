@@ -115,5 +115,5 @@ measurement is what makes it actionable.
 ---
 
 *Evidence: `docs/assets/cad/hull.mgla`, packed from the Onshape export by
-`tools/pack_hull.py`; body centroids measured 2026-09-23; hull bounding box cross-checked
+`tools/site/pack_hull.py`; body centroids measured 2026-09-23; hull bounding box cross-checked
 against `CLAUDE.md`. Firmware read at `src/control/mixer.cpp:26-42` and `include/config.h:117`.*

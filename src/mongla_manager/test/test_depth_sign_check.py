@@ -7,14 +7,14 @@ fix is unvalidated. A leak, a low thruster battery and a GCS loss all route to
 SURFACE, which calls `depth::update()` — so if the sign were still wrong, the
 emergency ascent drives the vehicle DOWN.
 
-`tools/depth_sign_check.py` makes that checkable disarmed with a thumb over the
+`tools/pool/depth_sign_check.py` makes that checkable disarmed with a thumb over the
 Bar30 port. The decision is pure so it is testable without a board.
 """
 import importlib.util
 import sys
 from pathlib import Path
 
-_TOOL = Path(__file__).resolve().parents[3] / 'tools' / 'depth_sign_check.py'
+_TOOL = Path(__file__).resolve().parents[3] / 'tools' / 'pool' / 'depth_sign_check.py'
 
 
 def _load():

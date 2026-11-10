@@ -24,7 +24,9 @@ _VS = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
 
 def test_the_verb_passes_the_tool_offset_into_the_loop():
     assert 'tool_offset_fn=' in _VV, 'align_loop is called without the tool aim'
-    assert 'vstate.tool_offset_px(tool)' in _VV
+    # ...and for THIS target: a pose of the last prop is not a range to this one (#76)
+    import re
+    assert re.search(r'vstate\.tool_offset_px\(\s*tool,\s*class_name=target_class\)', _VV)
 
 
 def test_the_loop_applies_it_to_EVERY_centring_axis():
@@ -48,13 +50,15 @@ def test_the_loop_applies_it_to_EVERY_centring_axis():
 def test_it_is_resolved_PER_TICK_because_the_range_moves():
     """A constant offset computed once would be right at one range only -- and
     the correction is largest exactly where a mission spends its final second."""
-    i = _MV.index('(tool_du, tool_dv) = _tool_offset(c.tool_offset_fn, self.log)')
+    # The call, not the assignment: `ast.unparse` writes a tuple target as
+    # `(a, b) =` on Python 3.10 and `a, b =` on 3.12 (the vehicle's Jazzy).
+    i = _MV.index('= _tool_offset(c.tool_offset_fn, self.log)')
     j = _MV.index("_axis_ctrl(ex_now, c.offsets.get('lat', 0.0), tool_du,")
     assert i < j, 'the offset is resolved after it is used'
     # Inside `_Align.command`, which `_Align.step` calls once per tick.
     assert _MV.rindex('def command(', 0, i) > _MV.rindex('def step(', 0, i)
     step = _MV[_MV.index('def step(', _MV.index('class _Align(')):]
-    assert 'self.command(sample)' in step[:step.index('def drive(')], \
+    assert 'self.command(sample, fresh)' in step[:step.index('def drive(')], \
         'not resolved on every tick'
 
 
@@ -137,7 +141,7 @@ class _Self:
 
 class _VState:
     def __init__(self, px=None): self._px = px
-    def tool_offset_px(self, tool): return self._px
+    def tool_offset_px(self, tool, **_kw): return self._px
 
 
 def _warn(fake, tool, vstate=None):

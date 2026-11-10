@@ -1,0 +1,28 @@
+name: Qualification step
+description: A check the vehicle must pass on the bench or in water before a capability is claimed.
+labels: ['blocked: water']
+body:
+  - type: textarea
+    id: claim
+    attributes:
+      label: The capability this qualifies
+      description: One sentence, and its state today (RUNS TODAY, BUILT NEVER FLOWN, or BLOCKED).
+    validations:
+      required: true
+  - type: textarea
+    id: scorer
+    attributes:
+      label: Pass, fail, and what would falsify it
+      description: Written before the run. The number, its bar, and the independent observation that checks it.
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration under test
+      description: Commit, board firmware revision, hull, models and calibration. A release manifest link is best.
+  - type: textarea
+    id: blockers
+    attributes:
+      label: Blocked by
+      description: Issues or upstream pull requests that must land first. Also set them as GitHub "blocked by" relationships.

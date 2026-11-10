@@ -43,7 +43,9 @@ keeps it that many px BELOW centre. ``0`` = dead centre.
 from .control import (  # noqa: F401
     ABORTED,
     ALIGNED,
+    COMMIT_UNVERIFIED,
     DRIFTED,
+    ESTIMATED_CROSSING,
     FWD_BAND,
     KP_FORWARD_DEFAULT,
     KP_LAT_DEFAULT,

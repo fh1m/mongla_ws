@@ -191,7 +191,7 @@ class SrotParams:
     def check_yaw_authority(self, timeout: float = 3.0):
         """Can a visual-servo yaw correction produce thrust at all? (ok, message)
 
-        The coupling this guards, measured on `tools/control_bench` against
+        The coupling this guards, measured on `tools/bench/control_bench` against
         this board's own parameters. Two independent thresholds stand between a
         host yaw demand and a turning propeller:
 

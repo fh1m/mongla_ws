@@ -132,6 +132,8 @@ is how `recommend()` happened.
 - [66. THE SHIPPED GATE HEF WAS DEGRADED BY ITS OWN FINE-TUNE — level 2 lost 0.34 of confidence that level 0 kept (B-82, issue #47)](#66-the-shipped-gate-hef-was-degraded-by-its-own-fine-tune--level-2-lost-034-of-confidence-that-level-0-kept-b-82-issue-47)
 - [67. PLACING A PROP FROM SIGHTINGS — the hull's error enters once, and it is the one that matters](#67-placing-a-prop-from-sightings--the-hulls-error-enters-once-and-it-is-the-one-that-matters)
 - [68. THE VEHICLE'S LOOPS HOLD THEIR RATES — and a relative sleep does not](#68-the-vehicles-loops-hold-their-rates--and-a-relative-sleep-does-not)
+- [69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)](#69-the-restart-policy--two-decided-numbers-two-derived-and-the-vehicle-refuted-my-first-camera-design-2026-11-10)
+- [70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10)](#70-kutum-in-the-health-report--the-pi-and-the-hailo-8-as-one-machine-graded-by-their-own-firmware-2026-11-10)
 <!-- contents:end -->
 
 ---
@@ -155,13 +157,13 @@ is how `recommend()` happened.
 | detector `conf` (close work) | `0.15` — `profiles.py` close/fast | same table; every knee ≥ 0.25 | ≥ 0.10 |
 | preprocessing | `off` — **all four profiles** | CLAHE never positive in **17** configurations (4 props, 3 venues, 39× sharpness range); gate 30.4 → **1.2 %** | **stays off in every profile.** Guarded: `test_no_profile_enables_preprocessing` |
 | tracker `high_conf_det_threshold` | clamped to live `conf` — `roboflow_tracker.py` | real underwater scores p10 **0.167** / p50 **0.258** / p90 0.439; only **0.6 %** cleared the old 0.6 | must be ≤ detector `conf`, or the tracker emits nothing |
-| cross-session recall | — (model choice) | same prop, 3 venues, 16× sharpness: **97.5 → 93.3 %**. Same prop, 2 *models*: **73 % vs 29 %** | **≥ 60 % on the WORST held-out session.** Rank with `tools/model_select.py` |
+| cross-session recall | — (model choice) | same prop, 3 venues, 16× sharpness: **97.5 → 93.3 %**. Same prop, 2 *models*: **73 % vs 29 %** | **≥ 60 % on the WORST held-out session.** Rank with `tools/studies/model_select.py` |
 
 ## 2. Vision — continuity (the lock ladder)
 
 Measured at **native frame rate**, 300 consecutive frames × 3 windows × 5 clips,
 conf 0.10 — 71 real gaps. A *sampled* sweep cannot measure this at all
-(`tools/gap_distribution.py` docstring says why).
+(`tools/studies/gap_distribution.py` docstring says why).
 
     gap  p50 0.155 s   p90 0.651 s   p99 2.418 s   max 4.00 s
 
@@ -1504,7 +1506,7 @@ would be fitted to the operator's wrist.
 
 ### The experiment that settles it
 
-`tools/flow_derot_ab.py` -- three de-rotation settings measured on ONE slide,
+`tools/bench/flow_derot_ab.py` -- three de-rotation settings measured on ONE slide,
 because a hand slide is not repeatable to better than ~1 cm and sequential
 arms cannot resolve a difference smaller than the operator. `flow_node` reads
 frames off a topic, so extra instances watch the same camera and share one
@@ -1548,7 +1550,7 @@ shipped GAINS are wrong for this mount**, which §12 predicted in as many
 words — *"the axis mapping and the method carry over; this gain does not,
 whatever its cause. Re-derive it on the hull."* — and which nobody had done.
 
-The gains need **deriving, not deleting**. `tools/flow_derot_calibrate.py`
+The gains need **deriving, not deleting**. `tools/bench/flow_derot_calibrate.py`
 does it from tilt-only motion with an excitation gate and held-out scoring,
 because fitting them from a SLIDE gives 1.90 / 1.63 — numbers fitted partly
 to the operator's wrist.
@@ -1878,7 +1880,7 @@ not being localised; large sloppy `repair` boxes are.
 
 **Warning: Three measurements, three different answers, two of them mine.**
 
-1. `tools/return_check.py` reported **0.0 %** — right, but by accident. It
+1. `tools/studies/return_check.py` reported **0.0 %** — right, but by accident. It
    name-matches `gate_backward`, which no 2025 model has, so 0.0 % was
    arithmetic. Worse, those `robosub_gate*` weights predict **nothing on the
    FRONT side of this same season's gate data** (0 boxes at conf 0.10 on 6/6
@@ -2172,7 +2174,7 @@ trusting an absolute heading late in a mission.
 have been ruined by treating *"it is on a bench"* as evidence of stillness. The
 board publishes its own gyro at 50 Hz inside ATTITUDE and we already republish it
 as `/mongla/imu_rates` — **stillness was always measurable and was assumed
-instead.** `tools/yaw_drift_check.py` now gates on it and refuses to report a
+instead.** `tools/bench/yaw_drift_check.py` now gates on it and refuses to report a
 drift with no gyro available, because absence of a stillness check is not
 evidence of stillness.
 
@@ -3120,7 +3122,7 @@ and the number is used nowhere.
 
 ## 11. The closed-loop bench — the plant, and what `MOT_SPIN_MIN` really costs
 
-**Built 2026-09-23.** `tools/control_bench/plant.py` + `flight.py`. Until now the
+**Built 2026-09-23.** `tools/bench/control_bench/plant.py` + `flight.py`. Until now the
 bench was OPEN LOOP — stick in, DShot out, no feedback — so it could say what the
 board commands and nothing about what the vehicle then does.
 
@@ -3345,7 +3347,7 @@ reference: a turntable or an optical heading truth, then the pool.
 **Camera <-> gyro time offset `td`, on the vehicle's own hardware (2026-10-03).**
 Pi 5, the downward Microdia global-shutter camera taped to the SROT board, the
 manager running (ClockMap ready, residual 0.12 ms, board clock -555 ppm), the
-rig twisted by hand about the optical axis, 62 s per run. `tools/td_measure.py`
+rig twisted by hand about the optical axis, 62 s per run. `tools/bench/td_measure.py`
 correlates the node's planar-fit image yaw against all three gyro axes; its
 `--self-test` recovers injected offsets of +23 / -11 / +4 ms to within 0.3 ms
 and refuses a steady turn. Image yaw matched **gyro z, sign -**, peak 0.86-0.95.
@@ -3820,7 +3822,7 @@ that XFeat is special. That is a truth test rather than an agreement test, and
 until today it was owed — the archive clips had been reported absent from both
 the dev box and the vehicle.
 
-They are present. `tools/feature_murky_control.py`, same protocol as §8:
+They are present. `tools/studies/feature_murky_control.py`, same protocol as §8:
 reference at 40 % of the clip, frame-to-reference at +1/3/5/8 s, `USAC_MAGSAC`
 at `RANSAC_PX = 3.0`, a pass needing 15 inliers, mutual-nearest-neighbour
 matching to mirror the anchor's own matcher, RootSIFT normalisation
@@ -3911,7 +3913,7 @@ what a larger bank costs, and whether a larger bank can be *searched*.
 
 ### 20.1 Cost: the limit is the match, and it is linear
 
-`tools/bank_scaling_bench.py`, dev box, top_k 1024, 64-D, 2 threads, median of 7.
+`tools/studies/bank_scaling_bench.py`, dev box, top_k 1024, 64-D, 2 threads, median of 7.
 Each reference is one 1024×1024×64 similarity matrix plus a mutual-NN pass.
 
 | bank | looped | batched | **shortlist(5)** | descriptors |
@@ -3934,7 +3936,7 @@ top 5, and 100 references cost what 10 do.
 ### 20.2 But does the shortlist retrieve the RIGHT reference?
 
 The above is a speed result on random descriptors and proves nothing about
-correctness. `tools/bank_shortlist_accuracy.py` answers the other half on the
+correctness. `tools/studies/bank_shortlist_accuracy.py` answers the other half on the
 **real archive clips**, with ground truth obtained the expensive way: match the
 query against *every* reference, see which truly yields the most inliers, then
 ask whether a signature ranking puts it in the top-k.
@@ -3984,7 +3986,7 @@ that needs withdrawing.
 
 §19.1 sampled four offsets (+1/3/5/8 s), found every clip's minimum at +8 s, and
 I read that as *"a reference decays with elapsed time; by 8 s it is close to
-worthless."* `tools/anchor_lifetime.py` sweeps the offset every second to 30 s,
+worthless."* `tools/studies/anchor_lifetime.py` sweeps the offset every second to 30 s,
 median over four start times per clip:
 
 | clip | half-life | T(<40 inliers) | T(<15 inliers) | inliers @ 1/5/10/20/30 s |
@@ -4020,7 +4022,7 @@ evidence** and is flagged for re-derivation against a diversity criterion.
 
 The operator's question: references taken before the run, reused on it. The
 archive holds pairs of separate runs over one venue and prop, which is the
-closest available analogue. `tools/anchor_cross_run.py`, 8 references from clip
+closest available analogue. `tools/studies/anchor_cross_run.py`, 8 references from clip
 A matched against 12 frames of clip B:
 
 | bank from | queried on | median | p10 | over the bar |
@@ -4110,7 +4112,7 @@ missed re-acquisition costs a second, a false one costs the run.
 ### What must change in the tooling
 
 **Warning: A practice bank built with `roi=None` encodes the venue.** References for a
-prop must be cropped to the prop. `tools/build_practice_bank.py` warns and
+prop must be cropped to the prop. `tools/pool/build_practice_bank.py` warns and
 records the ROI state so a whole-frame bank cannot be mistaken for a prop bank.
 
 **Caution: Still owed:** the same sweep with ROI-cropped references, which should move
@@ -4158,7 +4160,7 @@ anchor hold it, drive closer, and the detection strengthens until it can be
 trusted — "not detecting every time, but close". That is a good loop if and only
 if confidence rises with apparent size. Nobody had measured it.
 
-`tools/conf_vs_range.py`, our own `gate_rescue_repair` graph through
+`tools/studies/conf_vs_range.py`, our own `gate_rescue_repair` graph through
 `onnxruntime` on the dev box (so the numbers describe the MODEL, not the Hailo),
 archive clips, `conf >= 0.05` deliberately low so faint detections are visible.
 Size is √area, which is linear in 1/range for a fixed object:
@@ -4224,7 +4226,7 @@ holds that place recognition over a tiled floor is defeated by aliasing
 ("nothing on a tiled floor — aliasing is total"), and §22 measured a generic
 structural view matching a different run of itself on only 8 % of frames.
 
-`tools/floor_place_recognition.py` samples frames in PAIRS along a downward clip
+`tools/studies/floor_place_recognition.py` samples frames in PAIRS along a downward clip
 — two frames a short hop apart at each site — and matches every pair, splitting
 by time separation. Near pairs are the same ground; far pairs should not match
 unless the floor aliases:
@@ -4279,7 +4281,7 @@ a starting point that a pool day with known positions should replace.
 prop. But `lock_node` enrols with `roi=det_box`, so a shipped reference holds
 only the keypoints *inside the detection box*.
 
-`tools/anchor_roi_bars.py` rebuilds the experiment in production shape:
+`tools/studies/anchor_roi_bars.py` rebuilds the experiment in production shape:
 references cropped to a **real detector box** (our own YOLO graph through
 onnxruntime, not hand-drawn rectangles), queried against **whole live frames**,
 because that is what `locate()` sees.
@@ -4336,7 +4338,7 @@ because it fit the rate budget.
 
 ### 26.1 The isolated sweep
 
-`tools/xfeat_settings_sweep.py`, murky archive pairs at +1/3/5 s:
+`tools/studies/xfeat_settings_sweep.py`, murky archive pairs at +1/3/5 s:
 
 | model | top_k | thr | murky p50 | murky floor | detect | match |
 |---|---|---|---|---|---|---|
@@ -4462,7 +4464,7 @@ and Hailo supports natively. The substitution is **not an approximation**:
 | whole network, all three heads, 320×240 | max abs diff **0.000e+00** |
 | whole network, all three heads, 640×480 | max abs diff **0.000e+00** |
 
-`tools/xfeat_export_hailo.py` re-runs that check and **refuses to write** if it
+`tools/bench/xfeat_export_hailo.py` re-runs that check and **refuses to write** if it
 fails. A graph that compiles but computes something slightly different would
 surface later as a worse match rate and be blamed on quantisation.
 
@@ -4580,7 +4582,7 @@ What each step found, by py-spy on the live process:
   Strict scheduler priority for the detectors starved XFeat to 0 calls and is
   NOT used.
 
-**In the live graph, on real footage** (`tools/composed_lock_harness.py`,
+**In the live graph, on real footage** (`tools/studies/composed_lock_harness.py`,
 gate_sharks on 90 s of archive gate footage, 60 s, vehicle):
 backend `XFeatHailo`, **378 chip calls, p50 17.65 ms, p95 21.39 ms**, 64
 checkpoints enrolled, detections 29.9 Hz, rungs detection 20 % / follow 49 % /
@@ -4608,7 +4610,7 @@ the follower covered). That needs footage with a longer detection gap.
 ### 28.5 INT8 SURVIVES — the gate, passed
 
 **2026-09-24.** "A HEF that compiles is not a result; a HEF that still reads
-4/4 on the murky clips is." `tools/hef_vs_cpu.py`, run **on the vehicle**, both
+4/4 on the murky clips is." `tools/bench/hef_vs_cpu.py`, run **on the vehicle**, both
 arms sharing the shipped numpy post-processing, MAGSAC and 15-inlier bar so the
 only difference is float32-on-CPU against INT8-on-Hailo:
 
@@ -4649,7 +4651,7 @@ the modern API rather than anything about the model. Quote 701 FPS only as
 
 **2026-09-24.** Every number in §20–§28 is an inlier count, and an inlier count
 says a match is good without saying good **at what**.
-`tools/pipeline_visual_check.py` draws what the ladder believes — the matched
+`tools/studies/pipeline_visual_check.py` draws what the ladder believes — the matched
 quad, the surviving correspondences, the warped annotations, the identity
 verdict and its reason — on real footage. Three defects fell out immediately,
 none of which a table would have shown.
@@ -5017,7 +5019,7 @@ With the camera fixed: **`pub=37.0 Hz, sent=74, dropped=0`**, detections at
 monochrome, **mean 204/255 — blown out**. That is a legitimate miss, not a bug,
 and it is exactly the condition the anchor exists for.
 
-`tools/live_anchor_check.py`, bank enrolled from 4 live frames, then locating
+`tools/pool/live_anchor_check.py`, bank enrolled from 4 live frames, then locating
 for 12 s on the vehicle camera:
 
 | | |
@@ -5092,7 +5094,7 @@ taken on the same input. A recorded session plus `replay:=true` removes that.
 
 ### The fixture
 
-`tools/record_session.sh vision` on the vehicle, forward camera, `yolov11n`,
+`tools/pool/record_session.sh vision` on the vehicle, forward camera, `yolov11n`,
 `lock_class:=person`, a person walking in and out repeatedly:
 
 | | |
@@ -5194,7 +5196,7 @@ previously recorded.
 
 ### The board at rest — a 30-minute reference
 
-`tools/record_session.sh bench`, SROT board on the bench, disarmed:
+`tools/pool/record_session.sh bench`, SROT board on the bench, disarmed:
 **1798.1 s, 89 813 raw `/mongla/imu` samples, 39 534 `MonglaState`.**
 Raw `/mongla/imu` is recorded alongside the derived `imu_rates` on purpose: a
 noise fixture holding only the derived signal cannot be re-derived differently
@@ -5211,7 +5213,7 @@ refused — the vehicle would arm and not move.
 **2026-09-24.** SROT board on the bench, disarmed, untouched for 30 minutes.
 A vehicle at rest is the only condition outside water where truth is known
 exactly — every rate is zero, the only acceleration is gravity — so everything
-reported beyond that is bias and noise. `tools/imu_rest_stats.py` on
+reported beyond that is bias and noise. `tools/bench/imu_rest_stats.py` on
 `/mongla/imu`, **89 813 samples over 1797.0 s at 49.98 Hz**.
 
 Rest was verified rather than assumed: **|accel| = 9.7271 ± 0.0053 m/s²**. A
@@ -5539,7 +5541,7 @@ today's replay exercised both (`lock_node-4` and `-5`). What is new is that the
 
 ## 41. THE LOOP-CLOSURE TRUTH TEST — THE BAR HOLDS ON REAL WATER
 
-**2026-09-24.** `tools/loop_closure_truth.py`, three real downward clips
+**2026-09-24.** `tools/studies/loop_closure_truth.py`, three real downward clips
 (`octagon_1`, `octagon_Bottom`, `bin`), the shipped bank and the shipped
 `consider()`. Two arms, because a closure has two opposite ways to be wrong.
 
@@ -5592,7 +5594,7 @@ make it look like loop closure does not work.
 
 ## 42. POSE PRECISION: 640 IS 2.74× MORE PRECISE THAN 320 — AND §19 STILL STANDS
 
-**2026-09-24.** `tools/pose_precision.py`. A **known** homography is applied to
+**2026-09-24.** `tools/studies/pose_precision.py`. A **known** homography is applied to
 a real frame and the estimate compared against it, so truth is constructed
 rather than borrowed — comparing 320 against 640 directly would measure
 agreement and cannot rank them.
@@ -5718,7 +5720,7 @@ measurement with weights that have seen our water.
 ### The dataset — and it is the publishable part
 
 **4 304 frames from 145 clips across six physical archives.** Built by
-`tools/xfeat_finetune.py`, which needs **no labels**: upstream's
+`tools/bench/xfeat_finetune.py`, which needs **no labels**: upstream's
 `xfeat_synthetic` scheme warps each frame (homography + thin-plate spline) and
 keeps the warp as exact correspondence ground truth.
 
@@ -5819,7 +5821,7 @@ Worth recording because the second failure repeated the first:
   wall edges are axis-aligned when the camera is level.
 
 **Key point: The only verification that has ever worked here is looking at the
-frames.** `tools/footage_inventory.py` renders every clip; all 40 in
+frames.** `tools/bench/footage_inventory.py` renders every clip; all 40 in
 `raw_videos` + `2026` were verified visually. The defence is now structural —
 the contaminated archive is **not read at all** — rather than a detector.
 
@@ -5936,7 +5938,7 @@ detection RATE and from the others' ordering, not one from the quantity they
 actually defend against.** It then says nothing in this repo has ever recorded
 that quantity.
 
-It has now. `tools/continuity_from_bag.py` runs the module against the recorded
+It has now. `tools/studies/continuity_from_bag.py` runs the module against the recorded
 vehicle session (§36):
 
 ```
@@ -6006,7 +6008,7 @@ water footage exists, and the method is now a one-line rerun against any bag.
 **2026-09-24.** §50 measured the gap distribution on a person walking in and
 out of a room and shipped a five-constant candidate from it. Real underwater
 footage, scored with the model that actually flies
-(`gate_rescue_repair.onnx`, `tools/continuity_from_video.py`), refutes four
+(`gate_rescue_repair.onnx`, `tools/studies/continuity_from_video.py`), refutes four
 fifths of it.
 
 ```
@@ -6153,7 +6155,7 @@ passing columns   19/20                     19/20       identical
 
 ### The defect was my measuring instrument
 
-`tools/xfeat_finetune_score.py` drives the network with **its own** keypoint
+`tools/studies/xfeat_finetune_score.py` drives the network with **its own** keypoint
 extraction — top-k on the heatmap, nearest-neighbour descriptor sampling — not
 `xfeat_onnx.py`'s NMS, bilinear sampling and reliability weighting. It was a
 different algorithm wearing the same name.
@@ -6431,7 +6433,7 @@ needs a colour variant, and it means the AWB half of this concern is
 **Caution: The luma number is from a static indoor scene, which is the easy case.**
 Under a moving vehicle in changing water, an auto-exposure loop has far more to
 chase. The claim that it matters *underwater* is unmeasured, and
-`tools/camera_auto_loops.py` re-runs against any camera to settle it.
+`tools/studies/camera_auto_loops.py` re-runs against any camera to settle it.
 
 **Caution:** Also note `FIXED` read luma 59.55 against `AUTO`'s 119.27 — manual mode
 inherited `exposure_time_absolute=157` and simply underexposed. A shipped fix
@@ -6528,7 +6530,7 @@ training data. The honest gap is that they are **downward-camera instruments**,
 and the forward camera has no model-free equivalent — which is exactly what
 this section measured and could not close.
 
-Harness: `tools/rung_independence.py` — asks whether two rungs fail together,
+Harness: `tools/studies/rung_independence.py` — asks whether two rungs fail together,
 printing the joint failure rate beside what independence would predict.
 
 ---
@@ -6542,7 +6544,7 @@ gate-present and gate-absent footage at both 0.15 and 0.30. That defect has
 been open since 2026-09-25 and is the blocker on `tracking/presence.py`.
 
 **Key point: B-59 IS MODEL-SPECIFIC, AND NOBODY RE-CHECKED IT AFTER B-60 WAS RESOLVED
-BY SWITCHING MODELS.** Re-run today with `tools/negative_clip_check.py`, same
+BY SWITCHING MODELS.** Re-run today with `tools/studies/negative_clip_check.py`, same
 clips, same tool, `gate_sharks.pt` instead:
 
 | bar | worst positive | worst negative | separation |
@@ -6692,7 +6694,7 @@ chromatic_prior_check.py` is the harness that re-derives it against labels.
 
 **2026-09-28.** Bumblebee reflex 1 says "when you cannot pick a threshold, RUN
 BOTH". We ship two graphs that detect `gate`, so the intersection was measured
-rather than assumed (`tools/cross_model_gate.py`, conf 0.30, IoU 0.30, 250
+rather than assumed (`tools/studies/cross_model_gate.py`, conf 0.30, IoU 0.30, 250
 frames per clip, one positive and two negative clips):
 
 | | worst positive | worst negative | separation |
@@ -6788,7 +6790,7 @@ quartile, and this module compares **`box_height / frame_height`**. Different
 quantities, no recorded conversion between them. The citation pointed at a real
 section wrapped around a number that section never states.
 
-Re-measured in the controller's own unit (`tools/approach_band.py`: four
+Re-measured in the controller's own unit (`tools/studies/approach_band.py`: four
 archive clips, 13 668 detections, `gate_rescue_repair` ONNX at conf ≥ 0.05,
 binned by box_h / frame_h):
 
@@ -6905,7 +6907,7 @@ textured target, translating.
 ## 66. THE SHIPPED GATE HEF WAS DEGRADED BY ITS OWN FINE-TUNE — level 2 lost 0.34 of confidence that level 0 kept (B-82, issue #47)
 
 **2026-11-06, dev box, no Hailo device: the Dataflow Compiler's emulator.**
-`tools/hailo_int8_shift.py` runs an optimised `.har` as float
+`tools/bench/hailo_int8_shift.py` runs an optimised `.har` as float
 (`SDK_FP_OPTIMIZED`) and as INT8 (`SDK_QUANTIZED`) on the same frames and
 reports the per-frame best-score drop over frames the float path scores
 ≥ 0.25. The criteria were written before the run (in the tool's docstring),
@@ -7045,3 +7047,88 @@ a turn in water.
 **Caution:** NOT MEASURED: these loops under the full graph (vision + Hailo).
 The idle numbers are the floor, not the bar for a loaded vehicle.
 
+
+---
+
+## 69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)
+
+`mongla_localization/launch_respawn.py` restarts every process bringup starts;
+`mongla_vision/cameras/reopen.py` reopens a camera that dropped off USB (B-110).
+Which numbers are decisions, which are derived and which are measured:
+
+| constant | value | kind | reason |
+|---|---|---|---|
+| `launch_respawn.MAX_RESTARTS` | **3** restarts | owner decision | enough to ride out a transient (a Hailo timeout, a USB re-enumeration); a fault that survives three tries is real, and restarting it for the rest of the run hides it. The camera reopen imports the same number |
+| `launch_respawn.DELAY_S` | **2 s** | owner decision | long enough for a device to settle after its process dies, short against a run |
+| `reopen.LOST_AFTER_S` | **3 s** | derived | `is_healthy()` already turns False 2 s after the last frame; a device that has just reappeared gets 3 s before it is opened. Measured below: a replugged Fantech opened cleanly on the first try after that wait |
+| `camera_node._WATCH_PERIOD_S` | **0.5 s** | derived | one `is_healthy()` call; 10 % of the ~5 s it acts on |
+
+**Derived: a verb in flight during a restart reports LOST.** A vision verb
+coasts `vision.lost_grace_s` = 1.0 s on a lost target, and the restart delay
+alone is 2 s. So the verb ends LOST, which is what LOST exists for: the DSL
+runs its fallback search, and the next verb finds the target once the detector
+is back. "The mission keeps running" holds at the mission, not inside one verb.
+
+**Measured: how long a vision restart is blind, on top of the 2 s delay.**
+`tools/bench/restart_blind_time.py` (its `--self-test` reports a chosen delay within
++0.3 s, never early) started `vision_pi.launch.py paused:=false` five times
+on Kutum, release `3af415d7`, forward Fantech only, no target in view:
+
+| cycle | first frame | first detections message |
+|---|---|---|
+| 1 (cold cache) | 3.79 s | 3.76 s |
+| 2 | 2.60 s | 2.60 s |
+| 3 | 2.27 s | 2.33 s |
+| 4 | 2.26 s | 2.52 s |
+| 5 | 2.31 s | 2.53 s |
+
+So one restart costs about **4.5 s** of blindness (2 s delay + 2.5 s), and
+**5.8 s** worst. Not measured: the first *box* (no target was in view), both
+cameras attached, and a restart under a loaded graph.
+
+**Measured and REFUTED: the first camera reopen design.** On the vehicle, the
+forward Fantech's lead pulled for ~10 s: the watch spent all three attempts at
+5, 8 and 11 s after the unplug, each failing at once because
+`/dev/mongla_cam_forward` did not exist, and the camera stayed LOST after the
+lead went back in. Two changes followed. An attempt now counts only while the
+device node exists, so a pulled lead waits instead of spending tries. A reopen
+must return the source kind it replaces, because the factory's fallback to the
+OpenCV source (mailbox 16.9 ms against 396 ms, §3) would otherwise serve a
+stale camera for the rest of the run. Re-run on the vehicle with the lead out
+~55 s: `GONE` logged once, no attempt spent, one reopen after it came back,
+v4l2 mailbox with kernel timestamps, **30.0 Hz with 0 dropped**. Logs:
+`~/attic/2026-11-10/reopen_test/` on Kutum.
+
+## 70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10)
+
+`mongla_manager/kutum_health.py` puts Kutum in the manager's live health
+report as four rows: `kutum.pi_temperature`, `kutum.pi_power`, `kutum.hailo`
+and `kutum.disk`. Report-only, by the owner's decision. Pi throttling and disk
+are graded by the preflight's own functions (`bringup_host._throttled_verdict`,
+`_disk_verdict`), so the two cannot disagree.
+
+| constant | value | kind | reason |
+|---|---|---|---|
+| `PI_SOFT_THROTTLE_C` | **80 C** | vendor | the Pi firmware begins throttling the cores here (raspberrypi.com, "Heating and cooling Raspberry Pi 5"); DEGRADED |
+| `PI_MAX_C` | **85 C** | vendor | the Pi firmware maximum, where it throttles further; FAILED |
+| Hailo zones | read from the chip | vendor | the Hailo-8 firmware reports its own limits; Kutum's chip said orange at **104 C** (hysteresis 99), red at **120 C** (116), throttling levels at 104 / 108 / 112 / 116 C stepping the NN clock 400 → 350 → 300 → 250 MHz. Nothing here retypes them |
+| `SAMPLE_S` | **10 s** | decided | slow enough to cost nothing, fast against a thermal rise; `STALE_S` is three samples, so one slow read is not a fault |
+
+**Why a thread, derived.** `vcgencmd` runs under a 3 s timeout, and 3 s is
+`EXECUTOR_STALE_S`. Read in the health tick, one slow reading would withhold
+the heartbeat and let the board's link-loss failsafe surface the hull over a
+temperature. `test_kutum_is_in_the_health_report.py` holds a probe for 5 s and
+requires the poll to return in under 0.1 s.
+
+**Measured on Kutum**, the modules copied to `~/attic/2026-11-10/hosthealth/`
+and run through `register` exactly as the manager does: `pi_temperature` 50 C,
+`pi_power` `0x0`, `hailo` 39 C green at 400 MHz, `disk` 10.3 GB free (`df`
+9.7 GiB). A poll of all four costs **0.08 ms**; one chip read costs 42 ms on the
+sampler thread.
+
+**Measured: reading the chip does not disturb the detector.** `interfere.sh`
+in the same folder ran `vision_pi` (forward Fantech only) and read the chip
+every **1 s**, ten times the shipped rate: forward detections held
+**15.000 Hz** before and **15.000 Hz** during, over 32 reads (slowest 144 ms).
+15 Hz is the camera's rate, so this shows the reads cost no frames; it does not
+show the margin at a detector-bound rate. Idle, no thrusters, no target in view.

@@ -1,0 +1,35 @@
+name: Backlog drift
+
+# Once a week, compare every written claim about issue and pull request state
+# (BUGS.md, ROADMAP.md, every page citing an upstream item) with what GitHub
+# says now, and rewrite the one `drift-report` issue (#88). A report, not a
+# merge gate: each finding needs a person to decide whether the doc or the
+# issue is wrong. Everything it does is tools/ci/backlog_drift.py.
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: backlog-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: Backlog drift report
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - name: Compare the backlog with GitHub and rewrite the report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 tools/ci/backlog_drift.py --write-issue

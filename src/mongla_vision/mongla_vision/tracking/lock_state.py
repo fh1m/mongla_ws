@@ -25,8 +25,8 @@ Two rules, and they are what make it safe to act on
 
 2. **Nothing is ever fabricated.** Each rung reports its own confidence and may
    REFUSE; a refusal drops to the next rung and eventually to LOST. There is no
-   path here that invents a position, which is why the control loop can treat
-   `LockState.confidence` the way it treats a detection score.
+   path here that invents a position, which is why the control loop can act
+   on `LockState.authority` -- a rung's confidence gates, authority scales.
 
 Deliberately holds no ROS and no cv2: it takes rung outputs and returns a
 decision, so the node, a bag replay and the archive bench all exercise one
@@ -131,8 +131,10 @@ class LockState:
 
     @property
     def confidence(self) -> float:
-        """What the control loop should weigh. Rung trust TIMES time decay --
-        a confident anchor on a ten-second-old lock is still an old lock."""
+        """Rung trust times time decay, for display and diagnostics.
+
+        Not what the loop scales by: `/lock` publishes `authority` (#78). The
+        rung's own trust is a gate (`MIN_RUNG_CONF`), as a detector score is."""
         return float(self.rung_conf * self.authority)
 
     @property

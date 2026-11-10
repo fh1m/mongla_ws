@@ -27,6 +27,27 @@ HAILORT_V=4.24.0
 KUTUM_WIFI_COUNTRY="${KUTUM_WIFI_COUNTRY:-BD}"
 say() { printf '\n== %s\n' "$*"; }
 
+# What `--system` returns is the doctor's verdict on the finished machine
+# (issue #69): it used to swallow a FAIL and exit 0, so a machine that could
+# not run the stack read as provisioned. $1 is the doctor's exit code, $2 the
+# steps that only take effect on a reboot. A FAIL before such a reboot may be
+# one of them, so it gets its own code and an instruction, never a 0.
+verdict() {
+  if [ "$1" -eq 0 ]; then
+    if [ -n "$2" ]; then echo "Kutum is ready. Reboot to apply:$2"
+    else echo "Kutum is ready."; fi
+    return 0
+  fi
+  if [ -n "$2" ]; then
+    echo "The doctor FAILed, and this setup changed something that takes effect" \
+         "on reboot:$2. Reboot, then run kutum/doctor.sh: a FAIL then is real." >&2
+    return 3
+  fi
+  echo "The doctor FAILed: this machine cannot run the stack as it is." \
+       "Fix each FAIL above and run setup again." >&2
+  return 1
+}
+
 # =========================================================================== #
 if [ "${1:-}" = "--system" ]; then
   [ "$(id -u)" -eq 0 ] || { echo "run as: sudo $0 --system" >&2; exit 2; }
@@ -163,7 +184,9 @@ if [ "${1:-}" = "--system" ]; then
   netplan generate
   # apply re-reads every interface; on eth0 that can drop this ssh session
   # for a second or two. It comes back on the same address.
-  netplan apply || echo "  netplan apply failed: the change takes effect on reboot"
+  REBOOT=""
+  netplan apply || { echo "  netplan apply failed: the change takes effect on reboot"
+                     REBOOT="$REBOOT netplan"; }
   systemctl enable --now avahi-daemon
 
   say "7/8  the RTC: keep its battery charged"
@@ -175,12 +198,15 @@ if [ "${1:-}" = "--system" ]; then
   if ! grep -q '^dtparam=rtc_bbat_vchg=' "$cfg"; then
     printf '\n# kutum: charge the RTC battery (rechargeable ML-2020 only)\ndtparam=rtc_bbat_vchg=3000000\n' >> "$cfg"
     echo "  charging enabled in $cfg; reboot to apply"
+    REBOOT="$REBOOT rtc-charging"
   else echo "  already set: $(grep '^dtparam=rtc_bbat_vchg=' "$cfg")"; fi
 
   say "8/8  the user half, as $OWNER"
   sudo -u "$OWNER" -H bash "$KUTUM/setup.sh"
-  sudo -u "$OWNER" -H bash "$KUTUM/doctor.sh" || true
-  exit 0
+  rc=0
+  sudo -u "$OWNER" -H bash "$KUTUM/doctor.sh" || rc=$?
+  verdict "$rc" "$REBOOT"
+  exit $?
 fi
 
 # =========================================================================== #

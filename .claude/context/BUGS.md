@@ -119,7 +119,8 @@ every later tick did nothing; turning the knob back would resume the move.
 GitHub #71.
 
 **Fix.** `node_support.kill_latch` holds until a fresh heartbeat says
-DISARMED, re-sending every 3 s (at most 10 times) whatever the knob does,
+DISARMED, re-sending every 3 s whatever the knob does (B-97 adds the
+heartbeat withhold and removes the cap),
 and acts on an unknown armed state too. While latched, the action server
 refuses every verb but `disarm`, `stop` and `surface`, and health reads
 `safety_latch FAILED`. Arming now refuses an UNKNOWN kill switch (no
@@ -138,8 +139,8 @@ re-requested every 2 s, three times, each judged by a heartbeat heard after
 the first request. Still unconfirmed, the heartbeat is withheld so the board's
 failsafe surfaces the vehicle (owner decision 2026-11-09). It resolves when the
 board reports SURFACE or DISARMED; until then ordinary verbs are refused and
-health reads `safety_latch FAILED`. A manager restart clears both latches,
-which is the way out when the board cannot be heard at all.
+health reads `safety_latch FAILED`. A manager restart no longer clears
+either latch (B-97).
 
 ### B-95: an aborted torpedo shot could be revived by the next verb `READ 2026-11-08` **FIXED 2026-11-09 (host)**
 
@@ -169,6 +170,234 @@ decision 2026-11-09). An abort brakes it, SURFACE refuses it, a hold the
 board cuts short fails the verb, and the result says "held N s", never
 "settled": it is time held, not a measured stop. A bad value is refused
 before anything is sent.
+
+### B-97: an unconfirmed kill disarm went quiet, and a restart cleared every latch `READ 2026-11-09` **FIXED 2026-11-09 (host)**
+
+**What.** B-93's kill latch stopped re-sending after ten tries and then did
+nothing, while the manager's heartbeat stayed healthy, so the board's own
+link-loss failsafe never fired and an armed move could continue. Separately,
+both latches lived only in the manager's memory: restarting it cleared them
+while the board could still be armed and moving. GitHub #98.
+
+**Fix.** `node_support.kill_latch` withholds the heartbeat on its third
+unconfirmed try (`KILL_MAX_TRIES`, about 6 s) and keeps re-sending DISARM
+every 3 s after that, so the board's link-loss failsafe ends the move.
+`node_support.boot_latch` decides on the first fresh heartbeat after start-up:
+a board heard ARMED latches the new manager, refusing every verb but
+`disarm`, `stop` and `surface` until the board reports DISARMED; no heartbeat
+yet also refuses. The latch is decided when a goal arrives, not only on the
+watchdog tick, or the manager's own first arm would read as an armed board.
+The board-side kill latch is upstream (srot-control-board#41).
+
+### B-108: a fix from a camera with no CameraInfo claimed calibrated precision `READ 2026-11-09` **FIXED 2026-11-10**
+
+**What.** Before a camera's CameraInfo arrived (start-up, a replay without
+`camera_info`), `range_to` used one in-water focal from the FOV table and
+`bearing_to` read the box offset linearly across the FOV. A flat port has no
+single focal: for a gate 4 m ahead and 1.4 m across, the range read 6.1 %
+short and the bearing 1.6 deg off. `fix_from_prop` still published the
+sigma of a calibrated reading, and `floor_range` centred a principal row that
+sits 70 px off centre on the forward camera, a metre at 3 m.
+
+**Fix.** Without CameraInfo the camera matrix is built from the camera's
+measured FOV and runs through the same `rectifier_for` port model as a
+calibrated one, so only the principal point is a guess. `fix_from_prop` adds
+that guess's 1.264 deg (measured-bars, the forward camera entry) across the
+line of sight and says `uncalibrated` in its log line, `place_prop` adds it to
+the bearing term, and `floor_range` refuses. Both cameras are calibrated and
+`vision_pi` passes both files, so this runs only while CameraInfo is absent.
+`test_an_uncalibrated_camera_is_modelled_not_trusted.py` checks ray-traced
+truth; a single focal, no widening, no refusal and no bearing term each fail it.
+
+### B-109: tests in tools/ never ran, and the calibration solver's truth check had broken `READ 2026-11-10` **FIXED 2026-11-10**
+
+**What.** CI collects `src/*/test` and `test/` only. Three test files sat in
+`tools/`: two passing (21 tests, the free-decay and thruster-response fits) and
+`test_fov_solve.py`, the calibration solver's only ground-truth check, which
+had broken when `fov_solve.py` became a shim and lost the internals it called.
+A further 94 bench tests sit in `tools/bench/control_bench/`, also uncollected.
+Separately, 34 tools were named nowhere else in the repository.
+
+**Fix.** The three moved where CI collects them; the solver check now imports
+`mongla_vision.calibration.solver` and runs (36 s), and faking the pose spread
+fails it. `tools/README.md` indexes every tool from its own docstring
+(`tools/ci/gen_tools_index.py`), and `test/test_every_tool_is_indexed.py`, in the
+integrity gate, fails a stale index, a tool with no description, or a test file
+outside the collected tree. The control bench is the one named exemption: it
+compiles the firmware and needs that checkout in CI (#132).
+
+### B-105: process teardown counted zombies as survivors `REPRODUCED 2026-11-09 (CI container)` **FIXED 2026-11-09**
+
+**What.** `stop_tree` and `stop` in `tools/_record_lib.sh` asked `kill -0` whether
+a process was still running. `kill -0` succeeds on a zombie, and wherever
+orphans are not reaped -- a container whose pid 1 is not an init, which is the
+dev box's docker and CI -- every process `stop_tree` killed stayed a zombie. It
+then waited out its whole grace period and reported dead processes as
+SURVIVORS. The two tests that guard teardown carried the same check, and they
+failed on both ROS CI distros. On the vehicle, systemd reaps orphans, which
+hid it.
+
+**Fix.** `running` in the library treats a zombie as dead, falls back to
+`kill -0` when `/proc` cannot be read (unsure means alive), and every check in
+the library uses it. The stop-tree test asks the library's own `running`, so
+the test covers that function too. Checked against a real zombie:
+`kill -0` reported it alive and `running` reported it dead.
+
+### B-101: a pose of one prop could clear a shot at another `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** `TargetPose` had no field saying which target it was solved for.
+`square_within`, `obliquity_deg` and `tool_offset_px` checked only `ok` and
+age, so for up to a second after a mission switched from the gate to the
+torpedo board, the gate's fresh, square pose cleared the board's firing gate
+and supplied its tool-range correction (#76). Walking the rest of the chain
+found two neighbours on the same field: the fuse node voted poses of different
+targets into one answer, and `anchor_on('gate')` took any fused pose and wrote
+the gate's surveyed bearing against it, putting the world heading off by the
+angle between the two faces.
+
+**Fix.** `TargetPose.target_label` carries the class the producer OBSERVED
+(the anchor's enrolment label, not the class asked for), copied by PnP on
+success and refusal. The fuse node starts a new vote on a new label. Every
+pose gate takes the class it acts on, and `vision_align` binds its closures to
+`target_class`; an unlabelled pose cannot clear a named shot. `anchor_on`
+passes the course's `detect_class`, and a pose of another prop is refused with
+that reason. `test_pose_belongs_to_the_target.py`: four cases fail without the
+gate and the vote reset.
+
+### B-98: the calibration guide wrote a file wherever a request pointed `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** The guide's `/apply` built the destination file name from the
+request's `applies_to`, and the medium from the source file's contents, with
+no check. The guide listens on every interface with no login, so a profile of
+`../../x` wrote a calibration JSON outside the calibration folder; with the
+check disabled the test really wrote one in `/tmp`. Found by CodeQL's first
+analysis (py/path-injection), with a ReDoS in `tools/ci/topic_wiring_sweep.py`
+and an unchecked file name in `tools/site/upload_sink.py`.
+
+**Fix.** `solver.check_profile` accepts a plain name (letters, digits, `_`,
+`-`) and a medium of `air` or `water`, and both naming functions
+(`calibration_filename`, `capture_dir`) call it, so no path is built from
+anything else. `/apply` refuses before it reads the camera. The console stays
+open by decision (#66); what it may write is now bounded.
+
+### B-99: the ladder fallback steered on any class `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** With no live box of the requested class, `bbox_error(class, lock_s>0)`
+returned the first `/lock` box without looking at what it was. `/lock` names
+the rung (detection, follow, anchor) in its hypothesis and carried no class at
+all, so a ladder pinned or stale on prop B steered an align asked for prop A
+(#74). The existing test checked that the ladder's own class changed, not that
+the consumer refused a wrong one.
+
+**Fix.** `lock_node` puts the class it follows in `Detection2D.id`: the anchor's
+enrolment label on the anchor rung, the last real detection's class on the
+others. `_lock_sample` refuses a box whose id is not the requested class, and
+an empty id, which cannot be verified. With no class asked, the single-target
+fallback is unchanged. `test_lock_fallback_checks_identity.py` runs the real
+publisher, subscriber callback and `bbox_error`; four of its cases fail on the
+old consumer.
+
+### B-100: a new target class kept the old target's box, follower and pose `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** A mission switching the ladder's class (through `classes_filter` or
+a live `target_class`) changed `_cls` and the committed width, and nothing
+else. The last detection box, the follower's points, the anchor's pose and
+label and the world memory all stayed, so until a detection of the new class
+arrived the ladder kept publishing the old target, its range now computed with
+the new class's width (#75). A ladder tick already running at the switch could
+also publish, or write the old anchor label, after it.
+
+**Fix.** `_switch_target` bumps a generation and forgets all per-target state
+under the lock; the anchor's bank keeps its references, which are labelled by
+class. Each tick carries the generation it started under, and a tick that
+finishes under a newer one publishes nothing and clears what it wrote. The
+same class re-delivered (the filter is latched) is not a switch. With B-99, a
+box published in the instant between the check and the publish still names
+the old class and is refused by the consumer.
+
+### B-102: a stale bearing kept the hull turning `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** `align` scaled lateral and forward by the box's authority and sent
+yaw at full strength whatever its age, on the argument that the board's
+heading hold absorbs a rate demand (#77). It does the opposite: a rate demand
+from a bearing 0.8 s old, re-sent every tick, keeps turning the hull past a
+target it already faces, and a blind frame still yawed at the cap. The test
+that pinned the old behaviour asserted full yaw on a 0.30 s-old frame.
+
+**Fix.** `_yaw_command` takes the same authority as the other axes and applies
+it before the stiction snap, so a fading demand stays producible down to the
+board's floor and then goes to exactly zero, instead of falling into the band
+where the board produces nothing. At a healthy frame rate authority is 1.0 and
+nothing changes.
+
+### B-103: the ladder's authority came from the tracker's knob, and a box nothing steered on could end a verb `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** Every ladder box was marked coasted and so decayed on the tracker's
+`coast_s` (#78): with `lock_s=1, coast_s=0` a healthy follower box could not
+move the hull at all, and the default `coast_s=0.8` cut the ladder's own 2.5 s
+horizon to 0.8 s. The ladder also published rung trust times authority as its
+score, so a carried detection at an underwater score of 0.3 steered at 30 %
+on a lock it trusted fully. Neighbours on the same chain: a zero-authority
+box, or a Kalman prediction, sitting in band advanced `align`'s stable-frame
+counter toward ALIGNED, and a predicted box at the fill ended a fill-stop
+`move` as reached.
+
+**Fix.** `Sample.source` says which of detector, tracker and ladder made the
+box. A ladder box takes the ladder's authority (now what `/lock` publishes;
+rung trust is a gate, as a detector score is) times the age of its own frame,
+independent of `coast_s`. `_is_evidence` decides what may end a verb: a box
+with authority left that is not a prediction. Anything else holds the stable
+count and holds forward drive at the fill without completing the arrival.
+`test_vision_authority_by_source.py` drives both loops; 14 of its 24 cases fail
+on the old code.
+
+### B-104: a gate that vanished for any reason was reported as passed `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** A pass-through `move` reported ALIGNED ("passed through") once a gate it
+had seen left the frame and the commit ran (#79). Losing a gate is not seeing
+the hull cross it: a far gate blinking out in turbidity, one sliding out
+sideways and a camera outage all scored the same pass. Neighbours on the same
+path: the lock ladder kept the gate "present" for up to its 2.5 s horizon after
+the detector lost it, so the commit started late (pass-through already
+refused the tracker's coast for this reason, but not the ladder). And both
+navigation missions ran their blind transit on `not passed`, which once the
+verdict is honest would stack a second open-loop leg on a commit that had
+already driven past the gate.
+
+**Fix.** The verdict comes from the last live box. A gate the hull is entering
+surrounds the camera axis and runs off the frame: ESTIMATED_CROSSING, `ok`.
+Anything else: COMMIT_UNVERIFIED, not `ok`. Neither is ALIGNED, and the reason
+says which box decided it. The commit stays bounded by `duration`, and a
+commit cut short still gets a verdict. Pass-through ignores the ladder as it
+ignores the coast. `VisionResult.committed` tells a mission a commit leg was
+driven, and the blind transit runs only without one.
+`test_pass_through_crossing.py` replays the five sequences the issue names,
+the DSL mapping and both missions; breaking the verdict, the blind-leg guard
+or the ladder exclusion fails 7, 2 and 1 of its cases.
+
+**Compromise, and the data that would remove it.** This is an estimate from
+one camera. Confirming a crossing needs distance travelled after the loss
+compared against the range at the loss, and the chain already has that
+data: the downward camera's flow velocity (worst error 1.09 cm over 30 cm)
+reaches `/mongla/odom`. TRAVERSAL_CONFIRMED is left for that, tracked on #79.
+
+### B-107: "never been in water" erased the lineage, and a false water claim passed every check `READ 2026-11-09` **FIXED 2026-11-10**
+
+**What.** The README, the site, the wiki home and CLAUDE.md said "This vehicle has never been
+in water" and "WATER: nothing", which was true of the current platform and read as true of
+the whole project: the Duburi stack this repository began as competed at RoboSub 2026, the
+author's vision stack at RoboSub 2025, and the SROT board itself was in water in the Dubomini
+hull. In the other direction, no required check caught a planted line falsely saying the
+current SROT and Kutum platform had completed water trials. GitHub #87.
+
+**Fix.** `docs/evidence/water.json` holds every time a vehicle in the lineage was in water:
+platform, what ran, how well the code is identified, the evidence and whether it is still
+active. `lineage.md` is generated from it by `tools/ci/gen_lineage.py`. A status belongs to the
+platform it was earned on and is never inherited. Every public page now names the platform
+it means. `test_water_claims_have_a_scope.py`, in the integrity gate, validates the
+registry, keeps the page generated, and fails an unscoped "never in water" or a current
+platform put in water without a CURRENT_WATER event backed by a recording. Planting either
+line in the real README or wiki fails it.
 
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
@@ -246,6 +475,38 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 ---
 
 ## 2. HIGH
+
+### B-110: a process or camera that died mid-run stayed dead for the run `READ 2026-11-10` **FIXED 2026-11-10**
+
+**What.** No process bringup starts had a restart. A detector that `os._exit`s
+after repeated inference failures, a flow node that raised, or a manager that
+crashed stayed down until someone relaunched the stack by hand, which nobody
+can do with the hull in the water. A USB camera that dropped off the bus was
+worse: the v4l2 mailbox kept polling a dead descriptor, `is_healthy()` went
+False, and the camera node logged `BAD` every 2 s and never tried to reopen
+the device. Both cameras and both detectors share one process on the vehicle
+(`detector_dual_node`), so restarting that process would have blinded the
+healthy camera as well.
+
+**Fix.** The owner set the policy: restart 2 s after the death, three times,
+then stay down and say so; the mission keeps running and nothing acts on the
+loss alone. `mongla_localization/launch_respawn.py` implements it once,
+because Humble's launch has no restart limit. Every process in `bringup`,
+`vision_pi` and `vision` uses it except the operator display, and
+`test/test_every_launched_process_restarts.py` fails a bare node.
+A lost camera is reopened in place by its own capture thread
+(`mongla_vision/cameras/reopen.py`) under the same three-attempt policy, so
+the other camera never stops. The vehicle refuted the first version of that:
+with the forward lead pulled, three attempts were spent in 6 s on a device
+node that did not exist, and the camera stayed lost after the lead went back.
+Now an attempt counts only while the device exists, and a reopen that comes
+back as the OpenCV fallback instead of the mailbox is refused. Re-run on the
+vehicle: back at 30.0 Hz, 0 dropped, after ~55 s out (measured-bars §69). Restarting the manager is safe because of
+B-94/B-97: a new manager that hears ARMED latches. A restarted localization
+publishes in `odom` until it is re-anchored, which `pose()` refuses.
+Tests run real processes under a real `LaunchService`. Injection checks:
+removing the limit, restarting a clean exit, reopening a video file, skipping
+the source swap, and a bare node in any of the three launch files each fail.
 
 ### B-91: the floor's yaw bound was applied on arrival, against the heading now `READ 2026-11-07` **FIXED 2026-11-07**
 
@@ -405,7 +666,7 @@ the conf sweep on the HEF it asked for was never run.
   bite under injection.
 
 **To close.** With the Pi: sync the model, check the md5 against the provenance,
-run `hailortcli parse-hef`, and re-run `tools/composed_lock_harness.py` on the
+run `hailortcli parse-hef`, and re-run `tools/studies/composed_lock_harness.py` on the
 same gate clip. The detection-rung share must rise well above 20 %.
 
 ### B-61: the Hailo detector ran on colour-swapped frames `REPRODUCED 2026-09-25` **FIXED 2026-09-25**

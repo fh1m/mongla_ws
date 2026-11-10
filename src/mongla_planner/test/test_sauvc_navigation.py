@@ -130,7 +130,7 @@ def test_the_pass_depth_fits_inside_the_gate_opening():
     """
     floor_at_gate = 2.0 * 0.95
     top_bar = floor_at_gate - 1.50 * 1.05   # worst case: the tallest legal gate
-    half_hull = 0.172 / 2                   # CAD height, tools/pack_hull.py
+    half_hull = 0.172 / 2                   # CAD height, tools/site/pack_hull.py
     depth = -CFG.SAUVC_GATE_PASS_DEPTH_M
     assert depth - half_hull > top_bar, \
         'the hull top is ABOVE the gate top bar -- it would hit or go over'

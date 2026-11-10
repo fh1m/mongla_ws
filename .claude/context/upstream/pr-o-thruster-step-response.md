@@ -108,7 +108,7 @@ our model is wrong and we would very much like to know.
 
 ## 5. What we do with it — the analysis is written down, not negotiable
 
-`tools/fit_thruster_response.py` in `mongla_ws`. Send the CSV; the fit is:
+`tools/bench/fit_thruster_response.py` in `mongla_ws`. Send the CSV; the fit is:
 
 ```
 thrust(t) = 0                                      t <  t_dead
@@ -116,7 +116,7 @@ thrust(t) = T_ss · (1 − exp(−(t − t_dead)/τ))      t >= t_dead
 ```
 
 ```
-python3 tools/fit_thruster_response.py step_A_from_stopped.csv
+python3 tools/bench/fit_thruster_response.py step_A_from_stopped.csv
 ```
 
 It reports dead time, τ, total lag, 10–90 % rise, steady thrust, **and its own RMS residual**

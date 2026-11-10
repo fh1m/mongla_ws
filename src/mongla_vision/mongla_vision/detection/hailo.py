@@ -171,7 +171,7 @@ class HailoDetector(Detector):
         #
         # The blocking `InferVStreams.infer()` HOLDS THE GIL for its entire
         # ~10 ms. Measured against two controls that separate cleanly
-        # (`tools/gil_probe.py`), another Python thread in the process woke:
+        # (`tools/bench/gil_probe.py`), another Python thread in the process woke:
         #
         #     control: time.sleep (releases)     0.05 ms late,  0.0 % over 4 ms
         #     control: pure-Python spin (holds)  5.11 ms late, 99.9 %
@@ -195,7 +195,7 @@ class HailoDetector(Detector):
         # whether it releases the GIL, which is the question that mattered.
         # The conclusion is not overturned, it was answering a different one.
         # The blocking path is KEPT, behind an env flag, for two reasons: it
-        # is what `tools/hailo_api_equivalence.py` compares against to prove
+        # is what `tools/bench/hailo_api_equivalence.py` compares against to prove
         # the switch moved no pixels, and it is the fallback if a HailoRT
         # version ever regresses the async path on the vehicle. It is not a
         # tuning knob and nothing sets it in normal operation.
@@ -555,7 +555,7 @@ class HailoDetector(Detector):
 
         The blocking and async paths differ ONLY in how the buffer arrives.
         Two copies of this arithmetic is how they would come to disagree about
-        where a target is, and `tools/hailo_api_equivalence.py` would then be
+        where a target is, and `tools/bench/hailo_api_equivalence.py` would then be
         comparing two different box maths rather than two transports.
         """
         out: List[Detection] = []
@@ -616,7 +616,7 @@ class HailoDetector(Detector):
         the tail padding, finds a count of 0, and silently returns NOTHING for
         that class.
 
-        Caught only because `tools/hailo_api_equivalence.py` ran both APIs
+        Caught only because `tools/bench/hailo_api_equivalence.py` ran both APIs
         over the same frames: 56 detections blocking, 22 async, with every
         surviving box IDENTICAL -- boxes being lost, not moved. A smoke test
         would have passed; so would any check that only looked at class 0.

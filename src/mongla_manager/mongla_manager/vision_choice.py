@@ -31,20 +31,35 @@ class Sample:
     score:     float
     vis_range: float = 0.0         # monocular depth estimate from depth_estimation_node (0=far, 1=close)
     track_id:  int   = -1          # tracker id of this target (-1 = unknown / coast off)
-    coasted:   bool  = False       # True = tracker-predicted box during a detection gap (no live box)
+    coasted:   bool  = False       # True = not a live detection: a tracker prediction or a ladder box
+    # What produced the box, because the three are different evidence (#78):
+    #   'detector' a live detection; its age is time since capture
+    #   'tracker'  a Kalman prediction through a gap; a guess, never a measurement
+    #   'ladder'   the lock ladder's follower / anchor / carried detection, measured
+    #              on a real frame; `score` is the ladder's own authority, already
+    #              decayed from the last real detection
+    source:    str   = 'detector'
 
 
 class ChoiceMixin:
     """Methods of `VisionState`; see vision_state.py for the subscriptions."""
 
-    def _lock_sample(self, image_width: float, image_height: float):
+    def _lock_sample(self, image_width: float, image_height: float,
+                     class_name: str = ''):
         """A Sample from the ladder, or None.
 
-        The ladder has ALREADY applied its own decay -- `score` is rung trust
-        times time-since-the-last-real-detection -- so this must not decay it
-        again. Double-decaying would make the fallback die roughly twice as
-        fast as designed, which is the same arithmetic error that made the
-        uplink's coasted target expire inside 0.4 s.
+        Identity first (#74). The box's hypothesis names the RUNG (detection,
+        follow, anchor); the physical class it follows rides in
+        `Detection2D.id`, set by `lock_node`. A loop that asked for one class
+        never steers on a ladder holding another, and a box that does not say
+        what it is (an older lock_node, an empty id) is refused for the same
+        reason: an unverifiable identity is not a match.
+
+        The ladder has ALREADY applied its own decay -- `score` is its
+        authority, time since the last real detection with the cross-check's
+        demotion -- so this must not decay it again on the tracker's coast
+        curve (#78). `source='ladder'` routes it to `_ladder_authority`, which
+        adds only what the ladder cannot know: how old THIS box's frame is.
         """
         with self._lock:
             arr = self._lock_array
@@ -54,19 +69,24 @@ class ChoiceMixin:
         d = arr.detections[0]
         if not d.results:
             return None
+        if class_name and d.id != class_name:
+            return None
         score = _hypothesis_score(d)
         if score <= 0.0:
             return None
         b = d.bbox
         cx, cy = b.center.position.x, b.center.position.y
+        # Clamped like a live box: a follower that has run past the frame edge
+        # must not spike the controller harder than a detection there could.
+        ex = (cx - image_width * 0.5) / (image_width * 0.5)
+        ey = (cy - image_height * 0.5) / (image_height * 0.5)
         return Sample(
-            ex=(cx - image_width * 0.5) / (image_width * 0.5),
-            ey=(cy - image_height * 0.5) / (image_height * 0.5),
+            ex=max(-1.5, min(1.5, ex)), ey=max(-1.5, min(1.5, ey)),
             h_frac=float(b.size_y) / max(image_height, 1.0),
             w_frac=float(b.size_x) / max(image_width, 1.0),
             age_s=max(0.0, time.monotonic() - stamp) if stamp else 0.0,
-            class_id=_hypothesis_class_id(d), score=score,
-            vis_range=0.0, track_id=-1, coasted=True)
+            class_id=d.id or _hypothesis_class_id(d), score=score,
+            vis_range=0.0, track_id=-1, coasted=True, source='ladder')
 
     def bbox_error(self, class_name: str = '', *,
                    near: Optional[Tuple[float, float]] = None,
@@ -166,7 +186,7 @@ class ChoiceMixin:
             # same quantity in two places -- and the shorter of the two would
             # silently win. The name is the defect, not the behaviour.
             if lock_s > 0.0:
-                return self._lock_sample(image_width, image_height)
+                return self._lock_sample(image_width, image_height, class_name)
             return None
 
         vis_range = (float(vis_range_vals[best_index])
@@ -318,7 +338,8 @@ class ChoiceMixin:
                 age_s=age,                     # true time since last real detection
                 class_id=class_name or _hypothesis_class_id(det),
                 score=last_score,              # last real score (conf-exempt for the locked id)
-                vis_range=0.0, track_id=locked_id, coasted=True)
+                vis_range=0.0, track_id=locked_id, coasted=True,
+                source='tracker')
         return None
 
 

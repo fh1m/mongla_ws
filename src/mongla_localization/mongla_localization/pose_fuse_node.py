@@ -96,6 +96,13 @@ class PoseFuseNode(Node):
         # refusal onward would let a consumer count it as evidence of a fork.
         if not msg.ok:
             return
+        # Frames vote only with frames of the SAME target. A new label starts
+        # a new vote: fusing a gate's poses with a torpedo board's would
+        # publish an answer about neither (#76).
+        label = getattr(msg, 'target_label', '')
+        if label != getattr(self, '_label', None):
+            self._label = label
+            self._cluster.reset()
         t, _ = capture_monotonic(getattr(msg, 'header', None))
         both = bool(getattr(msg, 'branches_valid', False))
         self._cluster.add(PoseSample(
@@ -107,6 +114,7 @@ class PoseFuseNode(Node):
 
         out = TargetPose()
         out.header = msg.header
+        out.target_label = label
         fused = self._cluster.fuse(now=t)
         out.ok = bool(fused.decided)
         if fused.decided:

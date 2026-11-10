@@ -44,7 +44,7 @@ import sys
 import pytest
 
 _ROOT = pathlib.Path(__file__).resolve().parents[3]
-_TOOL = _ROOT / 'tools' / 'dead_function_sweep.py'
+_TOOL = _ROOT / 'tools' / 'ci' / 'dead_function_sweep.py'
 
 
 # Functions that only a test calls, on purpose, each with the consumer it

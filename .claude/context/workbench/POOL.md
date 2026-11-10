@@ -25,7 +25,8 @@ is a number that will be measured twice.
 
 ## Session 01 — first water  `[ ]` not yet scheduled
 
-**The vehicle has never been in water.** This session exists to close the gate that blocks
+**The current platform, this stack on the SROT board and Kutum in the Mongla hull, has never
+been in water.** This session exists to close the gate that blocks
 everything else, and to come back with the measurements three later rows depend on.
 
 **Hardware:** exactly what exists today — SROT board, Pi 5 + Hailo-8, two USB cameras, BNO085,

@@ -4,7 +4,7 @@ Read-only review. Nothing in any repo was changed. Hull = the **5-unit CAD hull*
 
 ## 1. What the GLB contains
 
-- `tools/pack_hull.py` **cannot read this export.** It raises `KeyError: 'bufferView'` at `pack_hull.py:76`. The file declares `KHR_draco_mesh_compression` in `extensionsRequired`, and the loader has no Draco path. It only rejects quantised accessors. I decoded the file with DracoPy. There are 40 bodies, node transforms are identity, and the frame is glTF Y-up with Z as the long axis.
+- `tools/site/pack_hull.py` **cannot read this export.** It raises `KeyError: 'bufferView'` at `pack_hull.py:76`. The file declares `KHR_draco_mesh_compression` in `extensionsRequired`, and the loader has no Draco path. It only rejects quantised accessors. I decoded the file with DracoPy. There are 40 bodies, node transforms are identity, and the frame is glTF Y-up with Z as the long axis.
 - **Overall size: 176.1 × 172.1 × 702.0 mm** (X −88…88, Y −97.1…75.0, Z −350…352). This matches CLAUDE.md. The bbox centre is (0, −11.05, +1.0) mm. The side skids (Parts 31/33, down to Y = −97.1) pull the box downward. The thrust axis is not at the bbox centre.
 
 | unit | bodies | thrust line (glTF, mm) | fitted? |

@@ -94,7 +94,7 @@ def main(argv=None):
     result = result_future.result().result
 
     _OUTCOME = {0: 'ALIGNED', 1: 'LOST', 2: 'TIMEOUT', 3: 'NO_CAMERA', 4: 'ABORTED',
-                5: 'DRIFTED'}
+                5: 'DRIFTED', 6: 'ESTIMATED_CROSSING', 7: 'COMMIT_UNVERIFIED'}
     code = int(round(result.final_value))
     aligned = code == 0
     print()

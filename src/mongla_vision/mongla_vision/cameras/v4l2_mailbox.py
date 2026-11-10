@@ -159,7 +159,7 @@ class _Format(ctypes.Structure):
     # field reads four bytes early -- width lands in the padding and reads 0,
     # height reads what was really width. A `sizeof` check does NOT catch it:
     # 4 bytes moved from the back to the front leaves the same 208 total.
-    # `tools/v4l2_latency.py --check` compares against v4l2-ctl, which is the
+    # `tools/bench/v4l2_latency.py --check` compares against v4l2-ctl, which is the
     # only thing that proves a layout.
     class _U(ctypes.Union):
         _fields_ = [('pix', _Pix), ('raw', ctypes.c_uint8 * 200),
@@ -412,7 +412,7 @@ class V4L2MailboxCamera(Camera):
 
         ...leaving 13.7 ms of pure backlog, which is about one full 4-buffer
         queue at 4 ms a frame. Draining to the newest costs 0.06 ms of
-        dequeue+requeue (measured by `tools/v4l2_latency.py`) and hands the
+        dequeue+requeue (measured by `tools/bench/v4l2_latency.py`) and hands the
         consumer a frame ~one period old instead of ~one queue old.
 
         The skipped buffers are requeued WITHOUT being copied -- they are the

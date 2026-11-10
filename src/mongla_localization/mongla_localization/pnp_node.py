@@ -134,6 +134,7 @@ class PnPNode(Node):
     def _refuse(self, msg, reason):
         out = TargetPose()
         out.header = msg.header
+        out.target_label = msg.target_label
         out.ok = False
         out.reason = reason
         self._pub.publish(out)
@@ -167,7 +168,9 @@ class PnPNode(Node):
 
         tp = solve_pnp(obj, img, K, ambiguity_max=self._ambiguity_max,
                        max_reproj_px=self._max_reproj_px)
-        self._pub.publish(to_msg(tp, msg.header))
+        out = to_msg(tp, msg.header)
+        out.target_label = msg.target_label     # whose pose this is (#76)
+        self._pub.publish(out)
 
 
 def to_msg(tp, header=None) -> TargetPose:

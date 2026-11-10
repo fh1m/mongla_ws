@@ -42,6 +42,8 @@ Every argument, its default and its meaning:
 `.claude/context/reference/commands.md` section 3 (generated from this file).
 """
 
+from functools                  import partial
+
 from launch                     import LaunchDescription
 from launch.actions             import (DeclareLaunchArgument, GroupAction,
                                         IncludeLaunchDescription, LogInfo,
@@ -56,6 +58,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 from mongla_localization import launch_defaults
+from mongla_localization.launch_respawn import respawning
 
 
 # Grace between SIGINT and SIGTERM for the manager. Above the manager's
@@ -331,7 +334,8 @@ def generate_launch_description():
     file_note = ([LogInfo(msg=f'[bringup] settings from {file_path}: ' + ', '.join(
         f'{k}={v}' for k, v in sorted(from_file.items())))] if from_file else [])
 
-    manager_node = Node(
+    manager_node = partial(
+        Node,
         package='mongla_manager',
         executable='start',
         name='mongla_manager',
@@ -441,7 +445,8 @@ def generate_launch_description():
     # attitude loop, this owns pool-frame position. Lives beside the manager
     # rather than in the vision launch because its inputs are the manager's
     # (/mongla/imu, /mongla/state) and it must run with vision:=false too.
-    localization_node = Node(
+    localization_node = partial(
+        Node,
         package='mongla_localization',
         executable='localization_node',
         name='mongla_localization',
@@ -463,7 +468,8 @@ def generate_launch_description():
     # detections/images/state are standard vision_msgs/sensor_msgs). use_compression
     # cuts tether bandwidth; still confirm detection FPS is unperturbed with it up
     # and images being viewed (Mongla is FPS-coupled). See foxglove-and-bags.md.
-    foxglove_node = Node(
+    foxglove_node = partial(
+        Node,
         package='foxglove_bridge',
         executable='foxglove_bridge',
         name='foxglove_bridge',
@@ -495,8 +501,16 @@ def generate_launch_description():
         # 4.76 ms at blas=1/split=2 against 5.33 ms at blas=4/split=2.
         SetEnvironmentVariable('OPENBLAS_NUM_THREADS', '1'),
         OpaqueFunction(function=_warn_vision_only),
-        manager_node,
-        localization_node,
+        # Every process here restarts 2 s after it dies mid-run, three times,
+        # then stays down (`launch_respawn`). The manager too: its teardown
+        # still tries the disarm, and a new manager that hears ARMED latches
+        # and refuses every verb but disarm/stop/surface (`boot_latch`), so a
+        # restart gives back the only host disarm path and moves nothing. A
+        # restarted localization publishes in `odom` until re-anchored, which
+        # `pose()` already refuses, so a mission reads "unknown", not a wrong
+        # pose.
+        *respawning(manager_node, 'the manager'),
+        *respawning(localization_node, 'localization'),
         # scoped=True keeps anything set INSIDE from escaping. It does not stop
         # the parent leaking IN -- and `forwarding=False`, which does, also
         # hides `vision`, `fwd_model` and friends from the condition and the
@@ -505,5 +519,5 @@ def generate_launch_description():
         # the colliding name a valid value instead of an inherited one.
         GroupAction([vision_pi_launch], scoped=True),
         GroupAction([vision_launch], scoped=True),
-        foxglove_node,
+        *respawning(foxglove_node, 'the Foxglove bridge'),
     ])

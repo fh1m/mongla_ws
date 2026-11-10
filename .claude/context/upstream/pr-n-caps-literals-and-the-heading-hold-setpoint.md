@@ -3,7 +3,7 @@
 **To:** the firmware team (Rakibul Islam), on `srot-control-board`.
 **Shape:** one headline PR (§2) that is small and high value, then an audit (§3–§5).
 
-**Why now.** We built `tools/control_bench`: your `mixer.cpp`,
+**Why now.** We built `tools/bench/control_bench`: your `mixer.cpp`,
 `attitude_control.cpp`, `feedforward.cpp`, `thrust_trim.cpp` and
 `depth_control.cpp` compiled natively on a host and driven from Python, with no
 reimplementation anywhere — the shim provides seven Arduino symbols and a

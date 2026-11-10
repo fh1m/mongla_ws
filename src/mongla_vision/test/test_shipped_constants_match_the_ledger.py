@@ -68,14 +68,31 @@ LEDGER_BOUND = {
                           'the grating and barometric heights may differ by '
                           'this much before it is a fault'),
     },
+    # §69: two owner decisions and one derived wait, each with its reason.
+    'mongla_localization.launch_respawn': {
+        'MAX_RESTARTS': (3, '**3** restarts',
+                         'owner decision: rides out a transient, stops '
+                         'hiding a real fault'),
+        'DELAY_S': (2.0, '**2 s**', 'owner decision: a device settles'),
+    },
+    'mongla_vision.cameras.reopen': {
+        'LOST_AFTER_S': (3.0, '**3 s**',
+                         'a reappeared device waits this long before it is '
+                         'opened; a replugged Fantech opened first try'),
+    },
     'mongla_vision.approach': {
         # The one that was wrong. Each band is a measured peak bin from
-        # tools/approach_band.py, not a chosen range.
+        # tools/studies/approach_band.py, not a chosen range.
         'BANDS': ({'gate': (0.45, 0.60),
                    'rescue': (0.10, 0.20),
                    'repair': (0.80, 1.20)}, '0.45 - 0.60',
                   'per-class peak bins of box_h/frame_h; a global band '
                   'matched none of the three'),
+    },
+    'mongla_planner.dsl_position': {
+        'UNCALIBRATED_BEARING_SIGMA_DEG': (1.264, '**+1.264°**',
+                                           'principal-point aiming bias a fix '
+                                           'carries before CameraInfo (B-108)'),
     },
 }
 

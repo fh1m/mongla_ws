@@ -111,7 +111,7 @@ measurements at the instant they describe.
 
 ## 6. The bench is itself a whole-chain artefact
 
-`tools/control_bench/` compiles the **board's own control code** natively and
+`tools/bench/control_bench/` compiles the **board's own control code** natively and
 flies it on a Fossen plant built from our **own CAD geometry**. Neither half is
 possible without owning both ends: you cannot compile firmware you do not have,
 and you cannot build a plant for a hull you did not draw.

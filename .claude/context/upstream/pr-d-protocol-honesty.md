@@ -3,7 +3,7 @@
 **Repo:** `srot-control-board` · **Severity:** medium (protocol correctness), with
 two absences behind it that are architectural
 **Evidence:** live probe against `Hengla v0.2.0`, behaviour rev 14, on
-`/dev/ttyUSB0` at 115200, 2026-09-03. Tool: `tools/srot_mav_probe.py` in
+`/dev/ttyUSB0` at 115200, 2026-09-03. Tool: `tools/bench/srot_mav_probe.py` in
 `mongla_ws` (`--messages`), which is in the PR branch and reproduces this in
 ~45 s.
 

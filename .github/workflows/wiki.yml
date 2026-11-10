@@ -4,7 +4,9 @@ name: Wiki
 # this repo, because the doc guards run against files, in the same commit as
 # the code they describe. This keeps the two the same, in both directions:
 #
-#   push to main  -> publish: build the pages from the files, force-push the wiki
+#   push to main  -> publish: refuse while the wiki holds an edit main does not
+#                             have, else build the pages from the files and push
+#                             them on top of the wiki's history (never --force)
 #   wiki edit     -> pull:    turn the edited pages back into files, run the doc
 #                             guards, commit to a review branch and open a PR.
 #   merge PR      -> publish: regenerate wiki from the approved main branch
@@ -15,7 +17,13 @@ name: Wiki
 # setting Actions -> General -> "Allow GitHub Actions to create and approve pull
 # requests"; without it the branch is still pushed and the run says so.
 #
-# How the conversion works and what it guarantees: tools/wiki_build.py.
+# That pull request is opened with GITHUB_TOKEN, so GitHub creates its checks
+# in an approval-required state: someone with write access opens the PR and
+# presses "Approve workflows to run". Editing the description does not start
+# them (GitHub docs, "Triggering a workflow from a workflow"; #94). Owner
+# decision 2026-11-09: approve by hand, no app or personal token.
+#
+# How the conversion works and what it guarantees: tools/ci/wiki_build.py.
 #
 # The wiki's git repository exists only after its first page is created by hand
 # (Wiki tab -> "Create the first page" -> Save). Until then publishing fails
@@ -27,10 +35,17 @@ on:
     paths:
       - '.claude/context/**'
       - 'docs/*.md'
-      - 'tools/wiki_build.py'
+      - 'tools/ci/wiki_build.py'
       - '.github/workflows/wiki.yml'
   gollum:
   workflow_dispatch:
+    inputs:
+      discard_wiki_edits:
+        description: >-
+          Publish over wiki edits main does not have. Only for an edit whose
+          pull request was reviewed and closed; the wiki's history keeps it.
+        type: boolean
+        default: false
 
 permissions:
   contents: write          # main, and <repo>.wiki.git
@@ -71,7 +86,7 @@ jobs:
             exit 1 ;;
           esac
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with: { ref: main, fetch-depth: 0 }
 
       - name: Fetch the wiki
@@ -80,7 +95,7 @@ jobs:
       - name: Turn the pages back into files
         id: pull
         run: |
-          python3 tools/wiki_build.py pull "$RUNNER_TEMP/wiki" | tee "$RUNNER_TEMP/changed"
+          python3 tools/ci/wiki_build.py pull "$RUNNER_TEMP/wiki" | tee "$RUNNER_TEMP/changed"
           [ -s "$RUNNER_TEMP/changed" ] && echo "any=1" >> "$GITHUB_OUTPUT" || echo "nothing changed"
 
       - name: Run the doc guards
@@ -114,7 +129,16 @@ jobs:
             echo "Wiki edit by ${WHO}: ${PAGES}."
             echo
             echo "This branch must pass the same repository integrity and provenance"
-            echo "checks as a normal code PR before merging into main."
+            echo "checks as a normal code PR before merging into main. They wait for"
+            echo "approval: open the Checks tab and press **Approve workflows to run**."
+            echo
+            # The wiki editor is the human source; tools/ci/provenance_check.py
+            # reads this table (test_provenance_check.py runs this block).
+            echo "## AI Provenance"
+            echo
+            echo "| # | Author / Handle | Source URL | What came from this person |"
+            echo "|---|---|---|---|"
+            echo "| 1 | ${WHO} | https://github.com/${GITHUB_REPOSITORY}/wiki | The wiki edit to: ${PAGES} |"
             echo
             if [ "$GUARDS_OK" != "true" ]; then
               echo "Local wiki guards failed; do not merge until they pass."
@@ -145,24 +169,60 @@ jobs:
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with: { ref: main }
 
-      - name: Build the pages
-        run: python3 tools/wiki_build.py build "$RUNNER_TEMP/wiki"
-
-      - name: Push to the wiki
+      # The wiki as it is NOW, history and all. Building on top of it, rather
+      # than a fresh history force-pushed over it, is what makes a concurrent
+      # human edit a refused push instead of a silent loss (#68).
+      - name: Fetch the wiki
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
+          if ! git clone -q "https://x-access-token:${TOKEN}@github.com/${REPO}.wiki.git" "$RUNNER_TEMP/wiki"; then
+            echo "::error::Could not clone the wiki. If it has no pages yet, open the Wiki tab, create any first page, save, then re-run this workflow."
+            exit 1
+          fi
+
+      - name: Refuse to publish over an edit main does not have
+        if: ${{ !inputs.discard_wiki_edits }}
+        run: |
+          # Only pages people changed since the bot last published. A page that
+          # was edited and then merged to main reads the same as its file and
+          # passes; one still in review, or saved while this run queued, does not.
+          W="$RUNNER_TEMP/wiki"
+          last=$(git -C "$W" log -1 --format=%H --author='github-actions\[bot\]')
+          if [ -z "$last" ]; then mapfile -t touched < <(git -C "$W" ls-files '*.md')
+          else mapfile -t touched < <(git -C "$W" diff --name-only "$last" HEAD -- '*.md'); fi
+          [ "${#touched[@]}" -gt 0 ] || { echo "no edits since the last publish"; exit 0; }
+          if ! python3 tools/ci/wiki_build.py check "$W" "${touched[@]}" > "$RUNNER_TEMP/pending"; then
+            echo "::error::The wiki holds edits main does not have yet, so publishing would erase them:"
+            sed 's/^/  /' "$RUNNER_TEMP/pending"
+            echo "Merge (or close) the open docs(wiki) pull request, then re-run. A closed one: run this workflow by hand with discard_wiki_edits."
+            exit 1
+          fi
+
+      - name: Build the pages
+        run: |
+          # Every page is regenerated, so a document removed from the book
+          # loses its page; the wiki's own history keeps the old text.
+          find "$RUNNER_TEMP/wiki" -maxdepth 1 -type f \( -name '*.md' -o -name '.mongla-pages.json' \) -delete
+          python3 tools/ci/wiki_build.py build "$RUNNER_TEMP/wiki"
+
+      - name: Push to the wiki
+        env:
+          REPO: ${{ github.repository }}
+        run: |
           cd "$RUNNER_TEMP/wiki"
-          git init -q -b master
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
+          if git diff --cached --quiet; then echo "the wiki already matches main"; exit 0; fi
           git commit -q -m "Built from ${REPO}@$(git -C "$GITHUB_WORKSPACE" rev-parse --short HEAD)"
-          if ! git push -q --force "https://x-access-token:${TOKEN}@github.com/${REPO}.wiki.git" master; then
-            echo "::error::Could not push the wiki. If it has no pages yet, open the Wiki tab, create any first page, save, then re-run this workflow."
+          # A plain push: if someone saved a page since the clone above, it is
+          # rejected, and that edit's own run imports it.
+          if ! git push -q origin HEAD; then
+            echo "::error::The wiki changed while this run built it (a new edit). Nothing was overwritten; its import run proposes it, and merging that publishes."
             exit 1
           fi

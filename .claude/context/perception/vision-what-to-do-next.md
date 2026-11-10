@@ -246,7 +246,7 @@ times on different builds. One day, and it can close lower rows outright.
 ### 5.1 Three measurements that cost almost nothing and settle a lot
 
 1. **DONE 2026-09-23 — ROOT-SIFT benched as a CONTROL, and it LOST.**
-   `tools/feature_murky_control.py`, same §8 protocol, on the three murky Mirpur
+   `tools/studies/feature_murky_control.py`, same §8 protocol, on the three murky Mirpur
    clips whose frames were confirmed identical by reproducing ORB's recorded
    reference keypoint counts exactly (71 / 7 / 111). ROOT-SIFT reads
    **0/4, 0/4, 2/4** where XFeat reads 4/4, 4/4, 4/4 — and finds **three

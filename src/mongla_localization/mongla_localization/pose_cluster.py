@@ -270,6 +270,10 @@ class PoseCluster:
         self.max_reproj_px = float(max_reproj_px)
         self._samples: list[PoseSample] = []
 
+    def reset(self) -> None:
+        """Forget every sample: the next vote starts from nothing."""
+        self._samples = []
+
     def add(self, s: PoseSample) -> None:
         self._samples.append(s)
 

@@ -14,6 +14,21 @@ import pytest
 SRC = os.path.join(os.path.dirname(__file__), '..', '..', 'mongla_localization')
 
 
+def _running(pid: int) -> bool:
+    """A zombie is dead. Where orphans are not reaped -- a container whose
+    pid 1 is not an init, as in CI -- the killed child stays a zombie, and
+    `kill(pid, 0)` would call it alive."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:
+        with open(f'/proc/{pid}/stat') as f:
+            return f.read().rsplit(')', 1)[1].split()[0] not in ('Z', 'X')
+    except OSError:
+        return True
+
+
 @pytest.mark.skipif(not sys.platform.startswith('linux'), reason='Linux only')
 def test_the_child_is_terminated_when_its_parent_dies(tmp_path):
     pidfile = tmp_path / 'child.pid'
@@ -38,9 +53,7 @@ def test_the_child_is_terminated_when_its_parent_dies(tmp_path):
     p.wait()
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
-        try:
-            os.kill(child, 0)
-        except ProcessLookupError:
+        if not _running(child):
             return
         time.sleep(0.05)
     os.kill(child, 9)

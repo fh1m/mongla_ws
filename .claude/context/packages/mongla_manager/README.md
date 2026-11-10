@@ -123,6 +123,7 @@ to decide.
 | `vision_tunables.py` | the live-tunable vision gains, in one place; set on the deck under `nodes:` in `bringup.yaml` |
 | `dispatch_policy.py` | which goals the action server accepts while busy: only `disarm`, `stop` and `surface`, which pre-empt the running verb |
 | `health.py` · `health_reporters.py` | subsystem health, reported rather than assumed |
+| `kutum_health.py` | Kutum, the Pi and its Hailo-8, as one group in the same report: `kutum.pi_temperature` (the Pi firmware's 80 and 85 C), `kutum.pi_power`, `kutum.hailo` (graded by the zones and throttling levels the chip reports) and `kutum.disk`, the last two Pi rows with the preflight's own grades. Sampled every 10 s on its own thread, because `vcgencmd` can take as long as the executor's stall limit. Report-only: nothing acts on these rows |
 | `connection_config.py` | connection profiles and network constants |
 | `mongla_localization/launch_defaults.py` | reads `~/.mongla/bringup.yaml` for bringup and every other launch file (it lives in the package they all depend on) |
 | `yaw_source.py` | heading, read off the board's own fused attitude |
@@ -165,7 +166,7 @@ Related: [`mongla_control`](../mongla_control/README.md) (what the verbs actuall
 ## Every module
 
 <!-- modules:begin -->
-Generated from each module's docstring by `tools/gen_reference.py`; a module
+Generated from each module's docstring by `tools/ci/gen_reference.py`; a module
 with no summary line shows as *(no summary)* until it gets one.
 
 | module | what it is |
@@ -182,6 +183,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `flare_order_send.py` | ``ros2 run mongla_manager flare_order R-B-Y --port /dev/ttyACM0`` -- tell the vehicle. |
 | `health.py` | One health surface. Four states, and UNKNOWN is not OK. |
 | `health_reporters.py` | Each subsystem's private dialect, translated once. |
+| `kutum_health.py` | Kutum in the live health report: the Pi and the Hailo-8 on it, as one machine. |
 | `node_action.py` | The /mongla/move action server: which goals run, how they stop, what they report. |
 | `node_health.py` | Is the node alive, and is the mission: the health report and the three watchdogs (executor, mission, kill switch). |
 | `node_setup.py` | Bringing the node up: parameters, the board link, the recorder, the preflight reads. |

@@ -76,7 +76,7 @@ def make_detector(*, model_path: str, logger=None, **kwargs) -> Detector:
         raise FileNotFoundError(
             f'{stem}: no compiled .hef for this machine (resolved {resolved}), '
             f'and PyTorch is not installed to run the .pt. Compile it: '
-            f'tools/hailo_compile.sh {stem}, and ship {stem}.hef beside '
+            f'tools/bench/hailo_compile.sh {stem}, and ship {stem}.hef beside '
             f'{stem}.yaml.')
     from .yolo import YoloDetector
     return YoloDetector(model_path=resolved, logger=logger, **kwargs)

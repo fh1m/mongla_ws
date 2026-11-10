@@ -139,7 +139,7 @@ def test_device_path_in_a_profile_reaches_the_builder(monkeypatch):
 def test_the_pi_profiles_name_a_symlink_this_OS_creates(name):
     """Raspberry Pi OS creates `/dev/v4l/by-id/` for USB video and NEVER
     `by-path`, so the by-path values these profiles used to carry -- which
-    udevadm reports correctly -- pointed at nothing. `tools/udev/` supplies
+    udevadm reports correctly -- pointed at nothing. `kutum/system/udev/` supplies
     `/dev/mongla_cam_*` instead, and the rule earned itself immediately: video0
     was the Sonix before a reboot and the Fantech after, so the raw index had
     already swapped the two cameras."""

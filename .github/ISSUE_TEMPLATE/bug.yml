@@ -1,0 +1,32 @@
+name: Defect
+description: Something the code does that it should not, with the value that shows it.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: The value you saw, where, and what it should have been. A plausible number standing in for an absent one is a defect too.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Commands, a bag, a fixture, or the code path with file:line.
+    validations:
+      required: true
+  - type: dropdown
+    id: safety
+    attributes:
+      label: Can it arm, move or keep the vehicle armed? (If yes, add the safety label.)
+      options: ['No', 'Yes', 'Not sure']
+    validations:
+      required: true
+  - type: dropdown
+    id: state
+    attributes:
+      label: Where it was seen
+      options: [code reading, unit test, bench, archive footage, water]
+    validations:
+      required: true

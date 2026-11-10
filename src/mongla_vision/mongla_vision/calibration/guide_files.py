@@ -203,6 +203,7 @@ def capture_dir(applies_to, medium):
     Same reasoning as the per-profile split that came before it: a switch
     must not resume into another capture's frames.
     """
+    solver.check_profile(applies_to, medium)
     suffix = '' if medium == 'air' else f'_{medium}'
     return os.path.expanduser(f'~/calib_{applies_to}{suffix}')
 
@@ -264,6 +265,10 @@ def apply_calibration(cal_dir, src_file, dev, applies_to):
     except Exception as e:
         return None, f'{src_file!r}: {e}'
     medium = d.get('medium', 'air')
+    try:
+        solver.check_profile(applies_to, medium)
+    except ValueError as e:
+        return None, str(e)
     ident = camera_identity(dev)
     if not ident.get('usb_vid'):
         return None, f'{dev}: no USB identity, refusing to bind blindly'
@@ -280,8 +285,11 @@ def apply_calibration(cal_dir, src_file, dev, applies_to):
     d['identity_source'] = 'operator asserted at apply time'
     d['applied_from'] = os.path.basename(src_file)
     d['applied_on'] = time.strftime('%Y-%m-%d %H:%M')
-    dest = os.path.join(cal_dir, solver.calibration_filename(
-        applies_to, d.get('image_width'), d.get('image_height'), medium))
+    try:
+        dest = os.path.join(cal_dir, solver.calibration_filename(
+            applies_to, d.get('image_width'), d.get('image_height'), medium))
+    except (ValueError, TypeError) as e:
+        return None, str(e)
     if os.path.exists(dest) and os.path.abspath(dest) != os.path.abspath(src):
         # Never overwrite a calibration without keeping the old one. It cost
         # somebody a board and ten minutes.

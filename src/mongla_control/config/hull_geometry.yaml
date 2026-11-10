@@ -7,7 +7,7 @@
 #
 # So EDITING THIS FILE ALONE CHANGES NOTHING. There is no `ros2 param set` for
 # hull geometry and no `--params-file` that loads it: it is not a ROS parameter
-# at any point. To change the geometry, re-run `tools/pull_hull_geometry.js`
+# at any point. To change the geometry, re-run `tools/site/pull_hull_geometry.js`
 # against the CAD and update the constants in those two modules; the tests
 # above will fail until both agree, which is the whole point of keeping the
 # file.
@@ -37,7 +37,7 @@
 # below is in the CAD's own frame.
 #
 # 2026-09-25 — re-measured offline, and the numbers hold exactly.
-# `tools/hull_stations.py` reads each body's bounding box out of the GLB's own
+# `tools/bench/hull_stations.py` reads each body's bounding box out of the GLB's own
 # POSITION accessor `min`/`max`, which glTF requires the exporter to write from
 # the CAD. Those bounds are in the JSON chunk, so Draco compression does not
 # touch them -- which means geometry needs NO mesh decode, NO numpy and NO
@@ -146,7 +146,7 @@ thrusters:
   - name: axial
     part: A2212
     # z = PROP HUB, +0.12 mm -- NOT the motor box's +8.06 mm (issue #9).
-    # Re-read 2026-10-02 with tools/hull_stations.py from the same export:
+    # Re-read 2026-10-02 with tools/bench/hull_stations.py from the same export:
     #   A2212        27.80 x 43.88 x 40.00   centre z +8.06   <- bracket pulls it
     #   prop (Pt 1)  36.95 x 36.73 x 21.00   centre z +0.12   <- the thrust line
     #   duct (Pt 3)  87.99 x 87.97 x  2.00   centre z  0.00

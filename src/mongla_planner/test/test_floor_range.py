@@ -12,7 +12,11 @@ def _m(boxes, size=(640.0, 480.0)):
     m = MagicMock()
     m.camera = 'forward'
     m._img_size = {'forward': size}
-    m.focal_px.return_value = F
+    # A calibrated pinhole in air, so these cases test the plane geometry
+    # alone; the port has its own cases below.
+    m._cam_k = {'forward': (F, F, size[0] / 2.0, size[1] / 2.0)}
+    m._cam_d = {}
+    m.medium = 'air'
     m._records.return_value = boxes
     return m
 
@@ -104,6 +108,7 @@ def test_floor_range_is_true_through_a_flat_port_off_centre():
     u, v = _through_port(right, below, fwd, fx, fy, cx, cy)
     m = _m([('drum', u, v - 30.0, 40.0, 60.0, 0.8)], size=(1280.0, 720.0))
     m._cam_k = {'forward': FANTECH}
+    m.medium = 'water'
     got = MonglaMission.floor_range(m, 'drum', plane_below_m=below, pitch_deg=0.0)
     assert got[0] == pytest.approx(math.hypot(fwd, right), rel=0.005)
 
@@ -118,6 +123,7 @@ def test_range_to_is_true_through_a_flat_port_off_centre(monkeypatch):
     ur, _ = _through_port(X + 0.75, 0.0, Z, fx, fy, cx, cy)
     m = _m([('gate', (ul + ur) / 2.0, v, ur - ul, 200.0, 0.9)], size=(1280.0, 720.0))
     m._cam_k = {'forward': FANTECH}
+    m.medium = 'water'
     got = MonglaMission.range_to(m, 'gate')
     assert got[0] == pytest.approx(Z, rel=0.01)
 

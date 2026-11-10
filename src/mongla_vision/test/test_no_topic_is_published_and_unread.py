@@ -30,7 +30,7 @@ import subprocess
 import sys
 
 _ROOT = pathlib.Path(__file__).resolve().parents[3]
-_TOOL = _ROOT / 'tools' / 'topic_wiring_sweep.py'
+_TOOL = _ROOT / 'tools' / 'ci' / 'topic_wiring_sweep.py'
 
 # Published with no in-graph subscriber -> the consumer that DOES read it.
 PUBLISHED_UNREAD = {
@@ -44,7 +44,7 @@ PUBLISHED_UNREAD = {
     '/flow_quality':
         'a DIAGNOSTIC. The gate it describes is applied inside flow_node, which '
         'publishes NO velocity at quality 0, so the filter never needs it. Read '
-        'by tools/flow_launch_check.py and tools/flow_derot_ab.py.',
+        'by tools/bench/flow_launch_check.py and tools/bench/flow_derot_ab.py.',
     '/mongla/localization/aiding':
         'a DIAGNOSTIC of which aiding sources the filter accepted. Read in a '
         'bag after a run, never in the loop.',

@@ -125,7 +125,10 @@ def _pass(mongla, blind_s, leg, log):
             fwd=None, hold=SAUVC_GATE_COMMIT_S,
             gain=SAUVC_APPROACH_GAIN, duration=SAUVC_QUAL_GATE_MOVE_S,
             fallback=creep_forward)
-    if SAUVC_QUAL_BLIND_ENABLED and not passed:
+    # Not after a commit leg (#79): an unverified pass-through already drove
+    # past where the gate was last seen, and a second, blind leg on top of
+    # it is the one way to reach the far wall.
+    if SAUVC_QUAL_BLIND_ENABLED and not passed and not getattr(passed, 'committed', False):
         if log:
             log(f'[SAUVC] qual gate ({leg}) never locked -- blind leg '
                 f'{blind_s:.0f}s at gain {SAUVC_BLIND_GAIN}')

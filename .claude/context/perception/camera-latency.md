@@ -1,6 +1,6 @@
 # Camera latency: the queue, and why the standard fix does not work
 
-> Every number here was measured on our Pi 5 with `tools/v4l2_latency.py`,
+> Every number here was measured on our Pi 5 with `tools/bench/v4l2_latency.py`,
 > against the **kernel's own capture timestamps**. Where a published source
 > disagrees, the disagreement is stated rather than smoothed over.
 

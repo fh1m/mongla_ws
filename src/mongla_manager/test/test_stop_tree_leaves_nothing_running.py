@@ -34,11 +34,10 @@ LIB = ROOT / 'tools' / '_record_lib.sh'
 
 
 def _alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except (ProcessLookupError, PermissionError):
-        return False
-    return True
+    """The library's own `running`: a zombie is dead, though `kill -0` says
+    otherwise. Asking the library means this test checks that too."""
+    return subprocess.run(['bash', '-c', f'source "{LIB}"; running {pid}'],
+                          capture_output=True).returncode == 0
 
 
 def _descendants(pid: int) -> list[int]:

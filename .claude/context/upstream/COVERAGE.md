@@ -92,7 +92,7 @@ link, which gives the Pi an address and DHCP but **no masquerade rule for
 confusing part is the split it produces: **DNS resolved fine** (the dev box's
 `systemd-resolved` answered) while every packet to an external address was
 dropped, so it looked like a routing problem at the far end rather than a
-missing NAT rule at the near one. `tools/pi_share_internet.sh` adds the
+missing NAT rule at the near one. `tools/pool/pi_share_internet.sh` adds the
 masquerade plus the two FORWARD rules and is idempotent.
 
 **The drift suite skipped all 25 of its tests there.** It walks up looking for

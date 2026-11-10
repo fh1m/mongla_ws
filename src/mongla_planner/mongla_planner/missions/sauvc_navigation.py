@@ -125,7 +125,10 @@ def navigate(mongla, log=None):
     # murky water or a bad start pose causes both -- so this branch fires exactly
     # when it is least likely to work, and a wall touch is -5. It is still the
     # right trade (zero is worse), but do not read it as a reliable fallback.
-    if SAUVC_BLIND_TRANSIT_ENABLED and not passed:
+    # Not after a commit leg (#79): an unverified pass-through already drove
+    # past where the gate was last seen, and a second, blind leg on top of
+    # it is the one way to reach the far wall.
+    if SAUVC_BLIND_TRANSIT_ENABLED and not passed and not getattr(passed, 'committed', False):
         if log:
             log('[SAUVC] gate never locked -- blind transit, '
                 f'{SAUVC_BLIND_TRANSIT_S:.0f}s at gain {SAUVC_BLIND_GAIN}')

@@ -21,7 +21,10 @@
 
 # The board link: MAVLink 2 over the SROT board's USB serial.
 # fc/srot_fc.py and every tools/srot_*.py.
-pymavlink>=2.4.41
+# Pinned to what the vehicle runs (kutum/requirements.txt): the decoding traps
+# in CLAUDE.md -- SYS_STATUS extended health, ESC_STATUS -- are properties of
+# this version, and the tests that pin them must test the vehicle's copy.
+pymavlink==2.4.49
 # serial port probing in the manager and the bench tools
 pyserial>=3.5
 
@@ -33,6 +36,8 @@ numpy>=1.24,<2.0
 # trackers: 2.4.0 exactly. The 2.5.0 wheel on PyPI contains no module, and its
 # numpy>=2 requirement is spurious, so on the Pi install it with --no-deps:
 #     pip install --no-deps "trackers==2.4.0"
+# so `pip install -r` on this file alone cannot resolve; tools/ci/ci_ros.sh shows
+# the two-step install.
 trackers>=2.4.0,<2.5.0
 # supervision: <=0.26.1 on numpy 1.x (0.30 uses np.long, which is numpy-2 only)
 supervision>=0.18.0,<=0.26.1
@@ -58,4 +63,6 @@ opencv-python>=4.8; platform_machine == "x86_64"
 matplotlib>=3.5; platform_machine == "x86_64"
 
 # tests
-pytest>=7.0
+# The ROS distro's own python3-pytest (6.2 on Humble, 7.4 on Jazzy): ROS's
+# launch_testing plugin fails to load under pytest 9.
+pytest>=6.2,<9

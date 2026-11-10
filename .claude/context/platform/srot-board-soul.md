@@ -71,7 +71,7 @@ defaults to 0 so it is free to borrow; restore it afterwards.
 
 `AUTOPILOT_VERSION.capabilities = 8206` = MAVLINK2 | COMMAND_INT | MISSION_INT |
 PARAM_FLOAT. That is a claim; these are measurements
-(`tools/srot_mav_probe.py`):
+(`tools/bench/srot_mav_probe.py`):
 
 | asked | answer |
 |---|---|

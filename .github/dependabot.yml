@@ -1,0 +1,80 @@
+# Dependabot proposes; nothing merges by itself (#95).
+#
+# The vehicle's Python is not a normal pip environment: numpy must stay 1.x
+# (cv_bridge and the system cv2 are built against it), OpenCV comes from apt,
+# pymavlink is the board's wire, and trackers/supervision are pinned around a
+# broken wheel. Those are ignored here and move only after a measured build
+# on Kutum (kutum/requirements.txt, pi-and-env-traps.md). Every other update
+# arrives as one grouped PR a week and goes through the required checks.
+#
+# A version that needs numpy 2 is the same trap by another door: scipy 1.18
+# requires numpy>=2.0 and Python 3.12 (PyPI metadata, checked 2026-11-09), so
+# scipy stays below 1.18 while the vehicle is on numpy 1.x. A major version of
+# a library the estimators call (filterpy 2.0 came after eight years of 1.4.5)
+# is an evaluation by hand, not a weekly merge.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+
+  # The dev-box ranges. Only raise a lower bound when a new version needs
+  # it; the default strategy rewrote every minimum to the newest release.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    versioning-strategy: increase-if-necessary
+    # The vehicle's pins have their own entry below. Without this the root
+    # scan finds kutum/requirements.txt too, and every vehicle bump arrives
+    # as two identical PRs (#115 and #116).
+    exclude-paths:
+      - kutum
+      - 'kutum/**'
+    groups:
+      python:
+        patterns: ['*']
+    ignore:
+      - dependency-name: numpy
+      - dependency-name: opencv-python
+      - dependency-name: pymavlink
+      - dependency-name: trackers
+      - dependency-name: supervision
+      - dependency-name: scipy
+        versions: ['>=1.18']
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: deps
+
+  # The vehicle's exact pins. Minor and patch only: a major version changes
+  # behaviour on the vehicle and is proposed by hand after a Kutum build.
+  # Even these merge only after kutum/deploy.sh passes on the vehicle.
+  - package-ecosystem: pip
+    directory: /kutum
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    groups:
+      kutum:
+        patterns: ['*']
+    ignore:
+      - dependency-name: numpy
+      - dependency-name: opencv-python
+      - dependency-name: pymavlink
+      - dependency-name: trackers
+      - dependency-name: supervision
+      - dependency-name: scipy
+        versions: ['>=1.18']
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: deps(kutum)

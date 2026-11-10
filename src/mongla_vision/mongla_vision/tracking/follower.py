@@ -147,6 +147,11 @@ class Follower:
     def active(self) -> bool:
         return self._pts is not None and len(self._pts) >= self._min_pts
 
+    def drop(self) -> None:
+        """Forget the target: inactive until the next `reset`."""
+        self._pts = None
+        self._box = None
+
     def reset(self, gray: np.ndarray, xyxy) -> int:
         """Seed from a DETECTION. Returns the point count.
 
