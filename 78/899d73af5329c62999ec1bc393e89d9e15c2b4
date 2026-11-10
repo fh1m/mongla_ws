@@ -1,0 +1,16 @@
+test/test_ros_ci_workflow.py
+  h_f1b9066eb9899c 83-93
+tools/ci_ros.sh
+  h_f1b9066eb9899c 97-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "78899d73af5329c62999ec1bc393e89d9e15c2b4",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
