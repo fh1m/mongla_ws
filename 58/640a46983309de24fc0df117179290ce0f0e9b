@@ -1,0 +1,58 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 137,7136-7190
+.claude/context/packages/mongla_vision/README.md
+  h_f1b9066eb9899c 71
+.claude/context/perception/ladder-register.md
+  h_f1b9066eb9899c 42
+README.md
+  h_f1b9066eb9899c 787,790
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+src/mongla_vision/mongla_vision/detection/detector.py
+  h_f1b9066eb9899c 82-87
+src/mongla_vision/mongla_vision/detection/hailo.py
+  h_f1b9066eb9899c 79,328-330,357,359,366-404,593-598
+src/mongla_vision/mongla_vision/detection/hef_file.py
+  h_f1b9066eb9899c 35-59
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  h_f1b9066eb9899c 118-124
+src/mongla_vision/mongla_vision/detector_node.py
+  h_f1b9066eb9899c 342-346,611-617,634-636
+src/mongla_vision/mongla_vision/detector_setup.py
+  h_f1b9066eb9899c 27-32
+src/mongla_vision/mongla_vision/lock_frames.py
+  h_f1b9066eb9899c 130,163,185,187-189,205-237
+src/mongla_vision/mongla_vision/lock_node.py
+  h_f1b9066eb9899c 4,58,75,93-96,203-204,215,237-239,250-256,270-272,280-281
+src/mongla_vision/mongla_vision/lock_publish.py
+  h_f1b9066eb9899c 100-106
+src/mongla_vision/mongla_vision/lock_setup.py
+  h_f1b9066eb9899c 369-370
+src/mongla_vision/mongla_vision/lock_wiring.py
+  h_f1b9066eb9899c 214-218,385-389
+src/mongla_vision/mongla_vision/tracker_node.py
+  h_f1b9066eb9899c 276-280,282
+src/mongla_vision/mongla_vision/tracking/lock_state.py
+  h_f1b9066eb9899c 9-11,47,171-172,261-284
+src/mongla_vision/test/test_hailo_arbiter.py
+  h_f1b9066eb9899c 381-394,397,400-412,415-426,430
+src/mongla_vision/test/test_lock_acting_bar.py
+  h_f1b9066eb9899c 67-74,302-357
+src/mongla_vision/test/test_lock_state.py
+  h_f1b9066eb9899c 219-268
+tools/README.md
+  h_f1b9066eb9899c 182
+tools/studies/held_rung_score.py
+  h_f1b9066eb9899c 1-254
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "58640a46983309de24fc0df117179290ce0f0e9b",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
