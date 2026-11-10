@@ -150,6 +150,23 @@ timed inside `infer()`, not beside it.
 **Falsifier.** Three contexts again, or a recall loss: then the family that chose our context
 count also chooses YOLO26's, and we stop.
 
+**Result, 2026-11-10: falsified, and we stop.** Hailo's own Model Zoo v2.18.0 HEFs for Hailo-8,
+fetched and run on Kutum in one session beside ours:
+
+```
+model                         contexts   hw-only FPS   hw latency   outputs
+gate_sharks (ours, YOLO11n)       3         94.97        8.52 ms    NMS on chip, FLOAT32
+yolo26n (Hailo zoo)               3         92.59        9.11 ms    6 raw UINT16 tensors
+yolo26s (Hailo zoo)               3         47.69       14.46 ms    6 raw UINT16 tensors
+```
+
+`yolo26n.hef` sha256 `af07137a…3aa8d30`, 8 683 748 bytes. Hailo's tuned compile of YOLO26 is
+three contexts too, it is slower on the chip than ours, and its NMS-free head moves a top-k
+decode over 80x80x80 + 40x40x80 + 20x20x80 scores onto the host, where ours costs 0.02 ms.
+On Hailo-8 the family switch buys nothing. It also strengthens §3a: a second modern family's tuned
+compile splits at 640 the way YOLO11's does, so lever 1 now has to beat the vendor's own
+allocator settings, not just the defaults.
+
 A caution from the one independent case study we found (Dubinsky, YOLO26 on Hailo-8L): the
 quantisation-aware fine-tune at optimisation level 3 bought little, and a DFC run without a GPU
 silently drops to level 0. Read the compile log for the level actually used before believing
