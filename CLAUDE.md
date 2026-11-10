@@ -257,8 +257,9 @@ environment pins: [`pi-and-env-traps.md`](.claude/context/kutum/pi-and-env-traps
 ## 5. Localization
 
 No GPS, no DVL. A right-invariant EKF predicts on the board's IMU and corrects with depth,
-optical-flow velocity, headings and prop fixes; late measurements are **replayed at the
-instant they describe** rather than applied on arrival. Course priors are per venue and
+optical-flow velocity, headings and prop fixes. With `retrodict:=true`, late measurements
+are **replayed at the instant they describe**; by default (`false`) they are applied on
+arrival. Course priors are per venue and
 overridable on the deck (`~/.mongla/courses`) with a survey tool to measure the real thing.
 
 Verified: the downward camera as a velocity sensor — three 30 cm slides, worst error
