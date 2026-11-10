@@ -19,6 +19,9 @@
 > **Rule for keeping it true:** a row moves to DONE only with a commit, a production caller, an
 > executed test and an injection that bites. Re-grep before trusting any OPEN row older than a
 > week — a stale ledger is confidently wrong about the one thing it exists to answer.
+> Every Monday `tools/backlog_drift.py` (`.github/workflows/backlog-drift.yml`) lists the dated
+> OPEN rows past that week, every BUGS entry whose GitHub issue disagrees with it, and every cited
+> upstream issue or pull request that has merged or closed, in the one `drift-report` issue.
 
 ---
 
@@ -59,7 +62,7 @@ not by competition, with a deck-side override for every venue constant.
 | G1 | **Board depth loop has never run closed under this stack.** Every srot move enters AUTO, which closes depth, so this gates `move_forward` too. It did close in `DEPTH_HOLD`, on the old hull in the firmware team's 2026-08-06/07 water tests, where the DEPTH_HOLD to AUTO transition crashed the board (fw `09d0033`, `f533bd2`) | OPEN (last read 2026-09-15: `DEPTH_OUT` absent while disarmed) | bench: the two armed checks in `srot-integration.md` |
 | G1b | **Warning: `FRAME_REVERSE` vs MOTOR_DETECT.** On this hull `FRAME_REVERSE = 1`, and MOTOR_DETECT converges to the configuration that cancels it — so a detect run leaves every axis inverted in every closed-loop mode, and Motor Test confirms the wrong answer. **Do not run MOTOR_DETECT on this hull until upstream `pr-q` lands** | OPEN (upstream, unsent) | `upstream/pr-q-motor-detect-and-frame-reverse.md`; source-read, not bench-verified |
 | G2 | **Thrusters fitted and ESC RPM non-zero.** 958/958 ESC frames read 0 with nothing attached; `THR_TRIM_EN=0` WARN | OPEN (hardware) | blocks `thrust_model`, the RPM velocity sensor, ESC current as a BLOCKED channel |
-| G3 | **Firmware PR merge.** 21 of our PRs open on `srot-control-board`, none merged since 2026-09-03 (re-checked 2026-09-17: #1-#24 all OPEN) | OPEN | `gh pr list -R RakibulIslam1/srot-control-board`; see §3 |
+| G3 | **Firmware PR merge.** 28 of our PRs open on `srot-control-board` (#1-#39), none ever merged (re-checked 2026-11-09: all 28 OPEN). `tools/backlog_drift.py` re-reads each cited one weekly | OPEN | `gh pr list -R RakibulIslam1/srot-control-board`; see §3 |
 | G4 | Board config applied 2026-09-15: Bar30 re-zeroed (+0.005 m), `LEAK_EN=1`, `MOT_BAT_V_MAX=16.8`, read back | DONE (re-verify after any reflash) | operator |
 | G5 | Tool offsets: torpedo and dropper are `unmeasured: true`, so every fire through them warns and aims the camera centre | OPEN (tape measure) | `src/mongla_vision/config/tool_geometry.yaml` |
 
