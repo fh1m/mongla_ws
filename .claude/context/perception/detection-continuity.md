@@ -164,7 +164,7 @@ is the guard, and it was verified to bite.
 
 ## 5. Method notes that cost something to learn
 
-**Run inference once, then compare.** `tools/tracker_ab.py` caches detections
+**Run inference once, then compare.** `tools/studies/tracker_ab.py` caches detections
 so every tracker sees byte-identical input. A rosbag cannot do this:
 `pool_record.sh` excludes `image_raw`, and `ros2 bag play` is wall-clock paced,
 so the pipeline drops a different frame subset each run.
@@ -319,8 +319,8 @@ know:
 
 ```
 ros2 run mongla_vision water_check              # live camera
-python3 tools/water_check.py --video clip.mkv   # a recording
-python3 tools/footage_inventory.py              # the same statistics per ARCHIVE clip
+python3 tools/pool/water_check.py --video clip.mkv   # a recording
+python3 tools/bench/footage_inventory.py              # the same statistics per ARCHIVE clip
 ```
 
 ### What this changes about §8

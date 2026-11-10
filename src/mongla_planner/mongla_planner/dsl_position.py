@@ -13,6 +13,12 @@ from .model_context import ClassRef
 
 from .dsl_detections import SeeMixin
 
+# Without CameraInfo the principal point is assumed at the image centre. The
+# forward camera's sits 26 px off it, a 1.264 deg aiming bias (measured-bars,
+# the forward camera entry), so a fix built from an uncalibrated bearing
+# carries that much more angle error.
+UNCALIBRATED_BEARING_SIGMA_DEG = 1.264
+
 
 class WhereMixin:
     # In-water horizontal FOV per camera, used ONLY when that camera has not
@@ -24,6 +30,7 @@ class WhereMixin:
     # camera's 46.7 applied to the forward one reads every range 17 % long and
     # every bearing 13 % short, with nothing logging a fault.
     HFOV_WATER_DEG_BY_CAMERA = {'forward': 53.6, 'downward': 46.7}
+    UNCALIBRATED_BEARING_SIGMA_DEG = UNCALIBRATED_BEARING_SIGMA_DEG
 
     def _optics(self, camera):
         """(fx, fy, cx, cy, width, height) in AIR from CameraInfo, or None."""
@@ -36,19 +43,38 @@ class WhereMixin:
             return None
         return (*k, float(wh[0]), float(wh[1]))
 
+    def _fov_optics(self, camera):
+        """(fx, fy, cx, cy, width, height) in AIR from the camera's measured FOV.
+
+        The stand-in for CameraInfo before it arrives (start-up, a replay with
+        no camera_info): the focal of the committed calibration, square pixels
+        and the principal point at the centre. What it cannot know is where the
+        principal point really is, which `UNCALIBRATED_BEARING_SIGMA_DEG` and
+        `floor_range`'s refusal account for.
+        """
+        import math as _math
+        from mongla_vision.optics import fov_water_to_air
+        sizes = getattr(self, '_img_size', None)
+        wh = sizes.get(camera) if isinstance(sizes, dict) else None
+        w, h = (float(wh[0]), float(wh[1])) if wh and wh[0] else (640.0, 480.0)
+        table = WhereMixin.HFOV_WATER_DEG_BY_CAMERA
+        hfov_air = fov_water_to_air(float(table.get(str(camera), table['forward'])))
+        fx = (w / 2.0) / _math.tan(_math.radians(hfov_air / 2.0))
+        return fx, fx, w / 2.0, h / 2.0, w, h
+
     def _water_camera(self, camera):
-        """(rectifier, K_rect) for `camera` from its live CameraInfo, or None.
+        """(rectifier, K_rect) for `camera`: its live CameraInfo, else its FOV.
 
         A flat port has no single focal length. The in-water focal grows with
         field angle (forward camera at 640 px: ~567 px at the centre, ~634 at the
         edge), so ANY one focal -- the old shared 46.7 deg (Snell), or a per-camera FOV --
         is wrong by up to ~12 % somewhere in the frame. Rectified pixels ARE a
         pinhole at `K_rect`, which is the model `lock_node` and `pnp_node` use;
-        the DSL now uses the same one instead of a second copy.
+        the DSL now uses the same one instead of a second copy. Without
+        CameraInfo the same port model runs on `_fov_optics`, so only the
+        principal point is a guess, never the refraction (B-108).
         """
-        o = WhereMixin._optics(self, camera)
-        if o is None:
-            return None
+        o = WhereMixin._optics(self, camera) or WhereMixin._fov_optics(self, camera)
         from mongla_vision.optics import rectifier_for
         fx, fy, cx, cy, _w, _h = o
         medium = getattr(self, 'medium', 'water')
@@ -63,6 +89,10 @@ class WhereMixin:
                     return pts
             rect = _Identity()
         return rect, K_rect
+
+    def _calibrated(self, camera) -> bool:
+        """True when `camera`'s optics come from a live CameraInfo."""
+        return WhereMixin._optics(self, camera) is not None
 
     def hfov_water_deg(self, camera: str | None = None) -> float:
         """In-water horizontal FOV of `camera`: its live calibration, else its fallback."""
@@ -89,10 +119,11 @@ class WhereMixin:
         """Bearing from the hull to a visible prop, in WORLD terms. None if unseen.
 
         Pixel to angle, then relative to absolute through the anchored
-        heading. With live CameraInfo the box centre is unprojected in full --
-        lens off, then the port, then the pinhole at `K_rect` (issue #24); only
-        without it does this fall back to the FOV reading of `where_offset`,
-        which is good to about a degree near the centre and worse at the edge.
+        heading. The box centre is unprojected in full -- lens off, then the
+        port, then the pinhole at `K_rect` (issue #24) -- from the live
+        CameraInfo, or before it arrives from the camera's FOV with the
+        principal point at the centre (B-108). Only an explicit `hfov_deg`
+        takes the linear FOV reading of `where_offset`.
 
         Unanchored, the number returned is relative to boot, so a fix built
         from it is in a rotated frame. `fix_position` says so rather than
@@ -106,7 +137,7 @@ class WhereMixin:
         if wc is not None:
             import math as _math
             rect, K_rect = wc
-            w = WhereMixin._optics(self, cam)[4]
+            w = (WhereMixin._optics(self, cam) or WhereMixin._fov_optics(self, cam))[4]
             u = (float(off) + 1.0) * w / 2.0
             # The box's own row, not the principal row (issue #24). Lens and
             # port are both RADIAL, so where a point lands horizontally depends
@@ -401,25 +432,21 @@ class WhereMixin:
         w_px = float(big[3])
         if w_px <= 0.0:
             return None
-        wc = WhereMixin._water_camera(self, cam)
-        if wc is not None:
-            # Both EDGES through the port, then the pinhole at K_rect: the box
-            # width compresses by the refraction at ITS field angle.
-            rect, K_rect = wc
-            e = rect.rectify([[big[1] - w_px / 2.0, big[2]], [big[1] + w_px / 2.0, big[2]]])
-            w_px = abs(float(e[1][0]) - float(e[0][0]))
-            f_px = float(K_rect[0][0])
-            if w_px <= 0.0:
-                return None
-            z = f_px * real_w / w_px
-            return (z, (z * z) * 1.0 / (f_px * real_w))
-        img_w = self._img_size.get(cam, (0.0, 0.0))[0] or 640.0
-        f_px = self.focal_px(img_w, camera=cam)
+        # Both EDGES through the port, then the pinhole at K_rect: the box
+        # width compresses by the refraction at ITS field angle. Without
+        # CameraInfo the same model runs on the FOV focal (B-108); the guessed
+        # principal point moves a box's field angle, not its width, so the
+        # range keeps its sigma and the bearing pays (`fix_from_prop`).
+        rect, K_rect = WhereMixin._water_camera(self, cam)
+        e = rect.rectify([[big[1] - w_px / 2.0, big[2]], [big[1] + w_px / 2.0, big[2]]])
+        w_px = abs(float(e[1][0]) - float(e[0][0]))
+        f_px = float(K_rect[0][0])
+        if w_px <= 0.0:
+            return None
         z = f_px * real_w / w_px
         # One pixel of box-width noise, which is optimistic for a YOLO box and
         # stated as such rather than padded with an invented factor.
-        sigma = (z * z) * 1.0 / (f_px * real_w)
-        return (z, sigma)
+        return (z, (z * z) * 1.0 / (f_px * real_w))
 
     def floor_range(self, target: str, *, plane_below_m: float, pitch_deg: float,
                     camera: str | None = None,
@@ -449,8 +476,9 @@ class WhereMixin:
             hull = mongla.pose()[2]                   # e.g. -0.60
             plane_below_m = abs(-1.60) - abs(hull)    # floor 1.60 m -> 1.00
 
-        Pixels are assumed square (`focal_px` is fx and is passed as fy too),
-        which holds for the cameras we fly.
+        It needs the camera's CameraInfo and returns None without it: the
+        principal row is a pitch offset (6 deg on the forward camera), and a
+        centred guess would be a confident metre wrong at 3 m.
 
         A box touching the frame edge on the side we read is REFUSED: the
         foot is outside the image and the box edge is not the foot, which would
@@ -473,18 +501,18 @@ class WhereMixin:
         v = cy + h / 2.0 if plane_below_m > 0.0 else cy - h / 2.0
         if v >= img_h - 2.0 or v <= 2.0:
             return None
-        wc = WhereMixin._water_camera(self, cam)
-        if wc is not None:
-            # The foot through the port, then the pinhole at K_rect -- which also
-            # carries the calibrated principal point: the forward camera's cy sits
-            # 70 px above centre at 720 p, ~6 deg of pitch, about a metre at 3 m.
-            rect, K_rect = wc
-            cx, v = (float(x) for x in rect.rectify([[cx, v]])[0])
-            f_px, fy_px = float(K_rect[0][0]), float(K_rect[1][1])
-            pcx, pcy = float(K_rect[0][2]), float(K_rect[1][2])
-        else:
-            f_px = self.focal_px(img_w, camera=cam)
-            pcx, pcy, fy_px = img_w / 2.0, img_h / 2.0, f_px
+        # The foot through the port, then the pinhole at K_rect -- which also
+        # carries the calibrated principal point: the forward camera's cy sits
+        # 70 px above centre at 720 p, ~6 deg of pitch, about a metre at 3 m.
+        # That is why no calibration is a refusal here, not a centred guess.
+        if not WhereMixin._calibrated(self, cam):
+            self.log.warning(f'[RANGE] floor_range({name!r}): {cam} has no CameraInfo, '
+                             f'so its principal row is unknown; no range')
+            return None
+        rect, K_rect = WhereMixin._water_camera(self, cam)
+        cx, v = (float(x) for x in rect.rectify([[cx, v]])[0])
+        f_px, fy_px = float(K_rect[0][0]), float(K_rect[1][1])
+        pcx, pcy = float(K_rect[0][2]), float(K_rect[1][2])
         hit = intersect(cx, v, fx=f_px, fy=fy_px, cx=pcx, cy=pcy,
                         plane_below_m=float(plane_below_m),
                         pitch_deg=float(pitch_deg),
@@ -534,14 +562,22 @@ class WhereMixin:
         if got is None:
             return Fix(False, reason=f'no width for {cls!r}, so no range')
         rng, sigma = got
+        cam = camera or self.camera
+        note = ''
+        if not WhereMixin._calibrated(self, cam):
+            # The bearing rests on a centred principal point: its bias, at
+            # this range, is a position error across the line of sight.
+            across = rng * _m.radians(WhereMixin.UNCALIBRATED_BEARING_SIGMA_DEG)
+            sigma = _m.hypot(sigma, across)
+            note = ', uncalibrated: no CameraInfo'
         # The hull sits one range BACK along the bearing from the prop.
         rad = _m.radians(bearing)
         x = float(p.x_m) - rng * _m.cos(rad)
         y = float(p.y_m) - rng * _m.sin(rad)
-        self._publish_fix(x, y, sigma=sigma, camera=camera or self.camera)
+        self._publish_fix(x, y, sigma=sigma, camera=cam)
         self.log.info(
             f'[FIX  ] pool position ({x:+.2f}, {y:+.2f}) m from {prop!r} at '
-            f'{rng:.2f} m bearing {bearing:.0f} deg (sigma {sigma:.2f} m)')
+            f'{rng:.2f} m bearing {bearing:.0f} deg (sigma {sigma:.2f} m{note})')
         return Fix(True, x_m=x, y_m=y, used=1, residual_m=0.0,
                    separation_deg=0.0)
 
@@ -607,6 +643,12 @@ class WhereMixin:
             return Placement(False, reason=f'{cls!r} was never seen with a pool-frame '
                                            f'pose in {timeout:.0f} s')
         prior = (float(p.x_m), float(p.y_m)) if p.has_position else None
+        if not WhereMixin._calibrated(self, cam):
+            # Every bearing shares the centred principal point's bias, like
+            # the hull's own yaw error, so it joins that term (B-108).
+            yaw_sd = _m.hypot(yaw_sd, WhereMixin.UNCALIBRATED_BEARING_SIGMA_DEG)
+            self.log.warning(f'[PLACE] {key}: {cam} has no CameraInfo; bearings '
+                             f'carry {WhereMixin.UNCALIBRATED_BEARING_SIGMA_DEG} deg more')
         res = place(sightings, hull_cov_xy=cov_xy, yaw_sigma_deg=yaw_sd, prior_xy=prior)
         if not res.ok:
             self.log.warning(f'[PLACE] {key}: {res.reason}')

@@ -56,8 +56,8 @@ approach controller reads), replay mode, and — new — the **acting bar** belo
 | **acting bar** `act_conf` 0.45 in `lock_node` | 3 Mirpur clips × 1 200 frames | gate-on-empty-water 90.8 % → 46.8 %, real gate held at 98.9 % |
 | **pre-dive floor gate** in `bringup_check` | the 4 deployed HEFs | FAIL naming `gate_rescue_repair` 0.200 and `yolov11n` 0.200 |
 | **HEF recompiled** at `nms_scores_th 0.05` | `hailortcli parse-hef` | `Score threshold: 0.050`, 3 classes — verified on the artifact |
-| **`tools/hailo_compile.sh`** | — | the compile is now a standing capability, not a thing rebuilt and thrown away |
-| **`tools/negative_clip_check.py`** | — | closes the hole that hid B-59: no bar may be set from positive frames alone |
+| **`tools/bench/hailo_compile.sh`** | — | the compile is now a standing capability, not a thing rebuilt and thrown away |
+| **`tools/studies/negative_clip_check.py`** | — | closes the hole that hid B-59: no bar may be set from positive frames alone |
 | **`tools/data_root.py`** | `df` on `/tmp` | 5 defaults across 4 tools moved off the RAM disk that ate Round 7 |
 
 ---
@@ -106,7 +106,7 @@ whose module is already written and measured.
    `gate, shark, shaw_fish` and NOT `rescue`/`repair`, so promoting it changes
    the mission surface; and it must be compiled at >= 1024 calibration frames
    before it flies.
-2. **The archive was searched.** `tools/model_inventory.py`: **208 `.pt`,
+2. **The archive was searched.** `tools/bench/model_inventory.py`: **208 `.pt`,
    96 unique after content dedup, 29 with a gate class.** 96/96 have never
    been measured against absent-prop footage — that column is now tracked.
 3. **`rescue` / `repair` / `sauvc_sim` / `bin_fire_blood` still unmeasured**
@@ -216,7 +216,7 @@ prerequisite for any of the three.
 
 ## The ROS-graph sweep — `/target_pose_fused` is produced and nobody reads it
 
-`tools/topic_wiring_sweep.py` (new, 2026-09-25) looks for the half of the §9
+`tools/ci/topic_wiring_sweep.py` (new, 2026-09-25) looks for the half of the §9
 defect that `orphan_sweep.py` cannot see: a topic published with no in-graph
 reader, or subscribed with no in-graph producer. That is the shape of the yaw
 gap — no import was missing, no test failed, and the capability did not exist.

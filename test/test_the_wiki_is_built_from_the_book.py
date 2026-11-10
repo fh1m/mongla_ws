@@ -1,6 +1,6 @@
 """The wiki and the repo hold the same docs, in both directions, and every link lands.
 
-Docs are read and edited in the GitHub wiki. `tools/wiki_build.py build` turns
+Docs are read and edited in the GitHub wiki. `tools/ci/wiki_build.py build` turns
 the repo's files into wiki pages on every push to main; `pull` turns a wiki edit
 back into its file, which is then committed (`.github/workflows/wiki.yml`).
 Two things would quietly lose work: a page whose round trip changes it (an
@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-_spec = importlib.util.spec_from_file_location('wiki_build', ROOT / 'tools' / 'wiki_build.py')
+_spec = importlib.util.spec_from_file_location('wiki_build', ROOT / 'tools' / 'ci' / 'wiki_build.py')
 wb = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(wb)
 

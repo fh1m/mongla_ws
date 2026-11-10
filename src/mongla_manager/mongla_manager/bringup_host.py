@@ -42,16 +42,30 @@ def _check_ros_env() -> list[tuple[str, str, str]]:
     return out
 
 
-def _check_disk() -> tuple[str, str]:
-    try:
-        free_gb = shutil.disk_usage('/').free / 1e9
-    except OSError as exc:
-        return WARN, f'could not stat /: {exc}'
-    if free_gb < 1.0:
+# Graded here and by the manager's live health report (kutum_health.py), so the
+# preflight and the run cannot disagree about the same disk.
+DISK_FAIL_GB = 1.0
+DISK_WARN_GB = 3.0
+
+
+def read_disk_free_gb(path: str = '/') -> float:
+    return shutil.disk_usage(path).free / 1e9
+
+
+def _disk_verdict(free_gb: float) -> tuple[str, str]:
+    if free_gb < DISK_FAIL_GB:
         return FAIL, f'{free_gb:.1f} GB free -- logging/models will fail'
-    if free_gb < 3.0:
+    if free_gb < DISK_WARN_GB:
         return WARN, f'{free_gb:.1f} GB free -- low for bag/log capture'
     return PASS, f'{free_gb:.1f} GB free'
+
+
+def _check_disk() -> tuple[str, str]:
+    try:
+        free_gb = read_disk_free_gb()
+    except OSError as exc:
+        return WARN, f'could not stat /: {exc}'
+    return _disk_verdict(free_gb)
 
 
 # --------------------------------------------------------------------------- #
@@ -307,7 +321,7 @@ def _check_model_separation() -> tuple[str, str]:
 
     The measurement lives in the sidecar, beside the weights it describes,
     so it cannot be separated from them by a copy or a rename. Written by
-    `tools/negative_clip_check.py`; `recommended_conf: null` means MEASURED AND
+    `tools/studies/negative_clip_check.py`; `recommended_conf: null` means MEASURED AND
     FOUND UNUSABLE for that class, which is different from absent.
 
     A model with no `separation:` block is unknown, not bad. Most graphs have
@@ -359,7 +373,7 @@ def _check_model_separation() -> tuple[str, str]:
                          if unmeasured else ''))
     return WARN, ('no model carries a measured separation -- a graph that '
                   'loads is not a graph that works. '
-                  'python3 tools/negative_clip_check.py --model <m> '
+                  'python3 tools/studies/negative_clip_check.py --model <m> '
                   '--class <c> --positive <clip> --negative <clip>')
 
 
@@ -529,7 +543,7 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
             f'configured conf {_CONF_DEFAULT:.2f} ({worst}) -- everything '
             f'below the bake was discarded on-chip and no runtime value '
             f'brings it back, so conf is a no-op on those models. Recompile: '
-            f'tools/hailo_compile.sh <model> --nms-score-th 0.05')
+            f'tools/bench/hailo_compile.sh <model> --nms-score-th 0.05')
     seen = (f', floors {min(floors.values()):.3f}-{max(floors.values()):.3f}'
             if floors else '')
     if stock_high:
@@ -593,16 +607,24 @@ def _throttled_verdict(raw: int) -> tuple[str, str]:
         f'Suspect the supply or the USB-C cable under load')
 
 
+def read_throttled() -> int:
+    """The `get_throttled` bitmask. Raises FileNotFoundError off a Pi and
+    ValueError on output it cannot read; up to 3 s, so never on an executor."""
+    out = subprocess.run(['vcgencmd', 'get_throttled'], capture_output=True,
+                         text=True, timeout=3).stdout.strip()
+    if '=' not in out:
+        raise ValueError(f'could not parse `vcgencmd get_throttled` output: {out[:60]!r}')
+    try:
+        return int(out.split('=', 1)[1].strip(), 0)
+    except ValueError:
+        raise ValueError(f'non-numeric throttle value: {out[:60]!r}') from None
+
+
 def _check_pi_power() -> tuple[str, str]:
     try:
-        out = subprocess.run(['vcgencmd', 'get_throttled'], capture_output=True,
-                             text=True, timeout=3).stdout.strip()
+        raw = read_throttled()
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return PASS, 'not a Raspberry Pi (vcgencmd absent) -- skipped'
-    if '=' not in out:
-        return WARN, f'could not parse `vcgencmd get_throttled` output: {out[:60]!r}'
-    try:
-        raw = int(out.split('=', 1)[1].strip(), 0)
-    except ValueError:
-        return WARN, f'non-numeric throttle value: {out[:60]!r}'
+    except ValueError as exc:
+        return WARN, str(exc)
     return _throttled_verdict(raw)

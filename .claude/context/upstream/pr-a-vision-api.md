@@ -154,7 +154,7 @@ and wrong is worse than one that is absent, which is the same rule your
 
 **Q5 — `target_num`: please treat it as a CLASS id, from a frozen table.** This
 is the one we have a concrete need on. We currently send a hardcoded `0` from
-the runtime while `tools/srot_uplink_check.py` sends `d.class_id` — our own two
+the runtime while `tools/pool/srot_uplink_check.py` sends `d.class_id` — our own two
 senders disagree about what the field means, which is our bug and we are fixing
 it. The fix needs the mapping to be a **frozen, append-only table** shared by
 both repos, exactly like `SERVOn_FUNCTION` and `movement::Type`:
