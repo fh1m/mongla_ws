@@ -1,0 +1,20 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 135
+README.md
+  h_f1b9066eb9899c 777,780
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+tools/README.md
+  h_f1b9066eb9899c 126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "79749563a8d21df2e26d60c529fe3e3858751ee7",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
