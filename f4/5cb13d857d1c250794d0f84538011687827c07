@@ -1,0 +1,18 @@
+README.md
+  h_f1b9066eb9899c 64-65
+src/mongla_manager/test/test_docs_contract.py
+  h_f1b9066eb9899c 317,319-323
+tools/site/ledger_strip.py
+  h_f1b9066eb9899c 129-164,172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "f45cb13d857d1c250794d0f84538011687827c07",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
