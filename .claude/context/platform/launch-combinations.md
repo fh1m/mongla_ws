@@ -4,7 +4,7 @@
 pairs) is rendered the way `ros2 launch` would run it, conditions and includes
 and all, with no process started: `test_every_switch_combination_renders.py`.
 A pair that raises, or a switch that no longer starts the node it names, fails
-the build. And every command on this page is checked by `tools/command_lint.py`: the launch
+the build. And every command on this page is checked by `tools/ci/command_lint.py`: the launch
 file exists, every `name:=value` is a declared argument (`ros2 launch` ignores
 an undeclared one **silently**), choices are respected, every model has its
 `<stem>.yaml` sidecar, every verb flag is a real field, every mission exists.
@@ -17,7 +17,7 @@ the **order you run them in**.
 ![Which processes each bringup switch starts: a dot matrix of nine launch lines against twelve processes, with the seventeen switches that only change a parameter listed beside it.](../../../docs/imgs/readme/launch-switches.webp)
 
 The figure is rendered from the same walk the test does, so it cannot drift
-from the launch files: `python3 tools/fig_launch_switches.py` (after a
+from the launch files: `python3 tools/site/fig_launch_switches.py` (after a
 launch-file change).
 
 The vehicle: SROT board (Hengla) over one USB-C cable, Raspberry Pi 5 with a
@@ -29,7 +29,7 @@ Hailo-8, forward and downward cameras.
 
 ```bash
 cd ~/mongla_ws                                    # on Kutum; ROS and the workspace are already sourced
-source scripts/pool_session.sh gate_practice_am   # same label in every terminal
+source tools/pool/pool_session.sh gate_practice_am   # same label in every terminal
 ```
 
 On a dev box, `cd` to your checkout and `source install/setup.bash` first; Kutum's
@@ -189,6 +189,15 @@ A live `ros2 param set` that a node cannot apply is refused rather than
 accepted and ignored. The tracker, for one, reads everything except `classes`
 once at startup.
 
+**Who feeds what.** Most topic names are built at run time, so the wiring is
+checked by launching it: `test_the_launched_graph_is_fed.py` (mongla_manager)
+starts this launch file against a fake board with `vision:=false` and requires
+every subscription to have a publisher, or a row naming the file that
+publishes it and the switch or mission that starts it. Those rows are the
+edges vision, flow and a mission add: prop fixes and the heading anchor come
+from a mission, the downward velocity, grid and lane headings from `flow:=true`
+(with `tile_m` and `lane_lines`), and `mission_alive` from a running mission.
+
 ---
 
 ## 3. One verb at a time — the `mongla` CLI
@@ -261,10 +270,10 @@ Every mission sends only real verbs with real kwargs —
 ## 5. Record and replay
 
 ```bash
-scripts/pool_record.sh record gate_run_1          # the debug allowlist, into $MONGLA_RUN_DIR
-scripts/pool_record.sh record --full gate_run_1   # + raw images (large)
-scripts/pool_record.sh list
-scripts/pool_record.sh replay ~/mongla_runs/gate_practice_am/gate_run_1
+tools/pool/pool_record.sh record gate_run_1          # the debug allowlist, into $MONGLA_RUN_DIR
+tools/pool/pool_record.sh record --full gate_run_1   # + raw images (large)
+tools/pool/pool_record.sh list
+tools/pool/pool_record.sh replay ~/mongla_runs/gate_practice_am/gate_run_1
 ```
 
 To re-run the vision stack on a recorded bag instead of live cameras:
@@ -314,7 +323,7 @@ fly are trained on the day.
 ## 7. A new model
 
 ```bash
-./tools/hailo_compile.sh my_stem --nms-score-th 0.05
+./tools/bench/hailo_compile.sh my_stem --nms-score-th 0.05
 ```
 
 Copy `my_stem.hef` **and** `my_stem.yaml` to `~/models` on the Pi — a missing
@@ -335,3 +344,29 @@ procedure: the `train-model` skill and [`hailo-vision.md`](../perception/hailo-v
 
 `stop`, `surface` and `disarm` bypass the busy gate: they run even while
 another verb is executing.
+
+### When a process dies on its own
+
+Every process bringup starts comes back by itself: 2 s after it dies, up to
+three times, then it stays down for the run and the log says so. The mission
+keeps running. Ctrl-C and a clean exit restart nothing.
+
+| in the log | what it means |
+|---|---|
+| `WARNING: the forward tracker exited (1); restart 1/3 in 2 s` | it died and is coming back |
+| `ERROR: the flow node exited (1) after 3 restarts; it stays down for this run` | gone until the next launch |
+| `[CAM  ] ERROR: downward: /dev/mongla_cam_downward is GONE` | the lead is out or the hub is re-enumerating; nothing is tried until the device comes back, then it reopens by itself |
+| `[CAM  ] WARNING: downward delivered nothing ...; reopening (1/3)` | the device is there but silent; only that camera is reopened |
+| `[CAM  ] downward reopened (v4l2_mailbox); frames resume` | it is back |
+| `[CAM  ] ERROR: downward LOST: 3 reopens failed` | three real tries failed; that camera is gone for the run, the other keeps running |
+
+One restart of the vision process costs about 4.5 s without detections
+(measured on the vehicle, measured-bars §69); a verb running at that moment
+ends LOST and the mission's fallback takes over.
+
+A restarted manager that finds the board armed refuses every verb except
+`disarm`, `stop` and `surface` until the board reports DISARMED. A restarted
+localization reports no pool position until it is anchored again. The only
+process that does not restart is the operator display. The rule is
+`test/test_every_launched_process_restarts.py`; why each restart is safe is in
+`mongla_localization/launch_respawn.py`.

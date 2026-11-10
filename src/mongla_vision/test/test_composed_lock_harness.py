@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-_PATH = Path(__file__).resolve().parents[3] / 'tools/composed_lock_harness.py'
+_PATH = Path(__file__).resolve().parents[3] / 'tools/studies/composed_lock_harness.py'
 _spec = importlib.util.spec_from_file_location('composed_lock_harness', _PATH)
 harness = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(harness)

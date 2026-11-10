@@ -11,8 +11,8 @@ pull request, a crafted file), what they get, and the commit you read.
 
 ## What is in scope
 
-- **The CI and repository gates** (`.github/workflows/`, `tools/ci_contract.py`,
-  `tools/provenance_check.py`): anything that lets a change merge without the
+- **The CI and repository gates** (`.github/workflows/`, `tools/ci/ci_contract.py`,
+  `tools/ci/provenance_check.py`): anything that lets a change merge without the
   required checks running, or runs pull request text as code.
 - **The vehicle's computer** (`kutum/`): services, sudo rules, anything that
   reaches the board or the operator's account from the network.

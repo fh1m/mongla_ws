@@ -96,7 +96,7 @@ PINNED = _pin_to_source()
 # --------------------------------------------------------------------------- #
 # A run that covered every suite, with no -k / -m / -x / --lf / --deselect and
 # nothing left unreported, writes docs/stats.json and copies it into the README
-# and the site (tools/published_counts.py). Anything less leaves them alone, so a
+# and the site (tools/ci/published_counts.py). Anything less leaves them alone, so a
 # quick run of one file never publishes a smaller number.
 _OUTCOMES = {}          # nodeid -> outcome ('passed', 'failed', 'skipped', ...)
 
@@ -127,7 +127,8 @@ def _full_run(session) -> bool:
 def pytest_sessionfinish(session, exitstatus):
     if not _full_run(session):
         return
-    sys.path.insert(0, str(_ROOT / 'tools'))
+    sys.path.insert(0, str(_ROOT / 'tools'))  # shared libraries
+    sys.path.insert(0, str(_ROOT / 'tools' / 'ci'))
     import published_counts
     counts = {}
     for nodeid, outcome in _OUTCOMES.items():

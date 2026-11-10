@@ -4,13 +4,13 @@ names:
   2: shaw_fish
 
 # ── measured separation ──────────────────────────────────────────────────────
-# `tools/negative_clip_check.py`, 2026-09-28. Per-frame detection rate for the
+# `tools/studies/negative_clip_check.py`, 2026-09-28. Per-frame detection rate for the
 # `gate` class on clips asserted to contain the prop and clips asserted not to.
 # Mirpur/Sun_June_21: gate.mkv positive, torpedo.mkv + torpedo_1.mkv negative.
 separation:
   gate:
     measured: '2026-09-28'
-    tool: tools/negative_clip_check.py
+    tool: tools/studies/negative_clip_check.py
     venue: Mirpur/Sun_June_21
     # bar: [worst positive %, worst negative %, separation points]
     # 0.15 was the LAUNCH DEFAULT until 2026-09-28 and is the worst

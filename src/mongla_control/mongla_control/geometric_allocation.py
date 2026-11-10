@@ -49,7 +49,7 @@ from typing import Sequence, Tuple
 # two agree instead of trusting them to.
 #
 # And the CAD is a moving design: custom thrusters are being designed and not
-# all are fitted. Re-run `tools/pull_hull_geometry.js` when it changes.
+# all are fitted. Re-run `tools/site/pull_hull_geometry.js` when it changes.
 #
 #   name          position (m, CAD frame)        axis
 THRUSTERS: Tuple[Tuple[str, Tuple[float, float, float], Tuple[float, float, float]], ...] = (
@@ -130,7 +130,7 @@ UNACTUATED = unactuated_axes()
 # One law, two vocabularies. The ORDER is `allocation.HORIZONTAL_PRIORITY`
 # and `allocation.VERTICAL_PRIORITY` -- yaw before lateral before forward, and
 # attitude before throttle -- renamed into this module's axes. It is restated
-# rather than imported because `tools/control_bench` loads this file without
+# rather than imported because `tools/bench/control_bench` loads this file without
 # the package (importing `mongla_control` pulls in ROS), and
 # `test_geometric_allocation.py` fails the moment the two disagree.
 #

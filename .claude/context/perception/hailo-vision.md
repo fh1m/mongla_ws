@@ -14,7 +14,15 @@
      Individual lines are deliberately NOT edited: 20 substitutions verified
      one at a time is how a second error gets introduced, and this banner
      states the truth once where it cannot be missed. Fix a line when you
-     re-measure it, not before. -->
+     re-measure it, not before.
+
+     RE-MEASURED 2026-11-10 on gate_sharks.hef itself, on Kutum:
+     `hailortcli parse-hef` reports Multi Context x3, score threshold 0.050,
+     IoU 0.70 -- so the section 1 row is now true of this file. Hardware-only
+     benchmark: 95.6 FPS in performance mode, 97.6 FPS with
+     ultra_performance (+2.1 %), against 98.1 / 100.3 on the retired model.
+     The other lines above still belong to gate_rescue_repair. What is left
+     to gain from the chip: hailo-frontier.md. -->
 
 <!-- MERGED 2026-09-07 (srot -> main). These were TWO DIFFERENT DOCUMENTS
      that happened to share a filename: they share ZERO of 18 headings. Neither
@@ -27,9 +35,12 @@
 # The Hailo-8 pipeline, measured — the CUDA-equivalent reference we never wrote
 
 > Every number here was measured on **our** Pi 5 + AI HAT+ on 2026-09-03, with
-> the harnesses in `tools/hailo_{stages,async,latency}.py`. Published figures are
+> the harnesses in `tools/bench/hailo_{stages,async,latency}.py`. Published figures are
 > quoted only where marked, and where they disagree with our measurements the
 > measurement wins and the disagreement is stated.
+>
+> What is still left in the chip, ranked with a scorer for each lever, and what we can
+> give back to other Hailo users: [the Hailo-8 frontier](hailo-frontier.md).
 
 ## 0. What the hardware actually is
 
@@ -63,7 +74,7 @@ is why host decode measures 0.02 ms.
 
 ## 2. Where a frame's time actually goes
 
-`tools/hailo_stages.py`, synthetic frames, `gate_sharks`:
+`tools/bench/hailo_stages.py`, synthetic frames, `gate_sharks`:
 
 ```
   stage         median      p95     share
@@ -155,7 +166,7 @@ that is invisible; in front of a 2.4 ms graph it is **66 % of the frame**.
 
 ## 5. Async inference — the number nobody had published
 
-`tools/hailo_async.py`. The research found the API and **no measured batch-1
+`tools/bench/hailo_async.py`. The research found the API and **no measured batch-1
 delta anywhere**. Ours:
 
 ```
@@ -177,7 +188,7 @@ device's own queue is 27 deep.
 
 ## 6. Throughput is not latency, and control pays latency
 
-`tools/hailo_latency.py` — submit-to-result for the frame you actually steer on:
+`tools/bench/hailo_latency.py` — submit-to-result for the frame you actually steer on:
 
 ```
   depth  throughput      median      p95      max
@@ -272,7 +283,7 @@ a different question and the answer changed the whole pipeline.
 
 ## 10. THE BLOCKING API HOLDS THE GIL FOR ITS ENTIRE INFERENCE
 
-`tools/gil_probe.py` — a sampler thread `time.sleep(1 ms)` in a loop, recording
+`tools/bench/gil_probe.py` — a sampler thread `time.sleep(1 ms)` in a loop, recording
 how LATE it woke, with two controls, because a gap number without controls
 cannot separate the subject from a badly-scheduling machine:
 
@@ -372,7 +383,7 @@ fixed stride and the layout is not one. Reading it that way returns **nothing
 for every class after the first** — 22 detections where there were 56 — without
 raising, and with every surviving box in exactly the right place.
 
-`tools/hailo_api_equivalence.py` runs both APIs over the same frames and
+`tools/bench/hailo_api_equivalence.py` runs both APIs over the same frames and
 compares detections. It caught this; a smoke test would not have, nor would any
 check that only looked at class 0. Keep the blocking path
 (`MONGLA_HAILO_FORCE_BLOCKING=1`) alive for exactly this comparison.
@@ -733,7 +744,7 @@ detections", which is badly wrong.**
 > a healthy `gate_sharks` build. The other finding: a FULL-optimisation build
 > whose fine-tune diverged lost **0.34**, and it was the one shipped (B-82,
 > measured-bars §66). `hailo_compile.py` now refuses a build that loses
-> more than 0.10. Measure every build with `tools/hailo_int8_shift.py`;
+> more than 0.10. Measure every build with `tools/bench/hailo_int8_shift.py`;
 > never budget a fixed number.
 
 **What quantization actually costs: about 0.08 of confidence** (as first

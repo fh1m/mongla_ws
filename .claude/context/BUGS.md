@@ -189,19 +189,39 @@ yet also refuses. The latch is decided when a goal arrives, not only on the
 watchdog tick, or the manager's own first arm would read as an armed board.
 The board-side kill latch is upstream (srot-control-board#41).
 
+### B-108: a fix from a camera with no CameraInfo claimed calibrated precision `READ 2026-11-09` **FIXED 2026-11-10**
+
+**What.** Before a camera's CameraInfo arrived (start-up, a replay without
+`camera_info`), `range_to` used one in-water focal from the FOV table and
+`bearing_to` read the box offset linearly across the FOV. A flat port has no
+single focal: for a gate 4 m ahead and 1.4 m across, the range read 6.1 %
+short and the bearing 1.6 deg off. `fix_from_prop` still published the
+sigma of a calibrated reading, and `floor_range` centred a principal row that
+sits 70 px off centre on the forward camera, a metre at 3 m.
+
+**Fix.** Without CameraInfo the camera matrix is built from the camera's
+measured FOV and runs through the same `rectifier_for` port model as a
+calibrated one, so only the principal point is a guess. `fix_from_prop` adds
+that guess's 1.264 deg (measured-bars, the forward camera entry) across the
+line of sight and says `uncalibrated` in its log line, `place_prop` adds it to
+the bearing term, and `floor_range` refuses. Both cameras are calibrated and
+`vision_pi` passes both files, so this runs only while CameraInfo is absent.
+`test_an_uncalibrated_camera_is_modelled_not_trusted.py` checks ray-traced
+truth; a single focal, no widening, no refusal and no bearing term each fail it.
+
 ### B-109: tests in tools/ never ran, and the calibration solver's truth check had broken `READ 2026-11-10` **FIXED 2026-11-10**
 
 **What.** CI collects `src/*/test` and `test/` only. Three test files sat in
 `tools/`: two passing (21 tests, the free-decay and thruster-response fits) and
 `test_fov_solve.py`, the calibration solver's only ground-truth check, which
 had broken when `fov_solve.py` became a shim and lost the internals it called.
-A further 94 bench tests sit in `tools/control_bench/`, also uncollected.
+A further 94 bench tests sit in `tools/bench/control_bench/`, also uncollected.
 Separately, 34 tools were named nowhere else in the repository.
 
 **Fix.** The three moved where CI collects them; the solver check now imports
 `mongla_vision.calibration.solver` and runs (36 s), and faking the pose spread
 fails it. `tools/README.md` indexes every tool from its own docstring
-(`tools/gen_tools_index.py`), and `test/test_every_tool_is_indexed.py`, in the
+(`tools/ci/gen_tools_index.py`), and `test/test_every_tool_is_indexed.py`, in the
 integrity gate, fails a stale index, a tool with no description, or a test file
 outside the collected tree. The control bench is the one named exemption: it
 compiles the firmware and needs that checkout in CI (#132).
@@ -251,8 +271,8 @@ request's `applies_to`, and the medium from the source file's contents, with
 no check. The guide listens on every interface with no login, so a profile of
 `../../x` wrote a calibration JSON outside the calibration folder; with the
 check disabled the test really wrote one in `/tmp`. Found by CodeQL's first
-analysis (py/path-injection), with a ReDoS in `tools/topic_wiring_sweep.py`
-and an unchecked file name in `tools/upload_sink.py`.
+analysis (py/path-injection), with a ReDoS in `tools/ci/topic_wiring_sweep.py`
+and an unchecked file name in `tools/site/upload_sink.py`.
 
 **Fix.** `solver.check_profile` accepts a plain name (letters, digits, `_`,
 `-`) and a medium of `air` or `water`, and both naming functions
@@ -361,6 +381,24 @@ compared against the range at the loss, and the chain already has that
 data: the downward camera's flow velocity (worst error 1.09 cm over 30 cm)
 reaches `/mongla/odom`. TRAVERSAL_CONFIRMED is left for that, tracked on #79.
 
+### B-107: "never been in water" erased the lineage, and a false water claim passed every check `READ 2026-11-09` **FIXED 2026-11-10**
+
+**What.** The README, the site, the wiki home and CLAUDE.md said "This vehicle has never been
+in water" and "WATER: nothing", which was true of the current platform and read as true of
+the whole project: the Duburi stack this repository began as competed at RoboSub 2026, the
+author's vision stack at RoboSub 2025, and the SROT board itself was in water in the Dubomini
+hull. In the other direction, no required check caught a planted line falsely saying the
+current SROT and Kutum platform had completed water trials. GitHub #87.
+
+**Fix.** `docs/evidence/water.json` holds every time a vehicle in the lineage was in water:
+platform, what ran, how well the code is identified, the evidence and whether it is still
+active. `lineage.md` is generated from it by `tools/ci/gen_lineage.py`. A status belongs to the
+platform it was earned on and is never inherited. Every public page now names the platform
+it means. `test_water_claims_have_a_scope.py`, in the integrity gate, validates the
+registry, keeps the page generated, and fails an unscoped "never in water" or a current
+platform put in water without a CURRENT_WATER event backed by a recording. Planting either
+line in the real README or wiki fails it.
+
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
 
@@ -437,6 +475,38 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 ---
 
 ## 2. HIGH
+
+### B-110: a process or camera that died mid-run stayed dead for the run `READ 2026-11-10` **FIXED 2026-11-10**
+
+**What.** No process bringup starts had a restart. A detector that `os._exit`s
+after repeated inference failures, a flow node that raised, or a manager that
+crashed stayed down until someone relaunched the stack by hand, which nobody
+can do with the hull in the water. A USB camera that dropped off the bus was
+worse: the v4l2 mailbox kept polling a dead descriptor, `is_healthy()` went
+False, and the camera node logged `BAD` every 2 s and never tried to reopen
+the device. Both cameras and both detectors share one process on the vehicle
+(`detector_dual_node`), so restarting that process would have blinded the
+healthy camera as well.
+
+**Fix.** The owner set the policy: restart 2 s after the death, three times,
+then stay down and say so; the mission keeps running and nothing acts on the
+loss alone. `mongla_localization/launch_respawn.py` implements it once,
+because Humble's launch has no restart limit. Every process in `bringup`,
+`vision_pi` and `vision` uses it except the operator display, and
+`test/test_every_launched_process_restarts.py` fails a bare node.
+A lost camera is reopened in place by its own capture thread
+(`mongla_vision/cameras/reopen.py`) under the same three-attempt policy, so
+the other camera never stops. The vehicle refuted the first version of that:
+with the forward lead pulled, three attempts were spent in 6 s on a device
+node that did not exist, and the camera stayed lost after the lead went back.
+Now an attempt counts only while the device exists, and a reopen that comes
+back as the OpenCV fallback instead of the mailbox is refused. Re-run on the
+vehicle: back at 30.0 Hz, 0 dropped, after ~55 s out (measured-bars §69). Restarting the manager is safe because of
+B-94/B-97: a new manager that hears ARMED latches. A restarted localization
+publishes in `odom` until it is re-anchored, which `pose()` refuses.
+Tests run real processes under a real `LaunchService`. Injection checks:
+removing the limit, restarting a clean exit, reopening a video file, skipping
+the source swap, and a bare node in any of the three launch files each fail.
 
 ### B-91: the floor's yaw bound was applied on arrival, against the heading now `READ 2026-11-07` **FIXED 2026-11-07**
 
@@ -596,7 +666,7 @@ the conf sweep on the HEF it asked for was never run.
   bite under injection.
 
 **To close.** With the Pi: sync the model, check the md5 against the provenance,
-run `hailortcli parse-hef`, and re-run `tools/composed_lock_harness.py` on the
+run `hailortcli parse-hef`, and re-run `tools/studies/composed_lock_harness.py` on the
 same gate clip. The detection-rung share must rise well above 20 %.
 
 ### B-61: the Hailo detector ran on colour-swapped frames `REPRODUCED 2026-09-25` **FIXED 2026-09-25**
