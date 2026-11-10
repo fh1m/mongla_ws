@@ -1,0 +1,14 @@
+.claude/context/perception/hailo-frontier.md
+  h_f1b9066eb9899c 188-189
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7dfc32dc4a1129a721d9b6e6440c6fe7294b8202",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
