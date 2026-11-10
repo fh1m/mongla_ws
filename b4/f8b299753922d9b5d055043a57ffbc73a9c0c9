@@ -1,0 +1,14 @@
+test/test_a_run_records_its_software.py
+  h_f1b9066eb9899c 28-30,32-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "b4f8b299753922d9b5d055043a57ffbc73a9c0c9",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
