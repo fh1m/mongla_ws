@@ -132,6 +132,7 @@ is how `recommend()` happened.
 - [66. THE SHIPPED GATE HEF WAS DEGRADED BY ITS OWN FINE-TUNE — level 2 lost 0.34 of confidence that level 0 kept (B-82, issue #47)](#66-the-shipped-gate-hef-was-degraded-by-its-own-fine-tune--level-2-lost-034-of-confidence-that-level-0-kept-b-82-issue-47)
 - [67. PLACING A PROP FROM SIGHTINGS — the hull's error enters once, and it is the one that matters](#67-placing-a-prop-from-sightings--the-hulls-error-enters-once-and-it-is-the-one-that-matters)
 - [68. THE VEHICLE'S LOOPS HOLD THEIR RATES — and a relative sleep does not](#68-the-vehicles-loops-hold-their-rates--and-a-relative-sleep-does-not)
+- [69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design](#69-the-restart-policy--two-decided-numbers-two-derived-and-the-vehicle-refuted-my-first-camera-design-2026-11-10)
 <!-- contents:end -->
 
 ---
@@ -7045,3 +7046,54 @@ a turn in water.
 **Caution:** NOT MEASURED: these loops under the full graph (vision + Hailo).
 The idle numbers are the floor, not the bar for a loaded vehicle.
 
+
+---
+
+## 69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)
+
+`mongla_localization/launch_respawn.py` restarts every process bringup starts;
+`mongla_vision/cameras/reopen.py` reopens a camera that dropped off USB (B-110).
+Which numbers are decisions, which are derived and which are measured:
+
+| constant | value | kind | reason |
+|---|---|---|---|
+| `launch_respawn.MAX_RESTARTS` | **3** restarts | owner decision | enough to ride out a transient (a Hailo timeout, a USB re-enumeration); a fault that survives three tries is real, and restarting it for the rest of the run hides it. The camera reopen imports the same number |
+| `launch_respawn.DELAY_S` | **2 s** | owner decision | long enough for a device to settle after its process dies, short against a run |
+| `reopen.LOST_AFTER_S` | **3 s** | derived | `is_healthy()` already turns False 2 s after the last frame; a device that has just reappeared gets 3 s before it is opened. Measured below: a replugged Fantech opened cleanly on the first try after that wait |
+| `camera_node._WATCH_PERIOD_S` | **0.5 s** | derived | one `is_healthy()` call; 10 % of the ~5 s it acts on |
+
+**Derived: a verb in flight during a restart reports LOST.** A vision verb
+coasts `vision.lost_grace_s` = 1.0 s on a lost target, and the restart delay
+alone is 2 s. So the verb ends LOST, which is what LOST exists for: the DSL
+runs its fallback search, and the next verb finds the target once the detector
+is back. "The mission keeps running" holds at the mission, not inside one verb.
+
+**Measured: how long a vision restart is blind, on top of the 2 s delay.**
+`tools/restart_blind_time.py` (its `--self-test` reports a chosen delay within
++0.3 s, never early) started `vision_pi.launch.py paused:=false` five times
+on Kutum, release `3af415d7`, forward Fantech only, no target in view:
+
+| cycle | first frame | first detections message |
+|---|---|---|
+| 1 (cold cache) | 3.79 s | 3.76 s |
+| 2 | 2.60 s | 2.60 s |
+| 3 | 2.27 s | 2.33 s |
+| 4 | 2.26 s | 2.52 s |
+| 5 | 2.31 s | 2.53 s |
+
+So one restart costs about **4.5 s** of blindness (2 s delay + 2.5 s), and
+**5.8 s** worst. Not measured: the first *box* (no target was in view), both
+cameras attached, and a restart under a loaded graph.
+
+**Measured and REFUTED: the first camera reopen design.** On the vehicle, the
+forward Fantech's lead pulled for ~10 s: the watch spent all three attempts at
+5, 8 and 11 s after the unplug, each failing at once because
+`/dev/mongla_cam_forward` did not exist, and the camera stayed LOST after the
+lead went back in. Two changes followed. An attempt now counts only while the
+device node exists, so a pulled lead waits instead of spending tries. A reopen
+must return the source kind it replaces, because the factory's fallback to the
+OpenCV source (mailbox 16.9 ms against 396 ms, §3) would otherwise serve a
+stale camera for the rest of the run. Re-run on the vehicle with the lead out
+~55 s: `GONE` logged once, no attempt spent, one reopen after it came back,
+v4l2 mailbox with kernel timestamps, **30.0 Hz with 0 dropped**. Logs:
+`~/attic/2026-11-10/reopen_test/` on Kutum.
