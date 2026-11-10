@@ -49,7 +49,7 @@ def run(mongla, log=None):
     # CLAUDE.md section 8.6 names as the one that ends runs.
     #
     # To bring it back: train a model that emits the marker classes AND clears
-    # the separation bar with tools/negative_clip_check.py first.
+    # the separation bar with tools/studies/negative_clip_check.py first.
 
     # ── Descend to pass depth, re-filter for the gate outline, drive through ──
     mongla.set_depth(GATE_PASS_DEPTH_M, timeout=20)

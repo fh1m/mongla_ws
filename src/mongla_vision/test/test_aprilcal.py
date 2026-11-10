@@ -206,9 +206,9 @@ class TestItRunsWithoutROS:
         place the shim exists to serve."""
         import pathlib
         for t in ('fov_solve.py', 'fov_calibrate_web.py'):
-            p = pathlib.Path(__file__).resolve().parents[3] / 'tools' / t
-            if not p.is_file():
-                continue
+            p = pathlib.Path(__file__).resolve().parents[3] / 'tools' / 'pool' / t
+            # A shim that moved must fail here, not stop being checked.
+            assert p.is_file(), f'{p} is gone: point this check at where it went'
             # Parse, do not grep: the docstring DESCRIBES the old import,
             # and a substring check flagged the explanation as the defect.
             import ast as _ast

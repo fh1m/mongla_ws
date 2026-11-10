@@ -4,7 +4,7 @@
 pairs) is rendered the way `ros2 launch` would run it, conditions and includes
 and all, with no process started: `test_every_switch_combination_renders.py`.
 A pair that raises, or a switch that no longer starts the node it names, fails
-the build. And every command on this page is checked by `tools/command_lint.py`: the launch
+the build. And every command on this page is checked by `tools/ci/command_lint.py`: the launch
 file exists, every `name:=value` is a declared argument (`ros2 launch` ignores
 an undeclared one **silently**), choices are respected, every model has its
 `<stem>.yaml` sidecar, every verb flag is a real field, every mission exists.
@@ -17,7 +17,7 @@ the **order you run them in**.
 ![Which processes each bringup switch starts: a dot matrix of nine launch lines against twelve processes, with the seventeen switches that only change a parameter listed beside it.](../../../docs/imgs/readme/launch-switches.webp)
 
 The figure is rendered from the same walk the test does, so it cannot drift
-from the launch files: `python3 tools/fig_launch_switches.py` (after a
+from the launch files: `python3 tools/site/fig_launch_switches.py` (after a
 launch-file change).
 
 The vehicle: SROT board (Hengla) over one USB-C cable, Raspberry Pi 5 with a
@@ -29,7 +29,7 @@ Hailo-8, forward and downward cameras.
 
 ```bash
 cd ~/mongla_ws                                    # on Kutum; ROS and the workspace are already sourced
-source scripts/pool_session.sh gate_practice_am   # same label in every terminal
+source tools/pool/pool_session.sh gate_practice_am   # same label in every terminal
 ```
 
 On a dev box, `cd` to your checkout and `source install/setup.bash` first; Kutum's
@@ -189,6 +189,15 @@ A live `ros2 param set` that a node cannot apply is refused rather than
 accepted and ignored. The tracker, for one, reads everything except `classes`
 once at startup.
 
+**Who feeds what.** Most topic names are built at run time, so the wiring is
+checked by launching it: `test_the_launched_graph_is_fed.py` (mongla_manager)
+starts this launch file against a fake board with `vision:=false` and requires
+every subscription to have a publisher, or a row naming the file that
+publishes it and the switch or mission that starts it. Those rows are the
+edges vision, flow and a mission add: prop fixes and the heading anchor come
+from a mission, the downward velocity, grid and lane headings from `flow:=true`
+(with `tile_m` and `lane_lines`), and `mission_alive` from a running mission.
+
 ---
 
 ## 3. One verb at a time — the `mongla` CLI
@@ -261,10 +270,10 @@ Every mission sends only real verbs with real kwargs —
 ## 5. Record and replay
 
 ```bash
-scripts/pool_record.sh record gate_run_1          # the debug allowlist, into $MONGLA_RUN_DIR
-scripts/pool_record.sh record --full gate_run_1   # + raw images (large)
-scripts/pool_record.sh list
-scripts/pool_record.sh replay ~/mongla_runs/gate_practice_am/gate_run_1
+tools/pool/pool_record.sh record gate_run_1          # the debug allowlist, into $MONGLA_RUN_DIR
+tools/pool/pool_record.sh record --full gate_run_1   # + raw images (large)
+tools/pool/pool_record.sh list
+tools/pool/pool_record.sh replay ~/mongla_runs/gate_practice_am/gate_run_1
 ```
 
 To re-run the vision stack on a recorded bag instead of live cameras:
@@ -314,7 +323,7 @@ fly are trained on the day.
 ## 7. A new model
 
 ```bash
-./tools/hailo_compile.sh my_stem --nms-score-th 0.05
+./tools/bench/hailo_compile.sh my_stem --nms-score-th 0.05
 ```
 
 Copy `my_stem.hef` **and** `my_stem.yaml` to `~/models` on the Pi — a missing

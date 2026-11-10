@@ -68,7 +68,7 @@ EXEMPT = {
     '.claude/context/kutum/pi-hailo-vision-box.md': 'the measurement that chose the Pi, against the companion it replaced',
     '.claude/context/perception/hailo-vision.md': 'the chip measured against the baseline it replaced',
     '.claude/skills/bumblebee-doctrine/': 'describes the champions\' stack, which runs ArduSub',
-    'tools/make_diagrams.py': 'draws the BEFORE half of the-shift diagram',
+    'tools/site/make_diagrams.py': 'draws the BEFORE half of the-shift diagram',
     '.claude/settings.local.json': 'user-local permission history, not ours to rewrite',
     # tests that name a retired token in order to ban it
     'test/test_the_retired_stack_stays_retired.py': 'this file',

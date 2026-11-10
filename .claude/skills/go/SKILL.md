@@ -22,7 +22,7 @@ yourself.
    **Warning:** A quality number a method computes from the data it just fit is **not**
    evidence — a vanishing point scored 0.958 on its own metric while jittering
    20 227 px. Cross-check against a second, independent observation or against
-   synthetic input whose answer you chose. `tools/tau_from_scale.py --self-test`
+   synthetic input whose answer you chose. `tools/studies/tau_from_scale.py --self-test`
    is the pattern, and it corrected its own author before any water.
 2. Implement.
 3. **Pick the strongest oracle available** from the ladder below. Strongest, not
@@ -46,8 +46,8 @@ Strongest first. Use the highest rung the change can reach.
 | 1 | Water / bench run with the board attached | only with a human on the kill switch; nothing here has been in water |
 | 2 | `ros2 run mongla_manager bringup_check` | anything touching the board, arming, or bring-up gating |
 | 3 | `./build_mongla.sh` then `pytest` | any source change — this is the default rung |
-| 4 | Replay a recorded bag (`scripts/pool_record.sh`) or archive footage (`video.launch.py`) | perception and tracking changes, against real footage |
-| 5 | `tools/control_bench` — the board's own C++ compiled natively | control behaviour against the firmware's real attitude and mixer code |
+| 4 | Replay a recorded bag (`tools/pool/pool_record.sh`) or archive footage (`video.launch.py`) | perception and tracking changes, against real footage |
+| 5 | `tools/bench/control_bench` — the board's own C++ compiled natively | control behaviour against the firmware's real attitude and mixer code |
 | 6 | A targeted `pytest src/<pkg>/test/test_<thing>.py` | a single focused change |
 
 ### Guards that must stay green
@@ -59,9 +59,9 @@ Run these whenever the change could plausibly touch them:
   that runs, or carry a written reason naming the consumer it waits for.
 - `src/mongla_control/test/test_doc_drift.py` — fails on any doc stating a stale
   constant. Edited `CLAUDE.md` or `.claude/context/`? Run it.
-- `python3 tools/gen_reference.py` — regenerates the command reference; a test fails if
+- `python3 tools/ci/gen_reference.py` — regenerates the command reference; a test fails if
   it drifts.
-- `tools/orphan_sweep.py`, `tools/topic_wiring_sweep.py`, `tools/launch_param_sweep.py`
+- `tools/ci/orphan_sweep.py`, `tools/ci/topic_wiring_sweep.py`, `tools/ci/launch_param_sweep.py`
   — reachability, topic wiring, launch-parameter coverage.
 
 ### New thresholds

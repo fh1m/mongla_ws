@@ -248,7 +248,7 @@ consequence.
 
 Three octagon models from the 2025 archive, each reporting **mAP50 = 0.9950**
 on its own validation split, evaluated on two sessions none of them trained on
-(`tools/recall_matrix.py`, conf 0.15):
+(`tools/studies/recall_matrix.py`, conf 0.15):
 
 | model | val mAP50 | val mAP50-95 | `oct_zawad` | `slot-1_obb` |
 |---|---|---|---|---|
@@ -287,7 +287,7 @@ artefact the training produces.
 
 ### What to do instead
 
-`tools/model_select.py` ranks candidates on held-out sessions and picks on the
+`tools/studies/model_select.py` ranks candidates on held-out sessions and picks on the
 **worst** one, not the mean — a model that is excellent at one venue and
 useless at another loses the run it is used in. Train several with the same
 config (the variance above means that is not a wasted run) and rank them here.
@@ -386,7 +386,7 @@ wrong one**. So the single cost of lowering a confidence floor is the one
 quantity that decision never measured, on a vehicle where a false gate
 detection steers the hull at a wall.
 
-`tools/recall_matrix.py` has computed tp/fp/fn the whole time. It was never
+`tools/studies/recall_matrix.py` has computed tp/fp/fn the whole time. It was never
 pointed at this question. `--sweep` now does, from **one inference pass**
 re-thresholded offline (verified equal to N independent passes on a pair where
 the threshold actually moves the result — the first attempt agreed at every

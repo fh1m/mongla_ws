@@ -36,8 +36,8 @@ The entire training doctrine is `.claude/skills/train-model/SKILL.md`, **40 line
 
 - **No training script, no augmentation code, no dataset versioning, no labelling tooling, no CI
   anywhere in the repository.** Training is a manual Ultralytics CLI run on another machine.
-- The datasets are not in the tree: `tools/dataset_survey.py:18`, `tools/return_check.py:25-27`
-  and `tools/conf_bar.py:13` all point at **hard-coded absolute paths** outside the workspace
+- The datasets are not in the tree: `tools/bench/dataset_survey.py:18`, `tools/studies/return_check.py:25-27`
+  and `tools/studies/conf_bar.py:13` all point at **hard-coded absolute paths** outside the workspace
   (`~/Work/.../2025/datasets`, `~/Music/detect`). 10 188 labelled images. Versioning is
   directory names: `robosub_octagon_n_200_final`, `..._final_again3`.
 - **Labelling: nothing.** No CVAT, Label Studio, labelImg or Roboflow-annotate integration.
@@ -54,10 +54,10 @@ The entire training doctrine is `.claude/skills/train-model/SKILL.md`, **40 line
 - **Warning: No compiled artifact exists in the repo**: five `.pt`, eight `.yaml`, **zero `.hef`**.
 - **How long any of this takes is recorded nowhere.**
 
-What we *do* have, and it is unusual: an evaluation fleet. `tools/model_select.py` shows three
+What we *do* have, and it is unusual: an evaluation fleet. `tools/studies/model_select.py` shows three
 octagon models at an identical **mAP50 = 0.9950** scoring **29.2 % / 72.7 % / 68.3 %**
 cross-session recall — two of them with byte-identical training configs and a 43-point gap.
-`tools/detector_viewpoint_check.py` scores the **trivial whole-frame model first**: on the return
+`tools/studies/detector_viewpoint_check.py` scores the **trivial whole-frame model first**: on the return
 leg, null = 15.3 % at IoU 0.5, our detector = **9.7 %** — worse than guessing.
 
 ### 1.3 What the vision system cannot do today (each stated in the tree)
@@ -329,7 +329,7 @@ same class of trap as our missing-sidecar-means-empty-allowlist rule.
 
 **Warning: The standing gap in the entire field:** *nothing in this literature measures held-out-session
 recall.* Every headline number is an i.i.d. split. **We already measure the thing the field does
-not** (`tools/model_select.py`, `tools/domain_gap.py`, `tools/detector_viewpoint_check.py`) — that
+not** (`tools/studies/model_select.py`, `tools/studies/domain_gap.py`, `tools/studies/detector_viewpoint_check.py`) — that
 is not a deficiency of ours, it is a lead.
 
 ### 2.9 Beyond optical flow: what would actually beat it

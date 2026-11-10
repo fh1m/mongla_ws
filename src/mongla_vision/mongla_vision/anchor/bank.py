@@ -168,7 +168,7 @@ REFRESH_INLIERS = 25
 # threshold on inlier count fires on troughs. §21.2 replaced it -- what the bank
 # buys is VIEWPOINT DIVERSITY. This is that, made operational.
 #
-# Seen on real footage (`tools/pipeline_visual_check.py`, Mirpur torpedo): the
+# Seen on real footage (`tools/studies/pipeline_visual_check.py`, Mirpur torpedo): the
 # bank enrolled where the detector was confident, which is mid-range, and then
 # refused every close-range frame -- 7 inliers against a board filling the
 # screen. The number said "no match"; the picture said "the prop is
@@ -202,7 +202,7 @@ SCALE_COVERAGE = 1.6
 # That sweep used whole-frame references and production does not.
 # `lock_node` enrols with `roi=det_box`, so a shipped reference holds only the
 # keypoints inside the box -- measured median 376 against 1024. Re-swept on
-# production-shaped references (`tools/anchor_roi_bars.py`):
+# production-shaped references (`tools/studies/anchor_roi_bars.py`):
 #
 #     bar 15: keeps  86 % of true, admits  93 % of false
 #     bar 30: keeps  64 %,          admits  21 %
