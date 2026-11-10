@@ -387,9 +387,10 @@ flowchart LR
 
 So a filter blends them: predict forward on the IMU, then correct with whatever else arrived.
 Two details carry it. It is **right-invariant** — the maths lives on the rotation group, so
-there is no Euler-angle singularity near vertical. And a measurement that arrives late is
-**replayed at the instant it describes**: a detection that took 18 ms is evidence about where the
-vehicle *was*.
+there is no Euler-angle singularity near vertical. And with `retrodict:=true` a measurement
+that arrives late is **replayed at the instant it describes**: a detection that took 18 ms is
+evidence about where the vehicle *was*. It is a switch, off by default, until a water run
+measures what it buys.
 
 <details>
 <summary><b>The maths, if you want it</b></summary>

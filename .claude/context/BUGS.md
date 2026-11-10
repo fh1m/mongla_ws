@@ -189,6 +189,23 @@ yet also refuses. The latch is decided when a goal arrives, not only on the
 watchdog tick, or the manager's own first arm would read as an armed board.
 The board-side kill latch is upstream (srot-control-board#41).
 
+### B-109: tests in tools/ never ran, and the calibration solver's truth check had broken `READ 2026-11-10` **FIXED 2026-11-10**
+
+**What.** CI collects `src/*/test` and `test/` only. Three test files sat in
+`tools/`: two passing (21 tests, the free-decay and thruster-response fits) and
+`test_fov_solve.py`, the calibration solver's only ground-truth check, which
+had broken when `fov_solve.py` became a shim and lost the internals it called.
+A further 94 bench tests sit in `tools/control_bench/`, also uncollected.
+Separately, 34 tools were named nowhere else in the repository.
+
+**Fix.** The three moved where CI collects them; the solver check now imports
+`mongla_vision.calibration.solver` and runs (36 s), and faking the pose spread
+fails it. `tools/README.md` indexes every tool from its own docstring
+(`tools/gen_tools_index.py`), and `test/test_every_tool_is_indexed.py`, in the
+integrity gate, fails a stale index, a tool with no description, or a test file
+outside the collected tree. The control bench is the one named exemption: it
+compiles the firmware and needs that checkout in CI (#132).
+
 ### B-105: process teardown counted zombies as survivors `REPRODUCED 2026-11-09 (CI container)` **FIXED 2026-11-09**
 
 **What.** `stop_tree` and `stop` in `tools/_record_lib.sh` asked `kill -0` whether
