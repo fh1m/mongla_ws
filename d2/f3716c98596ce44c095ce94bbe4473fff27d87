@@ -1,0 +1,38 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 2187-2204
+.claude/context/perception/camera-and-calibration.md
+  h_f1b9066eb9899c 168-185
+.claude/context/upstream/README.md
+  h_f1b9066eb9899c 38,103-104,112-114
+.claude/context/upstream/pr-w-the-board-triggers-the-eyes.md
+  h_f1b9066eb9899c 1-108
+kutum/system/udev/99-mongla-cameras.rules
+  h_f1b9066eb9899c 65-73
+src/mongla_vision/config/calibration/pi_downward_1280x720.json
+  h_f1b9066eb9899c 3-4
+src/mongla_vision/config/cameras.yaml
+  h_f1b9066eb9899c 60,62-67,69-70,79-91
+src/mongla_vision/mongla_vision/camera_node.py
+  h_f1b9066eb9899c 629-648
+src/mongla_vision/mongla_vision/config.py
+  h_f1b9066eb9899c 54,56-62,64-69,78-97
+src/mongla_vision/test/test_camera_calibration.py
+  h_f1b9066eb9899c 198-242
+src/mongla_vision/test/test_camera_profiles.py
+  h_f1b9066eb9899c 221,232-237
+src/mongla_vision/test/test_camera_profiles_yaml_matches_code.py
+  h_f1b9066eb9899c 99-102,106-108
+test/test_claims_say_where_they_came_from.py
+  h_f1b9066eb9899c 82-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "d2f3716c98596ce44c095ce94bbe4473fff27d87",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
