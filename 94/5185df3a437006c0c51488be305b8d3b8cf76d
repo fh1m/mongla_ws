@@ -1,0 +1,40 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 511-528
+.claude/context/platform/ros2-conventions.md
+  h_f1b9066eb9899c 62-63
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 413,432
+.claude/context/upstream/README.md
+  h_f1b9066eb9899c 40,108
+.claude/context/upstream/pr-y-a-floor-below-the-mission.md
+  h_f1b9066eb9899c 1-107
+CLAUDE.md
+  h_f1b9066eb9899c 124-128
+src/mongla_localization/mongla_localization/localization_inputs.py
+  h_f1b9066eb9899c 330-332,336-338,343-346
+src/mongla_localization/test/test_localization_node.py
+  h_f1b9066eb9899c 32-33,1089-1100,1138-1140,1149
+src/mongla_manager/mongla_manager/bringup_check.py
+  h_f1b9066eb9899c 43-44,178-182
+src/mongla_manager/mongla_manager/bringup_host.py
+  h_f1b9066eb9899c 310-339
+src/mongla_manager/mongla_manager/node_health.py
+  h_f1b9066eb9899c 14-15,79-81,105,124-152
+src/mongla_manager/mongla_manager/node_setup.py
+  h_f1b9066eb9899c 111-115,520-528
+src/mongla_manager/mongla_manager/node_support.py
+  h_f1b9066eb9899c 225-249
+src/mongla_manager/test/test_mission_keepalive.py
+  h_f1b9066eb9899c 80,84,96,341-420
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "945185df3a437006c0c51488be305b8d3b8cf76d",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
