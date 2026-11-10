@@ -7201,6 +7201,19 @@ it cannot acquire, and it cannot add time: the decay still ends every lock
 2.5 s after the last strong box. What it misses is the safety bar on a clip
 where the model is already wrong about identity. 0.0 turns it off.
 
-**Caution:** the replay has no follower. On the vehicle FOLLOW would also carry a
-false lock until the decay ends it, so "off" here understates the baseline.
-The vehicle comparison is HELD against FOLLOW, with the same criteria.
+**On the vehicle, the real composition** (`composed_lock_harness.py`,
+`gate_back`, 60 s, detector + ladder + XFeat on one Hailo-8 VDevice):
+
+| `assoc_conf` | detection | held | follow | anchor | lost | `/detections` with a target |
+|---|---|---|---|---|---|---|
+| 0.0 | 8 % | 0 % | 23 % | 2 % | 67 % | 9 % |
+| **0.10** | 8 % | **11 %** | 12 % | 2 % | 67 % | 9 % |
+
+HELD takes its frames from FOLLOW, and `lost` does not move, which is the
+design: a better position for the time the ladder already grants, and no
+more. `/detections` is unchanged, so no weak box reached what the verbs steer
+on. XFeat stayed at p50 16.6 ms on the chip.
+
+**Caution:** the offline replay has no follower, so its "off" understates the
+baseline. The table above is the follower comparison; the safety question it
+cannot answer is still the gate model's identity on the torpedo board.
