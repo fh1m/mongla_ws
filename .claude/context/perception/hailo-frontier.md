@@ -185,7 +185,8 @@ else. Each is reproducible from a tool in `tools/bench/`. In the order they woul
 the most time:
 
 1. **The blocking `InferVStreams.infer()` holds the Python GIL for the whole inference**
-   ([hailo-vision.md](hailo-vision.md) §10, `tools/bench/hailo_async_gil.py`). Any ROS 2 node
+   ([hailo-vision.md](hailo-vision.md) §10, `tools/bench/gil_probe.py`,
+   `tools/bench/hailo_async_gil.py`). Any ROS 2 node
    that runs a camera callback beside it loses that time.
 2. **`InferModel.configure()` costs chip SRAM and `activate()` does not** (§11). Swapping models
    by reconfiguring fills the chip with `CONTEXT_SWITCH_STATUS_SRAM_MEMORY_FULL` after a few dozen
