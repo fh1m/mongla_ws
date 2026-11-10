@@ -96,16 +96,16 @@ def test_a_profile_documented_in_the_yaml_EXISTS_in_the_code():
 
 
 def test_the_forward_camera_is_not_capped_below_its_measured_ceiling():
-    """Guards the specific regression: `fps` was 15 while the unit delivers
-    30.18, and the comment beside it asserted 15 was the hardware ceiling.
-    Detection rate is what the vision loop steers on."""
+    """Guards the request, not the delivery: the Fantech delivers 15.0 fps
+    whatever is asked (Kutum, 2026-11-10), but a profile asking 15 once read
+    as the hardware ceiling and was defended as one. Asking high costs
+    nothing when ignored and takes what a better unit offers."""
     code = _code_profiles()
     fps = code['pi_forward']['fps']
     assert fps >= 30, (
-        f'pi_forward fps is {fps}. Measured on the vehicle by distinct header '
-        f'stamps: requesting 15 gives 14.63 Hz, requesting 60 gives 30.18 Hz '
-        f'and takes detections 14.67 -> 27.11 Hz for ~6 points of one core. '
-        f'A value below 30 caps the forward camera under its own ceiling.')
+        f'pi_forward fps is {fps}. A request below 30 would cap a better '
+        f'forward camera under its own ceiling; the request costs nothing '
+        f'on the Fantech, which delivers 15.0 whatever is asked.')
     assert code['pi_forward'].get('fourcc') == 'MJPG', (
         'pi_forward lost fourcc: MJPG. Without it the driver negotiates YUYV '
         'and the measured rate collapses (5.00 Hz through the launch).')
