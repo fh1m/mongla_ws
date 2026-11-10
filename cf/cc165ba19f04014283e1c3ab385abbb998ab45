@@ -1,0 +1,14 @@
+tools/pool/pool_session.sh
+  h_f1b9066eb9899c 60-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "cfcc165ba19f04014283e1c3ab385abbb998ab45",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
