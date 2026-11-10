@@ -339,6 +339,11 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
                 _DIRECT_FALLBACK_S, self._check_direct_feed)
         self._pub_det      = self.create_publisher(
             Detection2DArray, f'{ns_out}/detections', qos.DETECTIONS)
+        # Every box down to the association floor: `detections` plus the ones
+        # under the acting bar, for the tracker and the lock ladder only. The
+        # same boxes as `detections` while `assoc_conf` is off.
+        self._pub_cand     = self.create_publisher(
+            Detection2DArray, f'{ns_out}/candidates', qos.DETECTIONS)
         # OUTLINES, on the same stamp as the detections beside them. Built for
         # every detection, box or mask alike -- see TargetContours.msg for why
         # the two are one message. Optional: a workspace without
@@ -603,6 +608,13 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         # model because a different one misbehaved. Caught by
         # `test_a_SUCCESSFUL_inference_in_the_LOOP_resets_the_counter`,
         # which went from 0 failures to 5.
+            act = det.acting_conf()
+            weak = [d for d in detections if d.score < act]
+            if weak:
+                detections = [d for d in detections if d.score >= act]
+                if crop_state is not None and crop_state.active:
+                    weak = [replace(d, xyxy=crop_state.to_full(d.xyxy))
+                            for d in weak]
             detections = self._merge_extra(infer_frame, detections)
             detections = self._back_to_full_frame(frame, detections, crop_state)
             dt = time.monotonic() - t0
@@ -619,6 +631,9 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
                 return
             try:
                 self._pub_det.publish(det_msg)
+                self._pub_cand.publish(
+                    detections_to_array(detections + weak, header)
+                    if weak else det_msg)
             except Exception:
                 return  # node being destroyed; exit thread cleanly
             self._publish_contours(frame, detections, header)

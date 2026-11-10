@@ -134,7 +134,9 @@ is how `recommend()` happened.
 - [68. THE VEHICLE'S LOOPS HOLD THEIR RATES — and a relative sleep does not](#68-the-vehicles-loops-hold-their-rates--and-a-relative-sleep-does-not)
 - [69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)](#69-the-restart-policy--two-decided-numbers-two-derived-and-the-vehicle-refuted-my-first-camera-design-2026-11-10)
 - [70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10)](#70-kutum-in-the-health-report--the-pi-and-the-hailo-8-as-one-machine-graded-by-their-own-firmware-2026-11-10)
+- [72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10)](#72-the-held-rung--a-weak-box-where-the-lock-is-more-accurate-and-it-failed-its-own-safety-bar-2026-11-10)
 - [73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)](#73-the-executor--what-delivering-one-callback-costs-and-what-that-is-worth-in-a-real-node-2026-11-10)
+- [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
 <!-- contents:end -->
 
 ---
@@ -7152,6 +7154,90 @@ every **1 s**, ten times the shipped rate: forward detections held
 15 Hz is the camera's rate, so this shows the reads cost no frames; it does not
 show the margin at a detector-bound rate. Idle, no thrusters, no target in view.
 
+---
+
+## 72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10)
+
+**The idea.** A box under the acting bar may *keep* a lock the bar acquired,
+when it lands near where the lock already is. It is ByteTrack's second stage
+inside the ladder (`Rung.HELD`, `lock_frames._held_from`), judged with
+`visibility.region_conf_bar` against the lock's own centre at the radius
+section 56 measured (a quarter of the frame width). It never acquires and never
+resets the decay clock. The detector sends those boxes on `candidates`, which
+only the tracker and the ladder read, never on `detections`.
+
+**The scorer was written first** (`tools/studies/held_rung_score.py`, its
+docstring). It replays the real `arbitrate` and `_held_from` over every box the
+HEF emitted down to 0.10, with no follower and no anchor, so any change is
+HELD's. Truth for accuracy is the detector's *next* box over the bar within
+0.25 s, which is a later, independent observation.
+
+Collected on Kutum through `gate_sharks.hef`, `act_conf` 0.45, 90 s per clip at
+the clips' own timestamps (about 31 fps):
+
+| clip | weak boxes | lock off | lock with HELD |
+|---|---|---|---|
+| `final_run/gate_back` (gate, hard) | 444 | detection 6.0 % | detection 6.0 %, **held 5.5 %** |
+| `Mirpur/gate` (gate, easy) | 0 | detection 100 % | unchanged |
+| `Mirpur/torpedo` (no gate) | — | lock 0.6 % | lock **2.2 %** |
+| `Mirpur/torpedo_1` (no gate) | — | lock 0.0 % | lock 0.0 % |
+
+| criterion | bar | measured | verdict |
+|---|---|---|---|
+| 1 accuracy | held error < carried error, ≥ 30 frames | **4.2 px vs 5.1 px**, 82 frames | **PASS** |
+| 2 safety | lock on gate-free clips rises ≤ 1.0 point | **+1.6** on `torpedo` | **FAIL** |
+| 3 value | detector-sourced lock rises on every positive clip | `gate_back` 6.0 → 11.5 %; `gate` cannot rise (no weak boxes) | **FAIL as written** |
+
+**Falsifier:** `--shuffle` scatters every weak box at random. Criterion 1 must
+fail, and it does: **114.7 px** against 4.7. The scorer measures locality, not
+something else.
+
+**The second variant, run the same day.** HELD may answer only after the lock
+has had two strong detections (`lock_frames.HELD_MIN_CONFIRMS`). Scored on
+clips this rule never saw, class `shark`, criterion 3 counting only clips with
+weak boxes, as written above before the run:
+
+| criterion | measured | verdict |
+|---|---|---|
+| 1 accuracy | **3.7 px vs 4.6 px**, 104 frames; falsifier 119.5 px | **PASS** |
+| 2 safety | 0.0 % → 0.0 % on `octagon_1` and `bin_front_#2` | **PASS, and empty**: neither clip produced a strong false shark, so there was no lock to extend |
+| 3 value | `torpedo_shark_up_1` had one strong frame, so its lock never had two | **FAIL** |
+
+Rerun on the gate clips with the same rule: accuracy still holds (4.2 vs
+5.1 px), and the gate-free `torpedo` clip still rises **0.6 → 2.1 %**. Two
+confirmations did not fix it: the gate model takes the torpedo board's frame
+for a gate again and again (B-60), so those false locks are confirmed many
+times over. The fault is the model's identity, which no ladder rule can see.
+
+**Warning: the negatives were checked by eye, and two were wrong.** The
+Mirpur `torpedo` and `torpedo_1` clips were picked as shark negatives and
+turned out to hold the shark torpedo board; rendering the boxes caught it.
+Mirpur `gate` was dropped as a shark negative too: its strong shark boxes sit
+on open water, but a shark sign is also in frame. Render before you score.
+
+**Decision (owner, 2026-11-10): HELD ships ON**, `assoc_conf` 0.10 in
+`vision_pi.launch.py`. It is more accurate than what it replaces in every run,
+it cannot acquire, and it cannot add time: the decay still ends every lock
+2.5 s after the last strong box. What it misses is the safety bar on a clip
+where the model is already wrong about identity. 0.0 turns it off.
+
+**On the vehicle, the real composition** (`composed_lock_harness.py`,
+`gate_back`, 60 s, detector + ladder + XFeat on one Hailo-8 VDevice):
+
+| `assoc_conf` | detection | held | follow | anchor | lost | `/detections` with a target |
+|---|---|---|---|---|---|---|
+| 0.0 | 8 % | 0 % | 23 % | 2 % | 67 % | 9 % |
+| **0.10** | 8 % | **11 %** | 12 % | 2 % | 67 % | 9 % |
+
+HELD takes its frames from FOLLOW, and `lost` does not move, which is the
+design: a better position for the time the ladder already grants, and no
+more. `/detections` is unchanged, so no weak box reached what the verbs steer
+on. XFeat stayed at p50 16.6 ms on the chip.
+
+**Caution:** the offline replay has no follower, so its "off" understates the
+baseline. The table above is the follower comparison; the safety question it
+cannot answer is still the gate model's identity on the torpedo board.
+
 ## 73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)
 
 rclpy's default executor rebuilds a wait set for every callback it delivers.
@@ -7207,3 +7293,36 @@ that calls `rclpy.spin` directly.
 
 Not measured: the manager's own executor cost, and any run with thrusters or
 a second camera.
+
+## 74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)
+
+The lead was that decoding MJPEG straight to half size saves CPU. The bar,
+written before measuring: a decoder replaces `cv2.imdecode` in
+`cameras/v4l2_mailbox.py` only if it is at least 25 % faster and returns the
+same pixels.
+
+Measured on Kutum on real frames from the forward camera (`v4l2-ctl
+--stream-to`), 300 to 400 decodes each:
+
+| decode | 640×360 (42 kB) | 1280×720 (135 kB) |
+|---|---|---|
+| `cv2.imdecode` colour (shipped) | **1.77 ms** | 6.84 ms |
+| grayscale | 1.00 ms | 3.57 ms |
+| half size, colour | 1.06 ms (320×180) | 3.76 ms (640×360) |
+| PIL (libjpeg-turbo) to an RGB array | 3.02 ms | not run |
+
+- The detector needs the full 640 px width, so a half-size decode of the
+  shipped stream gives it half the pixels. Capturing 1280×720 to decode at
+  half costs 3.76 ms for the same 640×360 the camera already sends at
+  1.77 ms.
+- The system OpenCV already decodes with libjpeg-turbo 2.1.5 and NEON
+  (`cv2.getBuildInformation()`), pixel-identical to PIL (maximum difference
+  0) and 1.7x faster than it. Thread count changes nothing (1.80 ms on one
+  thread).
+- The mailbox decodes only the frame a consumer takes, so the cost is per
+  consumed frame: 5 % of one core at 30 Hz.
+
+**Verdict: nothing to change.** No decoder cleared the bar. The one open
+saving is the lock ladder, which works on a grayscale image: a gray decode is
+1.00 ms, but the detector needs colour from the same frame, so it would be a
+second decode, not a cheaper one.
