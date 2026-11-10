@@ -327,18 +327,23 @@ class LocalizationInputsMixin:
         because the thing being reported is the ABSENCE of an input -- there is
         no callback for flow that did not arrive.
         """
-        observed = True
+        # Fails closed (issue #52): this feed is a safety input, and a gate
+        # that cannot be read has not said the position is observable.
+        observed, unread = False, 'this filter has no observability gate'
         probe = getattr(self._filter, '_velocity_is_observed', None)
         if probe is not None:
             try:
-                observed = bool(probe())
-            except Exception:                              # noqa: BLE001
-                observed = True      # an unreadable gate must not stop the node
+                observed, unread = bool(probe()), ''
+            except Exception as exc:                       # noqa: BLE001
+                unread = f'the observability gate raised {exc!r}'
         state = 'aided' if observed else 'unaided'
         if state == self._aiding_state:
             return
         self._aiding_state = state
-        if state == 'unaided':
+        if unread:
+            self.get_logger().error(f'[LOCAL] UNAIDED: {unread}, so the '
+                                    f'position is not known to be observable.')
+        elif state == 'unaided':
             self.get_logger().warning(
                 '[LOCAL] UNAIDED: velocity is unobserved, so depth and yaw '
                 'updates are being REFUSED (B-56) and horizontal position is '
