@@ -133,9 +133,20 @@ def _subs(graph):
                                 '/set_parameters', '/set_parameters_atomically'))}
 
 
+def _why_not_up(log: Path) -> str:
+    # The localization node logs every second, so the tail of the log hides
+    # why another node is missing. Show the lines that can explain it.
+    keep, lines = [], log.read_text(errors='replace').splitlines()
+    for i, line in enumerate(lines):
+        if ('mongla_manager' in line or 'auv_manager' in line or 'died' in line
+                or 'exited' in line or 'Traceback' in line or 'Error' in line):
+            keep.extend(lines[i:i + 3] if 'Traceback' in line else [line])
+    return '\n'.join(keep)[-4000:] or '\n'.join(lines[:40])
+
+
 def test_both_vehicle_nodes_came_up(graph):
     assert NODES <= set(graph[0]), (
-        f'launched {sorted(graph[0])}; log: {graph[1].read_text()[-2000:]}')
+        f'launched {sorted(graph[0])}; from the log:\n{_why_not_up(graph[1])}')
 
 
 def test_every_subscription_is_fed_or_says_who_feeds_it(graph):
