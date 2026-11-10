@@ -417,7 +417,9 @@ not port it back. A capability that needs something from it is rebuilt against t
   force-pushes, so a page saved mid-run rejects the push instead of vanishing.
   `tools/wiki_build.py` defines conversion; `test/test_wiki_edits_pass_pr_gate.py` and
   `test/test_wiki_publish_never_overwrites_an_edit.py` protect the workflow contract.
-- **Two required checks, and neither may be talked past.** The integrity gate runs
+- **Four required checks, and none may be talked past.** `ROS humble` and `ROS jazzy`
+  build the whole stack from a clean container and run every test on both distros
+  (`.github/workflows/ros.yml`, all of it in `tools/ci_ros.sh`). The integrity gate runs
   `tools/run_repo_integrity.py`, the one list of guards: a new guard is a line there, and
   any skip or a guard file with no passing test fails it. Both workflows' shape is an
   allowlist in `tools/ci_contract.py` (no `if:`, known actions, exact commands), which the
