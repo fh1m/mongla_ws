@@ -25,6 +25,7 @@
 | `anchor/health.py` | fouled lens vs changed world; `trend()` anticipates a fall before it happens | `TREND_FALL 0.70`, compares halves not slope |
 | `anchor/loop_closure.py` | place recognition; centre-displacement offset, not origin | bar 100 inliers, `MIN_TRAVEL_M 1.5` |
 | `tracking/lock_state.py` | the ladder state machine, authority decaying from last real detection | gap p50 0.155 s / p90 0.651 s / p99 2.418 s |
+| **HELD rung** (`lock_state.Rung.HELD`, `lock_frames._held_from`) | a weak box near a lock seen twice replaces the follower's guess in a gap: **3.7 px vs 4.6 px** (held-out) against the next strong detection | **ON by the owner's decision** (`assoc_conf` 0.10). Misses its safety bar where the gate model mistakes the torpedo board for a gate, +1.5 points (measured-bars section 72) |
 
 Plus, in the nodes themselves: the camera **mailbox** (16.9 ms stale vs 396 ms
 queued), the follower's **RANSAC similarity fit** (carries SCALE, which the

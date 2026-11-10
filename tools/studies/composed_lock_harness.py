@@ -106,6 +106,9 @@ def main() -> int:
     ap.add_argument('--model', default='gate_sharks')
     ap.add_argument('--target', default='gate')
     ap.add_argument('--conf', type=float, default=0.45)
+    ap.add_argument('--assoc-conf', type=float, default=0.10,
+                    help='association floor, as the vehicle launch sets it; '
+                         '0 turns HELD off')
     ap.add_argument('--fps', type=int, default=30)
     ap.add_argument('--seconds', type=float, default=60.0)
     ap.add_argument('--cpu-anchor', action='store_true',
@@ -143,7 +146,8 @@ def main() -> int:
             det = DetectorNode(f'mongla_detector_{cam}', parameter_overrides=[
                 P('camera', value=cam), P('direct_feed', value=True),
                 P('model_path', value=a.model), P('classes', value=a.target),
-                P('conf', value=a.conf), P('paused', value=False),
+                P('conf', value=a.conf), P('assoc_conf', value=a.assoc_conf),
+                P('paused', value=False),
                 P('device', value='cpu'), P('publish_debug_image', value=False)])
             nodes.append(det)
             det._cam_name = cam

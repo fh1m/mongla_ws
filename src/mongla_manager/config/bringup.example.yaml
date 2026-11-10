@@ -184,6 +184,9 @@
 # contours: true
 
 #   (passed to vision_pi.launch.py, which sets the default)
+# assoc_conf: 0.10
+
+#   (passed to vision_pi.launch.py, which sets the default)
 # preprocess: auto
 
 #   (passed to vision_pi.launch.py, which sets the default)
@@ -405,6 +408,7 @@
 #     fwd_classes: ''
 #     dwn_classes: ''
 #     conf: 0.45
+#     assoc_conf: 0.10
 #     max_det: 100
 #     vision: fast
 #     preprocess: auto

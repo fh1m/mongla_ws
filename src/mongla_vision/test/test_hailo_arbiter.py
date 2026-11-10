@@ -378,24 +378,56 @@ def test_asking_below_the_floor_is_reported(hailo, tmp_path, monkeypatch):
     assert any('BELOW' in w and '0.050' in w for w in warned['warn'])
 
 
-def test_the_cuda_operating_point_is_reported_on_an_int8_graph(
-        hailo, tmp_path, monkeypatch):
-    """0.35-0.45 is the CUDA number, and every launch path ships it. INT8 costs
-    ~0.08 of score, so it is ~3x the intended point -- the single most likely
-    cause of 'the Hailo model misses things'."""
+def _measured(tmp_path, stem, bar):
+    """A sidecar carrying a `separation:` block, as negative_clip_check writes."""
+    path = _model(tmp_path, stem, ['gate'])
+    sidecar = Path(path).with_suffix('.yaml')
+    sidecar.write_text(sidecar.read_text() + (
+        "separation:\n  gate:\n    measured: '2026-09-28'\n"
+        f"    recommended_conf: {'null' if bar is None else bar}\n"))
+    return path
+
+
+def test_the_bar_the_model_measured_is_quiet(hailo, tmp_path, monkeypatch):
+    """gate_sharks measured 0.45 and every launch ships 0.45. The retired
+    warning called that 'three times the intended operating point' on an INT8
+    cost the ledger later retracted, and it fired on every launch."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    warned, log = _logger()
+    hailo.HailoDetector(model_path=_measured(tmp_path, 'fwd', 0.45),
+                        conf=0.45, class_allowlist=None, warmup=False,
+                        logger=log)
+    assert warned['warn'] == []
+
+
+@pytest.mark.parametrize('conf,words', [(0.15, 'empty water'),
+                                        (0.75, 'being discarded')])
+def test_a_conf_off_the_measured_bar_is_reported_with_it(
+        hailo, tmp_path, monkeypatch, conf, words):
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    warned, log = _logger()
+    hailo.HailoDetector(model_path=_measured(tmp_path, 'fwd', 0.45),
+                        conf=conf, class_allowlist=None, warmup=False,
+                        logger=log)
+    assert any(words in w and '0.45' in w for w in warned['warn'])
+
+
+def test_a_class_measured_unusable_is_reported(hailo, tmp_path, monkeypatch):
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    warned, log = _logger()
+    hailo.HailoDetector(model_path=_measured(tmp_path, 'fwd', None),
+                        conf=0.45, class_allowlist=None, warmup=False,
+                        logger=log)
+    assert any('not evidence' in w for w in warned['warn'])
+
+
+def test_an_unmeasured_model_is_quiet(hailo, tmp_path, monkeypatch):
+    """No `separation:` block means nobody has measured it -- unknown, not
+    wrong, and the preflight already names the tool that measures it."""
     _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
     warned, log = _logger()
     hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
                         conf=0.45, class_allowlist=None, warmup=False,
-                        logger=log)
-    assert any('intended operating point' in w for w in warned['warn'])
-
-
-def test_the_intended_point_is_quiet(hailo, tmp_path, monkeypatch):
-    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
-    warned, log = _logger()
-    hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
-                        conf=0.15, class_allowlist=None, warmup=False,
                         logger=log)
     assert warned['warn'] == []
 

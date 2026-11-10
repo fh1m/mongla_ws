@@ -68,7 +68,7 @@ a confident zero.
 | Node | Publishes | Purpose |
 |---|---|---|
 | `camera_node` | `image_raw`, `camera_info` | the mailbox camera path; also plays video files |
-| `detector_node` | `detections`, `contours`, `image_debug` | inference, plus the always-on operator alignment line |
+| `detector_node` | `detections`, `candidates`, `contours`, `image_debug` | inference, plus the always-on operator alignment line |
 | `tracker_node` | `tracks` | stable ids, and a predicted box across a short gap |
 | `lock_node` | `lock`, `correspondences` | the continuity ladder and the feature anchor |
 | `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled` | everything the downward camera can tell us |
