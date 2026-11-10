@@ -22,9 +22,9 @@ def _css_red_lit() -> str:
 
 def test_figures_use_the_sites_lit_red():
     lit = _css_red_lit()
-    diagrams = (ROOT / 'tools/make_diagrams.py').read_text()
-    banners = (ROOT / 'tools/make_banner.py').read_text() + \
-        (ROOT / 'tools/section_banners.py').read_text()
+    diagrams = (ROOT / 'tools/site/make_diagrams.py').read_text()
+    banners = (ROOT / 'tools/site/make_banner.py').read_text() + \
+        (ROOT / 'tools/site/section_banners.py').read_text()
     assert re.search(rf"RED_L = '#ff0000', '{lit}'", diagrams), 'make_diagrams RED_L != --red-lit'
     assert lit in banners.lower(), 'the banners draw a red the site does not use'
 

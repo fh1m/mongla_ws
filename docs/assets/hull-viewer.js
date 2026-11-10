@@ -1,6 +1,6 @@
 /* Mongla hull viewer — WebGL2, no dependencies, no build step.
  *
- * Reads the .mgla container written by tools/pack_hull.py:
+ * Reads the .mgla container written by tools/site/pack_hull.py:
  *   'MGLA' | u16 version | u16 indexBytes | u32 verts | u32 tris
  *   f32 centre[3] | f32 scale | int16 pos[3]*verts | uint16|uint32 idx[3]*tris
  *

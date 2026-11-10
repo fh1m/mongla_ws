@@ -538,7 +538,7 @@ Also still retracted from earlier in this round: the claimed **sign flip**
 
 ### The verified numbers
 
-`tools/yaw_drift_check.py` — records yaw and gyro together, fits only over
+`tools/bench/yaw_drift_check.py` — records yaw and gyro together, fits only over
 quiescent samples, reports what fraction qualified, grades the capture, and
 **refuses to report a drift at all when no gyro is available.**
 

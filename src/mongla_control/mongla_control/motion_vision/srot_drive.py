@@ -22,7 +22,7 @@ from .. import actuation_model
 # Holding heading. Above it the output jumps straight to 17.4 % of full scale,
 # because `MOT_SPIN_MIN` lifts every non-zero demand into [0.15, 1].
 #
-# Measured on `tools/control_bench` -- the board's own attitude_control.cpp and
+# Measured on `tools/bench/control_bench` -- the board's own attitude_control.cpp and
 # mixer.cpp compiled natively -- under the LIVE board's parameters
 # (`workbench/data/board_params_20260923.json`, read off the vehicle 2026-09-23):
 #

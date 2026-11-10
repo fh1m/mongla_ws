@@ -6,7 +6,7 @@ sqrt(box area) IN PIXELS, by quartile; this module compares `box_height /
 frame_height`. Different quantities, no recorded conversion -- so the shipped
 numbers were an invention with a citation attached.
 
-Re-measured in the controller's own unit (`tools/approach_band.py`, 13 668
+Re-measured in the controller's own unit (`tools/studies/approach_band.py`, 13 668
 detections, four archive clips, the shipped gate_rescue_repair graph):
 
     gate      peak 0.45 - 0.60
@@ -39,7 +39,7 @@ def test_the_old_global_band_is_gone():
 
 def test_every_shipped_band_is_a_measured_peak():
     """The table is the measurement. Changing a number here means re-running
-    tools/approach_band.py, not editing a constant."""
+    tools/studies/approach_band.py, not editing a constant."""
     assert BANDS['gate'] == (0.45, 0.60)
     assert BANDS['rescue'] == (0.10, 0.20)
     assert BANDS['repair'] == (0.80, 1.20)

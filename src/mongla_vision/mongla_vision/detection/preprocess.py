@@ -101,7 +101,7 @@ one that was already crisp, pushing an already-marginal detection past the
 model's decision boundary the wrong way.
 
 So this is a per-water decision, not a per-vehicle one. Judge it from the
-pool on the day: `tools/water_check.py` prints the three statistics and says
+pool on the day: `tools/pool/water_check.py` prints the three statistics and says
 which side of the line the water is on. Do not set it once and forget it.
 """
 from __future__ import annotations
