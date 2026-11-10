@@ -14,7 +14,15 @@
      Individual lines are deliberately NOT edited: 20 substitutions verified
      one at a time is how a second error gets introduced, and this banner
      states the truth once where it cannot be missed. Fix a line when you
-     re-measure it, not before. -->
+     re-measure it, not before.
+
+     RE-MEASURED 2026-11-10 on gate_sharks.hef itself, on Kutum:
+     `hailortcli parse-hef` reports Multi Context x3, score threshold 0.050,
+     IoU 0.70 -- so the section 1 row is now true of this file. Hardware-only
+     benchmark: 95.6 FPS in performance mode, 97.6 FPS with
+     ultra_performance (+2.1 %), against 98.1 / 100.3 on the retired model.
+     The other lines above still belong to gate_rescue_repair. What is left
+     to gain from the chip: hailo-frontier.md. -->
 
 <!-- MERGED 2026-09-07 (srot -> main). These were TWO DIFFERENT DOCUMENTS
      that happened to share a filename: they share ZERO of 18 headings. Neither
@@ -27,9 +35,12 @@
 # The Hailo-8 pipeline, measured — the CUDA-equivalent reference we never wrote
 
 > Every number here was measured on **our** Pi 5 + AI HAT+ on 2026-09-03, with
-> the harnesses in `tools/hailo_{stages,async,latency}.py`. Published figures are
+> the harnesses in `tools/bench/hailo_{stages,async,latency}.py`. Published figures are
 > quoted only where marked, and where they disagree with our measurements the
 > measurement wins and the disagreement is stated.
+>
+> What is still left in the chip, ranked with a scorer for each lever, and what we can
+> give back to other Hailo users: [the Hailo-8 frontier](hailo-frontier.md).
 
 ## 0. What the hardware actually is
 
