@@ -1,0 +1,68 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 138,7178-7261
+.claude/context/packages/mongla_vision/README.md
+  h_f1b9066eb9899c 71
+.claude/context/perception/ladder-register.md
+  h_f1b9066eb9899c 28
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 126,291-292
+README.md
+  h_f1b9066eb9899c 797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+src/mongla_manager/config/bringup.example.yaml
+  h_f1b9066eb9899c 186-188,411
+src/mongla_manager/launch/bringup.launch.py
+  h_f1b9066eb9899c 79
+src/mongla_vision/launch/vision_pi.launch.py
+  h_f1b9066eb9899c 137-145,476-477
+src/mongla_vision/mongla_vision/detection/detector.py
+  h_f1b9066eb9899c 82-87
+src/mongla_vision/mongla_vision/detection/hailo.py
+  h_f1b9066eb9899c 79,328-330,357,359,366-404,593-598
+src/mongla_vision/mongla_vision/detection/hef_file.py
+  h_f1b9066eb9899c 35-59
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  h_f1b9066eb9899c 87,118-127
+src/mongla_vision/mongla_vision/detector_node.py
+  h_f1b9066eb9899c 342-346,611-617,634-636
+src/mongla_vision/mongla_vision/detector_setup.py
+  h_f1b9066eb9899c 27-32
+src/mongla_vision/mongla_vision/lock_frames.py
+  h_f1b9066eb9899c 28-33,136,169,191-194,196-198,214-247
+src/mongla_vision/mongla_vision/lock_node.py
+  h_f1b9066eb9899c 4,58,75,93-96,203-204,215,237-239,250-256,270-272,280-281
+src/mongla_vision/mongla_vision/lock_publish.py
+  h_f1b9066eb9899c 100-108
+src/mongla_vision/mongla_vision/lock_setup.py
+  h_f1b9066eb9899c 369-371
+src/mongla_vision/mongla_vision/lock_wiring.py
+  h_f1b9066eb9899c 214-219,386-390
+src/mongla_vision/mongla_vision/tracker_node.py
+  h_f1b9066eb9899c 276-280,282
+src/mongla_vision/mongla_vision/tracking/lock_state.py
+  h_f1b9066eb9899c 9-11,47,171-172,261-284
+src/mongla_vision/test/test_hailo_arbiter.py
+  h_f1b9066eb9899c 381-394,397,400-412,415-426,430
+src/mongla_vision/test/test_lock_acting_bar.py
+  h_f1b9066eb9899c 67-74,302-376
+src/mongla_vision/test/test_lock_state.py
+  h_f1b9066eb9899c 219-268
+tools/README.md
+  h_f1b9066eb9899c 183
+tools/studies/composed_lock_harness.py
+  h_f1b9066eb9899c 109-111,149-150
+tools/studies/held_rung_score.py
+  h_f1b9066eb9899c 1-261
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7d9f82593ab5aaae1fb14d7cf0cb3068c8db21e8",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
