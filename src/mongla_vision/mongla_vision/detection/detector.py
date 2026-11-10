@@ -79,6 +79,12 @@ class Detector:
     def is_ready(self) -> bool:
         return False
 
+    def acting_conf(self) -> float:
+        """The bar a box must clear to be acted on. Boxes `infer` returns
+        under it are association-only (`assoc_conf`); a backend with no
+        association floor returns only boxes at its bar, so 0.0 is exact."""
+        return 0.0
+
     def close(self) -> None:
         pass
 
