@@ -57,7 +57,8 @@ if [ -n "${ZSH_VERSION:-}" ]; then
 else
   _dbr_self="${BASH_SOURCE[0]}"
 fi
-_dbr_ws="$(cd "$(dirname "$_dbr_self")/.." && pwd -P)"
+# The script lives in tools/pool/, so the workspace is two levels up.
+_dbr_ws="$(cd "$(dirname "$_dbr_self")/../.." && pwd -P)"
 {
   echo "workspace: $_dbr_ws"
   echo "recorded: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
