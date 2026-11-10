@@ -443,7 +443,7 @@ class RIEKF:
         rotates the velocity nothing is observing, position runs further from
         the origin, and `-skew(p)` grows with it.
 
-        Measured on `tools/control_bench` against a Fossen plant with known
+        Measured on `tools/bench/control_bench` against a Fossen plant with known
         truth, 30 s, 1 m launch error, no velocity aiding:
 
             fix sigma 0.50 m -> 183 m error

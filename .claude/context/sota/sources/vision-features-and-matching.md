@@ -15,7 +15,7 @@ Everything below is judged against what the vehicle already does. Copied from th
 from memory:
 
 **XFeat as the anchor rung, forward camera only** (`mongla_vision/anchor/xfeat_onnx.py`,
-`tools/xfeat_export.py`). ONNX + numpy, no torch. Measured on the Pi 5 **with the vision
+`tools/bench/xfeat_export.py`). ONNX + numpy, no torch. Measured on the Pi 5 **with the vision
 stack running**:
 
 | input | 1 thread | 3 threads |
@@ -169,7 +169,7 @@ INT8**. A softmax over 65 channels and an L2 normalise are both operations whose
 to resolve small differences; 8-bit is the worst place to do them.
 
 **What our re-export would look like, and it is more than two lines.** Our
-`tools/xfeat_export.py` already stops at the three raw heads (`keypoints` is **65 channels**,
+`tools/bench/xfeat_export.py` already stops at the three raw heads (`keypoints` is **65 channels**,
 softmax/slice live in our numpy) and our input is already 1-channel — so keeping normalise and
 softmax **on the host in float** is our design choice and is strictly safer than the fork's.
 But the fork's three `--start-node-names` mean the HEF takes **three inputs**: the normalised
@@ -733,7 +733,7 @@ refraction — and no matcher and no extra degree of freedom touches any of thos
 ### The three things actually worth doing, in order
 
 1. **DONE 2026-09-23 — and the published underwater ranking did NOT transfer.**
-   `tools/feature_murky_control.py`, exactly that protocol. On the three murky Mirpur
+   `tools/studies/feature_murky_control.py`, exactly that protocol. On the three murky Mirpur
    clips — frames proven identical by reproducing ORB's recorded reference keypoint
    counts to the unit (71 / 7 / 111) — ROOT-SIFT scores **0/4, 0/4, 2/4** against
    XFeat's 4/4, 4/4, 4/4, with **3 keypoints in a whole 640×480 frame** on the worst
@@ -814,7 +814,7 @@ a blackout. The ranking transfers; the absolutes do not."*
 
 **Warning: Resolution — and I have to correct myself here too: XFeat\* is NOT "just a flag" for us.**
 In the upstream PyTorch API it nearly is. In *our* deployment it is not, because
-`tools/xfeat_export.py` exports **only `net`** — the three heads. XFeat\*'s gain comes from the
+`tools/bench/xfeat_export.py` exports **only `net`** — the three heads. XFeat\*'s gain comes from the
 **match-refinement MLP**, which is a *separate module* that is **not in our ONNX graph at all**.
 Adopting it means a second export plus a numpy port of the refinement, on top of the coarse
 1/8-resolution matching path. That is a day, not a flag.

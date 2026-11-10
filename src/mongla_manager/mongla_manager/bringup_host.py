@@ -307,7 +307,7 @@ def _check_model_separation() -> tuple[str, str]:
 
     The measurement lives in the sidecar, beside the weights it describes,
     so it cannot be separated from them by a copy or a rename. Written by
-    `tools/negative_clip_check.py`; `recommended_conf: null` means MEASURED AND
+    `tools/studies/negative_clip_check.py`; `recommended_conf: null` means MEASURED AND
     FOUND UNUSABLE for that class, which is different from absent.
 
     A model with no `separation:` block is unknown, not bad. Most graphs have
@@ -359,7 +359,7 @@ def _check_model_separation() -> tuple[str, str]:
                          if unmeasured else ''))
     return WARN, ('no model carries a measured separation -- a graph that '
                   'loads is not a graph that works. '
-                  'python3 tools/negative_clip_check.py --model <m> '
+                  'python3 tools/studies/negative_clip_check.py --model <m> '
                   '--class <c> --positive <clip> --negative <clip>')
 
 
@@ -529,7 +529,7 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
             f'configured conf {_CONF_DEFAULT:.2f} ({worst}) -- everything '
             f'below the bake was discarded on-chip and no runtime value '
             f'brings it back, so conf is a no-op on those models. Recompile: '
-            f'tools/hailo_compile.sh <model> --nms-score-th 0.05')
+            f'tools/bench/hailo_compile.sh <model> --nms-score-th 0.05')
     seen = (f', floors {min(floors.values()):.3f}-{max(floors.values()):.3f}'
             if floors else '')
     if stock_high:

@@ -19,7 +19,7 @@
 > **Rule for keeping it true:** a row moves to DONE only with a commit, a production caller, an
 > executed test and an injection that bites. Re-grep before trusting any OPEN row older than a
 > week — a stale ledger is confidently wrong about the one thing it exists to answer.
-> Every Monday `tools/backlog_drift.py` (`.github/workflows/backlog-drift.yml`) lists the dated
+> Every Monday `tools/ci/backlog_drift.py` (`.github/workflows/backlog-drift.yml`) lists the dated
 > OPEN rows past that week, every BUGS entry whose GitHub issue disagrees with it, and every cited
 > upstream issue or pull request that has merged or closed, in the one `drift-report` issue.
 
@@ -62,7 +62,7 @@ not by competition, with a deck-side override for every venue constant.
 | G1 | **Board depth loop has never run closed under this stack.** Every srot move enters AUTO, which closes depth, so this gates `move_forward` too. It did close in `DEPTH_HOLD`, on the old hull in the firmware team's 2026-08-06/07 water tests, where the DEPTH_HOLD to AUTO transition crashed the board (fw `09d0033`, `f533bd2`) | OPEN (last read 2026-09-15: `DEPTH_OUT` absent while disarmed; re-checked 2026-11-10: no board attached to the dev box or Kutum, so not re-read; closing needs the armed checks) | bench: the two armed checks in `srot-integration.md` |
 | G1b | **Warning: `FRAME_REVERSE` vs MOTOR_DETECT.** On this hull `FRAME_REVERSE = 1`, and MOTOR_DETECT converges to the configuration that cancels it — so a detect run leaves every axis inverted in every closed-loop mode, and Motor Test confirms the wrong answer. **Do not run MOTOR_DETECT on this hull until upstream `pr-q` lands** | OPEN (upstream, unsent) | `upstream/pr-q-motor-detect-and-frame-reverse.md`; source-read, not bench-verified |
 | G2 | **Thrusters fitted and ESC RPM non-zero.** 958/958 ESC frames read 0 with nothing attached; `THR_TRIM_EN=0` WARN | OPEN (hardware) | blocks `thrust_model`, the RPM velocity sensor, ESC current as a BLOCKED channel |
-| G3 | **Firmware PR merge.** 28 of our PRs open on `srot-control-board` (#1-#39), none ever merged (re-checked 2026-11-09: all 28 OPEN). `tools/backlog_drift.py` re-reads each cited one weekly | OPEN | `gh pr list -R RakibulIslam1/srot-control-board`; see §3 |
+| G3 | **Firmware PR merge.** 28 of our PRs open on `srot-control-board` (#1-#39), none ever merged (re-checked 2026-11-09: all 28 OPEN). `tools/ci/backlog_drift.py` re-reads each cited one weekly | OPEN | `gh pr list -R RakibulIslam1/srot-control-board`; see §3 |
 | G4 | Board config applied 2026-09-15: Bar30 re-zeroed (+0.005 m), `LEAK_EN=1`, `MOT_BAT_V_MAX=16.8`, read back | DONE (re-verify after any reflash) | operator |
 | G5 | Tool offsets: torpedo and dropper are `unmeasured: true`, so every fire through them warns and aims the camera centre | OPEN (tape measure) | `src/mongla_vision/config/tool_geometry.yaml` |
 
@@ -257,7 +257,7 @@ own formula. Dev suite before any change: 3220 passed, 0 failed.
 | Item | Resolution |
 |---|---|
 | `run_budget.py` (Tier 5.1) | wired into the DSL, opt-in: `use_budget(total_s, reserve_s)` starts the clock on a successful `arm()`; `worth_attempting(name, points=, worst_case_s=, fallback_s=, fallback_points=)` returns full / fallback / skip and logs it on the scoreboard. No budget = always attempt |
-| `mongla_control/nav_filter.py` | **false positive** of the `src/`-only census: `tools/srot_console_server.py` and `tools/srot_replay.py` import it. Kept |
+| `mongla_control/nav_filter.py` | **false positive** of the `src/`-only census: `tools/pool/srot_console_server.py` and `tools/pool/srot_replay.py` import it. Kept |
 | `estimator/thrust_model.py` | stays uncalled on purpose until G2 (thrusters fitted) |
 | topic `*/vision_info` | `mongla.active_models(cam)`; `set_model(name, confirm_s=N)` waits for the detector to announce `name`, then drops detections cached from the old model. Matched by NAME, not epoch (a restarted detector resets the epoch). `confirm_s=0` (default) is the old behaviour |
 | topic `*/contours` | `mongla.outline(cls)` → largest `Outline(class_name, score, angle_deg, area_px, points)`; a box model gives 4 corners, a seg model the mask outline |

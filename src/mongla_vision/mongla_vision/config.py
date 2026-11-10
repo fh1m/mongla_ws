@@ -44,7 +44,7 @@ CAMERA_PROFILES = {
     # The global-shutter Sonix is the BOTTOM camera and the Fantech is the
     # FORWARD one; the udev rules bound the names the other way round (one of
     # them to a port that matched no device at all), so `pi_forward` opened
-    # the bottom camera. Corrected in tools/udev/99-mongla-cameras.rules.
+    # the bottom camera. Corrected in kutum/system/udev/99-mongla-cameras.rules.
     #
     # `fps` and `fourcc` are MEASURED on the vehicle, not requested. Both were
     # previously absent or wrong, and `fourcc` could not be expressed at all:

@@ -4,7 +4,7 @@ No camera here. What is under test is the BOOKKEEPING -- the part that decides
 whether a control loop acts on a fresh picture or an old one -- and that is
 exercisable without hardware. The parts that genuinely need a camera (the
 kernel's timestamps, the oldest-kept queue behaviour, the measured 396 -> 17 ms)
-are measured by `tools/v4l2_latency.py` and recorded in the commit; a stub
+are measured by `tools/bench/v4l2_latency.py` and recorded in the commit; a stub
 cannot prove them and pretending otherwise would be worse than not trying.
 
 The three invariants:

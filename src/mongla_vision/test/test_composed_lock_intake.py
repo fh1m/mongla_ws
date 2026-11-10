@@ -69,7 +69,7 @@ def test_submit_frame_stores_a_reference_and_greys_on_demand():
 
 def test_destroy_stops_the_ladder_thread_first():
     """Destroyed mid-tick, the ladder published on a dead handle and logged a
-    fault on every Ctrl-C (found by tools/composed_lock_harness.py). Checked
+    fault on every Ctrl-C (found by tools/studies/composed_lock_harness.py). Checked
     BEFORE rclpy shuts down: shutdown alone also ends the loop, which would
     hide a destroy that does not."""
     from mongla_vision.lock_node import LockNode

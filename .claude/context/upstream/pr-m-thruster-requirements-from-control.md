@@ -9,7 +9,7 @@ below that we currently ship is fitted to a T200 datasheet, and every one of the
 placeholder for the same reason.
 
 **Provenance.** Everything numeric in this document is either (a) read in the firmware source
-with file and line, or (b) measured on `tools/control_bench/`, which compiles the board's own
+with file and line, or (b) measured on `tools/bench/control_bench/`, which compiles the board's own
 `mixer.cpp`, `attitude_control.cpp`, `feedforward.cpp`, `thrust_trim.cpp` and
 `depth_control.cpp` natively and is validated against live-board captures to under one DShot
 count of 999. Where a number comes from a vendor datasheet it says so, and that number is a
@@ -114,7 +114,7 @@ and one in `BUGS.md`.
 Reading the Onshape document on 2026-09-23 for `hull_geometry.yaml`, the thruster positions
 came out of the tunnel bores and one axial placeholder, because the fitted units in the model
 are three A2212 placeholders. Once the real unit exists, **name the bodies** — a consistent
-part name per thruster is what lets `tools/pull_hull_geometry.js` re-derive geometry every time
+part name per thruster is what lets `tools/site/pull_hull_geometry.js` re-derive geometry every time
 the design moves, instead of us identifying a thruster by where it happens to sit.
 
 And while it is on the list: **assign materials.** Onshape reports no material on any part,
@@ -152,7 +152,7 @@ died — which is §2.3 — not for it to never die.
 | §2.2 symmetry | bollard thrust at ±command, matched pairs; `REVERSE_EFFICIENCY` retires when the ratio is within measurement error of 1.0 |
 | §2.3 telemetry | rpm and current must move with a *known* mechanical change (a fouled prop, a held shaft) — a non-zero reading is not evidence, per the 958-frame result |
 | §2.4 curve | the fitted curve predicts a held-out thrust point; the number lands in `measured-bars.md` with voltage and method |
-| §2.5 CAD | `tools/pull_hull_geometry.js` re-runs and reports `materials_assigned: true`, and identifies every thruster by name rather than by position |
+| §2.5 CAD | `tools/site/pull_hull_geometry.js` re-runs and reports `materials_assigned: true`, and identifies every thruster by name rather than by position |
 
 ---
 

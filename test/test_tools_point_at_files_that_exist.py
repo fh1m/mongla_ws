@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-TOOLS = sorted((ROOT / 'tools').glob('*.py')) + sorted((ROOT / 'scripts').glob('*.py'))
+TOOLS = sorted((ROOT / 'tools').rglob('*.py'))
 OURS = ('mongla_control', 'mongla_manager', 'mongla_vision',
         'mongla_planner', 'mongla_localization', 'mongla_interfaces')
 _PATH = re.compile(r"""['"](src/[\w./-]+\.(?:py|yaml|json))['"]""")

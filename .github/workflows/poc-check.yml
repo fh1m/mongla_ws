@@ -5,12 +5,12 @@ name: Proof of Contribution Check
 # through `${{ }}` inside a script, which the runner pastes into the shell as
 # source text before bash runs (issue #54).
 #
-# The decision is tools/provenance_check.py, with its tests in the integrity
+# The decision is tools/ci/provenance_check.py, with its tests in the integrity
 # job: an exact declaration line or a populated AI Provenance table, outside
 # code fences and quotes (#97). It records what the author declares; it does
 # not verify how the code was made.
 #
-# This job also runs tools/ci_contract.py over both required workflows. A
+# This job also runs tools/ci/ci_contract.py over both required workflows. A
 # job skipped by `if:` reports Success to branch protection, so the
 # integrity job cannot be trusted to check its own shape (#93).
 #
@@ -43,9 +43,9 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-        run: python3 tools/provenance_check.py
+        run: python3 tools/ci/provenance_check.py
       - name: Check the required workflows keep their shape
-        run: python3 tools/ci_contract.py
+        run: python3 tools/ci/ci_contract.py
       - name: Post or update the status comment (on failure)
         if: failure()
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0

@@ -92,7 +92,7 @@ The same common error is why **spacing** comes out far better than position: two
 in one pass share it, and it cancels in their difference (median 0.019 m against 0.356 m,
 [ledger §67](../../measured-bars.md)). A `measured: true` prop is only *checked* against the
 sightings and never overwritten, so a run from a drifted pose cannot rewrite the survey that
-would correct it. Figure: `python3 tools/fig_prop_placement.py`, computed by the shipped code.
+would correct it. Figure: `python3 tools/site/fig_prop_placement.py`, computed by the shipped code.
 
 ## Running it
 
@@ -119,7 +119,7 @@ Related: [`mongla_vision`](../mongla_vision/README.md) (where velocity comes fro
 ## Every module
 
 <!-- modules:begin -->
-Generated from each module's docstring by `tools/gen_reference.py`; a module
+Generated from each module's docstring by `tools/ci/gen_reference.py`; a module
 with no summary line shows as *(no summary)* until it gets one.
 
 | module | what it is |

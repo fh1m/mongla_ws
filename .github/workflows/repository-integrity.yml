@@ -3,7 +3,7 @@ name: Repository Integrity
 # A fast policy gate on every PR and main push. This is deliberately ROS-free:
 # the colcon build and the whole suite are ros.yml, on Humble and Jazzy (#65).
 # No skip/continue-on-error: a violated invariant makes this check red.
-# Its shape is an allowlist in tools/ci_contract.py.
+# Its shape is an allowlist in tools/ci/ci_contract.py.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -29,8 +29,8 @@ jobs:
           python-version: '3.12'
       - name: Install policy-test dependencies
         run: python -m pip install --disable-pip-version-check 'pytest>=8.2,<10' 'PyYAML>=6,<7' 'numpy>=1.26,<2' 'pymavlink==2.4.49'
-      # The guard list lives in that one file; tools/ci_contract.py allows
+      # The guard list lives in that one file; tools/ci/ci_contract.py allows
       # this exact command and nothing else here, and the provenance job
       # runs the same contract, so skipping this job is caught there (#93).
       - name: Run the integrity guards
-        run: python tools/run_repo_integrity.py
+        run: python tools/ci/run_repo_integrity.py

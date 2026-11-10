@@ -16,6 +16,6 @@
 
 # What CI and the merge gate check.
 /.github/                 @fh1m
-/tools/ci_contract.py     @fh1m
-/tools/provenance_check.py @fh1m
-/tools/run_repo_integrity.py @fh1m
+/tools/ci/ci_contract.py     @fh1m
+/tools/ci/provenance_check.py @fh1m
+/tools/ci/run_repo_integrity.py @fh1m

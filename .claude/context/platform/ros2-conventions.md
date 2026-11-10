@@ -10,7 +10,7 @@ first.
 > `mongla_driver` / `mongla_bringup`. **None of those exist.**
 
 The generated reference is the authority for every name and default below:
-[`reference/commands.md`](../reference/commands.md), rebuilt by `python3 tools/gen_reference.py`
+[`reference/commands.md`](../reference/commands.md), rebuilt by `python3 tools/ci/gen_reference.py`
 and checked by a test. This page says *why*; that one says *what*, and cannot drift.
 
 ---

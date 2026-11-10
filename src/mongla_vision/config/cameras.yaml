@@ -45,7 +45,7 @@ mongla_vision:
     # bound the names the other way (and the `forward` rule named a USB port
     # that matched no device at all, so that symlink was hand-made and stale).
     # `pi_forward` therefore opened the bottom camera while every node, launch
-    # file and mission looked correct. See tools/udev/99-mongla-cameras.rules.
+    # file and mission looked correct. See kutum/system/udev/99-mongla-cameras.rules.
     #
     #   Sonix   MJPG 640x360 210.17 Hz | 640x400 210.21 | YUYV flat 35.26
     #   Fantech flat 15.00 Hz in EVERY format, resolution and requested rate

@@ -26,7 +26,7 @@ link never kills a running mission.
 mosh fh1m@mongla.local              # from the laptop
 tmux new -s run                     # or, after a drop: tmux attach -t run
 # inside tmux -- pin the run folder, then launch as usual
-source scripts/pool_session.sh gate_am
+source tools/pool/pool_session.sh gate_am
 ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
 ```
 

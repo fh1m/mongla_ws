@@ -17,7 +17,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-_TOOL = Path(__file__).resolve().parents[3] / 'tools' / 'yaw_drift_check.py'
+_TOOL = Path(__file__).resolve().parents[3] / 'tools' / 'bench' / 'yaw_drift_check.py'
 
 
 def _load():

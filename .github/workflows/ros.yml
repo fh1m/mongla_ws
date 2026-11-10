@@ -8,7 +8,7 @@ name: ROS
 # and the cameras are exercised on Kutum, and a test that needs one skips and
 # is listed by name in the job summary, never counted as a pass.
 #
-# Everything the job does is tools/ci_ros.sh; tools/ci_contract.py allows this
+# Everything the job does is tools/ci/ci_ros.sh; tools/ci/ci_contract.py allows this
 # file's shape and nothing else (no if:, no continue-on-error, one command).
 on:
   pull_request:
@@ -35,4 +35,4 @@ jobs:
         with:
           persist-credentials: false
       - name: Dependencies, clean build and every test
-        run: bash tools/ci_ros.sh
+        run: bash tools/ci/ci_ros.sh

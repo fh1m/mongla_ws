@@ -230,7 +230,7 @@ canary line the detector logs at startup:
 the class allowlist is empty and every frame returns a silent `[]`, with the
 pipeline looking perfectly healthy.
 
-Measured on the vehicle (`tools/hailo_stages.py`, synthetic frames): letterbox
+Measured on the vehicle (`tools/bench/hailo_stages.py`, synthetic frames): letterbox
 0.65 ms, inference 9.54 ms, decode 0.02 ms → **10.20 ms, 98.0 Hz**, against
 `hailortcli benchmark --hw-only` reporting 97.9 FPS for the same model. The
 Python pipeline is at the chip's own ceiling; NMS runs on-chip, which is why

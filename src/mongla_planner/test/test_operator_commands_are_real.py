@@ -2,7 +2,7 @@
 
 `ros2 launch` ignores an undeclared `name:=value` without a word, so a doc
 with a stale argument does not fail when you run it. The run just goes ahead
-without that setting. This test runs `tools/command_lint.py` over every doc
+without that setting. This test runs `tools/ci/command_lint.py` over every doc
 and source string and fails on any finding: a missing launch file, an
 undeclared argument, a value outside its choices, a model with no sidecar, a
 verb flag that is not a field, a mission that does not exist, or an
@@ -12,7 +12,8 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / 'tools'))
+sys.path.insert(0, str(ROOT / 'tools'))  # shared libraries
+sys.path.insert(0, str(ROOT / 'tools' / 'ci'))
 
 import command_lint  # noqa: E402
 

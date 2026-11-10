@@ -438,7 +438,7 @@ the useful part.*
 `verlab/accelerated_features:modules/interpolator.py` calls
 `F.grid_sample(x, grid, mode=self.mode, align_corners=False)`, **the same op Hailo declined
 to support** (§1a). **But our export almost certainly does not include it**:
-`tools/xfeat_export.py` exports `XFeat(weights=w, top_k=4096)**.net**` — the raw backbone —
+`tools/bench/xfeat_export.py` exports `XFeat(weights=w, top_k=4096)**.net**` — the raw backbone —
 **not** the `XFeat` wrapper whose `detectAndCompute` / `match_xfeat_star` path uses the
 sparse interpolator. The interpolator is a *host-side sampling step*, which is exactly the
 arrangement Hailo's own advice recommends (*"handle the operation on the host side"*).
@@ -528,7 +528,7 @@ here, but **no source and no measurement — this is labelled speculation.**
 
 ### 3d. What adoption would cost
 
-**Key point: Unusually little, because none of the expensive parts are new.** `tools/xfeat_export.py`,
+**Key point: Unusually little, because none of the expensive parts are new.** `tools/bench/xfeat_export.py`,
 the 2.7 MB ONNX, the matching + `USAC_MAGSAC` path in
 `src/mongla_vision/mongla_vision/anchor/anchor.py`, and the Mirpur bench protocol all exist.
 The work is: point it at consecutive downward frames instead of a stored reference, recover

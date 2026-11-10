@@ -1,7 +1,7 @@
 # Command reference — generated from the code
 
 > WARNING: **This file is generated.** Do not edit it by hand: run
-> `python3 tools/gen_reference.py`. A test fails if it has drifted from the source.
+> `python3 tools/ci/gen_reference.py`. A test fails if it has drifted from the source.
 > Every row below was read out of the file named beside it, never written from memory.
 
 **23 verbs.** On the SROT board **11** run as one `SROT_MOVE` primitive, which the board runs *and brakes* itself; the rest are host-side loops or single messages.
@@ -139,7 +139,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `target_width_m_forward` | `0.0` | (passed to vision_pi.launch.py, which sets the default) measured TRUE width of the forward target in metres; 0 = use the rulebook nominal. A measured prop beats a nominal, which is what SAUVC +/-5 % allows for |
 | `target_width_m_downward` | `0.0` | (passed to vision_pi.launch.py, which sets the default) measured true width of the downward target, metres |
 | `dwn_lock_class` | `` | (passed to vision_pi.launch.py, which sets the default) Class the DOWNWARD ladder follows. Empty = any class, and no 6-DoF pose (the geometry table is keyed by class). |
-| `bank_forward` | `` | (passed to vision_pi.launch.py, which sets the default) checkpoint bank (.npz) preloaded into the FORWARD lock node, from tools/build_practice_bank.py. Empty learns live. A preloaded reference is trusted exactly like a live one -- it clears MIN_INLIERS or it does not answer. |
+| `bank_forward` | `` | (passed to vision_pi.launch.py, which sets the default) checkpoint bank (.npz) preloaded into the FORWARD lock node, from tools/pool/build_practice_bank.py. Empty learns live. A preloaded reference is trusted exactly like a live one -- it clears MIN_INLIERS or it does not answer. |
 | `bank_downward` | `` | (passed to vision_pi.launch.py, which sets the default) checkpoint bank (.npz) preloaded into the DOWNWARD lock node -- places rather than props. |
 | `fwd_fps` | `0` | (passed to vision_pi.launch.py, which sets the default) |
 | `dwn_fps` | `0` | (passed to vision_pi.launch.py, which sets the default) |
@@ -317,7 +317,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `pool_depth_max_m` | `nan` | Deepest floor in the venue, metres (#35). |
 | `tile_m` | `0.0` | Floor tile pitch in metres, measured on deck. 0 = OFF. Sets height from the floor and publishes the grid angle that bounds yaw drift. A wrong value rescales every height silently -- measure it. |
 | `caustics` | `true` | flow: erode sun caustics and refuse a bare floor under them (false = always track the raw floor; A/B switch) |
-| `bank_forward` | `` | checkpoint bank (.npz) preloaded into the FORWARD lock node, from tools/build_practice_bank.py. Empty learns live. A preloaded reference is trusted exactly like a live one -- it clears MIN_INLIERS or it does not answer. |
+| `bank_forward` | `` | checkpoint bank (.npz) preloaded into the FORWARD lock node, from tools/pool/build_practice_bank.py. Empty learns live. A preloaded reference is trusted exactly like a live one -- it clears MIN_INLIERS or it does not answer. |
 | `bank_downward` | `` | checkpoint bank (.npz) preloaded into the DOWNWARD lock node -- places rather than props. |
 | `lane_lines` | `false` | Read the lane line (heading mod 180) for the yaw drift bound. OFF: a path marker is also a dark band. Enable on a floor with lanes and no markers. |
 | `medium` | `water` | The medium the VEHICLE is in. 'water' engages the flat-port rectification in flow_node, lock_node AND pnp_node; 'air' for a dry bench run. Was 'flow_medium' when only the flow node read it -- one value, so one argument, or the three drift apart and each reports a plausible number. |

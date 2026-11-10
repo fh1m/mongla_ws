@@ -96,7 +96,7 @@ shaping is the vision loops' gain caps and the arrival brake.
 `VISION_YAW_FLOOR_FILL`, the brake constants, `MIN_ALIGN_ERR_PX` and `FWD_BAND` are labelled
 **pool-tunable**, none measured. `SROT_YAW_MIN_PCT` replaced a 5.0 % *"hardware spin-up
 assumption, NOT a measured value"* with a number measured on the board's own
-`attitude_control.cpp` (`tools/control_bench`).
+`attitude_control.cpp` (`tools/bench/control_bench`).
 
 Shipped **off** by default: `ki_lat = 0.0` (lateral integral), `range_gain_floor = 1.0`
 (range-adaptive gain scheduling), `settle_px = 0.0`.

@@ -35,7 +35,7 @@ favour of the CAD's own values, but PR K had already been sent and still says
 arm, i.e. 1 % of the scarcest authority the hull has.
 
 Re-measured 2026-09-25 from the Onshape GLB export of Part Studio 1, using each
-body's exact per-primitive accessor bounds (`tools/hull_stations.py`, new):
+body's exact per-primitive accessor bounds (`tools/bench/hull_stations.py`, new):
 
 ```
 hull bbox  176.10 x 172.09 x 702.00 mm     fineness 3.986
@@ -218,5 +218,5 @@ Also swept: **6250 hostile demands across both priority modes, worst output
 ---
 
 *Geometry: Onshape GLB export of Part Studio 1, per-primitive accessor bounds,
-2026-09-25, via `tools/hull_stations.py`. Firmware read at `mixer.cpp:26-42`,
+2026-09-25, via `tools/bench/hull_stations.py`. Firmware read at `mixer.cpp:26-42`,
 `config.h:117`, `task_control_loop.cpp:893`, `calibration.cpp:346`.*

@@ -150,7 +150,7 @@ def test_the_shipped_calibrations_are_all_loadable_and_named_by_medium(g):
 def test_the_guide_never_imports_its_own_PACKAGE(g):
     """The calibration tool must run without a ROS environment.
 
-    `tools/fov_calibrate_web.py` loads this module BY PATH for exactly that
+    `tools/pool/fov_calibrate_web.py` loads this module BY PATH for exactly that
     reason. A `from mongla_vision...` anywhere in it -- including inside a
     function, which is where it slipped in -- re-enters
     `mongla_vision/__init__.py`, which imports `preflight`, which imports

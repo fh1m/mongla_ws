@@ -54,8 +54,8 @@ it). Record the measurement in `.claude/context/measured-bars.md`.
 ## 4. Compile for the Hailo-8 (dev box)
 
 ```bash
-./tools/hailo_compile.sh --check              # toolchain only
-./tools/hailo_compile.sh <stem> --nms-score-th 0.05
+./tools/bench/hailo_compile.sh --check              # toolchain only
+./tools/bench/hailo_compile.sh <stem> --nms-score-th 0.05
 ```
 
 The compile now measures the INT8 model against its own float on held-out
@@ -82,7 +82,7 @@ a class the model does not emit.
 
 ```bash
 ros2 run mongla_vision vision_check --camera forward --require-class <class>
-python3 tools/composed_lock_harness.py --help      # detection rung on archive footage
+python3 tools/studies/composed_lock_harness.py --help      # detection rung on archive footage
 ```
 
 Never claim it works without seeing detections on real footage at the

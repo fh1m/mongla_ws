@@ -90,7 +90,7 @@ DEFERRED = {
         'RESULT: THE BIGGEST ONE, and it is the allocator for the hull actually being '
         'built: measured moment arms, roll refused rather than rounded, a dead '
         'thruster expressible. Nothing that flies imports it -- only its own test '
-        'and tools/control_bench, which are off the mission path. The live path is '
+        'and tools/bench/control_bench, which are off the mission path. The live path is '
         '`allocation.py`, an 8x6 matrix of +-1 that mirrors what the firmware '
         'mixes today (the old Dubomini vehicle), and motion_vision imports that '
         'one at runtime for its anti-windup. Waits on the board reporting '
@@ -109,7 +109,7 @@ DEFERRED = {
         'what gets shipped and this stays a cross-check rather than a source.'),
     'mongla_control/mongla_control/nav_filter.py': (
         'alpha-beta smoothing for the OPERATOR CONSOLE, not the vehicle: '
-        '`tools/srot_console_server.py` and `tools/srot_replay.py` import its '
+        '`tools/pool/srot_console_server.py` and `tools/pool/srot_replay.py` import its '
         'DepthFilter and HeadingFilter to steady the displayed readings and to '
         're-tune them against a recorded dive. No node imports it, so it is not '
         'WIRED. Vehicle fusion is the RIEKF in mongla_localization and heading '
@@ -155,10 +155,10 @@ def _modules():
 
 def _load_orphan_sweep():
     """The ONE answer to "what imports this module" lives in
-    `tools/orphan_sweep.py`. Two copies of it is how a stem match hid
+    `tools/ci/orphan_sweep.py`. Two copies of it is how a stem match hid
     `anchor/draw.py` here while the repo-wide guard resolved dotted names."""
     import importlib.util
-    path = pathlib.Path(__file__).resolve().parents[1] / 'tools' / 'orphan_sweep.py'
+    path = pathlib.Path(__file__).resolve().parents[1] / 'tools' / 'ci' / 'orphan_sweep.py'
     spec = importlib.util.spec_from_file_location('_orphan_sweep', path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

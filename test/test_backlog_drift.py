@@ -12,7 +12,8 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'tools'))
+sys.path.insert(0, str(ROOT / 'tools'))  # shared libraries
+sys.path.insert(0, str(ROOT / 'tools' / 'ci'))
 import backlog_drift as bd  # noqa: E402
 
 TODAY = dt.date(2026, 11, 9)
@@ -130,4 +131,4 @@ def test_the_workflow_runs_weekly_with_issue_rights_only():
     assert wf['permissions'] == {'contents': 'read', 'issues': 'write'}
     steps = wf['jobs']['drift']['steps']
     runs = [s['run'] for s in steps if 'run' in s]
-    assert runs == ['python3 tools/backlog_drift.py --write-issue']
+    assert runs == ['python3 tools/ci/backlog_drift.py --write-issue']

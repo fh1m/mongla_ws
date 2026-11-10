@@ -289,7 +289,7 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
     def destroy_node(self):
         """Stop the ladder thread BEFORE the publishers go.
 
-        Found by tools/composed_lock_harness.py: destroyed while its thread
+        Found by tools/studies/composed_lock_harness.py: destroyed while its thread
         was mid-tick, the ladder published on a destroyed handle and logged
         `ladder fault #1 ... InvalidHandle` on every shutdown -- an ERROR on
         every Ctrl-C, which teaches an operator to ignore that line.

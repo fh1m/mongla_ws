@@ -123,7 +123,7 @@ DEFERRED = {
         'with measured separation shows the in-view and departed regimes '
         'separating -- neither of which the archive currently contains.'),
     'mongla_vision/mongla_vision/continuity.py': (
-        'NOW EXERCISED by tools/continuity_from_bag.py, which produced the '
+        'NOW EXERCISED by tools/studies/continuity_from_bag.py, which produced the '
         'measurement it was written for (section 50): 338 real gaps, p50 '
         '116 ms, p90 1.12 s, max 7.64 s, and one rung -- the 0.20 s freshness '
         'zero -- outrun by 35 % of them. It stays DEFERRED because no NODE '
@@ -136,7 +136,7 @@ DEFERRED = {
         'NOT DEAD after all -- corrected 2026-09-25. Its old note said '
         '"superseded UI ... delete it or revive it deliberately", and the '
         'orphan sweep agreed because it scanned only src/. '
-        '`tools/render_real_stills.py` imports `render_ui_strip` to generate '
+        '`tools/site/render_real_stills.py` imports `render_ui_strip` to generate '
         'the site HUD imagery, so this '
         'is live code with an out-of-tree consumer. It stays DEFERRED rather '
         'than WIRED because no NODE imports it -- the register tracks the '
@@ -155,7 +155,7 @@ DEFERRED = {
         'known start range, which makes true tau a straight line and the '
         'filter a fit rather than a guess.'),
     'mongla_vision/mongla_vision/approach.py': (
-        'WARNING: AND ITS BANDS CAME FROM THE RETIRED GRAPH. `tools/approach_band.py` '
+        'WARNING: AND ITS BANDS CAME FROM THE RETIRED GRAPH. `tools/studies/approach_band.py` '
         'was run against `gate_rescue_repair`, whose documented failure mode '
         'is half-frame boxes over empty water -- so the peaks may be peaks of '
         'hallucination, and the module\'s own docstring says class bands '
@@ -208,10 +208,10 @@ def _modules():
 
 def _load_orphan_sweep():
     """The ONE answer to "what imports this module" lives in
-    `tools/orphan_sweep.py`. Two copies of it is how a stem match hid
+    `tools/ci/orphan_sweep.py`. Two copies of it is how a stem match hid
     `anchor/draw.py` here while the repo-wide guard resolved dotted names."""
     import importlib.util
-    path = pathlib.Path(__file__).resolve().parents[3] / 'tools' / 'orphan_sweep.py'
+    path = pathlib.Path(__file__).resolve().parents[3] / 'tools' / 'ci' / 'orphan_sweep.py'
     spec = importlib.util.spec_from_file_location('_orphan_sweep', path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

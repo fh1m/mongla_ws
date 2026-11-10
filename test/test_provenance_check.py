@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-TOOL = ROOT / 'tools/provenance_check.py'
+TOOL = ROOT / 'tools/ci/provenance_check.py'
 _spec = importlib.util.spec_from_file_location('provenance_check', TOOL)
 pc = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(pc)
@@ -113,5 +113,5 @@ def test_the_workflow_passes_the_author_from_the_event():
     doc = yaml.load((ROOT / '.github/workflows/poc-check.yml').read_text(),
                     Loader=yaml.BaseLoader)
     step = next(s for s in doc['jobs']['poc-check']['steps']
-                if s.get('run', '').strip() == 'python3 tools/provenance_check.py')
+                if s.get('run', '').strip() == 'python3 tools/ci/provenance_check.py')
     assert step['env']['PR_AUTHOR'] == '${{ github.event.pull_request.user.login }}'
