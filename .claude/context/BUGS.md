@@ -189,6 +189,26 @@ yet also refuses. The latch is decided when a goal arrives, not only on the
 watchdog tick, or the manager's own first arm would read as an armed board.
 The board-side kill latch is upstream (srot-control-board#41).
 
+### B-108: a fix from a camera with no CameraInfo claimed calibrated precision `READ 2026-11-09` **FIXED 2026-11-10**
+
+**What.** Before a camera's CameraInfo arrived (start-up, a replay without
+`camera_info`), `range_to` used one in-water focal from the FOV table and
+`bearing_to` read the box offset linearly across the FOV. A flat port has no
+single focal: for a gate 4 m ahead and 1.4 m across, the range read 6.1 %
+short and the bearing 1.6 deg off. `fix_from_prop` still published the
+sigma of a calibrated reading, and `floor_range` centred a principal row that
+sits 70 px off centre on the forward camera, a metre at 3 m.
+
+**Fix.** Without CameraInfo the camera matrix is built from the camera's
+measured FOV and runs through the same `rectifier_for` port model as a
+calibrated one, so only the principal point is a guess. `fix_from_prop` adds
+that guess's 1.264 deg (measured-bars, the forward camera entry) across the
+line of sight and says `uncalibrated` in its log line, `place_prop` adds it to
+the bearing term, and `floor_range` refuses. Both cameras are calibrated and
+`vision_pi` passes both files, so this runs only while CameraInfo is absent.
+`test_an_uncalibrated_camera_is_modelled_not_trusted.py` checks ray-traced
+truth; a single focal, no widening, no refusal and no bearing term each fail it.
+
 ### B-109: tests in tools/ never ran, and the calibration solver's truth check had broken `READ 2026-11-10` **FIXED 2026-11-10**
 
 **What.** CI collects `src/*/test` and `test/` only. Three test files sat in
@@ -360,6 +380,24 @@ one camera. Confirming a crossing needs distance travelled after the loss
 compared against the range at the loss, and the chain already has that
 data: the downward camera's flow velocity (worst error 1.09 cm over 30 cm)
 reaches `/mongla/odom`. TRAVERSAL_CONFIRMED is left for that, tracked on #79.
+
+### B-107: "never been in water" erased the lineage, and a false water claim passed every check `READ 2026-11-09` **FIXED 2026-11-10**
+
+**What.** The README, the site, the wiki home and CLAUDE.md said "This vehicle has never been
+in water" and "WATER: nothing", which was true of the current platform and read as true of
+the whole project: the Duburi stack this repository began as competed at RoboSub 2026, the
+author's vision stack at RoboSub 2025, and the SROT board itself was in water in the Dubomini
+hull. In the other direction, no required check caught a planted line falsely saying the
+current SROT and Kutum platform had completed water trials. GitHub #87.
+
+**Fix.** `docs/evidence/water.json` holds every time a vehicle in the lineage was in water:
+platform, what ran, how well the code is identified, the evidence and whether it is still
+active. `lineage.md` is generated from it by `tools/ci/gen_lineage.py`. A status belongs to the
+platform it was earned on and is never inherited. Every public page now names the platform
+it means. `test_water_claims_have_a_scope.py`, in the integrity gate, validates the
+registry, keeps the page generated, and fails an unscoped "never in water" or a current
+platform put in water without a CURRENT_WATER event backed by a recording. Planting either
+line in the real README or wiki fails it.
 
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
