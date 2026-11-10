@@ -123,6 +123,7 @@ fails when this page is stale.
 | `record_session.sh` | record_session.sh -- capture a REPLAYABLE pipeline session on the vehicle. |
 | `render_real_stills.py` | Run the REAL 2025 models over REAL competition footage and render the real HUD. |
 | `replay_check.sh` | replay_check.sh -- run the REAL vision graph on a RECORDED session. |
+| `restart_blind_time.py` | How long the vehicle is blind while its vision process starts: frame and detection. |
 | `return_check.py` | A2 -- RETURN: 2,882 raw frames + 302 labelled. |
 | `robosub_record.py` | The competition record, read out of RoboNation's own published score sheets. |
 | `run_repo_integrity.py` | The fast integrity gate: the one list of guards, run here and in CI. |
