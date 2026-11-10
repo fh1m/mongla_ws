@@ -110,7 +110,10 @@ def _ranger(boxes, width_px=640.0, f_px=500.0):
     m = MagicMock()
     m.camera = 'forward'
     m._img_size = {'forward': (width_px, 480.0)}
-    m.focal_px.return_value = f_px
+    # A calibrated pinhole in air: these cases test the range relation alone.
+    m._cam_k = {'forward': (f_px, f_px, width_px / 2.0, 240.0)}
+    m._cam_d = {}
+    m.medium = 'air'
     m._records.return_value = boxes
     return m
 
@@ -192,6 +195,8 @@ def _prop_fixer(course, *, offset=0.0, bearing=0.0, rng=(3.0, 0.09)):
     m.bearing_to.return_value = bearing
     m.range_to.return_value = rng
     m._publish_fix = MagicMock()
+    m._cam_k = {'forward': (500.0, 500.0, 320.0, 240.0)}
+    m._img_size = {'forward': (640.0, 480.0)}
     return m
 
 

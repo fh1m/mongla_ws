@@ -89,6 +89,11 @@ LEDGER_BOUND = {
                   'per-class peak bins of box_h/frame_h; a global band '
                   'matched none of the three'),
     },
+    'mongla_planner.dsl_position': {
+        'UNCALIBRATED_BEARING_SIGMA_DEG': (1.264, '**+1.264°**',
+                                           'principal-point aiming bias a fix '
+                                           'carries before CameraInfo (B-108)'),
+    },
 }
 
 

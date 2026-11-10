@@ -189,6 +189,26 @@ yet also refuses. The latch is decided when a goal arrives, not only on the
 watchdog tick, or the manager's own first arm would read as an armed board.
 The board-side kill latch is upstream (srot-control-board#41).
 
+### B-108: a fix from a camera with no CameraInfo claimed calibrated precision `READ 2026-11-09` **FIXED 2026-11-10**
+
+**What.** Before a camera's CameraInfo arrived (start-up, a replay without
+`camera_info`), `range_to` used one in-water focal from the FOV table and
+`bearing_to` read the box offset linearly across the FOV. A flat port has no
+single focal: for a gate 4 m ahead and 1.4 m across, the range read 6.1 %
+short and the bearing 1.6 deg off. `fix_from_prop` still published the
+sigma of a calibrated reading, and `floor_range` centred a principal row that
+sits 70 px off centre on the forward camera, a metre at 3 m.
+
+**Fix.** Without CameraInfo the camera matrix is built from the camera's
+measured FOV and runs through the same `rectifier_for` port model as a
+calibrated one, so only the principal point is a guess. `fix_from_prop` adds
+that guess's 1.264 deg (measured-bars, the forward camera entry) across the
+line of sight and says `uncalibrated` in its log line, `place_prop` adds it to
+the bearing term, and `floor_range` refuses. Both cameras are calibrated and
+`vision_pi` passes both files, so this runs only while CameraInfo is absent.
+`test_an_uncalibrated_camera_is_modelled_not_trusted.py` checks ray-traced
+truth; a single focal, no widening, no refusal and no bearing term each fail it.
+
 ### B-109: tests in tools/ never ran, and the calibration solver's truth check had broken `READ 2026-11-10` **FIXED 2026-11-10**
 
 **What.** CI collects `src/*/test` and `test/` only. Three test files sat in
