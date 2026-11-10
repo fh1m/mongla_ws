@@ -1,0 +1,26 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 209-228
+.claude/context/missions/client-and-dsl-api.md
+  h_f1b9066eb9899c 119-122
+src/mongla_planner/mongla_planner/dsl_position.py
+  h_f1b9066eb9899c 16-21,33,46-64,66,73-75,77,93-96,122-126,140,435-445,449,479-481,504-515,565-572,577,580,646-651
+src/mongla_planner/test/test_an_uncalibrated_camera_is_modelled_not_trusted.py
+  h_f1b9066eb9899c 1-141
+src/mongla_planner/test/test_floor_range.py
+  h_f1b9066eb9899c 15-19,111,126
+src/mongla_planner/test/test_pose_and_prop_fix.py
+  h_f1b9066eb9899c 113-116,198-199
+src/mongla_vision/test/test_shipped_constants_match_the_ledger.py
+  h_f1b9066eb9899c 92-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "bf9e16ccdd392b6e67f890961a0d99814b067e49",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
