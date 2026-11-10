@@ -1,0 +1,20 @@
+kutum/README.md
+  h_f1b9066eb9899c 94-98
+kutum/cut_release.sh
+  h_f1b9066eb9899c 1-63
+kutum/deploy.sh
+  h_f1b9066eb9899c 162-171
+test/test_a_release_is_cut_only_from_a_passed_gate.py
+  h_f1b9066eb9899c 1-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "f7bd12d80e360eb1aebb033c1d468f78754dace1",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
