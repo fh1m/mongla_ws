@@ -43,13 +43,14 @@ def test_disk_reads_exactly_as_the_preflight_does(gb):
     assert hh.disk(gb).state is GRADE[_disk_verdict(gb)[0]]
 
 
-@pytest.mark.parametrize('row', [hh.pi_temperature, hh.pi_power, hh.disk, hh.hailo])
+@pytest.mark.parametrize('row', [hh.pi_temperature, hh.pi_power, hh.disk, hh.hailo, hh.clock])
 def test_no_reading_is_unknown_never_ok(row):
     assert row(None, 'FileNotFoundError: vcgencmd').state is State.UNKNOWN
     assert 'vcgencmd' in row(None, 'FileNotFoundError: vcgencmd').evidence
     assert row(None, '', float('inf')).state is State.UNKNOWN
     # A good number from a sampler that has stopped is not good news.
-    stale = row(GREEN if row is hh.hailo else 10.0, '', hh.STALE_S + 1)
+    good = {hh.hailo: GREEN, hh.clock: CLOCK_OK}.get(row, 10.0)
+    stale = row(good, '', hh.STALE_S + 1)
     assert stale.state is State.UNKNOWN and 'stopped' in stale.evidence
 
 
@@ -93,11 +94,13 @@ def test_each_row_appears_only_where_its_hardware_is():
         s = hh.register(board, **kw)
         s.stop()
         return set(board.poll())
-    assert rows(is_pi=False, has_hailo=False) == {'kutum.disk'}
-    assert rows(is_pi=True, has_hailo=False) == {'kutum.disk', 'kutum.pi_temperature',
-                                                 'kutum.pi_power'}
-    assert rows(is_pi=True, has_hailo=True) == {'kutum.disk', 'kutum.pi_temperature',
-                                                'kutum.pi_power', 'kutum.hailo'}
+    assert rows(is_pi=False, has_hailo=False, has_rtc=False) == {'kutum.disk'}
+    assert rows(is_pi=True, has_hailo=False, has_rtc=False) == {
+        'kutum.disk', 'kutum.pi_temperature', 'kutum.pi_power'}
+    assert rows(is_pi=True, has_hailo=True, has_rtc=False) == {
+        'kutum.disk', 'kutum.pi_temperature', 'kutum.pi_power', 'kutum.hailo'}
+    assert rows(is_pi=True, has_hailo=True, has_rtc=True) == {
+        'kutum.disk', 'kutum.pi_temperature', 'kutum.pi_power', 'kutum.hailo', 'kutum.clock'}
 
 
 def test_the_manager_registers_the_rows():
@@ -129,3 +132,85 @@ def test_a_hailo_with_no_zones_is_never_ok():
     still reported, but nothing graded it, so it cannot read as fine."""
     h = hh.hailo(hh.HailoReading(60.0))
     assert h.state is State.DEGRADED and '60 C' in h.evidence
+
+
+# --- the clock ---------------------------------------------------------------
+
+CLOCK_OK = hh.ClockReading(cell_v=3.0, rtc_offset_s=0, synced=False, stepped_s=0.0)
+
+
+def _rtc(tmp_path, volts=3.0, offset_s=0):
+    d = tmp_path / 'rtc0'
+    d.mkdir(exist_ok=True)
+    (d / 'battery_voltage').write_text(f'{int(volts * 1e6)}\n')
+    (d / 'since_epoch').write_text(f'{int(time.time()) - offset_s}\n')
+    return d
+
+
+def test_a_good_clock_says_where_its_time_comes_from():
+    h = hh.clock(CLOCK_OK)
+    assert h.state is State.OK and 'RTC time, no network' in h.evidence
+    from dataclasses import replace
+    assert 'network time' in hh.clock(replace(CLOCK_OK, synced=True)).evidence
+
+
+@pytest.mark.parametrize('field,value,needle', [
+    ('cell_v', 2.4, 'power-off'),
+    ('rtc_offset_s', 5, '+5 s'),
+    ('stepped_s', 37.0, 'moved +37.0 s'),
+    ('stepped_s', -1.5, 'moved -1.5 s'),
+])
+def test_each_clock_fault_degrades_and_names_itself(field, value, needle):
+    from dataclasses import replace
+    h = hh.clock(replace(CLOCK_OK, **{field: value}))
+    assert h.state is State.DEGRADED and needle in h.evidence
+
+
+def test_the_clock_bars_sit_exactly_at_their_edges():
+    from dataclasses import replace
+    assert hh.clock(replace(CLOCK_OK, cell_v=hh.RTC_CELL_LOW_V)).state is State.OK
+    assert hh.clock(replace(CLOCK_OK, rtc_offset_s=hh.RTC_OFFSET_S)).state is State.OK
+    assert hh.clock(replace(CLOCK_OK, stepped_s=hh.CLOCK_STEP_S - 0.01)).state is State.OK
+    assert hh.clock(replace(CLOCK_OK, stepped_s=hh.CLOCK_STEP_S)).state is State.DEGRADED
+
+
+def test_the_probe_reads_the_rtc_and_the_network_flag(tmp_path):
+    flag = tmp_path / 'synchronized'
+    probe = hh.ClockProbe(str(_rtc(tmp_path, volts=2.95, offset_s=3)), str(flag))
+    r = probe()
+    assert r.cell_v == pytest.approx(2.95) and r.rtc_offset_s in (3, 4) and not r.synced
+    flag.write_text('')
+    assert probe().synced
+
+
+def test_a_wall_clock_step_is_remembered_after_the_clock_settles(tmp_path, monkeypatch):
+    """The step is the event; the report must still say it once the clock is
+    steady again, because the bag recorded across it either way."""
+    probe = hh.ClockProbe(str(_rtc(tmp_path)), str(tmp_path / 'none'))
+    wall = [1_000_000.0]
+    monkeypatch.setattr(hh.time, 'time', lambda: wall[0])
+    monkeypatch.setattr(hh.time, 'monotonic', lambda: 50.0)
+    assert probe().stepped_s == 0.0
+    wall[0] += 42.0                       # network time arrives
+    assert probe().stepped_s == pytest.approx(42.0)
+    assert probe().stepped_s == pytest.approx(42.0)   # still remembered
+
+
+@pytest.mark.parametrize('ppm,reported', [(50, False), (500, True)])
+def test_a_slow_slew_is_reported_only_once_it_amounts_to_a_second(tmp_path, monkeypatch, ppm,
+                                                                    reported):
+    """A crystal correction (tens of ppm) stays under the bar for an hour; a
+    slew at the kernel's 500 ppm cap moves wall stamps 1.8 s an hour, which
+    misaligns them as much as a step, so it is reported."""
+    probe = hh.ClockProbe(str(_rtc(tmp_path)), str(tmp_path / 'none'))
+    t = [0.0]
+    monkeypatch.setattr(hh.time, 'monotonic', lambda: t[0])
+    monkeypatch.setattr(hh.time, 'time', lambda: 1_000_000.0 + t[0] * (1 + ppm * 1e-6))
+    probe()
+    t[0] = 3600.0
+    assert (abs(probe().stepped_s) >= hh.CLOCK_STEP_S) is reported
+
+
+def test_the_cell_bar_is_the_doctors_bar():
+    doctor = (Path(__file__).resolve().parents[3] / 'kutum/doctor.sh').read_text()
+    assert f'v < {hh.RTC_CELL_LOW_V}' in doctor
