@@ -123,7 +123,7 @@ to decide.
 | `vision_tunables.py` | the live-tunable vision gains, in one place; set on the deck under `nodes:` in `bringup.yaml` |
 | `dispatch_policy.py` | which goals the action server accepts while busy: only `disarm`, `stop` and `surface`, which pre-empt the running verb |
 | `health.py` · `health_reporters.py` | subsystem health, reported rather than assumed |
-| `kutum_health.py` | Kutum, the Pi and its Hailo-8, as one group in the same report: `kutum.pi_temperature` (the Pi firmware's 80 and 85 C), `kutum.pi_power`, `kutum.hailo` (graded by the zones and throttling levels the chip reports) and `kutum.disk`, the last two Pi rows with the preflight's own grades. Sampled every 10 s on its own thread, because `vcgencmd` can take as long as the executor's stall limit. Report-only: nothing acts on these rows |
+| `kutum_health.py` | Kutum, the Pi and its Hailo-8, as one group in the same report: `kutum.pi_temperature` (the Pi firmware's 80 and 85 C), `kutum.pi_power`, `kutum.hailo` (graded by the zones and throttling levels the chip reports), `kutum.disk`, and `kutum.clock` (the RTC cell, the RTC against the system clock, and any wall-clock move during the session), the Pi power and disk rows with the preflight's own grades. Sampled every 10 s on its own thread, because `vcgencmd` can take as long as the executor's stall limit. Report-only: nothing acts on these rows |
 | `connection_config.py` | connection profiles and network constants |
 | `mongla_localization/launch_defaults.py` | reads `~/.mongla/bringup.yaml` for bringup and every other launch file (it lives in the package they all depend on) |
 | `yaw_source.py` | heading, read off the board's own fused attitude |
