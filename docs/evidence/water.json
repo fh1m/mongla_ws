@@ -1,0 +1,99 @@
+{
+  "about": "Every time a vehicle in this project's lineage was in water, and what that does and does not prove about the code here today. Read by tools/ci/gen_lineage.py (which writes lineage.md) and by test/test_water_claims_have_a_scope.py. A status is earned by the evidence listed with it, never inherited: code that descends from a water-tested predecessor has its own status, in docs/capability-map.md.",
+  "statuses": {
+    "HISTORICAL_WATER": "in water, on an earlier vehicle, firmware or stack than the current platform",
+    "RECORDED_WATER_REPLAY": "real underwater footage, recorded on an earlier vehicle, replayed through the current code",
+    "CURRENT_WATER": "in water on the current platform, with a recorded artifact in this repository",
+    "NOT_YET": "the current platform has not been in water"
+  },
+  "current_platform": "mongla-srot-kutum",
+  "platforms": {
+    "duburi-2025": "the university programme's vehicle at RoboSub 2025: Pixhawk and ArduSub, the author's vision stack (not in this repository)",
+    "duburi-2026": "the same programme's vehicle at RoboSub 2026: Pixhawk and ArduSub, running the Duburi ROS 2 stack this repository's history begins with",
+    "dubomini-srot": "the old Dubomini hull (eight vectored T200s) with the SROT board and Hengla firmware, driven by the firmware team's own tools",
+    "mongla-srot-kutum": "the current platform: this stack on the SROT board and the Kutum Pi 5 with a Hailo-8, in the Mongla hull"
+  },
+  "events": [
+    {
+      "id": "W-RS25",
+      "platform": "duburi-2025",
+      "status": "HISTORICAL_WATER",
+      "date": "2025",
+      "date_precision": "year",
+      "place": "RoboSub 2025",
+      "observed": "The team scored 4 083 points and placed 8th of 58: gate pass-through, maintain control, coin flip, style, channel at the correct depth.",
+      "code_in_water": "The author's vision stack, archived offline. Control and missions were other team members' code.",
+      "code_identity": "reported by the author; the code is not in this repository",
+      "evidence": [
+        {"kind": "path", "ref": "docs/data/robosub.json", "note": "read from RoboNation's published score sheets by tools/robosub_record.py"},
+        {"kind": "path", "ref": "docs/imgs/real/manifest.json", "note": "RoboSub-pool frames from the 2025 archive, scenes robosub-*"}
+      ],
+      "active_today": "no; its successor is mongla_vision, which has its own status"
+    },
+    {
+      "id": "W-MIRPUR25",
+      "platform": "duburi-2025",
+      "status": "RECORDED_WATER_REPLAY",
+      "date": "2025-06-29",
+      "date_precision": "day",
+      "place": "Mirpur",
+      "observed": "Pool runs at the gate and the torpedo board, recorded by the vehicle's camera. The current vision code is measured on these frames, not in water.",
+      "code_in_water": "The 2025 vehicle's software; the current code only replays the footage.",
+      "code_identity": "footage folder raw_images/Mirpur/sun_june_29 in the 2025 archive",
+      "evidence": [
+        {"kind": "path", "ref": "docs/imgs/real/manifest.json", "note": "scenes mirpur-gate and mirpur-torpedo, with the frame each came from"},
+        {"kind": "path", "ref": "docs/imgs/real/mirpur-gate.webp", "note": "one of those frames"}
+      ],
+      "active_today": "the footage is a test input for mongla_vision"
+    },
+    {
+      "id": "W-RS26",
+      "platform": "duburi-2026",
+      "status": "HISTORICAL_WATER",
+      "date": "2026-07",
+      "date_precision": "month",
+      "place": "RoboSub 2026",
+      "observed": "The team scored 6 234 points and placed 8th of 58. A pool run the same week sank a downward surge-only align to the floor, fixed in commit 7feb8551.",
+      "code_in_water": "The Duburi ROS 2 stack in this repository's history (control, vision and planner over ArduSub), confirmed by the author.",
+      "code_identity": "best-known ref 7feb8551 (2026-07-15), the last commit before the competition gap; the exact commit flown is reported, verification pending",
+      "evidence": [
+        {"kind": "path", "ref": "docs/data/robosub.json", "note": "official score sheets"},
+        {"kind": "commit", "ref": "7feb8551", "note": "records a pool observation of this stack"},
+        {"kind": "archive", "ref": "Duburi/2026/Cockpit (Jul 13, 2026)", "note": "BlueOS Cockpit recordings, GMT-7; off-repository, on the author's machine"}
+      ],
+      "active_today": "the ArduSub backend was removed on 2026-11-06 (tag last-with-pixhawk-and-sim); vision, planner and missions descend from it and carry their own status"
+    },
+    {
+      "id": "W-DUBOMINI26",
+      "platform": "dubomini-srot",
+      "status": "HISTORICAL_WATER",
+      "date": "2026-08-06",
+      "date_precision": "day",
+      "place": "pool test by the firmware team, 2026-08-06 and 2026-08-07",
+      "observed": "The SROT board closed its depth loop in DEPTH_HOLD; it bounced at DEPTH_P 3.0 and was tuned in water to P 0.5, I 0.1, D 0.01. A DEPTH_HOLD to AUTO transition crashed the board. Every axis ran reversed until the firmware gained FRAME_REVERSE.",
+      "code_in_water": "Hengla firmware and the firmware team's tools. None of this stack ran.",
+      "code_identity": "firmware commits 09d0033 and f533bd2 on srot-control-board",
+      "evidence": [
+        {"kind": "path", "ref": ".claude/context/platform/srot-integration.md", "note": "our record, section IN-WATER 2026-08-06"},
+        {"kind": "upstream", "ref": "srot-control-board#40", "note": "the firmware team's in-water source record"}
+      ],
+      "active_today": "the board, and the depth gains it was tuned to; AUTO, which every move verb uses, has not been in water"
+    },
+    {
+      "id": "W-MONGLA",
+      "platform": "mongla-srot-kutum",
+      "status": "NOT_YET",
+      "date": "2026-11-10",
+      "date_precision": "day",
+      "place": "",
+      "observed": "Not in water. Everything about this platform is measured on a bench, on recorded footage, or on the live board over a cable.",
+      "code_in_water": "",
+      "code_identity": "main",
+      "evidence": [
+        {"kind": "path", "ref": "docs/capability-map.md", "note": "every capability with its own state"},
+        {"kind": "path", "ref": ".claude/context/platform/first-pool-verification.md", "note": "what the first water session has to decide"}
+      ],
+      "active_today": "yes"
+    }
+  ]
+}
