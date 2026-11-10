@@ -1,0 +1,20 @@
+.claude/context/README.md
+  h_f1b9066eb9899c 45-59,63-69,73-81,85-87,91-94,98-104,108-111,115-117
+.claude/context/perception/hailo-frontier.md
+  h_f1b9066eb9899c 1-237
+.claude/context/perception/hailo-vision.md
+  h_f1b9066eb9899c 17-25,38,41-43
+README.md
+  h_f1b9066eb9899c 575-584
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "29b42dd3cc9c1b7d508cd9da50e4beddeb81b492",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
