@@ -14,7 +14,8 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools'))  # shared libraries
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools' / 'bench'))
 
 from mixer_map import dshot_signed  # noqa: E402
 
@@ -55,7 +56,7 @@ def test_values_measured_on_the_board(value, expected):
 
 
 def test_the_tool_and_the_module_decode_identically():
-    """`tools/mixer_map.py` carries a standalone copy because it is scp'd to the
+    """`tools/bench/mixer_map.py` carries a standalone copy because it is scp'd to the
     vehicle and run from /tmp, where the workspace is not importable. A second
     copy nobody compares is how two truths appear -- so compare them, across the
     whole of both bands and the boundary between them."""
@@ -69,7 +70,7 @@ def test_the_tool_and_the_module_decode_identically():
 def test_no_other_copy_of_the_band_arithmetic_exists():
     """The copy that went wrong was the one nothing compared. `mixer_map.py`
     has a standalone copy for a stated reason and the test above compares it.
-    `tools/control_bench/` had TWO more, uncompared, and they disagreed:
+    `tools/bench/control_bench/` had TWO more, uncompared, and they disagreed:
     `flight.py` decoded the reverse band as `-(v - 47)` where every other copy
     uses 48. One count -- but it put a STOPPED thruster at -1/999 of full
     reverse and full reverse at a magnitude of 1.001, outside the range its

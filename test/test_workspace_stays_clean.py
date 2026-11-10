@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 TOP_LEVEL = {
     # the stack and its tests
-    'src', 'test', 'tools', 'scripts', 'config', 'kutum',
+    'src', 'test', 'tools', 'config', 'kutum',
     'conftest.py', 'pytest.ini', 'requirements.txt', 'build_mongla.sh',
     # the book, the site and the project's own records
     'docs', '.claude', 'CLAUDE.md', 'README.md', 'AUTHORS.md', 'CITATION.cff',

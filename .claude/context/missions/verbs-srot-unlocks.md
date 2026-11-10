@@ -1,6 +1,6 @@
 # The verbs the board could give us, and has not yet
 
-> Measured on `tools/control_bench` against the live board's parameters
+> Measured on `tools/bench/control_bench` against the live board's parameters
 > (`workbench/data/board_params_20260923.json`), and read in the firmware at
 > `bff7400`.
 

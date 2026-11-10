@@ -30,7 +30,7 @@ underwater frames, so any preprocessing that makes an image look better to a
 person moves it away from the distribution the detector learned.
 
     ros2 run mongla_vision water_check                 # live camera topic
-    python3 tools/water_check.py --video clip.mkv      # a recording
+    python3 tools/pool/water_check.py --video clip.mkv      # a recording
 """
 import argparse
 import sys

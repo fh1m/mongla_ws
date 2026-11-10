@@ -23,7 +23,7 @@ name: Wiki
 # them (GitHub docs, "Triggering a workflow from a workflow"; #94). Owner
 # decision 2026-11-09: approve by hand, no app or personal token.
 #
-# How the conversion works and what it guarantees: tools/wiki_build.py.
+# How the conversion works and what it guarantees: tools/ci/wiki_build.py.
 #
 # The wiki's git repository exists only after its first page is created by hand
 # (Wiki tab -> "Create the first page" -> Save). Until then publishing fails
@@ -35,7 +35,7 @@ on:
     paths:
       - '.claude/context/**'
       - 'docs/*.md'
-      - 'tools/wiki_build.py'
+      - 'tools/ci/wiki_build.py'
       - '.github/workflows/wiki.yml'
   gollum:
   workflow_dispatch:
@@ -95,7 +95,7 @@ jobs:
       - name: Turn the pages back into files
         id: pull
         run: |
-          python3 tools/wiki_build.py pull "$RUNNER_TEMP/wiki" | tee "$RUNNER_TEMP/changed"
+          python3 tools/ci/wiki_build.py pull "$RUNNER_TEMP/wiki" | tee "$RUNNER_TEMP/changed"
           [ -s "$RUNNER_TEMP/changed" ] && echo "any=1" >> "$GITHUB_OUTPUT" || echo "nothing changed"
 
       - name: Run the doc guards
@@ -132,7 +132,7 @@ jobs:
             echo "checks as a normal code PR before merging into main. They wait for"
             echo "approval: open the Checks tab and press **Approve workflows to run**."
             echo
-            # The wiki editor is the human source; tools/provenance_check.py
+            # The wiki editor is the human source; tools/ci/provenance_check.py
             # reads this table (test_provenance_check.py runs this block).
             echo "## AI Provenance"
             echo
@@ -196,7 +196,7 @@ jobs:
           if [ -z "$last" ]; then mapfile -t touched < <(git -C "$W" ls-files '*.md')
           else mapfile -t touched < <(git -C "$W" diff --name-only "$last" HEAD -- '*.md'); fi
           [ "${#touched[@]}" -gt 0 ] || { echo "no edits since the last publish"; exit 0; }
-          if ! python3 tools/wiki_build.py check "$W" "${touched[@]}" > "$RUNNER_TEMP/pending"; then
+          if ! python3 tools/ci/wiki_build.py check "$W" "${touched[@]}" > "$RUNNER_TEMP/pending"; then
             echo "::error::The wiki holds edits main does not have yet, so publishing would erase them:"
             sed 's/^/  /' "$RUNNER_TEMP/pending"
             echo "Merge (or close) the open docs(wiki) pull request, then re-run. A closed one: run this workflow by hand with discard_wiki_edits."
@@ -208,7 +208,7 @@ jobs:
           # Every page is regenerated, so a document removed from the book
           # loses its page; the wiki's own history keeps the old text.
           find "$RUNNER_TEMP/wiki" -maxdepth 1 -type f \( -name '*.md' -o -name '.mongla-pages.json' \) -delete
-          python3 tools/wiki_build.py build "$RUNNER_TEMP/wiki"
+          python3 tools/ci/wiki_build.py build "$RUNNER_TEMP/wiki"
 
       - name: Push to the wiki
         env:

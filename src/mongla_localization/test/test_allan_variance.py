@@ -16,7 +16,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools'))  # shared libraries
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools' / 'bench'))
 
 from allan_variance import characterise, overlapping_allan  # noqa: E402
 
