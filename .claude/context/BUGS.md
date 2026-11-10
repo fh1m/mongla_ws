@@ -438,6 +438,38 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-110: a process or camera that died mid-run stayed dead for the run `READ 2026-11-10` **FIXED 2026-11-10**
+
+**What.** No process bringup starts had a restart. A detector that `os._exit`s
+after repeated inference failures, a flow node that raised, or a manager that
+crashed stayed down until someone relaunched the stack by hand, which nobody
+can do with the hull in the water. A USB camera that dropped off the bus was
+worse: the v4l2 mailbox kept polling a dead descriptor, `is_healthy()` went
+False, and the camera node logged `BAD` every 2 s and never tried to reopen
+the device. Both cameras and both detectors share one process on the vehicle
+(`detector_dual_node`), so restarting that process would have blinded the
+healthy camera as well.
+
+**Fix.** The owner set the policy: restart 2 s after the death, three times,
+then stay down and say so; the mission keeps running and nothing acts on the
+loss alone. `mongla_localization/launch_respawn.py` implements it once,
+because Humble's launch has no restart limit. Every process in `bringup`,
+`vision_pi` and `vision` uses it except the operator display, and
+`test/test_every_launched_process_restarts.py` fails a bare node.
+A lost camera is reopened in place by its own capture thread
+(`mongla_vision/cameras/reopen.py`) under the same three-attempt policy, so
+the other camera never stops. The vehicle refuted the first version of that:
+with the forward lead pulled, three attempts were spent in 6 s on a device
+node that did not exist, and the camera stayed lost after the lead went back.
+Now an attempt counts only while the device exists, and a reopen that comes
+back as the OpenCV fallback instead of the mailbox is refused. Re-run on the
+vehicle: back at 30.0 Hz, 0 dropped, after ~55 s out (measured-bars §69). Restarting the manager is safe because of
+B-94/B-97: a new manager that hears ARMED latches. A restarted localization
+publishes in `odom` until it is re-anchored, which `pose()` refuses.
+Tests run real processes under a real `LaunchService`. Injection checks:
+removing the limit, restarting a clean exit, reopening a video file, skipping
+the source swap, and a bare node in any of the three launch files each fail.
+
 ### B-91: the floor's yaw bound was applied on arrival, against the heading now `READ 2026-11-07` **FIXED 2026-11-07**
 
 **What.** `flow_node` published `floor_grid_deg` and `lane_heading_deg` as bare
