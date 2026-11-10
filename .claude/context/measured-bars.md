@@ -134,6 +134,7 @@ is how `recommend()` happened.
 - [68. THE VEHICLE'S LOOPS HOLD THEIR RATES — and a relative sleep does not](#68-the-vehicles-loops-hold-their-rates--and-a-relative-sleep-does-not)
 - [69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)](#69-the-restart-policy--two-decided-numbers-two-derived-and-the-vehicle-refuted-my-first-camera-design-2026-11-10)
 - [70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10)](#70-kutum-in-the-health-report--the-pi-and-the-hailo-8-as-one-machine-graded-by-their-own-firmware-2026-11-10)
+- [73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)](#73-the-executor--what-delivering-one-callback-costs-and-what-that-is-worth-in-a-real-node-2026-11-10)
 <!-- contents:end -->
 
 ---
@@ -7150,3 +7151,59 @@ every **1 s**, ten times the shipped rate: forward detections held
 **15.000 Hz** before and **15.000 Hz** during, over 32 reads (slowest 144 ms).
 15 Hz is the camera's rate, so this shows the reads cost no frames; it does not
 show the margin at a detector-bound rate. Idle, no thrusters, no target in view.
+
+## 73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)
+
+rclpy's default executor rebuilds a wait set for every callback it delivers.
+Jazzy's `rclpy.experimental.EventsExecutor` is told by the middleware when
+something is ready. `tools/bench/executor_cost.py` runs one small node (a
+100 Hz publisher and subscriber, four 10 Hz timers) under each executor in a
+fresh process and divides process CPU by callbacks delivered.
+
+**The bar, written before the first run:** against the single-threaded
+executor on the same box, CPU per callback at most half, p99 latency no worse
+than 1.5x, at least 99 % delivered.
+
+Measured on Kutum (Pi 5, Jazzy, rclpy 7.1.11), 10 s each:
+
+| executor | CPU per callback | process CPU | latency p50 | p99 | delivered |
+|---|---|---|---|---|---|
+| single-threaded (the `rclpy.spin` default) | 0.2507 ms | 6.0 % | 0.246 ms | 0.349 ms | 1.000 |
+| multi-threaded | 0.5345 ms | 12.7 % | 0.425 ms | 0.529 ms | 0.984 |
+| **events** | **0.0374 ms** | **0.9 %** | **0.049 ms** | **0.071 ms** | 1.000 |
+
+Events passes: 0.15x the CPU and 0.20x the p99. The multi-threaded executor
+fails its own comparison at 2.13x the CPU of the single-threaded one.
+
+**The falsifier.** With `--work-ms 5` every callback burns 5 ms, so the
+executor's share is small and the ratio must move toward 1. It did: events
+0.91x, multi 1.09x. A ratio that survived real work would have meant the
+bench measured something else.
+
+**What it is worth in a real node is much less than the ratio.** The composed
+vision graph (`tools/studies/composed_lock_harness.py`: camera, detector and
+lock ladder in one process, `gate_sharks` on the `gate_back` clip, 45 s, twice
+each, alternating):
+
+| executor | detections | process CPU | XFeat p50 | rungs |
+|---|---|---|---|---|
+| multi-threaded | 29.9, 30.0 Hz | 108.3, 108.9 % | 16.81, 16.44 ms | identical |
+| events | 30.0, 29.9 Hz | 99.2, 103.7 % | 15.40, 16.98 ms | identical |
+
+The bar for this run, also written first: detection and lock rates at least
+0.98x, CPU no higher, no error, exit 0. It passed. The saving is **5 to 9
+points of one core** out of about 108: decode, pre-processing and
+post-processing are the rest, and the executor never touched them. So the
+per-callback figure is 6.7x and the node is about 7 % cheaper; both are true
+and only the second is what the vehicle gets.
+
+**Shipped.** `mongla_localization/spin.py` picks the executor for every node
+main (`MONGLA_EXECUTOR=events`, the default, or `classic`). Humble has no
+events executor, so a dev box gets the classic one. The manager stays
+multi-threaded on purpose: its action callbacks block for the length of a
+move while telemetry and health keep ticking, and the events executor has one
+thread. `test_every_node_spins_on_the_chosen_executor.py` refuses a node main
+that calls `rclpy.spin` directly.
+
+Not measured: the manager's own executor cost, and any run with thrusters or
+a second camera.

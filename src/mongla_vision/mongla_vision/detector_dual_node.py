@@ -63,9 +63,12 @@ Launch's `name=` and `parameters=` are PROCESS-WIDE remappings (`__node:=`,
 parameters arrive here `fwd_`/`dwn_`-prefixed on this launcher and are handed
 down as `parameter_overrides` rather than declared per node by launch.
 
-A MultiThreadedExecutor, because the two image callbacks must not serialise
-behind each other: at ~35 Hz per camera under contention a single-threaded
-executor makes the second camera wait a whole inference for the first.
+The executor comes from `mongla_localization.spin`. Live, each camera hands
+its frames to its detector on the camera's own capture thread, so the executor
+carries only timers, services and small topics, and the single-threaded events
+executor is enough. In replay the frames arrive as image callbacks, and
+`MONGLA_EXECUTOR=classic` gives the multi-threaded executor back, so one
+camera's inference does not make the other wait.
 """
 from __future__ import annotations
 
@@ -390,7 +393,9 @@ def main():
         from mongla_localization.params_file import refuse_unknown
         for n in nodes:
             refuse_unknown(n)     # bringup.yaml `nodes:` typos stop here
-        ex = MultiThreadedExecutor()
+        from mongla_localization.spin import make_executor
+        ex, which = make_executor(launcher.get_logger(), classic=MultiThreadedExecutor)
+        launcher.get_logger().info(f'[COMP ] spinning on the {which} executor')
         for n in nodes:
             ex.add_node(n)
         ex.spin()
