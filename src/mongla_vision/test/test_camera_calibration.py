@@ -195,3 +195,48 @@ def test_unreadable_calibration_warns_and_degrades():
     s._calib = load(s)
     assert s._calib is None
     assert s.warned, 'a missing calibration must be reported, not swallowed'
+
+
+_CAL_DIR = os.path.join(_HERE, '..', 'config', 'calibration')
+
+
+def _cal_named(name):
+    with open(os.path.join(_CAL_DIR, name)) as fh:
+        return json.load(fh)
+
+
+def test_another_cameras_calibration_is_refused_and_its_own_is_used():
+    """The launch passes the Fantech's file for the forward slot whatever sits
+    there. With the global-shutter unit forward, publishing the Fantech's
+    focal would give confident bearings wrong by a fixed factor (the round-38
+    defect). The loader must take the file that names the profile."""
+    load, _ = _methods()
+    fantech = os.path.join(_CAL_DIR, 'pi_forward_1280x720.json')
+    s = _Stub(fantech, profile='pi_forward_global_shutter')
+    s._calib = load(s)
+    sonix_fx = _cal_named('pi_downward_1280x720.json')['camera_matrix'][0][0]
+    fantech_fx = _cal_named('pi_forward_1280x720.json')['camera_matrix'][0][0]
+    assert s._calib is not None
+    assert s._calib['K'][0] == pytest.approx(sonix_fx), (
+        f"fx {s._calib['K'][0]} is not the Sonix's {sonix_fx} "
+        f"(the Fantech's is {fantech_fx})")
+    assert s.warned, 'the substitution must be said, not silent'
+
+
+def test_a_mismatched_calibration_with_no_replacement_gives_no_K():
+    load, _ = _methods()
+    fantech = os.path.join(_CAL_DIR, 'pi_forward_1280x720.json')
+    s = _Stub(fantech, profile='forward')
+    s._calib = load(s)
+    assert s._calib is None, 'another lens is worse than no lens'
+    assert s.warned
+
+
+def test_a_calibration_that_names_its_profile_is_used_as_given():
+    load, _ = _methods()
+    fantech = os.path.join(_CAL_DIR, 'pi_forward_1280x720.json')
+    s = _Stub(fantech, profile='pi_forward')
+    s._calib = load(s)
+    assert s._calib['K'][0] == pytest.approx(
+        _cal_named('pi_forward_1280x720.json')['camera_matrix'][0][0])
+    assert not s.warned
