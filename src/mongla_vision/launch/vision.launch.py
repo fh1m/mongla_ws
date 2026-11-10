@@ -36,6 +36,8 @@ Nodes: mongla_camera_<camera>, mongla_detector_<camera>,
 Camera/detector/tracker log at WARN; the viewer logs at INFO.
 """
 
+from functools                    import partial
+
 from launch                       import LaunchDescription
 from launch.actions               import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
 from launch.conditions            import IfCondition
@@ -45,6 +47,7 @@ from launch.substitutions         import LaunchConfiguration, PythonExpression
 from launch_ros.actions           import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from mongla_localization import launch_defaults
+from mongla_localization.launch_respawn import respawning
 
 # Quiet by default: camera/tracker/depth emit only warnings+ so the console
 # isn't flooded during a mission (YOLO itself is already verbose=False). The
@@ -216,7 +219,8 @@ def generate_launch_description():
     # node's own logger to info so its always-on operator alignment line shows.
     _DET_QUIET = ['--log-level', 'warn', '--log-level', det_node + [':=info']]
 
-    camera_node = Node(
+    camera_node = partial(
+        Node,
         package='mongla_vision', executable='camera_node', name=cam_node,
         output='screen', ros_arguments=_QUIET, additional_env=_QUIET_ENV,
         parameters=[{
@@ -243,7 +247,8 @@ def generate_launch_description():
         }],
     )
 
-    detector_node = Node(
+    detector_node = partial(
+        Node,
         package='mongla_vision', executable='detector_node', name=det_node,
         output='screen', ros_arguments=_DET_QUIET, additional_env=_QUIET_ENV,
         parameters=[{
@@ -264,7 +269,8 @@ def generate_launch_description():
         }],
     )
 
-    tracker_node = Node(
+    tracker_node = partial(
+        Node,
         package='mongla_vision', executable='tracker_node', name=trk_node,
         output='screen', ros_arguments=_QUIET, additional_env=_QUIET_ENV,
         parameters=[{
@@ -281,7 +287,8 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('tracking')),
     )
 
-    depth_node = Node(
+    depth_node = partial(
+        Node,
         package='mongla_vision', executable='depth_estimation_node',
         name=['mongla_depth_', cam], output='screen', ros_arguments=_QUIET,
         additional_env=_QUIET_ENV,
@@ -294,7 +301,8 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('depth')),
     )
 
-    flow_node = Node(
+    flow_node = partial(
+        Node,
         package='mongla_vision', executable='flow_node',
         name='mongla_flow_velocity', output='screen', ros_arguments=_QUIET,
         additional_env=_QUIET_ENV,
@@ -311,7 +319,8 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('flow')),
     )
 
-    lock_node = Node(
+    lock_node = partial(
+        Node,
         package='mongla_vision', executable='lock_node',
         name=['mongla_lock_', cam], output='screen',
         parameters=[{
@@ -348,6 +357,15 @@ def generate_launch_description():
     args, settings = launch_defaults.for_launch_file(args, __file__)
 
     return LaunchDescription(
-        args + settings + [camera_node, detector_node, tracker_node, lock_node, depth_node,
-                flow_node, image_viewer, shutdown_on_viewer_exit]
+        args + settings + [
+            # Each restarts 2 s after it dies mid-run, three times, then stays
+            # down (`launch_respawn`). The viewer does not: closing it ends the
+            # group on purpose.
+            *respawning(camera_node, 'the camera'),
+            *respawning(detector_node, 'the detector'),
+            *respawning(tracker_node, 'the tracker'),
+            *respawning(lock_node, 'the lock ladder'),
+            *respawning(depth_node, 'the depth estimator'),
+            *respawning(flow_node, 'the flow node'),
+            image_viewer, shutdown_on_viewer_exit]
     )

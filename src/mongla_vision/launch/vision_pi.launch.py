@@ -38,6 +38,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from mongla_localization import launch_defaults
+from mongla_localization.launch_respawn import respawning
 
 # Framework chatter off, our own nodes at info. Same convention as the other
 # launch files: a process default of `warn` with per-logger `info` pins.
@@ -449,78 +450,79 @@ def generate_launch_description():
     # to `mongla_detector_dual` and ros2 warned about duplicate names. The
     # launcher's own default name is already `mongla_detector_dual`, and the two
     # detectors name themselves.
-    detectors = Node(
-        package='mongla_vision', executable='detector_dual_node',
-        output='screen', ros_arguments=_QUIET,
-        parameters=[{
-            'fwd_model_path': LaunchConfiguration('fwd_model'),
-            'dwn_model_path': LaunchConfiguration('dwn_model'),
-            'fwd_models':     LaunchConfiguration('fwd_models'),
-            'dwn_models':     LaunchConfiguration('dwn_models'),
-            'fwd_active_model': LaunchConfiguration('fwd_active'),
-            'dwn_active_model': LaunchConfiguration('dwn_active'),
-            'publish_contours': LaunchConfiguration('contours'),
-            'fwd_classes':    LaunchConfiguration('fwd_classes'),
-            'dwn_classes':    LaunchConfiguration('dwn_classes'),
-            'fwd_conf':       LaunchConfiguration('conf'),
-            'dwn_conf':       LaunchConfiguration('conf'),
-            'imgsz':          LaunchConfiguration('imgsz'),
-            'max_det':        LaunchConfiguration('max_det'),
-            'vision_profile':  LaunchConfiguration('vision'),
-            'preprocess':      LaunchConfiguration('preprocess'),
-            'range_crop':      LaunchConfiguration('range_crop'),
-            'preprocess_clip': LaunchConfiguration('preprocess_clip'),
-            'paused':         LaunchConfiguration('paused'),
-            'replay':         LaunchConfiguration('replay'),
-            # The Hailo backend ignores it (`**_ignored`), but the value has to
-            # be SOMETHING that is not 'cuda:0': `gpu.select_device` raises on a
-            # Pi, and the factory builds the backend from the model extension,
-            # not from this.
-            'device':         'cpu',
-            'half':           False,
+    def detectors() -> Node:
+        return Node(
+            package='mongla_vision', executable='detector_dual_node',
+            output='screen', ros_arguments=_QUIET,
+            parameters=[{
+                'fwd_model_path': LaunchConfiguration('fwd_model'),
+                'dwn_model_path': LaunchConfiguration('dwn_model'),
+                'fwd_models':     LaunchConfiguration('fwd_models'),
+                'dwn_models':     LaunchConfiguration('dwn_models'),
+                'fwd_active_model': LaunchConfiguration('fwd_active'),
+                'dwn_active_model': LaunchConfiguration('dwn_active'),
+                'publish_contours': LaunchConfiguration('contours'),
+                'fwd_classes':    LaunchConfiguration('fwd_classes'),
+                'dwn_classes':    LaunchConfiguration('dwn_classes'),
+                'fwd_conf':       LaunchConfiguration('conf'),
+                'dwn_conf':       LaunchConfiguration('conf'),
+                'imgsz':          LaunchConfiguration('imgsz'),
+                'max_det':        LaunchConfiguration('max_det'),
+                'vision_profile':  LaunchConfiguration('vision'),
+                'preprocess':      LaunchConfiguration('preprocess'),
+                'range_crop':      LaunchConfiguration('range_crop'),
+                'preprocess_clip': LaunchConfiguration('preprocess_clip'),
+                'paused':         LaunchConfiguration('paused'),
+                'replay':         LaunchConfiguration('replay'),
+                # The Hailo backend ignores it (`**_ignored`), but the value has to
+                # be SOMETHING that is not 'cuda:0': `gpu.select_device` raises on a
+                # Pi, and the factory builds the backend from the model extension,
+                # not from this.
+                'device':         'cpu',
+                'half':           False,
 
-            'fwd_cam_profile':         LaunchConfiguration('fwd_profile'),
-            'dwn_cam_profile':         LaunchConfiguration('dwn_profile'),
-            'fwd_cam_device_path':     LaunchConfiguration('fwd_device_path'),
-            'dwn_cam_device_path':     LaunchConfiguration('dwn_device_path'),
-            'fwd_cam_calibration':     LaunchConfiguration('fwd_calibration'),
-            'dwn_cam_calibration':     LaunchConfiguration('dwn_calibration'),
-            'fwd_cam_fps':             LaunchConfiguration('fwd_fps'),
-            'dwn_cam_fps':             LaunchConfiguration('dwn_fps'),
-            'fwd_cam_publish_rate_hz': LaunchConfiguration('fwd_publish_hz'),
-            'dwn_cam_publish_rate_hz': LaunchConfiguration('dwn_publish_hz'),
+                'fwd_cam_profile':         LaunchConfiguration('fwd_profile'),
+                'dwn_cam_profile':         LaunchConfiguration('dwn_profile'),
+                'fwd_cam_device_path':     LaunchConfiguration('fwd_device_path'),
+                'dwn_cam_device_path':     LaunchConfiguration('dwn_device_path'),
+                'fwd_cam_calibration':     LaunchConfiguration('fwd_calibration'),
+                'dwn_cam_calibration':     LaunchConfiguration('dwn_calibration'),
+                'fwd_cam_fps':             LaunchConfiguration('fwd_fps'),
+                'dwn_cam_fps':             LaunchConfiguration('dwn_fps'),
+                'fwd_cam_publish_rate_hz': LaunchConfiguration('fwd_publish_hz'),
+                'dwn_cam_publish_rate_hz': LaunchConfiguration('dwn_publish_hz'),
 
-            # The lock ladder, in this process. It was two separate
-            # lock_node processes; the Hailo allows one VDevice per process, so
-            # with XFeat on the chip they raced the detector for it. Composed,
-            # all of them share one VDevice. Why each value is passed:
-            #   act_conf      -- the B-59 acting bar; a pool day must reach it
-            #   target_width  -- the anchor's metric scale; a measured prop
-            #                    beats the rulebook nominal
-            #   medium        -- the lock rectifies its OBJECT points
-            # Place recognition is deliberately NOT plumbed: it configures
-            # itself from ~/.mongla/*.yaml so every launch path behaves alike
-            # (a guard test fails if the plumbing comes back).
-            'lock':                   ParameterValue(
-                LaunchConfiguration('lock'), value_type=bool),
-            'lock_follow':            True,
-            'lock_anchor':            True,
-            'lock_act_conf':          LaunchConfiguration('act_conf'),
-            'lock_anchor_xfeat_hef':  ParameterValue(
-                LaunchConfiguration('anchor_xfeat_hef'), value_type=bool),
-            'lock_anchor_semi_dense': ParameterValue(
-                LaunchConfiguration('anchor_semi_dense'), value_type=bool),
-            'lock_medium':            LaunchConfiguration('medium'),
-            'fwd_lock_target_class':  LaunchConfiguration('lock_class'),
-            'dwn_lock_target_class':  LaunchConfiguration('dwn_lock_class'),
-            'fwd_lock_anchor_bank':   LaunchConfiguration('bank_forward'),
-            'dwn_lock_anchor_bank':   LaunchConfiguration('bank_downward'),
-            'fwd_lock_target_width_m': ParameterValue(
-                LaunchConfiguration('target_width_m_forward'), value_type=float),
-            'dwn_lock_target_width_m': ParameterValue(
-                LaunchConfiguration('target_width_m_downward'), value_type=float),
-        }],
-    )
+                # The lock ladder, in this process. It was two separate
+                # lock_node processes; the Hailo allows one VDevice per process, so
+                # with XFeat on the chip they raced the detector for it. Composed,
+                # all of them share one VDevice. Why each value is passed:
+                #   act_conf      -- the B-59 acting bar; a pool day must reach it
+                #   target_width  -- the anchor's metric scale; a measured prop
+                #                    beats the rulebook nominal
+                #   medium        -- the lock rectifies its OBJECT points
+                # Place recognition is deliberately NOT plumbed: it configures
+                # itself from ~/.mongla/*.yaml so every launch path behaves alike
+                # (a guard test fails if the plumbing comes back).
+                'lock':                   ParameterValue(
+                    LaunchConfiguration('lock'), value_type=bool),
+                'lock_follow':            True,
+                'lock_anchor':            True,
+                'lock_act_conf':          LaunchConfiguration('act_conf'),
+                'lock_anchor_xfeat_hef':  ParameterValue(
+                    LaunchConfiguration('anchor_xfeat_hef'), value_type=bool),
+                'lock_anchor_semi_dense': ParameterValue(
+                    LaunchConfiguration('anchor_semi_dense'), value_type=bool),
+                'lock_medium':            LaunchConfiguration('medium'),
+                'fwd_lock_target_class':  LaunchConfiguration('lock_class'),
+                'dwn_lock_target_class':  LaunchConfiguration('dwn_lock_class'),
+                'fwd_lock_anchor_bank':   LaunchConfiguration('bank_forward'),
+                'dwn_lock_anchor_bank':   LaunchConfiguration('bank_downward'),
+                'fwd_lock_target_width_m': ParameterValue(
+                    LaunchConfiguration('target_width_m_forward'), value_type=float),
+                'dwn_lock_target_width_m': ParameterValue(
+                    LaunchConfiguration('target_width_m_downward'), value_type=float),
+            }],
+        )
 
     def tracker(camera_name: str, rate_arg: str) -> Node:
         return Node(
@@ -600,6 +602,32 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('lock')),
         )
 
+    def flow() -> Node:
+        return Node(package='mongla_vision', executable='flow_node',
+               name='mongla_flow_velocity', output='screen',
+               parameters=[{
+                   'camera':       'downward',
+                   'medium':       LaunchConfiguration('medium'),
+                   'pool_depth_m': ParameterValue(
+                       LaunchConfiguration('pool_depth_m'), value_type=float),
+                   'pool_depth_min_m': ParameterValue(
+                       LaunchConfiguration('pool_depth_min_m'), value_type=float),
+                   'pool_depth_max_m': ParameterValue(
+                       LaunchConfiguration('pool_depth_max_m'), value_type=float),
+                   # The SAME calibration the downward camera_node gets. Passing
+                   # them separately is how they came to disagree.
+                   'calibration':  LaunchConfiguration('dwn_calibration'),
+                   'profile':      LaunchConfiguration('dwn_profile'),
+                   # Floor instruments. Both OFF by default; see flow_node.
+                   'tile_m':       ParameterValue(
+                       LaunchConfiguration('tile_m'), value_type=float),
+                   'lane_lines':   ParameterValue(
+                       LaunchConfiguration('lane_lines'), value_type=bool),
+                   'caustic_suppression': ParameterValue(
+                       LaunchConfiguration('caustics'), value_type=bool),
+               }],
+               condition=IfCondition(LaunchConfiguration('flow')))
+
     # `launch: vision_pi:` in ~/.mongla/bringup.yaml re-defaults these, and its
     # `nodes:` reach the nodes below -- only when this file is the one typed.
     args, settings = launch_defaults.for_launch_file(args, __file__)
@@ -613,41 +641,21 @@ def generate_launch_description():
         # detectors and the control loop. Measured on the Pi, 1024x1024x64:
         # 4.76 ms at blas=1/split=2 against 5.33 ms at blas=4/split=2.
         SetEnvironmentVariable('OPENBLAS_NUM_THREADS', '1'),
-        detectors,
-        tracker('forward',  'fwd_frame_rate'),
-        tracker('downward', 'dwn_frame_rate'),
-        Node(package='mongla_vision', executable='flow_node',
-             name='mongla_flow_velocity', output='screen',
-             parameters=[{
-                 'camera':       'downward',
-                 'medium':       LaunchConfiguration('medium'),
-                 'pool_depth_m': ParameterValue(
-                     LaunchConfiguration('pool_depth_m'), value_type=float),
-                 'pool_depth_min_m': ParameterValue(
-                     LaunchConfiguration('pool_depth_min_m'), value_type=float),
-                 'pool_depth_max_m': ParameterValue(
-                     LaunchConfiguration('pool_depth_max_m'), value_type=float),
-                 # The SAME calibration the downward camera_node gets. Passing
-                 # them separately is how they came to disagree.
-                 'calibration':  LaunchConfiguration('dwn_calibration'),
-                 'profile':      LaunchConfiguration('dwn_profile'),
-                 # Floor instruments. Both OFF by default; see flow_node.
-                 'tile_m':       ParameterValue(
-                     LaunchConfiguration('tile_m'), value_type=float),
-                 'lane_lines':   ParameterValue(
-                     LaunchConfiguration('lane_lines'), value_type=bool),
-                 'caustic_suppression': ParameterValue(
-                     LaunchConfiguration('caustics'), value_type=bool),
-             }],
-             condition=IfCondition(LaunchConfiguration('flow'))),
+        # Every process below restarts 2 s after it dies mid-run, three times,
+        # then stays down (`launch_respawn`). The cameras live inside
+        # `detectors`, so its restart also reopens a camera that vanished.
+        *respawning(detectors, 'the detectors and cameras'),
+        *respawning(lambda: tracker('forward', 'fwd_frame_rate'), 'the forward tracker'),
+        *respawning(lambda: tracker('downward', 'dwn_frame_rate'), 'the downward tracker'),
+        *respawning(flow, 'the flow node'),
         # The ladders are composed into `detectors` above (`lock:=`), not
         # started here: as separate processes they raced it for the Hailo.
-        solver('forward'),
-        solver('downward'),
-        solver_near('forward'),
-        solver_near('downward'),
-        pose_fuse('forward'),
-        pose_fuse('downward'),
+        *respawning(lambda: solver('forward'), 'the forward pose solver'),
+        *respawning(lambda: solver('downward'), 'the downward pose solver'),
+        *respawning(lambda: solver_near('forward'), 'the forward near pose solver'),
+        *respawning(lambda: solver_near('downward'), 'the downward near pose solver'),
+        *respawning(lambda: pose_fuse('forward'), 'the forward pose fuse'),
+        *respawning(lambda: pose_fuse('downward'), 'the downward pose fuse'),
         Node(package='mongla_vision', executable='vision_display',
              name='mongla_display', output='screen',
              parameters=[{'camera': 'forward'}],

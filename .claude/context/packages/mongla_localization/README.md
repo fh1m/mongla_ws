@@ -132,6 +132,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `heading_anchor.py` | Recover an ABSOLUTE heading from a prop whose world bearing is known. |
 | `inekf.py` | Right-invariant EKF on SE_2(3): where the hull is, from what it can feel. |
 | `launch_defaults.py` | Bringup settings from a file, so a pool day is a file and not a long command. |
+| `launch_respawn.py` | Restart a vehicle process that dies mid-run, three times, then leave it down. |
 | `localization_inputs.py` | What the localization node does with each measurement as it arrives. |
 | `localization_node.py` | The vehicle's own answer to "where am I", fused from every sensor it has. |
 | `localization_publish.py` | What the localization node publishes: the odometry and its diagnostic line. |

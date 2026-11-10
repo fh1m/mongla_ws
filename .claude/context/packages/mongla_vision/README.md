@@ -197,6 +197,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `calibration/solver.py` | Camera calibration that PROVES its own answer instead of asserting it. |
 | `cameras/camera.py` | Abstract Camera — every image source implements this. |
 | `cameras/discover.py` | discover_cameras() -- probe connected USB cameras. |
+| `cameras/reopen.py` | When a camera that has stopped delivering is closed and opened again. |
 | `cameras/ros_topic.py` | subscribes to a sensor_msgs/Image topic. |
 | `cameras/v4l2_mailbox.py` | A mailbox, not a queue: always the newest frame, with the kernel's timestamp. |
 | `cameras/video_file.py` | run the vision pipeline on a pre-recorded video file. |

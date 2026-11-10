@@ -387,9 +387,10 @@ flowchart LR
 
 So a filter blends them: predict forward on the IMU, then correct with whatever else arrived.
 Two details carry it. It is **right-invariant** — the maths lives on the rotation group, so
-there is no Euler-angle singularity near vertical. And a measurement that arrives late is
-**replayed at the instant it describes**: a detection that took 18 ms is evidence about where the
-vehicle *was*.
+there is no Euler-angle singularity near vertical. And with `retrodict:=true` a measurement
+that arrives late is **replayed at the instant it describes**: a detection that took 18 ms is
+evidence about where the vehicle *was*. It is a switch, off by default, until a water run
+measures what it buys.
 
 <details>
 <summary><b>The maths, if you want it</b></summary>
@@ -773,10 +774,10 @@ the kind of thing that goes stale — `test_doc_drift.py` fails any doc that sta
 > it's wrong."* — Richard Feynman
 
 [`measured-bars.md`](.claude/context/measured-bars.md) is the file this project is really built
-on: **110 entries, 860 rows of numbers**, each with the method, the conditions and the bar it had
+on: **111 entries, 871 rows of numbers**, each with the method, the conditions and the bar it had
 to clear. Tests read it. A constant that drifts from it fails CI.
 
-**18 of those 110 entries say in their own title that they took an earlier result back.** 7
+**18 of those 111 entries say in their own title that they took an earlier result back.** 7
 more measured an idea and concluded it should stay switched off. The retractions live in the
 same file as the results that stand, in the middle rather than in an appendix:
 
