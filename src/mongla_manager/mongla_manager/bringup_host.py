@@ -42,16 +42,30 @@ def _check_ros_env() -> list[tuple[str, str, str]]:
     return out
 
 
-def _check_disk() -> tuple[str, str]:
-    try:
-        free_gb = shutil.disk_usage('/').free / 1e9
-    except OSError as exc:
-        return WARN, f'could not stat /: {exc}'
-    if free_gb < 1.0:
+# Graded here and by the manager's live health report (host_health.py), so the
+# preflight and the run cannot disagree about the same disk.
+DISK_FAIL_GB = 1.0
+DISK_WARN_GB = 3.0
+
+
+def read_disk_free_gb(path: str = '/') -> float:
+    return shutil.disk_usage(path).free / 1e9
+
+
+def _disk_verdict(free_gb: float) -> tuple[str, str]:
+    if free_gb < DISK_FAIL_GB:
         return FAIL, f'{free_gb:.1f} GB free -- logging/models will fail'
-    if free_gb < 3.0:
+    if free_gb < DISK_WARN_GB:
         return WARN, f'{free_gb:.1f} GB free -- low for bag/log capture'
     return PASS, f'{free_gb:.1f} GB free'
+
+
+def _check_disk() -> tuple[str, str]:
+    try:
+        free_gb = read_disk_free_gb()
+    except OSError as exc:
+        return WARN, f'could not stat /: {exc}'
+    return _disk_verdict(free_gb)
 
 
 # --------------------------------------------------------------------------- #
@@ -593,16 +607,24 @@ def _throttled_verdict(raw: int) -> tuple[str, str]:
         f'Suspect the supply or the USB-C cable under load')
 
 
+def read_throttled() -> int:
+    """The `get_throttled` bitmask. Raises FileNotFoundError off a Pi and
+    ValueError on output it cannot read; up to 3 s, so never on an executor."""
+    out = subprocess.run(['vcgencmd', 'get_throttled'], capture_output=True,
+                         text=True, timeout=3).stdout.strip()
+    if '=' not in out:
+        raise ValueError(f'could not parse `vcgencmd get_throttled` output: {out[:60]!r}')
+    try:
+        return int(out.split('=', 1)[1].strip(), 0)
+    except ValueError:
+        raise ValueError(f'non-numeric throttle value: {out[:60]!r}') from None
+
+
 def _check_pi_power() -> tuple[str, str]:
     try:
-        out = subprocess.run(['vcgencmd', 'get_throttled'], capture_output=True,
-                             text=True, timeout=3).stdout.strip()
+        raw = read_throttled()
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return PASS, 'not a Raspberry Pi (vcgencmd absent) -- skipped'
-    if '=' not in out:
-        return WARN, f'could not parse `vcgencmd get_throttled` output: {out[:60]!r}'
-    try:
-        raw = int(out.split('=', 1)[1].strip(), 0)
-    except ValueError:
-        return WARN, f'non-numeric throttle value: {out[:60]!r}'
+    except ValueError as exc:
+        return WARN, str(exc)
     return _throttled_verdict(raw)

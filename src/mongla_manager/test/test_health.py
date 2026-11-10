@@ -229,7 +229,9 @@ def test_a_backend_MISSING_a_method_is_UNKNOWN_not_a_crash():
     m._register_health()
     states = {k: v.state for k, v in m._health.poll().items()}
     assert set(states) >= {'board_link', 'barometer', 'thrusters', 'detector'}
-    assert all(s is not State.OK for s in states.values())
+    # The host rows read this computer, not the backend, so they may be OK.
+    host = {'host_disk', 'pi_temperature', 'pi_power'}
+    assert all(s is not State.OK for k, s in states.items() if k not in host)
 
 
 def test_the_tick_speaks_only_when_the_STATE_CHANGES():
