@@ -1,0 +1,126 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 523-526,566-583
+.claude/context/README.md
+  h_f1b9066eb9899c 60,64-70,74-82,86-88,92-95,99-105,109-112,116-118
+.claude/context/kutum/README.md
+  h_f1b9066eb9899c 77
+.claude/context/kutum/pi-and-env-traps.md
+  h_f1b9066eb9899c 20-24
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 142-146,7399-7421,7428-7431,7437-7726
+.claude/context/packages/mongla_localization/README.md
+  h_f1b9066eb9899c 146
+.claude/context/packages/mongla_manager/README.md
+  h_f1b9066eb9899c 69
+.claude/context/perception/hailo-vision.md
+  h_f1b9066eb9899c 673-676
+.claude/context/perception/vision-pipeline.md
+  h_f1b9066eb9899c 1-209
+.claude/context/platform/foxglove-and-bags.md
+  h_f1b9066eb9899c 82-86
+.claude/context/platform/ros2-conventions.md
+  h_f1b9066eb9899c 62-63
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 413,432,473,488-489
+.claude/context/upstream/README.md
+  h_f1b9066eb9899c 40-41,109-110
+.claude/context/upstream/pr-y-a-floor-below-the-mission.md
+  h_f1b9066eb9899c 1-107
+.claude/context/upstream/pr-z-four-new-senses.md
+  h_f1b9066eb9899c 1-269
+.claude/skills/train-model/SKILL.md
+  h_f1b9066eb9899c 66-68
+CLAUDE.md
+  h_f1b9066eb9899c 124-128
+README.md
+  h_f1b9066eb9899c 64-65,797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+kutum/README.md
+  h_f1b9066eb9899c 61-70
+kutum/doctor.sh
+  h_f1b9066eb9899c 57-71,143-145,170-171
+kutum/env.sh
+  h_f1b9066eb9899c 24-27
+kutum/setup.sh
+  h_f1b9066eb9899c 115-120,125,136-137,142-151,209,221-232
+kutum/system/limits/99-mongla-realtime.conf
+  h_f1b9066eb9899c 1-6
+kutum/system/systemd/hailort.service
+  h_f1b9066eb9899c 1-56
+src/mongla_localization/mongla_localization/localization_inputs.py
+  h_f1b9066eb9899c 330-332,336-338,348-351
+src/mongla_localization/mongla_localization/realtime.py
+  h_f1b9066eb9899c 1-66
+src/mongla_localization/test/test_localization_node.py
+  h_f1b9066eb9899c 32-33,1089-1100,1138-1140,1149
+src/mongla_localization/test/test_the_manager_asks_for_realtime.py
+  h_f1b9066eb9899c 1-89
+src/mongla_manager/mongla_manager/auv_manager_node.py
+  h_f1b9066eb9899c 350-353,355
+src/mongla_manager/mongla_manager/bringup_check.py
+  h_f1b9066eb9899c 43-44,178-182
+src/mongla_manager/mongla_manager/bringup_host.py
+  h_f1b9066eb9899c 310-339
+src/mongla_manager/mongla_manager/health.py
+  h_f1b9066eb9899c 159-163,167-173
+src/mongla_manager/mongla_manager/node_health.py
+  h_f1b9066eb9899c 14-15,79-81,105,124-152,318-341,344
+src/mongla_manager/mongla_manager/node_setup.py
+  h_f1b9066eb9899c 111-115,510-512,523-531
+src/mongla_manager/mongla_manager/node_support.py
+  h_f1b9066eb9899c 225-249
+src/mongla_manager/package.xml
+  h_f1b9066eb9899c 15
+src/mongla_manager/test/test_health.py
+  h_f1b9066eb9899c 382-431
+src/mongla_manager/test/test_mission_keepalive.py
+  h_f1b9066eb9899c 80,84,96,341-420
+src/mongla_vision/mongla_vision/detection/__init__.py
+  h_f1b9066eb9899c 6-15
+src/mongla_vision/mongla_vision/detection/hailo.py
+  h_f1b9066eb9899c 27-32,354-404,450-451
+src/mongla_vision/mongla_vision/detection/hailo_device.py
+  h_f1b9066eb9899c 3-7,24-32,140,142-223
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  h_f1b9066eb9899c 91-92,133
+src/mongla_vision/mongla_vision/detector_setup.py
+  h_f1b9066eb9899c 47-56,292-331,449-471
+src/mongla_vision/test/test_detector_nms_is_live.py
+  h_f1b9066eb9899c 1-93
+src/mongla_vision/test/test_hailo_arbiter.py
+  h_f1b9066eb9899c 139-141,162,168,501-571
+src/mongla_vision/test/test_hailo_service_open.py
+  h_f1b9066eb9899c 1-119
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  h_f1b9066eb9899c 48-51
+test/test_every_camera_matrix_reader_removes_the_lens.py
+  h_f1b9066eb9899c 1-67
+test/test_kutum.py
+  h_f1b9066eb9899c 175-187
+tools/README.md
+  h_f1b9066eb9899c 58,79,88,99
+tools/bench/cv_hot_path.py
+  h_f1b9066eb9899c 1-57
+tools/bench/hailo_service_drill.py
+  h_f1b9066eb9899c 1-60
+tools/bench/overclock_soak.py
+  h_f1b9066eb9899c 1-148
+tools/bench/wake_latency.py
+  h_f1b9066eb9899c 1-168
+tools/ci/run_repo_integrity.py
+  h_f1b9066eb9899c 37
+tools/pool/pool_record.sh
+  h_f1b9066eb9899c 30-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "094d3b5da23764144604d4e3f36c1f549df5bb67",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
