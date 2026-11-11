@@ -26,6 +26,14 @@ git -C "$FW" diff --quiet 2>/dev/null || DIRTY=" (dirty)"
 echo "revision: ${REV}${DIRTY}"
 printf '%s\n' "${REV}${DIRTY}" > "$HERE/.firmware_rev"
 
+# CI builds from the commit in FIRMWARE_PIN. A local checkout at another
+# commit still builds, and says which, so a result is never read as the pin's.
+PIN="$(grep -v '^#' "$HERE/FIRMWARE_PIN" | awk '{print $2}')"
+FULL="$(git -C "$FW" rev-parse HEAD 2>/dev/null || echo unknown)"
+if [[ "$FULL" != "$PIN" || -n "$DIRTY" ]]; then
+  echo "WARNING: this checkout is ${REV}${DIRTY}; CI judges the bench against ${PIN:0:7} (FIRMWARE_PIN)" >&2
+fi
+
 SRC=(
   "$HERE/bench_api.cpp"
   "$FW/src/control/mixer.cpp"

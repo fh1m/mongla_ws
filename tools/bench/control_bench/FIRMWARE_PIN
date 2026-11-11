@@ -1,0 +1,7 @@
+# The firmware commit the control bench is built from and judged against in
+# CI (tools/ci/ci_ros.sh). A local build uses the checkout beside the
+# workspace, and build.sh says so when that checkout is another commit.
+# One line: the repository, then the full commit. Moving it is a deliberate
+# pull request, which re-runs the bench and the wire drift guard against the
+# new firmware. We only ever read that repository.
+https://github.com/RakibulIslam1/srot-control-board.git f1d3ba92667b7fd25010bcbab155de4184b9f9ea
