@@ -61,7 +61,7 @@ success while doing nothing.
 > automatic mode every move uses. If you are here to judge whether the software works underwater, the honest answer is
 > that nobody knows yet, and this page will not pretend otherwise.
 
-That is also why there is a [ledger of retractions](#the-ledger): 119 measurement entries, of
+That is also why there is a [ledger of retractions](#the-ledger): 120 measurement entries, of
 which 18 say in their own title that they took an earlier result back, and 8 more measured an idea
 and concluded it should stay switched off.
 
@@ -794,10 +794,10 @@ the kind of thing that goes stale — `test_doc_drift.py` fails any doc that sta
 > it's wrong."* — Richard Feynman
 
 [`measured-bars.md`](.claude/context/measured-bars.md) is the file this project is really built
-on: **119 entries, 933 rows of numbers**, each with the method, the conditions and the bar it had
+on: **120 entries, 949 rows of numbers**, each with the method, the conditions and the bar it had
 to clear. Tests read it. A constant that drifts from it fails CI.
 
-**18 of those 119 entries say in their own title that they took an earlier result back.** 8
+**18 of those 120 entries say in their own title that they took an earlier result back.** 8
 more measured an idea and concluded it should stay switched off. The retractions live in the
 same file as the results that stand, in the middle rather than in an appendix:
 

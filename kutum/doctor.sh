@@ -54,6 +54,13 @@ if [ -z "$thr" ]; then warn "vcgencmd missing -- throttling cannot be read"
 elif [ "$thr" = "0x0" ]; then ok "never throttled since boot, ${temp} C now"
 else warn "throttled=$thr since boot (${temp} C now): undervoltage or heat; the detector rate will not hold"; fi
 
+# The clock setup asks for (measured-bars 82). The firmware reports what it
+# was told, so a card rebuilt without the system half shows as stock here.
+arm="$(vcgencmd get_config arm_freq 2>/dev/null | cut -d= -f2)"
+if   [ -z "$arm" ]; then warn "vcgencmd missing -- the ARM clock cannot be read"
+elif [ "$arm" = 2800 ]; then ok "ARM clock: 2800 MHz"
+else warn "ARM clock: $arm MHz, not the 2800 setup.sh --system writes -- about 15 % less CPU and Hailo rate under full load"; fi
+
 # The Hailo-8 is shared through HailoRT's service (measured-bars 80). Without
 # it each vision process opens the chip itself, and only one can.
 if systemctl is-active --quiet hailort.service 2>/dev/null; then ok "hailort.service: running"
