@@ -1,0 +1,26 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 142-143,7406-7481
+.claude/context/perception/hailo-frontier.md
+  h_f1b9066eb9899c 187-203
+README.md
+  h_f1b9066eb9899c 64,797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+src/mongla_vision/mongla_vision/detection/hailo_device.py
+  h_f1b9066eb9899c 22-30
+tools/README.md
+  h_f1b9066eb9899c 87
+tools/bench/rtc_vs_counter.py
+  h_f1b9066eb9899c 1-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "96409ab8e56a6595f0df058ef2505076d01388d5",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
