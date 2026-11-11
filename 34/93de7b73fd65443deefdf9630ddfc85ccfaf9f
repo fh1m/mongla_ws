@@ -1,0 +1,88 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 523-526,566-583
+.claude/context/README.md
+  h_f1b9066eb9899c 60,64-70,74-82,86-88,92-95,99-105,109-112,116-118
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 142,7396-7418,7425-7428,7432-7464,7500-7505
+.claude/context/packages/mongla_manager/README.md
+  h_f1b9066eb9899c 69
+.claude/context/perception/hailo-frontier.md
+  h_f1b9066eb9899c 195
+.claude/context/perception/hailo-vision.md
+  h_f1b9066eb9899c 673-676
+.claude/context/perception/vision-pipeline.md
+  h_f1b9066eb9899c 1-209
+.claude/context/platform/foxglove-and-bags.md
+  h_f1b9066eb9899c 82-86
+.claude/context/platform/ros2-conventions.md
+  h_f1b9066eb9899c 62-63
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 413,432,473,488-489
+.claude/context/upstream/README.md
+  h_f1b9066eb9899c 40-41,109-110
+.claude/context/upstream/pr-y-a-floor-below-the-mission.md
+  h_f1b9066eb9899c 1-107
+.claude/context/upstream/pr-z-four-new-senses.md
+  h_f1b9066eb9899c 1-269
+.claude/skills/train-model/SKILL.md
+  h_f1b9066eb9899c 66-68
+CLAUDE.md
+  h_f1b9066eb9899c 124-128
+README.md
+  h_f1b9066eb9899c 64-65,797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+src/mongla_localization/mongla_localization/localization_inputs.py
+  h_f1b9066eb9899c 330-332,336-338,348-351
+src/mongla_localization/test/test_localization_node.py
+  h_f1b9066eb9899c 32-33,1089-1100,1138-1140,1149
+src/mongla_manager/mongla_manager/bringup_check.py
+  h_f1b9066eb9899c 43-44,178-182
+src/mongla_manager/mongla_manager/bringup_host.py
+  h_f1b9066eb9899c 310-339
+src/mongla_manager/mongla_manager/health.py
+  h_f1b9066eb9899c 159-163,167-173
+src/mongla_manager/mongla_manager/node_health.py
+  h_f1b9066eb9899c 14-15,79-81,105,124-152,318-341,344
+src/mongla_manager/mongla_manager/node_setup.py
+  h_f1b9066eb9899c 111-115,510-512,523-531
+src/mongla_manager/mongla_manager/node_support.py
+  h_f1b9066eb9899c 225-249
+src/mongla_manager/package.xml
+  h_f1b9066eb9899c 15
+src/mongla_manager/test/test_health.py
+  h_f1b9066eb9899c 382-431
+src/mongla_manager/test/test_mission_keepalive.py
+  h_f1b9066eb9899c 80,84,96,341-420
+src/mongla_vision/mongla_vision/detection/hailo.py
+  h_f1b9066eb9899c 27-32,354-404,450-451
+src/mongla_vision/mongla_vision/detection/hailo_device.py
+  h_f1b9066eb9899c 22-24
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  h_f1b9066eb9899c 91-92,133
+src/mongla_vision/mongla_vision/detector_setup.py
+  h_f1b9066eb9899c 47-56,292-331,449-471
+src/mongla_vision/test/test_detector_nms_is_live.py
+  h_f1b9066eb9899c 1-93
+src/mongla_vision/test/test_hailo_arbiter.py
+  h_f1b9066eb9899c 139-141,162,168,501-571
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  h_f1b9066eb9899c 48-51
+test/test_every_camera_matrix_reader_removes_the_lens.py
+  h_f1b9066eb9899c 1-67
+tools/ci/run_repo_integrity.py
+  h_f1b9066eb9899c 37
+tools/pool/pool_record.sh
+  h_f1b9066eb9899c 30-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "3493de7b73fd65443deefdf9630ddfc85ccfaf9f",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
