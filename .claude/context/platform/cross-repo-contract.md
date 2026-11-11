@@ -129,7 +129,18 @@ So the routine when a firmware revision lands is fixed and short:
 git -C Mongla_others/srot-control-board fetch origin && git -C Mongla_others/srot-control-board merge --ff-only origin/main
 SROT_FW_DIR=$PWD/Mongla_others/srot-control-board python -m pytest src/mongla_control/test/test_srot_protocol_drift.py -q
 # then bump FW_BEHAVIOUR_REV in srot_protocol.py to the new rev and document what it means
+# then move the commit in tools/bench/control_bench/FIRMWARE_PIN, in its own pull request
 ```
+
+**Key point: CI judges against one pinned firmware commit.** The ROS job fetches the
+firmware read-only at the commit in `tools/bench/control_bench/FIRMWARE_PIN`, builds the
+control bench from it (the board's own mixer, attitude, depth and feedforward sources,
+compiled for the host) and runs its 94 tests, and the drift suite reads the same checkout.
+Before 2026-11-11 both ran only on a dev box, against whatever its mirror held: the mirror
+was two months behind `main` and nothing said so. A local `build.sh` now prints a warning
+when the checkout is not the pinned commit. Moving the pin is how a new firmware revision
+is accepted: the pull request that moves it is the run that proves the bench and the wire
+still match.
 
 **Caution: A green drift suite proves the wire matches, not that the vehicle behaves the same.**
 Rev 7 passed clean while shipping `FRAME_REVERSE`, which inverts every axis on our hull —
