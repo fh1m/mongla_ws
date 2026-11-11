@@ -64,6 +64,23 @@ from mongla_localization.launch_respawn import respawning
 # Grace between SIGINT and SIGTERM for the manager. Above the manager's
 # EMERGENCY_DISARM_S plus the brake, so a slow disarm confirmation is logged
 # rather than killed mid-poll (a test compares the two).
+
+# What a browser may do through foxglove_bridge. The bridge cannot tell one
+# browser from another, and its defaults let every one of them call any
+# service, set any node's parameters and publish on any topic -- which with
+# include_hidden reaches /mongla/move/_action/send_goal and
+# shield_max_depth_m, past the helm. So: drive only through the helm
+# (mongla_batighor/helm.py), tune only the detector's live settings, publish
+# nothing. test_the_bridge_only_lets_a_browser_drive_through_the_helm.
+BRIDGE_LIMITS = {
+    'capabilities': ['parameters', 'parametersSubscribe', 'services',
+                     'connectionGraph', 'assets'],
+    'service_whitelist': ['^/mongla/batighor/helm$'],
+    'param_whitelist': [
+        r'^/mongla_detector_(forward|downward)\.(conf|nms_floor|nms_iou|active_model|classes)$'],
+    'client_topic_whitelist': ['^$'],
+}
+
 MANAGER_SIGTERM_TIMEOUT_S = 12
 
 # The vehicle vision stack's own arguments, the ones this file does not
@@ -486,6 +503,7 @@ def generate_launch_description():
             # namespace => ROS 2 HIDDEN topics. Without this the live err_x_px/
             # err_y_px convergence plot is silently empty (default is false).
             'include_hidden':  True,
+            **BRIDGE_LIMITS,
         }],
         condition=IfCondition(LaunchConfiguration('batighor')),
     )

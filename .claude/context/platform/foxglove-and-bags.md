@@ -178,7 +178,8 @@ Default allowlist: `state`, `imu_rates`, `move` action feedback/status, and per-
 finalizes the bag. Override the parent dir with `MONGLA_RUN_DIR`.
 
 **Replay-to-tune loop:** `replay` a bag → run `vision_display` or Foxglove against it →
-`ros2 param set /mongla_detector_forward conf 0.45` and watch the effect — all on the
+`ros2 param set /mongla_detector_forward conf 0.45` (or the Parameters panel in Batighor,
+which may change only the detectors' live settings) and watch the effect — all on the
 bench, no pool. (The control loop needs the manager+MAVLink; **detection/vision tuning**
 is what replays cleanly.)
 
