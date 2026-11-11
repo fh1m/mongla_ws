@@ -30,7 +30,7 @@ import rclpy
 from rclpy.node import Node
 
 from sensor_msgs.msg import Image
-from cv_bridge        import CvBridge
+from mongla_vision import image_msg
 
 from mongla_vision import (
     make_camera, make_camera_from_profile,
@@ -88,7 +88,6 @@ class VisionNode(Node):
         self._deadband   = float(self.get_parameter('alignment_deadband').value)
 
         self._publish_dbg = bool(self.get_parameter('publish_debug_image').value)
-        self._bridge      = CvBridge()
         if self._publish_dbg:
             ns_out = f'/mongla/vision/{self._cam_name}'
             self._pub_dbg = self.create_publisher(Image, f'{ns_out}/image_debug', 5)
@@ -154,7 +153,7 @@ class VisionNode(Node):
                 healthy=self._cam.is_healthy(),
                 deadband=self._deadband, primary=primary)
             try:
-                dbg = self._bridge.cv2_to_imgmsg(overlay, encoding='bgr8')
+                dbg = image_msg.to_msg(overlay, 'bgr8')
                 dbg.header.stamp    = self.get_clock().now().to_msg()
                 dbg.header.frame_id = str(self._info.get('frame_id') or self._cam_name)
                 self._pub_dbg.publish(dbg)

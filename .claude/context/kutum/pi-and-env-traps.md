@@ -17,6 +17,10 @@
   JetPack/ROS system numpy. ROS Humble's `cv_bridge` boost extension **and** the
   system `cv2` are compiled against the NumPy 1.x C-ABI and segfault under 2.x.
   `ultralytics` also pins `numpy<2.0.0`.
+  **The stack no longer imports `cv_bridge`** (measured-bars 78):
+  `mongla_vision/image_msg.py` converts between an Image message and an array,
+  byte-identical to it, and works under NumPy 2. What still holds the rule in
+  place is the distribution's `cv2` alone.
 - **Fix:** `pip3 install "numpy==1.26.4"` (last 1.x; correct target for this stack).
 - **Guard:** do not let any `pip install` pull numpy 2 back. If something forces it,
   reinstall 1.26.4 and that package with `--no-deps`.

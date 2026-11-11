@@ -136,6 +136,7 @@ is how `recommend()` happened.
 - [70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10)](#70-kutum-in-the-health-report--the-pi-and-the-hailo-8-as-one-machine-graded-by-their-own-firmware-2026-11-10)
 - [71. KUTUM'S CLOCK IN THE HEALTH REPORT — the RTC, and a wall clock that moves mid-session (2026-11-10)](#71-kutums-clock-in-the-health-report--the-rtc-and-a-wall-clock-that-moves-mid-session-2026-11-10)
 - [72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10)](#72-the-held-rung--a-weak-box-where-the-lock-is-more-accurate-and-it-failed-its-own-safety-bar-2026-11-10)
+- [78. CV_BRIDGE REPLACED — the same bytes, a frame read 75 times cheaper, and one copy fewer to send (2026-11-11)](#78-cv_bridge-replaced--the-same-bytes-a-frame-read-75-times-cheaper-and-one-copy-fewer-to-send-2026-11-11)
 <!-- contents:end -->
 
 ---
@@ -7259,3 +7260,44 @@ on. XFeat stayed at p50 16.6 ms on the chip.
 **Caution:** the offline replay has no follower, so its "off" understates the
 baseline. The table above is the follower comparison; the safety question it
 cannot answer is still the gate model's identity on the torpedo board.
+
+---
+
+## 78. CV_BRIDGE REPLACED — the same bytes, a frame read 75 times cheaper, and one copy fewer to send (2026-11-11)
+
+**Why.** Entry 77 found that `cv_bridge` is what breaks first beside a NumPy 2
+OpenCV, and the stack used it for three encodings in two directions.
+`mongla_vision/image_msg.py` does that directly on the message's buffer.
+
+**The bar, written before the swap.** Byte-identical messages and
+pixel-identical arrays against `cv_bridge` in every encoding and conversion the
+stack uses, and no slower in either direction.
+
+**Measured on Kutum** against `cv_bridge` 4.1.0, 640x360 `bgr8`, median of
+400, two runs while a compile was using two cores:
+
+| direction | `cv_bridge` | `image_msg` |
+|---|---|---|
+| array to message | 0.29 to 0.44 ms | 0.17 to 0.24 ms |
+| message to array, same encoding | 0.31 to 0.42 ms | **0.004 ms** |
+
+Identical in `bgr8`, `rgb8`, `mono8` and `32FC1`, and in every conversion
+between the first three. Reading is a view on the message's buffer;
+`cv_bridge` converted through `cvtColor` even when nothing needed converting.
+
+**Where the sending copy went.** Jazzy's generated setter for `Image.data`
+assigns an `array.array` as it is only when the message was built with field
+checks on. With them off, the default, it copies the whole frame into a new
+array: **0.129 ms** for 640x360, measured apart. `image_msg` builds the
+message with checks on and so pays one copy, not two. Humble's setter has no
+such branch.
+
+**On the real path:** the forward camera publishing through `to_msg` and a
+subscriber decoding through `to_array` over DDS on Kutum: 239 frames in 8 s,
+360x640x3, with `cv_bridge` never imported in either process. Under NumPy
+2.5.4 and OpenCV 5.0.0 the module round-trips where `cv_bridge` fails.
+
+**On the dev box** `cv_bridge` does not raise beside NumPy 2.2.6, it takes the
+interpreter down (exit -11), so the two vision test files that
+`importorskip`'d it now run there instead of being skipped. The agreement test
+runs `cv_bridge` in a child process for that reason.

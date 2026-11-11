@@ -74,7 +74,7 @@ def _check_disk() -> tuple[str, str]:
 def _check_vision_deps() -> list[tuple[str, str, str]]:
     out: list[tuple[str, str, str]] = []
 
-    # numpy<2 -- numpy 2 breaks the cv_bridge / cv2 ABI => every vision node
+    # numpy<2 -- numpy 2 breaks the system cv2's ABI => every vision node
     # dies with `_ARRAY_API not found` (pi-and-env-traps.md E1).
     try:
         import numpy

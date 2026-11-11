@@ -153,6 +153,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `draw_widgets.py` | reusable HUD micro-widgets for the mission-control strip. |
 | `factory.py` | Single dispatch point: source-name -> Camera instance. |
 | `identity.py` | Take GEOMETRY from the structure, IDENTITY from the symbol on it. |
+| `image_msg.py` | `sensor_msgs/Image` to a NumPy array and back, with no `cv_bridge`. |
 | `ladder_config.py` | One deck file for the ladder's switches, read by the node itself. |
 | `lock_anchor.py` | The anchor rung: enrol a reference or locate against the bank, and box what it found. |
 | `lock_frames.py` | LockNode's image and detection inputs: by topic, or by reference when composed. |

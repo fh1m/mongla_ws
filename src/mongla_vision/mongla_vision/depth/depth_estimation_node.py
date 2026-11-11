@@ -14,7 +14,7 @@ import time
 import cv2
 import numpy as np
 import rclpy
-from cv_bridge import CvBridge
+from mongla_vision import image_msg
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
@@ -78,7 +78,6 @@ class DepthEstimationNode(Node):
             if self._pub_map else None
         )
 
-        self._bridge      = CvBridge()
         self._frame_count = 0
         self._depth_map: np.ndarray | None = None   # (H, W) float32, 0=far 1=close
         self._depth_shape: tuple | None = None       # (orig_h, orig_w)
@@ -126,9 +125,9 @@ class DepthEstimationNode(Node):
         if self._frame_count % self._every_n != 0:
             return
         try:
-            frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            frame = image_msg.to_array(msg, 'bgr8')
         except Exception as exc:
-            self.get_logger().warning(f'[DEPTH] cv_bridge decode failed: {exc!r}')
+            self.get_logger().warning(f'[DEPTH] image decode failed: {exc!r}')
             return
 
         self._depth_shape = (frame.shape[0], frame.shape[1])
@@ -146,7 +145,7 @@ class DepthEstimationNode(Node):
 
         if self._pub_map and self._pub_depth_map is not None:
             try:
-                map_msg        = self._bridge.cv2_to_imgmsg(depth_full, encoding='32FC1')
+                map_msg        = image_msg.to_msg(depth_full, '32FC1')
                 map_msg.header = msg.header
                 self._pub_depth_map.publish(map_msg)
             except Exception:
