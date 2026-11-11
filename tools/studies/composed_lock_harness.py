@@ -177,13 +177,17 @@ def main() -> int:
                                       f'/mongla/vision/{cam}/detections',
                                       on_det, _qos.DETECTIONS)
 
-            ex = MultiThreadedExecutor()
+            # The executor the vehicle's composed node would pick
+            # (MONGLA_EXECUTOR), so both can be compared on one clip.
+            from mongla_localization.spin import make_executor
+            ex, ex_name = make_executor(classic=MultiThreadedExecutor)
             for n in nodes:
                 ex.add_node(n)
             threading.Thread(target=ex.spin, daemon=True).start()
-            t0 = time.monotonic()
+            t0, cpu0 = time.monotonic(), time.process_time()
             time.sleep(a.seconds)
             elapsed = time.monotonic() - t0
+            cpu_pct = 100.0 * (time.process_time() - cpu0) / elapsed
             lock._log_health()             # fold in the last partial window
             ex.shutdown()
             ex = None
@@ -209,6 +213,7 @@ def main() -> int:
           f'{elapsed:.0f} s')
     print(f'detections  {seen["msgs"] / elapsed:6.1f} Hz published, '
           f'{100 * frac:.0f} % with a target')
+    print(f'executor    {ex_name}, process CPU {cpu_pct:.1f} % of one core')
     print(f'anchor      backend {backend}, {enrolled} checkpoint(s) enrolled')
     print(f'XFeat       {len(xf_ms)} chip call(s), p50 {p50:.2f} ms, '
           f'p95 {p95:.2f} ms, {len(errors)} raised')

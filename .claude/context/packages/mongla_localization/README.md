@@ -145,5 +145,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `prop_placement.py` | Where a prop is, from several sightings of it taken from where we think we are. |
 | `resection.py` | Absolute position from bearings to props whose positions we know. |
 | `retro.py` | Apply every filter event at the instant it describes, not the instant it arrived. |
+| `spin.py` | One place that decides which rclpy executor a Mongla node spins on. |
 | `tile_grating.py` | The pool floor is a surveyed 2-D grating. Read it like an optical encoder. |
 <!-- modules:end -->
