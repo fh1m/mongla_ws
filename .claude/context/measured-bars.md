@@ -139,6 +139,8 @@ is how `recommend()` happened.
 - [73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)](#73-the-executor--what-delivering-one-callback-costs-and-what-that-is-worth-in-a-real-node-2026-11-10)
 - [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
 - [79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)](#79-the-compiled-score-threshold-is-a-default--the-floor-is-set-when-the-model-is-configured-2026-11-11)
+- [80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11)](#80-the-hailort-service--two-processes-on-one-chip-at-no-cost-a-frame-built-measured-not-installed-2026-11-11)
+- [81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11)](#81-the-rtc-is-not-a-control-clock--one-second-steps-read-with-tens-of-milliseconds-of-jitter-2026-11-11)
 <!-- contents:end -->
 
 ---
@@ -7401,3 +7403,79 @@ is untouched.
 
 **Not measured:** a floor below 0.05, and the 100-boxes-per-class cap, which
 a very low floor on a many-class graph could reach.
+
+## 80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11)
+
+One Hailo-8 serves one process: a second `VDevice` fails with
+`HAILO_OUT_OF_PHYSICAL_DEVICES` (74). HailoRT's answer is `hailort_service`,
+a daemon that owns the chip and serves clients over a local socket. The
+packaged library on Kutum is built without it, which is why
+`multi_process_service=True` has always raised
+`HailoRTInvalidOperationException` here, and why this was written off. Built
+from the v4.24.0 source with `-DHAILO_BUILD_SERVICE=1` in a scratch
+directory, and run from there.
+
+**Bars, written before the run:**
+
+| bar | what would falsify it |
+|---|---|
+| share | either of two processes, each with its own `VDevice` in one group, fails or stalls during the run |
+| cost | one process through the service: median more than 10 % over direct, or p99 more than 1 ms over |
+
+**Measured on Kutum**, `gate_sharks`, 580 inferences after 20 discarded:
+
+| arrangement | median | p99 | rate |
+|---|---|---|---|
+| direct, packaged library | 10.452 ms | 10.475 ms | 95.7 Hz |
+| direct, source build | 10.453 ms | 10.478 ms | 95.7 Hz |
+| through the service, one process | 10.464 ms | 10.518 ms | 95.5 Hz |
+| through the service, two processes at once | 20.928 ms each | 20.995 ms | 47.8 Hz each |
+| direct, two processes at once | the second fails with error 74 | | |
+
+Both bars hold: **+0.012 ms** a frame at the median, +0.04 ms at p99, and two
+processes split the chip evenly with a sum of 95.6 Hz. An idle service does
+not hold the chip: a direct process ran at full rate beside it. The daemon's
+resident memory was 11.8 MB. The packaged client fails the same way with the
+service running, so using it means installing the source build of the library
+as well as the daemon.
+
+**Decision: not installed.** The vision stack is one process on purpose, and
+nothing in it needs a second. What the service would buy is a detector per
+process (no shared interpreter lock between the forward and downward
+cameras) and bench tools running beside a live stack. The first is a change
+of architecture that needs its own measurement against the composed process;
+the second is a convenience. Reversal: when a measurement shows the composed
+process losing frames to its own lock that a split would keep.
+
+## 81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11)
+
+Kutum's RTC has its own cell and keeps time with the power off. The question
+was whether a dedicated clock should time anything in the control path.
+
+**Bar, written before the run** (`tools/bench/rtc_vs_counter.py`): a
+resolution finer than 1 ms and a rate within 5 ppm of the network-disciplined
+counter. Falsifier for the rate: a fit residual above the 1 ms polling step.
+
+**Measured**, 900 turn-overs over 899 s:
+
+| quantity | value |
+|---|---|
+| RTC resolution | **1 s** |
+| residual of the turn-overs against the raw counter | **31.2 ms** |
+| residual against the disciplined clock | 30.8 ms |
+| fitted rate, raw counter against RTC | -17.5 ppm |
+| fitted rate, disciplined clock against RTC | -12.3 ppm |
+
+It fails the resolution bar by three orders. The residual is thirty times the
+falsifier, so **the two rates are not evidence**: a 31 ms scatter over 899 s
+is about 35 ppm of uncertainty, larger than either figure. What the run does
+establish is that a read of the RTC lands tens of milliseconds from the
+second it reports.
+
+**Decision.** The RTC stays what it already is and does it completely: the
+kernel sets the system clock from it at boot and writes network time back to
+it, the cell charges, and `kutum.clock` (section 71) watches the cell, the
+offset and a wall clock that moves mid-session. Nothing in control reads it.
+Intervals on the host are timed on the monotonic counter, and a move is timed
+on the board, which is the system clock for when things happened. At the
+worst rate above, a 5 s move is mistimed by 0.09 ms; the board's tick is 2 ms.

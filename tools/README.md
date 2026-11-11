@@ -84,6 +84,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `mixer_map.py` | Measure what the mixer ACTUALLY does, using the Pico's console as readback. |
 | `model_inventory.py` | Every model on this box, what it detects, and whether it has been checked. |
 | `restart_blind_time.py` | How long the vehicle is blind while its vision process starts: frame and detection. |
+| `rtc_vs_counter.py` | Is the RTC a better clock for control than the system counter? Kutum has a dedicated real-time clock with its own cell. |
 | `srot_loop_soak.py` | Run the board link at the shipping vision-loop rate for minutes and report the jitter distribution. |
 | `srot_loop_sweep.py` | Where does the vision->thrust loop saturate, and on what? `VISION_LOOP_HZ = 20` was chosen when perception was 3-4 Hz on a .pt and 20-30 Hz on the old GPU path. |
 | `srot_mav_probe.py` | What does this board ACTUALLY answer? Measured, not read off a bitmask. |

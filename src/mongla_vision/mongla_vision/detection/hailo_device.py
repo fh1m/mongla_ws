@@ -19,9 +19,15 @@ import weakref
 #
 #   two PROCESSES, a VDevice each   -> HAILO_OUT_OF_PHYSICAL_DEVICES (74) on the
 #                                      second. Sharing happens in ONE process.
-#   multi_process_service + scheduler -> HailoRTInvalidOperationException. The
-#                                      API accepts the flag; the `hailort_service`
-#                                      daemon it needs is not installed.
+#   multi_process_service + scheduler -> HailoRTInvalidOperationException from
+#                                      the installed library, with or without
+#                                      a service running: it was built without
+#                                      the service client. Built from source
+#                                      with HAILO_BUILD_SERVICE, two processes
+#                                      share the chip at 47.8 Hz each and one
+#                                      inference costs +0.012 ms
+#                                      (measured-bars 80). Not installed: the
+#                                      stack is one process by design.
 #   ONE process, activation handed back and forth by hand (what shipped until
 #   2026-10-03)                      -> works: 73.8 Hz across two detectors
 #                                      swapping every frame, 4.15 ms a swap.
