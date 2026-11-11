@@ -145,6 +145,8 @@ is how `recommend()` happened.
 - [76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11)](#76-a-realtime-kernel--not-chosen-the-stock-kernel-wakes-a-loaded-50-hz-loop-within-002-ms-once-the-loop-has-a-realtime-priority-2026-11-11) — *measured, not adopted*
 - [77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11)](#77-numpy-2-and-a-newer-opencv-on-kutum--not-chosen-10-to-16--of-the-hot-path-and-cv_bridge-stops-converting-2026-11-11) — *measured, not adopted*
 - [78. CV_BRIDGE REPLACED — the same bytes, a frame read 75 times cheaper, and one copy fewer to send (2026-11-11)](#78-cv_bridge-replaced--the-same-bytes-a-frame-read-75-times-cheaper-and-one-copy-fewer-to-send-2026-11-11)
+- [80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11)](#80-the-hailort-service--two-processes-on-one-chip-at-no-cost-a-frame-built-measured-not-installed-2026-11-11)
+- [81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11)](#81-the-rtc-is-not-a-control-clock--one-second-steps-read-with-tens-of-milliseconds-of-jitter-2026-11-11)
 <!-- contents:end -->
 
 ---
@@ -7762,3 +7764,78 @@ subscriber decoding through `to_array` over DDS on Kutum: 239 frames in 8 s,
 interpreter down (exit -11), so the two vision test files that
 `importorskip`'d it now run there instead of being skipped. The agreement test
 runs `cv_bridge` in a child process for that reason.
+
+## 80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11)
+
+One Hailo-8 serves one process: a second `VDevice` fails with
+`HAILO_OUT_OF_PHYSICAL_DEVICES` (74). HailoRT's answer is `hailort_service`,
+a daemon that owns the chip and serves clients over a local socket. The
+packaged library on Kutum is built without it, which is why
+`multi_process_service=True` has always raised
+`HailoRTInvalidOperationException` here, and why this was written off. Built
+from the v4.24.0 source with `-DHAILO_BUILD_SERVICE=1` in a scratch
+directory, and run from there.
+
+**Bars, written before the run:**
+
+| bar | what would falsify it |
+|---|---|
+| share | either of two processes, each with its own `VDevice` in one group, fails or stalls during the run |
+| cost | one process through the service: median more than 10 % over direct, or p99 more than 1 ms over |
+
+**Measured on Kutum**, `gate_sharks`, 580 inferences after 20 discarded:
+
+| arrangement | median | p99 | rate |
+|---|---|---|---|
+| direct, packaged library | 10.452 ms | 10.475 ms | 95.7 Hz |
+| direct, source build | 10.453 ms | 10.478 ms | 95.7 Hz |
+| through the service, one process | 10.464 ms | 10.518 ms | 95.5 Hz |
+| through the service, two processes at once | 20.928 ms each | 20.995 ms | 47.8 Hz each |
+| direct, two processes at once | the second fails with error 74 | | |
+
+Both bars hold: **+0.012 ms** a frame at the median, +0.04 ms at p99, and two
+processes split the chip evenly with a sum of 95.6 Hz. An idle service does
+not hold the chip: a direct process ran at full rate beside it. The daemon's
+resident memory was 11.8 MB. The packaged client fails the same way with the
+service running, so using it means installing the source build of the library
+as well as the daemon.
+
+**Decision, first written: not installed**, because the vision stack was one
+process. **Reversed the same day by the owner:** the chip's ability to serve
+several processes is a resource to use, not a convenience. The service is
+installed by `kutum/setup.sh --system`, every vision process opens the chip
+through it, and the vision stack is to be split into one process per camera.
+The failure drill that decided how a lost service is handled is section 83.
+
+## 81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11)
+
+Kutum's RTC has its own cell and keeps time with the power off. The question
+was whether a dedicated clock should time anything in the control path.
+
+**Bar, written before the run** (`tools/bench/rtc_vs_counter.py`): a
+resolution finer than 1 ms and a rate within 5 ppm of the network-disciplined
+counter. Falsifier for the rate: a fit residual above the 1 ms polling step.
+
+**Measured**, 900 turn-overs over 899 s:
+
+| quantity | value |
+|---|---|
+| RTC resolution | **1 s** |
+| residual of the turn-overs against the raw counter | **31.2 ms** |
+| residual against the disciplined clock | 30.8 ms |
+| fitted rate, raw counter against RTC | -17.5 ppm |
+| fitted rate, disciplined clock against RTC | -12.3 ppm |
+
+It fails the resolution bar by three orders. The residual is thirty times the
+falsifier, so **the two rates are not evidence**: a 31 ms scatter over 899 s
+is about 35 ppm of uncertainty, larger than either figure. What the run does
+establish is that a read of the RTC lands tens of milliseconds from the
+second it reports.
+
+**Decision.** The RTC stays what it already is and does it completely: the
+kernel sets the system clock from it at boot and writes network time back to
+it, the cell charges, and `kutum.clock` (section 71) watches the cell, the
+offset and a wall clock that moves mid-session. Nothing in control reads it.
+Intervals on the host are timed on the monotonic counter, and a move is timed
+on the board, which is the system clock for when things happened. At the
+worst rate above, a 5 s move is mistimed by 0.09 ms; the board's tick is 2 ms.
