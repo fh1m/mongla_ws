@@ -46,6 +46,8 @@ class _Chip:
         self.overlap = False         # two models were mid-inference together
         # Set by a test to hold one model's inference open until released.
         self.hold = {}
+        self.models = []             # every InferModel created
+        self.refuse_floor = False    # set_nms_score_threshold raises
 
 
 CHIP = _Chip()
@@ -123,6 +125,16 @@ class _InferModel:
     def __init__(self, name, nclasses):
         self.name = name
         self._nclasses = nclasses
+        CHIP.models.append(self)
+        self.nms_floor = None       # what set_nms_score_threshold was given
+        self.floor_set_after_configure = False
+        self.configured = False
+
+    def _set_floor(self, value):
+        if CHIP.refuse_floor:
+            raise RuntimeError('HAILO_INVALID_OPERATION')
+        self.floor_set_after_configure = self.configured
+        self.nms_floor = value
 
     def input(self):
         return types.SimpleNamespace(set_format_type=lambda t: None)
@@ -143,10 +155,12 @@ class _InferModel:
         # API you imagined tests the code you imagined.
         return types.SimpleNamespace(
             set_format_type=lambda t: None,
+            set_nms_score_threshold=self._set_floor,
             shape=(self._nclasses * (1 + self._CAP * 5),))
 
     def configure(self):
         CHIP.configures += 1
+        self.configured = True
         return _Cim(self.name)
 
 
@@ -432,11 +446,57 @@ def test_an_unmeasured_model_is_quiet(hailo, tmp_path, monkeypatch):
     assert warned['warn'] == []
 
 
+def test_a_graph_compiled_above_the_floor_is_configured_at_the_floor(
+        hailo, tmp_path, monkeypatch):
+    """A stock graph is compiled at 0.200. Its NMS runs on the host and takes
+    a new threshold when the model is configured (measured-bars 79), so the
+    detector asks for EMIT_FLOOR before the configure, and 0.10 is then a
+    conf this model can run at: no BELOW warning."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.200\n')
+    warned, log = _logger()
+    det = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                              conf=0.10, class_allowlist=None, warmup=False,
+                              logger=log)
+    model = CHIP.models[-1]
+    assert model.nms_floor == pytest.approx(hailo.EMIT_FLOOR)
+    assert det._floor == pytest.approx(hailo.EMIT_FLOOR)
+    assert not any('BELOW' in w for w in warned['warn'])
+    det.infer(np.zeros((64, 64, 3), np.uint8))
+    assert model.configured and not model.floor_set_after_configure
+
+
+def test_a_graph_already_at_the_floor_is_left_alone(
+        hailo, tmp_path, monkeypatch):
+    """Ours are compiled at 0.05. Setting the same value again is a call into
+    the runtime that can only go wrong; a graph compiled lower keeps its own."""
+    for baked in ('0.050', '0.020'):
+        _stub_parse_hef(monkeypatch, hailo, f'Score threshold: {baked}\n')
+        det = hailo.HailoDetector(
+            model_path=_model(tmp_path, f'm{baked[-2:]}', ['gate']),
+            conf=0.45, class_allowlist=None, warmup=False)
+        assert CHIP.models[-1].nms_floor is None
+        assert det._floor == pytest.approx(float(baked))
+
+
+def test_a_refused_lowering_keeps_and_reports_the_compiled_floor(
+        hailo, tmp_path, monkeypatch):
+    """If the runtime refuses, the floor is still the compiled one. Reporting
+    EMIT_FLOOR then would bring back the silent overrule this log exists for."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.200\n')
+    monkeypatch.setattr(CHIP, 'refuse_floor', True)
+    warned, log = _logger()
+    det = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                              conf=0.10, class_allowlist=None, warmup=False,
+                              logger=log)
+    assert det._floor == pytest.approx(0.2)
+    assert any('could not lower' in w for w in warned['warn'])
+    assert any('BELOW' in w and '0.200' in w for w in warned['warn'])
+
+
 def test_a_stock_model_baked_at_0_2_does_not_get_the_int8_advice(
         hailo, tmp_path, monkeypatch):
-    """The advice is 'run at 0.12-0.15', and on a stock HEF that is not
-    reachable -- its floor IS 0.200. Repeating it there would be advice the
-    operator cannot follow."""
+    """A conf at the bar a model measured gets no operating-point advice,
+    whatever the graph was compiled at."""
     _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.200\n')
     warned, log = _logger()
     hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),

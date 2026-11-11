@@ -7,10 +7,10 @@ ROS overlay's onnx and dies claiming `onnx.mapping` is missing.
 
     ./tools/bench/hailo_compile.sh gate_sharks --nms-score-th 0.05
 
-Why this tool exists. A HEF bakes its NMS score threshold into the on-chip
-post-process; no ROS parameter can lower it, because the chip has already
-thrown those boxes away. Parsing all four deployed HEFs on 2026-09-24 found
-`sauvc_sim` and `bin_fire_blood` at 0.050, stock `yolov11n` at 0.200 -- and
+Why this tool exists. A HEF carries the NMS score threshold it was compiled
+with. The detector now configures every graph at 0.05 (measured-bars 79), but
+for months nothing did, and the compiled value was the floor. Parsing all
+four deployed HEFs on 2026-09-24 found `sauvc_sim` and `bin_fire_blood` at 0.050, stock `yolov11n` at 0.200 -- and
 `gate_sharks`, the COMPETITION model, at 0.200. Every host-side bar
 below 0.20 was decoration on that model, including the murky profile's 0.10
 and a measured underwater score p10 of 0.167 the chip could not emit (B-58).

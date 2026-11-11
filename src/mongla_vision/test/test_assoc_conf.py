@@ -36,6 +36,7 @@ class _FakeHailo:
         self._conf = conf
         self._assoc_conf = conf
         self._baked_conf = baked
+        self._floor = baked
         self._log = None
         self._max_det = 100
 
