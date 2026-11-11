@@ -64,7 +64,7 @@ from sensor_msgs.msg import Image, Range
 from std_msgs.msg import Float32, Float32MultiArray, String, UInt8
 from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 
-from mongla_interfaces.msg import FloorHeading, MonglaState
+from mongla_interfaces.msg import FloorHeading, FlowTracks, MonglaState
 from mongla_vision.flow.flow_timing import TimeOffset
 from mongla_vision.flow.flow_math import (
     DistanceAccumulator,
@@ -217,6 +217,10 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         self._pub_dist = self.create_publisher(Float32, f'{ns}/distance_traveled', 10)
         self._pub_debug = self.create_publisher(Float32MultiArray,
                                                 f'{ns}/distance_debug', 10)
+        # The pairs each accepted interval measured, for an operator to see
+        # the floor being tracked (Batighor's `flow` layout). Built only while
+        # someone subscribes.
+        self._pub_tracks = self.create_publisher(FlowTracks, f'{ns}/flow_tracks', 5)
         # Whether the velocity is on the calibration or on the focal
         # parameters (#80). Latched: it changes at most once, at the first
         # frame, and localization must know it whenever it starts.

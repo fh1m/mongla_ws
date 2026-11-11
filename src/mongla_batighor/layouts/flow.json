@@ -1,0 +1,92 @@
+{
+  "configById": {
+    "Image!floor": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/flow_annotations": {
+            "visible": true
+          }
+        }
+      }
+    },
+    "Plot!velocity": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/velocity.twist.twist.linear.x",
+          "enabled": true,
+          "label": "vx m/s",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/velocity.twist.twist.linear.y",
+          "enabled": true,
+          "label": "vy m/s",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!distance": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/distance_traveled.data",
+          "enabled": true,
+          "label": "distance m",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!quality": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/flow_quality.data",
+          "enabled": true,
+          "label": "quality",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/distance_debug.data[2]",
+          "enabled": true,
+          "label": "tracks",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/distance_debug.data[1]",
+          "enabled": true,
+          "label": "height m",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    }
+  },
+  "layout": {
+    "direction": "row",
+    "first": "Image!floor",
+    "second": {
+      "direction": "column",
+      "first": "Plot!velocity",
+      "second": {
+        "direction": "column",
+        "first": "Plot!distance",
+        "second": "Plot!quality",
+        "splitPercentage": 50
+      },
+      "splitPercentage": 34
+    },
+    "splitPercentage": 60
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  }
+}
