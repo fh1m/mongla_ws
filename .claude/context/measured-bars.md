@@ -136,6 +136,10 @@ is how `recommend()` happened.
 - [70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10)](#70-kutum-in-the-health-report--the-pi-and-the-hailo-8-as-one-machine-graded-by-their-own-firmware-2026-11-10)
 - [71. KUTUM'S CLOCK IN THE HEALTH REPORT — the RTC, and a wall clock that moves mid-session (2026-11-10)](#71-kutums-clock-in-the-health-report--the-rtc-and-a-wall-clock-that-moves-mid-session-2026-11-10)
 - [72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10)](#72-the-held-rung--a-weak-box-where-the-lock-is-more-accurate-and-it-failed-its-own-safety-bar-2026-11-10)
+- [73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)](#73-the-executor--what-delivering-one-callback-costs-and-what-that-is-worth-in-a-real-node-2026-11-10)
+- [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
+- [79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)](#79-the-compiled-score-threshold-is-a-default--the-floor-is-set-when-the-model-is-configured-2026-11-11)
+- [75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)](#75-rectify-the-image-once-at-the-camera--not-chosen-468-ms-a-frame-against-a-4-ms-bar-and-points-cost-37-microseconds-2026-11-10) — *measured, not adopted*
 <!-- contents:end -->
 
 ---
@@ -152,6 +156,11 @@ is how `recommend()` happened.
 > models and on the GPU/ONNX path. See **B-58**; the fix is recompiling
 > `gate_rescue_repair` at 0.05, after which this sweep must be re-run on the
 > HEF before these bars are quoted as live for that model.
+>
+> **Corrected 2026-11-11 (section 79):** the compiled value is a default, not
+> a floor. The detector now configures every graph at 0.05 whatever it was
+> compiled with, so a model compiled at 0.200 no longer needs a recompile to
+> run below it.
 
 | quantity | shipped (file) | measured | bar |
 |---|---|---|---|
@@ -7259,3 +7268,194 @@ on. XFeat stayed at p50 16.6 ms on the chip.
 **Caution:** the offline replay has no follower, so its "off" understates the
 baseline. The table above is the follower comparison; the safety question it
 cannot answer is still the gate model's identity on the torpedo board.
+
+## 73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)
+
+rclpy's default executor rebuilds a wait set for every callback it delivers.
+Jazzy's `rclpy.experimental.EventsExecutor` is told by the middleware when
+something is ready. `tools/bench/executor_cost.py` runs one small node (a
+100 Hz publisher and subscriber, four 10 Hz timers) under each executor in a
+fresh process and divides process CPU by callbacks delivered.
+
+**The bar, written before the first run:** against the single-threaded
+executor on the same box, CPU per callback at most half, p99 latency no worse
+than 1.5x, at least 99 % delivered.
+
+Measured on Kutum (Pi 5, Jazzy, rclpy 7.1.11), 10 s each:
+
+| executor | CPU per callback | process CPU | latency p50 | p99 | delivered |
+|---|---|---|---|---|---|
+| single-threaded (the `rclpy.spin` default) | 0.2507 ms | 6.0 % | 0.246 ms | 0.349 ms | 1.000 |
+| multi-threaded | 0.5345 ms | 12.7 % | 0.425 ms | 0.529 ms | 0.984 |
+| **events** | **0.0374 ms** | **0.9 %** | **0.049 ms** | **0.071 ms** | 1.000 |
+
+Events passes: 0.15x the CPU and 0.20x the p99. The multi-threaded executor
+fails its own comparison at 2.13x the CPU of the single-threaded one.
+
+**The falsifier.** With `--work-ms 5` every callback burns 5 ms, so the
+executor's share is small and the ratio must move toward 1. It did: events
+0.91x, multi 1.09x. A ratio that survived real work would have meant the
+bench measured something else.
+
+**What it is worth in a real node is much less than the ratio.** The composed
+vision graph (`tools/studies/composed_lock_harness.py`: camera, detector and
+lock ladder in one process, `gate_sharks` on the `gate_back` clip, 45 s, twice
+each, alternating):
+
+| executor | detections | process CPU | XFeat p50 | rungs |
+|---|---|---|---|---|
+| multi-threaded | 29.9, 30.0 Hz | 108.3, 108.9 % | 16.81, 16.44 ms | identical |
+| events | 30.0, 29.9 Hz | 99.2, 103.7 % | 15.40, 16.98 ms | identical |
+
+The bar for this run, also written first: detection and lock rates at least
+0.98x, CPU no higher, no error, exit 0. It passed. The saving is **5 to 9
+points of one core** out of about 108: decode, pre-processing and
+post-processing are the rest, and the executor never touched them. So the
+per-callback figure is 6.7x and the node is about 7 % cheaper; both are true
+and only the second is what the vehicle gets.
+
+**Shipped.** `mongla_localization/spin.py` picks the executor for every node
+main (`MONGLA_EXECUTOR=events`, the default, or `classic`). Humble has no
+events executor, so a dev box gets the classic one. The manager stays
+multi-threaded on purpose: its action callbacks block for the length of a
+move while telemetry and health keep ticking, and the events executor has one
+thread. `test_every_node_spins_on_the_chosen_executor.py` refuses a node main
+that calls `rclpy.spin` directly.
+
+Not measured: the manager's own executor cost, and any run with thrusters or
+a second camera.
+
+## 74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)
+
+The lead was that decoding MJPEG straight to half size saves CPU. The bar,
+written before measuring: a decoder replaces `cv2.imdecode` in
+`cameras/v4l2_mailbox.py` only if it is at least 25 % faster and returns the
+same pixels.
+
+Measured on Kutum on real frames from the forward camera (`v4l2-ctl
+--stream-to`), 300 to 400 decodes each:
+
+| decode | 640×360 (42 kB) | 1280×720 (135 kB) |
+|---|---|---|
+| `cv2.imdecode` colour (shipped) | **1.77 ms** | 6.84 ms |
+| grayscale | 1.00 ms | 3.57 ms |
+| half size, colour | 1.06 ms (320×180) | 3.76 ms (640×360) |
+| PIL (libjpeg-turbo) to an RGB array | 3.02 ms | not run |
+
+- The detector needs the full 640 px width, so a half-size decode of the
+  shipped stream gives it half the pixels. Capturing 1280×720 to decode at
+  half costs 3.76 ms for the same 640×360 the camera already sends at
+  1.77 ms.
+- The system OpenCV already decodes with libjpeg-turbo 2.1.5 and NEON
+  (`cv2.getBuildInformation()`), pixel-identical to PIL (maximum difference
+  0) and 1.7x faster than it. Thread count changes nothing (1.80 ms on one
+  thread).
+- The mailbox decodes only the frame a consumer takes, so the cost is per
+  consumed frame: 5 % of one core at 30 Hz.
+
+**Verdict: nothing to change.** No decoder cleared the bar. The one open
+saving is the lock ladder, which works on a grayscale image: a gray decode is
+1.00 ms, but the detector needs colour from the same frame, so it would be a
+second decode, not a cheaper one.
+
+## 79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)
+
+B-58 and every note after it said a HEF's NMS score threshold is fixed at
+compile time: boxes below it are dropped before the host sees them, and only
+a recompile lowers it. That was inferred from `parse-hef` and from asking for
+a lower `conf` on the host, never from the runtime. The NMS of a YOLOv8-family
+graph runs in libhailort on the host (`engine=cpu` in the model script), and
+`InferModel.output().set_nms_score_threshold` replaces the value when the
+model is configured.
+
+**Bars, written before the run** (`tools/bench/hailo_nms_floor.py`, whose
+`--self-test` drives the verdict with a hard floor, a soft floor, a moved box,
+a dropped box and a slow run):
+
+| bar | what would falsify it |
+|---|---|
+| reach | no box with a score in [0.05, compiled) on a clip that shows the prop |
+| identity | any box at or above the compiled value that differs between the two runs |
+| cost | a median inference more than 5 % slower |
+
+**Measured on Kutum**, HailoRT 4.24.0, 150 frames of the Mirpur gate clip,
+three alternating rounds, while a compile was using two cores:
+
+| graph | compiled | boxes at compiled | boxes at 0.05 | below compiled | confident boxes that differ | median ms compiled / 0.05 |
+|---|---|---|---|---|---|---|
+| stock `yolov11n` | 0.200 | 18 | 341 | **323** | **0 of 18** | 11.526 / 11.545 (+0.16 %) |
+| `gate_sharks` | 0.050 | 150 | 150 | n/a | 0 of 150 | 9.589 / 9.573 |
+
+Set to 0.01 the stock graph returned 2383 boxes with a lowest score of 0.011,
+and set to 0.6 it returned none, so the call takes effect in both directions.
+
+**Shipped:** `EMIT_FLOOR = 0.05` in `detection/hailo.py`. A detection graph
+compiled above it is configured at it; one compiled at or below it is left
+alone. `conf` and `assoc_conf` filter above it as before. A refusal from the
+runtime keeps and reports the compiled floor.
+
+**Changing it during a run.** The score floor and the overlap threshold are
+both read when the model is configured, so a live change hands the configured
+model back and configures it again. Bars written first: the output follows
+the new values 20 changes in a row with no error and no growth in time, and
+the detector is without a result for under 250 ms.
+
+| graph | changes | output follows | release to first result, first four / last four | worst |
+|---|---|---|---|---|
+| stock `yolov11n` | 20 | yes, repeatably (651 / 426 / 0 / 161 boxes at 0.01+0.70, 0.01+0.30, 0.50+0.70, 0.05+0.95) | 88.0 87.6 86.2 85.3 / 88.6 86.8 87.0 85.5 ms | **89.1 ms** |
+| `gate_sharks` | 20 | yes | 81.3 81.1 82.2 80.9 / 81.3 80.9 81.5 81.3 ms | **82.2 ms** |
+
+Through the shipping `HailoDetector.update_nms` the first inference after a
+change took 63.4 to 64.8 ms, and a floor raised to 0.5 and returned to 0.05
+went 17 boxes, 0, 17. The first run of that check returned 0 at the end: the
+change had raised the association floor with it and nothing lowered it again.
+Fixed, and held by a test.
+
+**Shipped:** `nms_floor` (0.05) and `nms_iou` (0.0, meaning as compiled) on
+the detector node, live. A live `iou` is now rejected: it is read once when a
+`.pt` model is built, and accepting it reported a change nothing made.
+
+**What this does not change.** 0.05 is still the value to compile with: the
+blocking diagnostic path does not lower it, and a graph that already carries
+it needs nothing from the runtime. A segmentation graph has no NMS output and
+is untouched.
+
+**Not measured:** the 100-boxes-per-class cap, which a very low floor on a
+many-class graph could reach, and a change made while a second model is
+mid-inference on the same chip.
+
+**Not measured:** a floor below 0.05, and the 100-boxes-per-class cap, which
+a very low floor on a many-class graph could reach.
+
+---
+
+## 75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)
+
+**The idea (issue #42).** Three consumers once read `CameraInfo.k` and ignored
+`CameraInfo.d`. Remapping every frame in `camera_node` and publishing a
+pinhole image with `D = 0` would make that mistake impossible.
+
+**The bar, from the issue, written before the run.** `cv2.remap` on Kutum at
+1280x720 BGR with `CV_16SC2` maps, 1000 frames: an added p95 above **4 ms**
+kills it, and the lens is then removed from points per consumer, behind a
+guard.
+
+**Measured on Kutum** (Pi 5, system OpenCV 4.6.0, the downward lens's own
+calibration, `alpha = 0`):
+
+| frame | remap p50 | remap p95 | 8 points undistorted, p50 | HFOV in air, raw to rectified |
+|---|---|---|---|---|
+| 1280x720 | 4.61 ms | **4.68 ms** | 3.7 us | 63.82 to 64.15 deg |
+| 640x360 | 0.96 ms | 0.97 ms | 3.7 us | 63.82 to 64.19 deg |
+
+**Verdict: FAIL at the bar's resolution.** At the 640x360 the vehicle runs it
+is 0.97 ms, which at the downward camera's 210 Hz is a fifth of one core spent
+on pixels no consumer measures. A consumer measures a box centre or four
+corners, and removing the lens from eight points costs 3.7 microseconds. The
+other two falsifiers (detector accuracy on rectified frames, field of view)
+were not run: the first had already decided it.
+
+**What ships instead.** Every reader of `CameraInfo.k` already reads `d`
+(`pnp_node`, `lock_inputs`, `dsl_detections`, `vision_state`).
+`test/test_every_camera_matrix_reader_removes_the_lens.py` fails a new one that
+does not.

@@ -29,6 +29,8 @@ class _NullLogger:
     def warning(self, *_a, **_k):
         pass
 
+    error = warning
+
 
 class _Stamp:
     def __init__(self, t):
@@ -1084,6 +1086,18 @@ def test_aiding_is_reported_as_aided_on_a_healthy_filter():
     assert n._pub_aiding.sent == ['aided']
 
 
+def test_an_unreadable_aiding_gate_reports_unaided():
+    """Issue #52: the feed is a safety input, so it fails closed."""
+    n = _node()
+    n._pub_aiding = _Recorder()
+
+    def boom():
+        raise RuntimeError('covariance is not finite')
+    n._filter._velocity_is_observed = boom
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['unaided']
+
+
 def test_aiding_flips_to_unaided_when_velocity_stops_being_observed():
     """The signal a mission needs. The pose keeps publishing and keeps
     looking healthy the whole time velocity is unobserved -- that is exactly
@@ -1121,10 +1135,9 @@ def test_aiding_recovers_when_velocity_is_measured_again():
     assert n._pub_aiding.sent == ['aided', 'unaided', 'aided']
 
 
-def test_a_filter_without_the_gate_reports_aided_rather_than_crashing():
-    """The node must survive a filter that predates the gate -- a replayed
-    bag, or a swapped estimator. An unreadable gate is reported as aided, which
-    is the pre-B-56 behaviour, rather than stopping the node."""
+def test_a_filter_without_the_gate_reports_unaided_and_does_not_crash():
+    """The node survives a filter with no gate (a swapped estimator), and says
+    unaided: a gate that is not there has not vouched for the position (#52)."""
     n = _node()
     n._pub_aiding = _Recorder()
 
@@ -1133,7 +1146,7 @@ def test_a_filter_without_the_gate_reports_aided_rather_than_crashing():
 
     n._filter = _Old()
     n._report_aiding()
-    assert n._pub_aiding.sent == ['aided']
+    assert n._pub_aiding.sent == ['unaided']
 
 
 def test_the_aiding_topic_is_not_the_motion_topic():
@@ -1334,3 +1347,30 @@ def test_an_imu_gap_advances_position_and_grows_the_covariance():
     assert n._n['gap'] == 1
     assert n._filter.X.p[0] - p0[0] == pytest.approx(0.5, abs=1e-6)
     assert n._filter.P[6, 6] > P0
+
+
+def test_aiding_by_uncalibrated_flow_is_reported_as_such():
+    """#80. A flow node running on its focal parameters by permission says so
+    on a latched topic; the aiding state carries it instead of reading as
+    plainly 'aided'. INJECTION-VERIFIED: drop the uncalibrated branch in
+    `_report_aiding` and this reads ['aided']."""
+    import types
+    n = _node()
+    n._pub_aiding = _Recorder()
+    n._on_flow_calibration(types.SimpleNamespace(
+        data="uncalibrated: none was passed (-p calibration:=<json>)"))
+    n._report_aiding()
+    n._on_flow_calibration(types.SimpleNamespace(data='calibrated'))
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['aided (flow uncalibrated)', 'aided']
+
+
+def test_unaided_stays_unaided_whatever_the_calibration_says():
+    import types
+    n = _node()
+    n._pub_aiding = _Recorder()
+    n._on_flow_calibration(types.SimpleNamespace(data='uncalibrated: x'))
+    for _ in range(200):
+        n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['unaided']

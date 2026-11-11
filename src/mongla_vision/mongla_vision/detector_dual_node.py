@@ -63,9 +63,12 @@ Launch's `name=` and `parameters=` are PROCESS-WIDE remappings (`__node:=`,
 parameters arrive here `fwd_`/`dwn_`-prefixed on this launcher and are handed
 down as `parameter_overrides` rather than declared per node by launch.
 
-A MultiThreadedExecutor, because the two image callbacks must not serialise
-behind each other: at ~35 Hz per camera under contention a single-threaded
-executor makes the second camera wait a whole inference for the first.
+The executor comes from `mongla_localization.spin`. Live, each camera hands
+its frames to its detector on the camera's own capture thread, so the executor
+carries only timers, services and small topics, and the single-threaded events
+executor is enough. In replay the frames arrive as image callbacks, and
+`MONGLA_EXECUTOR=classic` gives the multi-threaded executor back, so one
+camera's inference does not make the other wait.
 """
 from __future__ import annotations
 
@@ -85,7 +88,8 @@ from .detector_node import DetectorNode
 # ones an operator sets globally (max_det, debug_image_hz, paused).
 _PER_CAMERA = ('model_path', 'models', 'active_model', 'classes', 'conf',
                'assoc_conf', 'model_conf', 'image_topic')
-_SHARED = ('device', 'half', 'iou', 'imgsz', 'max_det', 'publish_contours',
+_SHARED = ('device', 'half', 'iou', 'nms_floor', 'nms_iou', 'imgsz', 'max_det',
+           'publish_contours',
            'publish_debug_image',
            'debug_image_hz', 'alignment_deadband', 'paused',
            'preprocess', 'preprocess_clip', 'vision_profile',
@@ -126,6 +130,7 @@ _DEFAULTS = {
     # vehicle launch turns it on (vision_pi.launch.py, `assoc_conf`).
     'assoc_conf': 0.0,
     'device': 'auto', 'half': True, 'iou': 0.5, 'imgsz': 640,
+    'nms_floor': 0.05, 'nms_iou': 0.0,
     'max_det': 100, 'publish_contours': True,
     'publish_debug_image': True, 'debug_image_hz': 5.0,
     'alignment_deadband': 0.05, 'paused': False,
@@ -394,7 +399,9 @@ def main():
         from mongla_localization.params_file import refuse_unknown
         for n in nodes:
             refuse_unknown(n)     # bringup.yaml `nodes:` typos stop here
-        ex = MultiThreadedExecutor()
+        from mongla_localization.spin import make_executor
+        ex, which = make_executor(launcher.get_logger(), classic=MultiThreadedExecutor)
+        launcher.get_logger().info(f'[COMP ] spinning on the {which} executor')
         for n in nodes:
             ex.add_node(n)
         ex.spin()

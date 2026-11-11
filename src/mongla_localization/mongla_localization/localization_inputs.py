@@ -327,18 +327,28 @@ class LocalizationInputsMixin:
         because the thing being reported is the ABSENCE of an input -- there is
         no callback for flow that did not arrive.
         """
-        observed = True
+        # Fails closed (issue #52): this feed is a safety input, and a gate
+        # that cannot be read has not said the position is observable.
+        observed, unread = False, 'this filter has no observability gate'
         probe = getattr(self._filter, '_velocity_is_observed', None)
         if probe is not None:
             try:
-                observed = bool(probe())
-            except Exception:                              # noqa: BLE001
-                observed = True      # an unreadable gate must not stop the node
+                observed, unread = bool(probe()), ''
+            except Exception as exc:                       # noqa: BLE001
+                unread = f'the observability gate raised {exc!r}'
         state = 'aided' if observed else 'unaided'
+        # Aided by a velocity the flow node scaled with no valid calibration
+        # (#80) is not the same claim as aided: say which, on the same topic.
+        cal = getattr(self, '_flow_cal', None)
+        if observed and cal is not None and cal != 'calibrated':
+            state = 'aided (flow uncalibrated)'
         if state == self._aiding_state:
             return
         self._aiding_state = state
-        if state == 'unaided':
+        if unread:
+            self.get_logger().error(f'[LOCAL] UNAIDED: {unread}, so the '
+                                    f'position is not known to be observable.')
+        elif state == 'unaided':
             self.get_logger().warning(
                 '[LOCAL] UNAIDED: velocity is unobserved, so depth and yaw '
                 'updates are being REFUSED (B-56) and horizontal position is '
@@ -448,6 +458,14 @@ class LocalizationInputsMixin:
         self._apply(None, lambda f, s=self._zupt_sigma: f.update_zero_velocity(sigma=s))
         self._n['zupt'] += 1
         self._still.clear()
+
+    def _on_flow_calibration(self, msg) -> None:
+        """The flow node's latched calibration state; re-reported on change."""
+        self._flow_cal = str(msg.data)
+        if self._flow_cal != 'calibrated':
+            self.get_logger().warning(
+                f'[LOCAL] flow velocity is {self._flow_cal}: its scale is the '
+                f'focal parameters, not a calibration')
 
     def _on_heading(self, msg: Float32) -> None:
         """An absolute world heading from the landmark anchor.

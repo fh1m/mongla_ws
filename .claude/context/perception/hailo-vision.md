@@ -389,7 +389,7 @@ check that only looked at class 0. Keep the blocking path
 (`MONGLA_HAILO_FORCE_BLOCKING=1`) alive for exactly this comparison.
 
 Also from `parse-hef`, worth knowing without re-deriving: `Score threshold:
-0.050` (the baked floor — runtime `conf` can only tighten), `IoU threshold:
+0.050` (the compiled default; the detector configures every graph at 0.05, measured-bars 79), `IoU threshold:
 0.70`, input `UINT8 NHWC(640x640x3)`.
 
 ## 13. PCIe IS NOT A LEVER ON THIS BOARD — SETTLED
@@ -664,12 +664,16 @@ loop measured here is strictly serial), not from a smaller model.
 
 ## Consequences for the pipeline — read before integrating
 
-- **`conf` can only be tightened, never loosened.** The HEF bakes in
-  `Score threshold: 0.200` and `IoU: 0.70` at compile time. The detector's
-  live `conf` param and `vision.ctrl_conf` still work *above* 0.2, but nothing
-  at runtime can go below it. To detect fainter targets the HEF must be
-  **recompiled**. This differs from both the `.pt` and `.engine` backends, where
-  `conf` is a per-`predict()` argument.
+- **The compiled score threshold is a default.** A stock HEF carries
+  `Score threshold: 0.200`, and until 2026-11-11 this page said nothing at
+  runtime could go below it. The NMS runs in libhailort on the host, and the
+  detector sets it to `EMIT_FLOOR` (0.05) when it configures the model, so
+  `conf` is a runtime decision on every graph: 323 boxes came back below a
+  compiled 0.200 with every box above it unchanged (measured-bars 79). The
+  Both the floor and the IoU threshold (compiled 0.70) change during a run
+  through the node's `nms_floor` and `nms_iou`, at about 85 ms without
+  frames per change. The whole list of live controls is in
+  [`vision-pipeline.md`](vision-pipeline.md).
 - **Class count is baked in too** (`Classes: 80` on the stock HEFs). Our models
   carry 2-11 classes, so the NMS config must be set per model at compile time.
 - **The `.yaml` sidecar becomes mandatory, not merely advisable.** A `.hef`

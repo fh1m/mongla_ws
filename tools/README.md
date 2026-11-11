@@ -56,6 +56,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `chip_throttle_bench.py` | The production configuration: XFeat at the rate the ANCHOR actually wants. |
 | `control_bench/` | The board's own control code, running on this machine. |
 | `dataset_survey.py` | Characterise every labelled dataset by its WATER, not by its task. |
+| `executor_cost.py` | What an rclpy executor costs to deliver one callback, per executor. |
 | `fit_free_decay.py` | Fit a free-decay rotation: the drag-to-inertia ratio the controller needs. |
 | `fit_thruster_response.py` | Fit a thruster's step response: dead time, time constant, steady thrust. |
 | `flow_bench.py` | flow_bench -- measure the bottom camera AS A DVL against a tape measure. |
@@ -73,6 +74,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `hailo_compile.sh` | The permanent Hailo compile harness. |
 | `hailo_int8_shift.py` | What does INT8 cost a compiled model, measured off the chip? (issue #47) Runs an OPTIMIZED .har through the Dataflow Compiler's emulator twice on the same real frames -- `SDK_FP_OPTIMIZED` (the ... |
 | `hailo_latency.py` | Throughput is not latency, and a control loop pays latency. |
+| `hailo_nms_floor.py` | Is the score threshold compiled into a HEF a floor, or only a default? A detection HEF carries an NMS score threshold from its compile. |
 | `hailo_stages.py` | Where does a Hailo frame actually go? Per-stage, on real frames. |
 | `hef_vs_cpu.py` | Does XFeat still MATCH after INT8? The gate that makes the HEF a result. |
 | `hull_stations.py` | Read EXACT thruster stations out of an Onshape GLB export. |

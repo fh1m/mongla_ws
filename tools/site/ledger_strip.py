@@ -126,6 +126,42 @@ def contents(entries: list[Entry]) -> str:
     return '\n'.join(lines)
 
 
+README = LEDGER.parents[2] / 'README.md'
+
+
+def readme_counts(entries: list[Entry], check: bool) -> int:
+    """The README states the ledger's counts in prose. Written here, so two
+    branches that each add an entry need this tool re-run after a merge and
+    never a hand count (three hand resolutions on 2026-11-10)."""
+    n, rows = len(entries), sum(x.rows for x in entries)
+    back = sum(x.kind == 'back' for x in entries)
+    no = sum(x.kind == 'no' for x in entries)
+    old = README.read_text(encoding='utf-8')
+    subs = [
+        (r'\*\*[\d,]+ entries, [\d,]+ rows of numbers\*\*',
+         f'**{n} entries, {rows:,} rows of numbers**'),
+        (r'\*\*\d+ of those \d+ entries', f'**{back} of those {n} entries'),
+        (r'\d+(\s+)more measured an idea', rf'{no}\1more measured an idea'),
+        (r'\d+ measurement entries, of(\s+)which \d+ say',
+         rf'{n} measurement entries, of\1which {back} say'),
+    ]
+    new = old
+    for pattern, to in subs:
+        new, hits = re.subn(pattern, to, new)
+        if not hits:
+            print(f'README.md no longer has the sentence {pattern!r} rewrites',
+                  file=sys.stderr)
+            return 1
+    if new == old:
+        return 0
+    if check:
+        print('README.md ledger counts have drifted -- re-run tools/site/ledger_strip.py',
+              file=sys.stderr)
+        return 1
+    README.write_text(new, encoding='utf-8')
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--check', action='store_true', help='exit 1 if the page has drifted')
@@ -133,6 +169,7 @@ def main() -> int:
     entries = read_ledger(LEDGER.read_text(encoding='utf-8'))
     rc = splice('ledger', render(entries), args.check)
     rc = rc or splice('contents', contents(entries), args.check, target=LEDGER, indent='')
+    rc = rc or readme_counts(entries, args.check)
     if rc == 0:
         kinds = {k: sum(1 for x in entries if x.kind == k) for k in ('back', 'no', 'ok')}
         print(f'{len(entries)} entries, {sum(x.rows for x in entries)} rows, {kinds}')

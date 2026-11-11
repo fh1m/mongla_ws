@@ -15,6 +15,7 @@ from mongla_vision.flow.flow_features import (
 from .flow_constants import (  # noqa: F401
     FLOW_ROT_RESIDUAL_CALIBRATED,
     FLOW_SCALE_SIGMA_FRAC,
+    FLOW_UNCALIBRATED_SCALE_SIGMA_FRAC,
     _LK_PARAMS,
 )
 
@@ -252,6 +253,10 @@ class FlowChecksMixin:
         """Variance the fit cannot see: scale and un-removed rotation (#23)."""
         speed = math.hypot(float(v.vx), float(v.vy))
         var = (FLOW_SCALE_SIGMA_FRAC * speed) ** 2
+        # Running on the focal parameters, by explicit permission (#80): the
+        # sigma says so instead of claiming the calibrated scale.
+        if getattr(self, '_cal_problem', ''):
+            var += (FLOW_UNCALIBRATED_SCALE_SIGMA_FRAC * speed) ** 2
         # The floor's own spread, while the height comes from the typed
         # constant rather than read off the floor (#35): v scales with h.
         if getattr(self, '_tile_height', None) is None and float(h) > 0.0:

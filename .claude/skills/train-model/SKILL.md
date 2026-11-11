@@ -62,7 +62,10 @@ The compile now measures the INT8 model against its own float on held-out
 frames and **refuses** a build that loses more than 0.10 confidence
 (`MAX_INT8_SHIFT`). If it refuses, try `--finetune off` before anything else
 (B-82: a diverged fine-tune cost `gate_sharks` 0.34). The NMS score threshold
-is baked into the `.hef`: runtime `conf` can only tighten it.
+in the `.hef` is a default: the detector configures every graph at 0.05
+(measured-bars 79), and runtime `conf` filters above that. The whole loop,
+and every setting that changes during a run, is in
+`.claude/context/perception/vision-pipeline.md`.
 
 ## 5. Use it
 

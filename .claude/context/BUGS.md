@@ -381,6 +381,34 @@ compared against the range at the loss, and the chain already has that
 data: the downward camera's flow velocity (worst error 1.09 cm over 30 cm)
 reaches `/mongla/odom`. TRAVERSAL_CONFIRMED is left for that, tracked on #79.
 
+### B-106: flow published velocity at the calibrated sigma from an uncalibrated scale `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** A missing, unreadable, wrong-camera or wrong-aspect calibration made
+`flow_node` fall back to one focal length and the frame centre, the state
+measured at a 3.08 % axis asymmetry, and then publish velocity and distance
+with the calibrated 3.6 % scale sigma. Localization fused it as normal and
+reported `aided`. Neighbours on the same path: `Intrinsics.from_json` scales x
+and y separately, so a calibration on frames of another aspect ratio (a crop)
+stretched one axis with no message; a file calibrated in water would have had
+the port corrected twice; and `vision.launch.py` started `flow_node` with no
+calibration at all while its own `camera_node` resolved one from the profile.
+GitHub #80.
+
+**Fix.** `flow_setup._calibration_problem` names what is wrong (none passed,
+unreadable, no `camera_matrix`, a medium other than air, an `applies_to` that
+does not name the camera or profile) and `_aspect_problem` adds a crop at the
+first frame. Any of them refuses velocity and distance through `_scale_ready`,
+unless `allow_uncalibrated:=true`, which runs on the focal parameters, adds
+`FLOW_UNCALIBRATED_SCALE_SIGMA_FRAC` (0.0308, ledger-bound) to the sigma and
+warns. A latched `/mongla/vision/<camera>/flow_calibration` says
+`calibrated` or `uncalibrated: <why>`, and localization reports
+`aided (flow uncalibrated)` from it. With no path, flow binds the calibration
+from its `profile` through `calibration/binding.py`, the lookup `camera_node`
+already made, and both launch files pass the profile.
+`test_flow_calibration_is_valid_or_refused.py` covers each case through the
+real node; removing the gate, the aspect check, the binding check, the sigma
+term or the aiding branch fails 7, 1, 2, 1 and 1 cases.
+
 ### B-107: "never been in water" erased the lineage, and a false water claim passed every check `READ 2026-11-09` **FIXED 2026-11-10**
 
 **What.** The README, the site, the wiki home and CLAUDE.md said "This vehicle has never been
@@ -476,6 +504,33 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-112: the detector treated a HEF's compiled score threshold as a floor nothing could lower `READ 2026-11-11` **FIXED 2026-11-11**
+
+**What.** B-58 found a model compiled at the stock 0.200 and concluded that
+only a recompile could lower it. Every note since repeated that: the detector
+clamped `assoc_conf` to the compiled value, warned that a lower `conf` could
+not be had, and a stock graph could not run at the 0.10 to 0.15 this stack
+operates at. Nobody had asked the runtime. The NMS of these graphs runs in
+libhailort on the host, and `set_nms_score_threshold` on the model's output
+replaces the value at configure time.
+
+**Measured** (measured-bars 79): on a graph compiled at 0.200, 323 boxes
+came back below 0.200, all 18 boxes at or above it were unchanged, and the
+inference took 0.16 % longer.
+
+**Fix.** `HailoDetector._lower_floor` configures any detection graph compiled
+above `EMIT_FLOOR` (0.05) at `EMIT_FLOOR`, and `_floor` is what the clamp and
+the warning now read. A refusal keeps and reports the compiled value. The
+floor and the overlap threshold are also live parameters (`nms_floor`,
+`nms_iou`), and a live `iou`, which nothing read after a model was built and
+which was accepted in silence, is now rejected with the parameter that works.
+`test_hailo_arbiter.py` holds it: the call is made, before the configure, only
+when needed, and a refusal is not reported as success.
+
+**How it survived.** The compiled value was read from `parse-hef`, a lower
+host `conf` changed nothing, and both facts fitted "it is baked". The check
+that would have refuted it was one call on the runtime.
+
 ### B-110: a process or camera that died mid-run stayed dead for the run `READ 2026-11-10` **FIXED 2026-11-10**
 
 **What.** No process bringup starts had a restart. A detector that `os._exit`s
@@ -507,6 +562,24 @@ publishes in `odom` until it is re-anchored, which `pose()` refuses.
 Tests run real processes under a real `LaunchService`. Injection checks:
 removing the limit, restarting a clean exit, reopening a video file, skipping
 the source swap, and a bare node in any of the three launch files each fail.
+
+### B-111: nothing below the mission stopped a dive, and the aiding feed failed open `READ 2026-11-10` **FIXED 2026-11-10** (host half)
+
+**What.** Two gaps the same shape (issue #52). A mission with a sign or units
+error could command any depth up to the 10 m move envelope, and the only thing
+that would refuse it was the process that made the mistake. And
+`/mongla/localization/aiding`, the estimator's own "do not act on this
+position" signal, reported `aided` whenever its observability gate raised or
+was missing, so the one case where the estimator could not vouch for itself
+read as healthy.
+
+**Fix.** `shield_max_depth_m` on the manager (`node_support.depth_shield`):
+past the floor for one second while armed, it aborts, surfaces and holds the
+same latch a dead mission does until the board confirms. It is off until the
+deck sets it, the manager says so at start-up, and `bringup_check` warns. The
+aiding feed fails closed. The board half, where a floor belongs, is
+[upstream ask Y](upstream/pr-y-a-floor-below-the-mission.md); the host does
+not send the `AIDED` flag until the board reads it.
 
 ### B-91: the floor's yaw bound was applied on arrival, against the heading now `READ 2026-11-07` **FIXED 2026-11-07**
 
