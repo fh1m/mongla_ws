@@ -520,7 +520,10 @@ inference took 0.16 % longer.
 
 **Fix.** `HailoDetector._lower_floor` configures any detection graph compiled
 above `EMIT_FLOOR` (0.05) at `EMIT_FLOOR`, and `_floor` is what the clamp and
-the warning now read. A refusal keeps and reports the compiled value.
+the warning now read. A refusal keeps and reports the compiled value. The
+floor and the overlap threshold are also live parameters (`nms_floor`,
+`nms_iou`), and a live `iou`, which nothing read after a model was built and
+which was accepted in silence, is now rejected with the parameter that works.
 `test_hailo_arbiter.py` holds it: the call is made, before the configure, only
 when needed, and a refusal is not reported as success.
 
