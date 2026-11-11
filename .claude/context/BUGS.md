@@ -381,6 +381,34 @@ compared against the range at the loss, and the chain already has that
 data: the downward camera's flow velocity (worst error 1.09 cm over 30 cm)
 reaches `/mongla/odom`. TRAVERSAL_CONFIRMED is left for that, tracked on #79.
 
+### B-106: flow published velocity at the calibrated sigma from an uncalibrated scale `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** A missing, unreadable, wrong-camera or wrong-aspect calibration made
+`flow_node` fall back to one focal length and the frame centre, the state
+measured at a 3.08 % axis asymmetry, and then publish velocity and distance
+with the calibrated 3.6 % scale sigma. Localization fused it as normal and
+reported `aided`. Neighbours on the same path: `Intrinsics.from_json` scales x
+and y separately, so a calibration on frames of another aspect ratio (a crop)
+stretched one axis with no message; a file calibrated in water would have had
+the port corrected twice; and `vision.launch.py` started `flow_node` with no
+calibration at all while its own `camera_node` resolved one from the profile.
+GitHub #80.
+
+**Fix.** `flow_setup._calibration_problem` names what is wrong (none passed,
+unreadable, no `camera_matrix`, a medium other than air, an `applies_to` that
+does not name the camera or profile) and `_aspect_problem` adds a crop at the
+first frame. Any of them refuses velocity and distance through `_scale_ready`,
+unless `allow_uncalibrated:=true`, which runs on the focal parameters, adds
+`FLOW_UNCALIBRATED_SCALE_SIGMA_FRAC` (0.0308, ledger-bound) to the sigma and
+warns. A latched `/mongla/vision/<camera>/flow_calibration` says
+`calibrated` or `uncalibrated: <why>`, and localization reports
+`aided (flow uncalibrated)` from it. With no path, flow binds the calibration
+from its `profile` through `calibration/binding.py`, the lookup `camera_node`
+already made, and both launch files pass the profile.
+`test_flow_calibration_is_valid_or_refused.py` covers each case through the
+real node; removing the gate, the aspect check, the binding check, the sigma
+term or the aiding branch fails 7, 1, 2, 1 and 1 cases.
+
 ### B-107: "never been in water" erased the lineage, and a false water claim passed every check `READ 2026-11-09` **FIXED 2026-11-10**
 
 **What.** The README, the site, the wiki home and CLAUDE.md said "This vehicle has never been

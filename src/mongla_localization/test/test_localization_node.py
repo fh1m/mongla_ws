@@ -1334,3 +1334,30 @@ def test_an_imu_gap_advances_position_and_grows_the_covariance():
     assert n._n['gap'] == 1
     assert n._filter.X.p[0] - p0[0] == pytest.approx(0.5, abs=1e-6)
     assert n._filter.P[6, 6] > P0
+
+
+def test_aiding_by_uncalibrated_flow_is_reported_as_such():
+    """#80. A flow node running on its focal parameters by permission says so
+    on a latched topic; the aiding state carries it instead of reading as
+    plainly 'aided'. INJECTION-VERIFIED: drop the uncalibrated branch in
+    `_report_aiding` and this reads ['aided']."""
+    import types
+    n = _node()
+    n._pub_aiding = _Recorder()
+    n._on_flow_calibration(types.SimpleNamespace(
+        data="uncalibrated: none was passed (-p calibration:=<json>)"))
+    n._report_aiding()
+    n._on_flow_calibration(types.SimpleNamespace(data='calibrated'))
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['aided (flow uncalibrated)', 'aided']
+
+
+def test_unaided_stays_unaided_whatever_the_calibration_says():
+    import types
+    n = _node()
+    n._pub_aiding = _Recorder()
+    n._on_flow_calibration(types.SimpleNamespace(data='uncalibrated: x'))
+    for _ in range(200):
+        n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['unaided']

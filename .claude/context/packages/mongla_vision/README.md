@@ -71,7 +71,7 @@ a confident zero.
 | `detector_node` | `detections`, `candidates`, `contours`, `image_debug` | inference, plus the always-on operator alignment line |
 | `tracker_node` | `tracks` | stable ids, and a predicted box across a short gap |
 | `lock_node` | `lock`, `correspondences` | the continuity ladder and the feature anchor |
-| `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled` | everything the downward camera can tell us |
+| `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled`, `flow_calibration` | everything the downward camera can tell us |
 | `depth_estimation_node` | `vis_range` | monocular proximity, off by default |
 | `mission_web_node` | — | the pool-day browser console |
 
@@ -90,6 +90,13 @@ health log). To find where a `self._x` is defined, grep them together:
 may refuse a frame), `flow_floor.py` (tile-grid heading and lane lines), `flow_publish.py`
 (topics and the log) and `flow_constants.py` (the measured constants, each in
 `measured-bars.md`).
+
+**Key point:** `flow_node` publishes no velocity without a calibration it can use: one that
+loads, was taken dry, names this camera or its `profile` in `applies_to`, and has the frames'
+aspect ratio. With no `calibration` path it binds one from `profile`, as `camera_node` does.
+`allow_uncalibrated:=true` runs on the focal parameters anyway with a wider sigma, and the
+latched `flow_calibration` topic says which state it is in; localization reports
+`aided (flow uncalibrated)` from it (B-106).
 
 `detector_node` likewise: `detector_node.py` (the inference loop and its recovery),
 `detector_setup.py` (parameters, model loading, live changes), `detector_frames.py` (mailbox

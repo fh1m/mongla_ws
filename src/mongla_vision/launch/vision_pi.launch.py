@@ -626,6 +626,7 @@ def generate_launch_description():
                    # The SAME calibration the downward camera_node gets. Passing
                    # them separately is how they came to disagree.
                    'calibration':  LaunchConfiguration('dwn_calibration'),
+                   'profile':      LaunchConfiguration('dwn_profile'),
                    # Floor instruments. Both OFF by default; see flow_node.
                    'tile_m':       ParameterValue(
                        LaunchConfiguration('tile_m'), value_type=float),

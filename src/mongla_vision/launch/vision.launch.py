@@ -308,6 +308,12 @@ def generate_launch_description():
         additional_env=_QUIET_ENV,
         parameters=[{
             'camera':       cam,
+            # The hardware profile, even on a replay: footage of the downward
+            # unit still needs its lens. flow_node binds the calibration from
+            # it exactly as camera_node does, and refuses velocity when none
+            # declares it (#80).
+            'profile':      PythonExpression([
+                "'", LaunchConfiguration('profile'), "' or '", cam, "'"]),
             'pool_depth_m': ParameterValue(LaunchConfiguration('pool_depth_m'), value_type=float),
         }],
         condition=IfCondition(LaunchConfiguration('flow')),

@@ -44,6 +44,9 @@ FED_ELSEWHERE = {
         'a running mission; its silence is how the manager knows one died'),
     '/mongla/vision/downward/velocity': (
         'src/mongla_vision/mongla_vision/flow/flow_node.py', 'flow:=true'),
+    '/mongla/vision/downward/flow_calibration': (
+        'src/mongla_vision/mongla_vision/flow/flow_node.py',
+        'flow:=true; latched, so a late subscriber still learns whether the scale is valid'),
     '/mongla/vision/downward/floor_grid_deg': (
         'src/mongla_vision/mongla_vision/flow/flow_node.py',
         'flow:=true with tile_m set'),
