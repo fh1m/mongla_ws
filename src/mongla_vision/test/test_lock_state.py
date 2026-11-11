@@ -216,3 +216,53 @@ def test_the_live_window_follows_the_detector_it_is_given():
                   follow=OTHER, follow_conf=0.8,
                   live_s=live_window(1 / 15.0))
     assert s.rung is Rung.DETECTION
+
+
+# --------------------------------------------------------------------------- #
+#  HELD: a weak box where the lock already is
+# --------------------------------------------------------------------------- #
+def test_a_held_box_outranks_the_follower_during_a_gap():
+    """The detector's own fresh look beats a follower integrating frame to
+    frame -- both answer about now, only one of them drifts."""
+    st = arbitrate(now=11.0, last_detection_t=10.0,
+                   held=BOX, held_conf=0.30, held_age_s=0.02,
+                   follow=OTHER, follow_conf=0.9)
+    assert st.rung is Rung.HELD and st.xyxy == BOX
+
+
+def test_a_held_box_never_buys_time():
+    """Rule 1. Authority still decays from the last box that cleared the bar:
+    on the gate model the band under it holds confident boxes on empty water
+    (B-59), and one that lands where the gate was must not hold the lock."""
+    mid = arbitrate(now=10.0 + (FULL_AUTHORITY_S + ZERO_AUTHORITY_S) / 2,
+                    last_detection_t=10.0,
+                    held=BOX, held_conf=0.40, held_age_s=0.0)
+    assert mid.rung is Rung.HELD
+    assert mid.authority == pytest.approx(
+        authority_for(mid.age_s), abs=1e-9) and mid.authority < 1.0
+    gone = arbitrate(now=10.0 + ZERO_AUTHORITY_S + 0.01, last_detection_t=10.0,
+                     held=BOX, held_conf=0.40, held_age_s=0.0)
+    assert gone.rung is Rung.LOST
+
+
+def test_a_held_box_never_acquires():
+    """No strong detection ever, no lock: a weak box keeps a target, it does
+    not start one."""
+    st = arbitrate(now=5.0, last_detection_t=0.0,
+                   held=BOX, held_conf=0.40, held_age_s=0.0)
+    assert st.rung is Rung.LOST
+
+
+def test_a_stale_held_box_falls_through():
+    """A held box from a detector that has gone quiet is not a look at now."""
+    st = arbitrate(now=11.0, last_detection_t=10.0,
+                   held=BOX, held_conf=0.30, held_age_s=0.5,
+                   follow=OTHER, follow_conf=0.9)
+    assert st.rung is Rung.FOLLOW
+
+
+def test_a_live_strong_detection_outranks_a_held_box():
+    st = arbitrate(now=10.02, last_detection_t=10.0,
+                   detection=OTHER, detection_conf=0.6,
+                   held=BOX, held_conf=0.30, held_age_s=0.0)
+    assert st.rung is Rung.DETECTION and st.xyxy == OTHER

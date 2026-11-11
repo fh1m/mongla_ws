@@ -123,6 +123,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `fwd_active` | `` | (passed to vision_pi.launch.py, which sets the default) |
 | `dwn_active` | `` | (passed to vision_pi.launch.py, which sets the default) |
 | `contours` | `true` | (passed to vision_pi.launch.py, which sets the default) |
+| `assoc_conf` | `0.10` | (passed to vision_pi.launch.py, which sets the default) |
 | `preprocess` | `auto` | (passed to vision_pi.launch.py, which sets the default) |
 | `range_crop` | `-1` | (passed to vision_pi.launch.py, which sets the default) |
 | `preprocess_clip` | `0.0` | (passed to vision_pi.launch.py, which sets the default) |
@@ -287,7 +288,8 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `contours` | `true` |  |
 | `fwd_classes` | `` |  |
 | `dwn_classes` | `` |  |
-| `conf` | `0.45` | INT8 operating point. NOT the CUDA path's 0.35-0.45 -- see the module docstring. |
+| `conf` | `0.45` | The acting bar: gate_sharks' measured bar. Another model's bar is in its <stem>.yaml; see the module docstring. |
+| `assoc_conf` | `0.10` |  |
 | `max_det` | `100` |  |
 | `vision` | `fast` |  |
 | `preprocess` | `auto` |  |
