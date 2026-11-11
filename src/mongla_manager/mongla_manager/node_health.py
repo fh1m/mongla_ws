@@ -11,8 +11,8 @@ import shutil
 
 from . import health as _health, health_reporters as _hr, kutum_health as _kutum
 from .node_support import (EXECUTOR_STALE_S, KILL_MAX_TRIES, MISSION_SILENT_S, boot_latch,
-                           SURFACE_MAX_TRIES, _load_sensor_offsets, kill_latch,
-                           mission_recovery, mission_watchdog)
+                           SURFACE_MAX_TRIES, _load_sensor_offsets, depth_shield,
+                           kill_latch, mission_recovery, mission_watchdog)
 
 
 class HealthMixin:
@@ -76,8 +76,9 @@ class HealthMixin:
         """
         rec = getattr(self, '_recovery', None)
         if rec is not None:
-            return (f'mission {rec["name"]!r} died with the vehicle armed; SURFACE '
-                    f'is not yet confirmed by the board')
+            why = rec.get('why') or (f'mission {rec["name"]!r} died with the '
+                                     f'vehicle armed')
+            return f'{why}; SURFACE is not yet confirmed by the board'
         if getattr(self, '_kill_latch', None) is not None:
             return ('the kill switch was engaged while armed and the board has '
                     'not yet confirmed DISARMED')
@@ -101,6 +102,7 @@ class HealthMixin:
         armed = self._armed_now()
         self._boot_tick(armed)
         self._kill_watch_tick(armed, now)
+        self._depth_shield_tick(armed, now)
         self._recovery_tick(now)
         # Unknown is treated as armed: acting on a disarmed vehicle is noise,
         # not acting on an armed one is the failure.
@@ -117,6 +119,35 @@ class HealthMixin:
             f'[MISSN] !! mission {name!r} SILENT {MISSION_SILENT_S:.0f}s+ with the '
             f'vehicle ARMED -- the mission process is gone. Abort, brake, SURFACE.')
         self._recovery = {'name': name, 'first': now, 'last': now, 'tries': 1}
+        self._request_surface()
+
+    def _depth_shield_tick(self, armed, now: float) -> None:
+        """Surface a hull that has passed the depth floor, whatever asked for it.
+
+        See `node_support.depth_shield` (issue #52). It hands over to the
+        mission-loss recovery, so the SURFACE is retried until the board
+        confirms it and ordinary verbs are refused meanwhile.
+        """
+        floor = float(getattr(self, '_shield_max_depth_m', 0.0))
+        if (getattr(self, '_recovery', None) is not None
+                or getattr(self, '_kill_latch', None) is not None
+                or getattr(self, '_fast_mode', '') == 'SURFACE'):
+            self._depth_past_since = None
+            return
+        try:
+            depth = getattr(self.fc.telemetry(), 'depth_m', None)
+        except Exception:                          # noqa: BLE001 -- unknown
+            depth = None
+        self._depth_past_since, trip = depth_shield(
+            getattr(self, '_depth_past_since', None), depth, floor, armed, now)
+        if not trip:
+            return
+        self._depth_past_since = None
+        why = (f'depth {depth:+.2f} m passed the {floor:.2f} m floor '
+               f'(shield_max_depth_m)')
+        self.get_logger().error(f'[SHLD ] !! {why} -- abort, brake, SURFACE.')
+        self._recovery = {'name': 'depth shield', 'why': why, 'first': now,
+                          'last': now, 'tries': 1}
         self._request_surface()
 
     def _request_surface(self) -> None:
