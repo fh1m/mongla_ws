@@ -410,7 +410,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `max_ambiguity` | `0.9` |
 | `max_reproj_px` | `10.0` |
 
-**`mongla_manager/auv_manager_node.py`** — 15 parameters
+**`mongla_manager/auv_manager_node.py`** — 16 parameters
 
 | parameter | default |
 |---|---|
@@ -429,6 +429,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `srot_telemetry_period_s` | `2.0` |
 | `allow_saturated_depth_arm` | `False` |
 | `allow_unknown_kill_switch` | `False` |
+| `shield_max_depth_m` | `0.0` |
 
 **`mongla_vision/camera_node.py`** — 15 parameters
 
@@ -469,7 +470,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `replay` | `False` |
 | `lock` | `False` |
 
-**`mongla_vision/detector_node.py`** — 25 parameters
+**`mongla_vision/detector_node.py`** — 27 parameters
 
 | parameter | default |
 |---|---|
@@ -484,6 +485,8 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `assoc_conf` | `0.0` |
 | `model_conf` | `''` |
 | `iou` | `0.5` |
+| `nms_floor` | `0.05` |
+| `nms_iou` | `0.0` |
 | `imgsz` | `640` |
 | `max_det` | `100` |
 | `classes` | `'person'` |
