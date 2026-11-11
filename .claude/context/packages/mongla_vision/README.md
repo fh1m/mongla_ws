@@ -177,6 +177,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `time_to_contact.py` | Seconds until contact, for a MOVING observer. |
 | `tool_geometry.py` | Where each tool is, relative to the camera that aims it. |
 | `tracker_node.py` | subscribe to detections, publish stable tracks. |
+| `trigger_stamps.py` | Which trigger made this frame: pairing camera frames with the board's pulses. |
 | `underwater.py` | Underwater image statistics, and what they predict about detection. |
 | `vision_node.py` | single-process diagnostic for camera + detector. |
 | `anchor/anchor.py` | Hold a target with NO detection at all. |
