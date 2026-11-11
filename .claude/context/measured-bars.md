@@ -140,6 +140,7 @@ is how `recommend()` happened.
 - [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
 - [79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)](#79-the-compiled-score-threshold-is-a-default--the-floor-is-set-when-the-model-is-configured-2026-11-11)
 - [75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)](#75-rectify-the-image-once-at-the-camera--not-chosen-468-ms-a-frame-against-a-4-ms-bar-and-points-cost-37-microseconds-2026-11-10) — *measured, not adopted*
+- [83. THE HAILORT SERVICE DIES MID-RUN — back in 0.31 s, and its clients fail fast (2026-11-11)](#83-the-hailort-service-dies-mid-run--back-in-031-s-and-its-clients-fail-fast-2026-11-11)
 <!-- contents:end -->
 
 ---
@@ -7459,3 +7460,50 @@ were not run: the first had already decided it.
 (`pnp_node`, `lock_inputs`, `dsl_detections`, `vision_state`).
 `test/test_every_camera_matrix_reader_removes_the_lens.py` fails a new one that
 does not.
+
+## 83. THE HAILORT SERVICE DIES MID-RUN — back in 0.31 s, and its clients fail fast (2026-11-11)
+
+The service is installed (section 80) and every vision process opens the chip
+through it, so it is one process that every camera depends on. The owner's
+order for losing it: restart everything first; if the service stays down,
+the forward process opens the chip itself and the downward one runs without
+it. `hailo_device._open` implements the order; `kutum/system/systemd/hailort.service`
+restarts the daemon 200 ms after it dies, with no limit on how often.
+
+**Bars, written before the drill** (`tools/bench/hailo_service_drill.py`):
+
+| bar | falsified by |
+|---|---|
+| restart | systemd has the service running again more than 1 s after a SIGKILL |
+| surface | an inference through the dead service hangs, or raises more than 1 s after the kill (a hang never reaches the node's exit) |
+| rejoin | a process started after the restart does not open through the service |
+| order | with the service stopped, the forward process does not open the chip, or the downward one does |
+
+**Measured on Kutum**, `gate_sharks`, the drill run twice:
+
+| | run 1 | run 2 |
+|---|---|---|
+| daemon back after SIGKILL | | **0.31 s** |
+| the running client's next inference | raised `HAILO_RPC_FAILED` (77) | raised 77, 25 ms after the kill |
+| a new process after the restart | opened through the service in 0.15 s | 0.15 s |
+| service stopped, downward (`none`) | refused after its 3.0 s wait | refused, 3.0 s |
+| service stopped, forward (`direct`) | opened the chip after 3.09 s | 3.09 s |
+| 50 inferences, through the service / direct | 0.548 s / 0.525 s | 0.548 s / 0.525 s |
+
+All four bars hold. The restart time of run 1 was not captured: the timing
+loop's output was cut by the log filter.
+
+**What a vision process does with it.** A client of a dead service never
+recovers by itself: the error is "non-recoverable" in HailoRT's own words.
+The detector node already counts consecutive failures, rebuilds at 15 and
+exits at 45 (`detector_node._on_infer_failure`), and the launch respawns the
+process 2 s later, up to three times (`launch_respawn`). At 30 frames a
+second that is about 1.5 s of failures, 2 s of respawn and the model load,
+then the process is back through the restarted service. The cost is a few
+seconds without detections on a service crash, which has not been seen
+outside this drill.
+
+**Not shown here:** a crash while two processes share the chip, and the
+respawn limit of three being reached by a service that keeps dying. The
+second leaves the cameras down and says so, which is the existing policy for
+any process.

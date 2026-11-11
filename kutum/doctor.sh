@@ -54,6 +54,12 @@ if [ -z "$thr" ]; then warn "vcgencmd missing -- throttling cannot be read"
 elif [ "$thr" = "0x0" ]; then ok "never throttled since boot, ${temp} C now"
 else warn "throttled=$thr since boot (${temp} C now): undervoltage or heat; the detector rate will not hold"; fi
 
+# The Hailo-8 is shared through HailoRT's service (measured-bars 80). Without
+# it each vision process opens the chip itself, and only one can.
+if systemctl is-active --quiet hailort.service 2>/dev/null; then ok "hailort.service: running"
+elif [ -x /usr/local/bin/hailort_service ]; then warn "hailort.service is not running -- the vision processes cannot share the chip; the forward one opens it alone"
+else warn "no hailort_service: HailoRT was built without it (sudo kutum/setup.sh --system rebuilds it)"; fi
+
 gov="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)"
 [ "$gov" = performance ] && ok "CPU governor: performance" \
   || warn "CPU governor: $gov -- the first milliseconds of every frame run at the idle clock (cpu-performance.service)"

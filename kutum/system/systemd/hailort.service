@@ -1,0 +1,27 @@
+# The HailoRT service: the one process that opens the Hailo-8, serving every
+# vision process over a local socket (measured-bars 80: +0.012 ms a frame).
+# Ours rather than the one HailoRT installs, because that one starts
+# /usr/bin/hailort_service and a source build installs to /usr/local/bin, and
+# because a vehicle wants it back fast: always restarted, 200 ms later, with
+# no limit on how often. A vision process that loses it exits and is
+# respawned; on start it waits for this unit, then the forward process opens
+# the chip directly and the downward one runs without it (hailo_device.py).
+[Unit]
+Description=HailoRT service (the Hailo-8, shared between processes)
+Documentation=https://github.com/hailo-ai/hailort
+After=systemd-modules-load.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=forking
+EnvironmentFile=-/etc/default/hailort_service
+ExecStart=/usr/local/bin/hailort_service
+PIDFile=/run/hailo/hailort_service.pid
+RuntimeDirectory=hailo
+RuntimeDirectoryPreserve=yes
+Restart=always
+RestartSec=200ms
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target
