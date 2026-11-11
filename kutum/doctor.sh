@@ -54,6 +54,11 @@ if [ -z "$thr" ]; then warn "vcgencmd missing -- throttling cannot be read"
 elif [ "$thr" = "0x0" ]; then ok "never throttled since boot, ${temp} C now"
 else warn "throttled=$thr since boot (${temp} C now): undervoltage or heat; the detector rate will not hold"; fi
 
+# Batighor's web app (src/mongla_batighor): the pinned Lichtblick build.
+lbv="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$(dirname "${BASH_SOURCE[0]}")/../src/mongla_batighor/LICHTBLICK.json" 2>/dev/null)"
+if [ -f "$HOME/.mongla/batighor/web/$lbv/index.html" ]; then ok "Batighor: Lichtblick $lbv installed"
+else warn "Batighor: Lichtblick ${lbv:-?} not installed -- the operator center answers 503 (ros2 run mongla_batighor fetch)"; fi
+
 gov="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)"
 [ "$gov" = performance ] && ok "CPU governor: performance" \
   || warn "CPU governor: $gov -- the first milliseconds of every frame run at the idle clock (cpu-performance.service)"

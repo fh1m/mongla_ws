@@ -70,7 +70,7 @@ one capability at a time.
 | + the downward camera's velocity | `ros2 launch mongla_manager bringup.launch.py vision:=true flow:=true pool_depth_m:=1.6` |
 | + the lock ladder on one class | `ros2 launch mongla_manager bringup.launch.py vision:=true lock_class:=gate` |
 | no localization | `ros2 launch mongla_manager bringup.launch.py localization:=false` |
-| + Foxglove on ws://\<pi\>:8765 | `ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true` |
+| + Batighor on http://\<pi\>:8000 | `ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true` |
 | a named serial device | `ros2 launch mongla_manager bringup.launch.py mav_device:=/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` |
 | on the bench, in air | `ros2 launch mongla_manager bringup.launch.py vision:=true medium:=air` |
 

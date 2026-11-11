@@ -38,6 +38,8 @@
 
 | run it with | module |
 |---|---|
+| `ros2 run mongla_batighor serve` | `mongla_batighor.serve:main` |
+| `ros2 run mongla_batighor fetch` | `mongla_batighor.fetch:main` |
 | `ros2 run mongla_localization localization_node` | `mongla_localization.localization_node:main` |
 | `ros2 run mongla_localization pnp_node` | `mongla_localization.pnp_node:main` |
 | `ros2 run mongla_localization pose_fuse_node` | `mongla_localization.pose_fuse_node:main` |
@@ -114,7 +116,8 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `imgsz` | `640` | Inference square size for a .pt. A .hef bakes its input size at compile time and ignores this. |
 | `max_det` | `100` | Post-NMS detection cap (runtime; lower toward ~10 if NMS is the FPS bottleneck on busy frames). |
 | `viewer` | `false` | Open vision_display (OpenCV viewer) alongside vision pipeline |
-| `foxglove` | `false` | Start foxglove_bridge (WebSocket telemetry on foxglove_port). Off the mission path -- pure viz. Needs ros-humble-foxglove-bridge installed. Connect the Foxglove desktop app to ws://<pi>:<foxglove_port>. |
+| `batighor` | `false` | Batighor, the operator center: foxglove_bridge on foxglove_port and the Lichtblick app on batighor_port (open http://<pi>:<batighor_port>/). Off the mission path; any number of browsers. |
+| `batighor_port` | `8000` | Batighor web port |
 | `foxglove_port` | `8765` | foxglove_bridge WebSocket port |
 | `fwd_profile` | `pi_forward` | (passed to vision_pi.launch.py, which sets the default) |
 | `dwn_profile` | `pi_downward` | (passed to vision_pi.launch.py, which sets the default) |

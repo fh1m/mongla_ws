@@ -10,7 +10,7 @@ import re
 import pytest
 
 _SRC = pathlib.Path(__file__).resolve().parents[2]
-_LAYOUTS = sorted((_SRC / 'mongla_vision' / 'foxglove').glob('*.json'))
+_LAYOUTS = sorted((_SRC / 'mongla_batighor' / 'layouts').glob('*.json'))
 
 
 def _published():
@@ -40,3 +40,8 @@ def test_every_layout_topic_is_published_somewhere(path):
         literal = topic in src
         templated = re.search(rf"f'[^']*/{re.escape(tail)}'", src) is not None
         assert literal or templated, f'{path.name}: nothing publishes {topic}'
+
+
+def test_the_layouts_are_found():
+    # A moved folder parametrizes the test above over nothing, and passes.
+    assert len(_LAYOUTS) >= 4, _LAYOUTS
