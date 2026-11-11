@@ -40,7 +40,8 @@ import sys  # noqa: E402
 
 from .bringup_board import _check_srot, _resolve_srot_for_check
 from .bringup_grade import FAIL, PASS, WARN, _line
-from .bringup_host import (_check_build_freshness, _check_cameras, _check_disk,
+from .bringup_host import (_check_build_freshness, _check_cameras, _check_depth_floor,
+                           _check_disk,
                            _check_model_separation, _check_models, _check_pi_power,
                            _check_ros_env, _check_sensor_offsets, _check_serial_drivers,
                            _check_vision_deps)
@@ -173,6 +174,11 @@ def main(argv: list[str] | None = None) -> int:
     section('K1c. Sensor offsets (is flow corrected for where the lens is?)')
     st, det = _check_sensor_offsets()
     emit(st, 'IMU -> camera / baro', det)
+
+    # ---- K1d. The floor below the mission ----------------------------- #
+    section('K1d. Depth floor (does anything stop a dive past the pool?)')
+    st, det = _check_depth_floor()
+    emit(st, 'shield_max_depth_m', det)
 
     # ---- K2. Stale build tree --------------------------------------- #
     section('K2. Build tree freshness (is the vehicle running your code?)')

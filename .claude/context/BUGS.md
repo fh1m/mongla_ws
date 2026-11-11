@@ -563,6 +563,24 @@ Tests run real processes under a real `LaunchService`. Injection checks:
 removing the limit, restarting a clean exit, reopening a video file, skipping
 the source swap, and a bare node in any of the three launch files each fail.
 
+### B-111: nothing below the mission stopped a dive, and the aiding feed failed open `READ 2026-11-10` **FIXED 2026-11-10** (host half)
+
+**What.** Two gaps the same shape (issue #52). A mission with a sign or units
+error could command any depth up to the 10 m move envelope, and the only thing
+that would refuse it was the process that made the mistake. And
+`/mongla/localization/aiding`, the estimator's own "do not act on this
+position" signal, reported `aided` whenever its observability gate raised or
+was missing, so the one case where the estimator could not vouch for itself
+read as healthy.
+
+**Fix.** `shield_max_depth_m` on the manager (`node_support.depth_shield`):
+past the floor for one second while armed, it aborts, surfaces and holds the
+same latch a dead mission does until the board confirms. It is off until the
+deck sets it, the manager says so at start-up, and `bringup_check` warns. The
+aiding feed fails closed. The board half, where a floor belongs, is
+[upstream ask Y](upstream/pr-y-a-floor-below-the-mission.md); the host does
+not send the `AIDED` flag until the board reads it.
+
 ### B-91: the floor's yaw bound was applied on arrival, against the heading now `READ 2026-11-07` **FIXED 2026-11-07**
 
 **What.** `flow_node` published `floor_grid_deg` and `lane_heading_deg` as bare

@@ -307,6 +307,36 @@ def _check_sensor_offsets() -> tuple[str, str]:
     return (PASS if h.ok else WARN), h.evidence
 
 
+def depth_floor_verdict(nodes: dict) -> tuple[str, str]:
+    """PASS / WARN for the manager's depth floor, from the deck file's `nodes:`."""
+    raw = (nodes.get('mongla_manager') or {}).get('shield_max_depth_m', 0.0)
+    try:
+        floor = float(raw)
+    except (TypeError, ValueError):
+        return WARN, f'shield_max_depth_m is {raw!r}, not a number'
+    if floor > 0.0:
+        return PASS, f'the manager surfaces a hull past {floor:.2f} m'
+    return WARN, ('no depth floor: set shield_max_depth_m under nodes: '
+                  'mongla_manager: in ~/.mongla/bringup.yaml, to the depth '
+                  'the hull must never pass in this venue')
+
+
+def _check_depth_floor() -> tuple[str, str]:
+    """Is there a depth floor below the mission? (#52)
+
+    Warn, never fail: a bench has no floor to set. The board has none of its
+    own until upstream ask Y lands, so on the deck this line is the only
+    place an unset floor is seen before the hull is wet.
+    """
+    try:
+        from mongla_localization import launch_defaults as ld
+        path = ld.config_path()
+        nodes = ld.read_nodes(path) if path is not None else {}
+    except Exception as exc:                        # noqa: BLE001
+        return WARN, f'bringup.yaml unreadable: {exc!r}'
+    return depth_floor_verdict(nodes)
+
+
 def _check_model_separation() -> tuple[str, str]:
     """Can the model you are about to fly TELL THE PROP FROM THE WATER?
 
