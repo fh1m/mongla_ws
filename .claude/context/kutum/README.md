@@ -74,7 +74,7 @@ Read by the doctor, `lscpu` and `hailortcli` on 2026-11-07.
 
 | Layer | Value |
 |---|---|
-| Board | Raspberry Pi 5 Model B Rev 1.0, 4 × Cortex-A76 at 2.4 GHz, 4 GB |
+| Board | Raspberry Pi 5 Model B Rev 1.0, 4 × Cortex-A76 at 2.8 GHz (stock is 2.4; set by `setup.sh --system`, measured-bars 82), 4 GB |
 | Accelerator | Hailo-8 (26 TOPS) on PCIe **Gen 3 x1, 8 GT/s** |
 | Storage | 32 GB SD card, 9.9 GB free after the tidy |
 | OS | Ubuntu 24.04.4 LTS, kernel 6.8.0-1065-raspi, governor pinned to `performance` |
