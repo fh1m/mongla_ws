@@ -63,7 +63,9 @@ else warn "ARM clock: $arm MHz, not the 2800 setup.sh --system writes -- about 1
 
 # The Hailo-8 is shared through HailoRT's service (measured-bars 80). Without
 # it each vision process opens the chip itself, and only one can.
-if systemctl is-active --quiet hailort.service 2>/dev/null; then ok "hailort.service: running"
+if systemctl is-active --quiet hailort.service 2>/dev/null && ! id -nG | grep -qw hailort; then
+  warn "hailort.service runs, but $(id -un) is not in group hailort -- log in again after setup.sh --system"
+elif systemctl is-active --quiet hailort.service 2>/dev/null; then ok "hailort.service: running"
 elif [ -x /usr/local/bin/hailort_service ]; then warn "hailort.service is not running -- the vision processes cannot share the chip; the forward one opens it alone"
 else warn "no hailort_service: HailoRT was built without it (sudo kutum/setup.sh --system rebuilds it)"; fi
 
@@ -162,6 +164,7 @@ same "$KUTUM/system/udev/99-mongla-cameras.rules" /etc/udev/rules.d/99-mongla-ca
 same "$KUTUM/system/udev/51-hailo-udev.rules"     /etc/udev/rules.d/51-hailo-udev.rules     "Hailo device permissions"
 same "$KUTUM/system/systemd/set-cpu-performance"  /usr/local/sbin/set-cpu-performance      "governor script"
 same "$KUTUM/system/systemd/cpu-performance.service" /etc/systemd/system/cpu-performance.service "cpu-performance.service"
+same "$KUTUM/system/systemd/hailort.service"  /etc/systemd/system/hailort.service     "hailort.service"
 same "$KUTUM/system/netplan/60-kutum-eth.yaml"  /etc/netplan/60-kutum-eth.yaml          "Ethernet link-local"
 systemctl is-enabled cpu-performance.service >/dev/null 2>&1 && ok "cpu-performance.service enabled" \
   || warn "cpu-performance.service not enabled"

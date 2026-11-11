@@ -88,3 +88,32 @@ def test_the_unit_restarts_without_limit_and_runs_the_installed_binary():
     assert f'ExecStart={hd.SERVICE_BIN}' in unit
     assert f'PIDFile={hd.SERVICE_PID}' in unit
     assert 'Restart=always' in unit and 'StartLimitIntervalSec=0' in unit
+
+
+def test_the_service_address_is_one_value_in_three_places():
+    """The unit listens where it is told, the shells and the vision package
+    connect where they are told. Three copies of one path: held equal."""
+    import pathlib
+    import re
+    from mongla_vision.detection.hailo_device import SERVICE_ADDR
+    kutum = pathlib.Path(__file__).resolve().parents[3] / 'kutum'
+    unit = (kutum / 'system/systemd/hailort.service').read_text()
+    env = (kutum / 'env.sh').read_text()
+    assert re.search(rf'^Environment=HAILORT_SERVICE_ADDRESS={re.escape(SERVICE_ADDR)}$', unit, re.M)
+    assert re.search(rf'^export HAILORT_SERVICE_ADDRESS={re.escape(SERVICE_ADDR)}$', env, re.M)
+    # Not the default: the unit's private /tmp would hide it from every client.
+    assert '/tmp/' not in SERVICE_ADDR
+
+
+def test_importing_detection_sets_the_address_before_the_library_can_load():
+    import os
+    import subprocess
+    import sys
+    code = ('import os; os.environ.pop("HAILORT_SERVICE_ADDRESS", None)\n'
+            'import mongla_vision.detection\n'
+            'print(os.environ["HAILORT_SERVICE_ADDRESS"])')
+    env = {k: v for k, v in os.environ.items() if k != 'HAILORT_SERVICE_ADDRESS'}
+    env['PYTHONPATH'] = os.pathsep.join(p for p in sys.path if p)   # this test's own imports
+    r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == 'unix:///run/hailo/hailort_uds.sock'

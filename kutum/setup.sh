@@ -139,6 +139,11 @@ if [ "${1:-}" = "--system" ]; then
   systemctl enable --now cpu-performance.service
   # HailoRT's own install drops a unit that points at /usr/bin; ours replaces it.
   rm -f /usr/local/lib/systemd/system/hailort.service /lib/systemd/system/hailort.service
+  # It runs as its own user (#67); the operator joins its group to reach the
+  # socket, which takes effect at the next login.
+  id -u hailort >/dev/null 2>&1 \
+    || useradd --system --user-group --no-create-home --shell /usr/sbin/nologin hailort
+  id -nG "$OWNER" | grep -qw hailort || usermod -aG hailort "$OWNER"
   install -m 0644 "$KUTUM/system/systemd/hailort.service" /etc/systemd/system/
   systemctl daemon-reload
   systemctl enable --now hailort.service

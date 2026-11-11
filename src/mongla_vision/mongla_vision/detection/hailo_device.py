@@ -144,6 +144,11 @@ def shared_device():
 # Where the service is, and how long a starting process waits for it.
 SERVICE_BIN = '/usr/local/bin/hailort_service'
 SERVICE_PID = '/run/hailo/hailort_service.pid'
+# Not HailoRT's default /tmp socket: the service runs with a private /tmp
+# (kutum/system/systemd/hailort.service). Set before the library loads, by the
+# package's __init__; kutum/env.sh and the unit say the same, and a test holds
+# all three equal.
+SERVICE_ADDR = 'unix:///run/hailo/hailort_uds.sock'
 GROUP_ID = 'mongla'
 SERVICE_WAIT_S = 3.0
 # How this process falls back when the service is not there:

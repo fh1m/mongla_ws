@@ -7593,3 +7593,29 @@ outside this drill.
 respawn limit of three being reached by a service that keeps dying. The
 second leaves the cameras down and says so, which is the existing policy for
 any process.
+
+**Confined, as its own user (2026-11-12).** Every Kutum service runs as its
+own user (#67), and the first confined unit failed: as user `hailort`, every
+client got `HAILO_NOT_FOUND` at its first inference, or a timeout. Bisected
+on Kutum with runtime drop-ins, 50 `yolov8n` inferences through the service
+each time:
+
+| configuration | result |
+|---|---|
+| user `hailort`, no capabilities | fails (timeout or `HAILO_NOT_FOUND`) |
+| root, full confinement, no capabilities | fails |
+| root, full confinement, `CAP_KILL` only | 0.808 s, three runs |
+| user `hailort`, full confinement, `CAP_KILL` only | 0.808 s and 0.805 s |
+
+The service checks that each client is alive by signalling its pid; a
+different user may not do that, so every client looked dead and its network
+was released. `CAP_KILL` is the one capability the unit keeps, both bounding
+and ambient. Full confinement here means `NoNewPrivileges`, `ProtectSystem=strict`,
+`ProtectHome`, `PrivateTmp`, `UMask=0007` and the socket in `/run/hailo`,
+group `hailort`; it costs nothing measurable against the 0.548 s above
+(a different model, `gate_sharks`).
+
+The drill above, re-run against the installed confined unit: back in
+**0.525 s** after SIGKILL, running as `hailort`; the running client raised
+`HAILO_RPC_FAILED` (77) at once; a new process opened through the service.
+The restart, surface and rejoin bars still hold.
