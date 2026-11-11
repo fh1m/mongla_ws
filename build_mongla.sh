@@ -67,7 +67,7 @@ source /opt/ros/humble/setup.bash 2>/dev/null || true
 
 # Wipe stale Python package dirs so colcon sees a clean slate.
 # mongla_interfaces is ament_cmake so its install dir is managed correctly by CMake.
-for pkg in mongla_control mongla_manager mongla_localization mongla_planner mongla_vision; do
+for pkg in mongla_batighor mongla_control mongla_manager mongla_localization mongla_planner mongla_vision; do
     rm -rf "install/$pkg" "build/$pkg"
 done
 
@@ -107,17 +107,17 @@ find src -name __pycache__ -type d -prune -exec rm -rf {} +
 colcon build --packages-select mongla_interfaces --cmake-args -Wno-dev "$@"
 source install/setup.bash
 
-# Step 2: build the Python packages (control + sensors + manager + planner + vision)
+# Step 2: build the Python packages (operator center + control + sensors + manager + planner + vision)
 # --symlink-install: a source edit is live in install/ without a rebuild, so
 # the installed tree cannot quietly lag the source between builds (it did:
 # 2026-10-03 found the dev box's install/ three weeks behind src/).
 colcon build --symlink-install --packages-select \
-    mongla_control mongla_manager mongla_localization mongla_planner mongla_vision "$@"
+    mongla_batighor mongla_control mongla_manager mongla_localization mongla_planner mongla_vision "$@"
 
 INSTALL="$(pwd)/install"
 PY=python3.10
 
-for pkg in mongla_control mongla_manager mongla_localization mongla_planner mongla_vision; do
+for pkg in mongla_batighor mongla_control mongla_manager mongla_localization mongla_planner mongla_vision; do
     PREFIX="$INSTALL/$pkg"
     DIST="$PREFIX/local/lib/$PY/dist-packages"
     SITE="$PREFIX/lib/$PY/site-packages"
