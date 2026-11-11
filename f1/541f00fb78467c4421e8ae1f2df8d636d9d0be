@@ -1,0 +1,22 @@
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 28,63-72
+.claude/context/platform/foxglove-and-bags.md
+  h_f1b9066eb9899c 181-182
+src/mongla_batighor/layouts/mongla_layout.json
+  h_f1b9066eb9899c 33-36,51-56,58
+src/mongla_manager/launch/bringup.launch.py
+  h_f1b9066eb9899c 67-83,506
+src/mongla_manager/test/test_the_bridge_only_lets_a_browser_drive_through_the_helm.py
+  h_f1b9066eb9899c 1-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "f1541f00fb78467c4421e8ae1f2df8d636d9d0be",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
