@@ -1,0 +1,65 @@
+{
+  "configById": {
+    "Plot!link": {
+      "paths": [
+        {
+          "value": "/mongla/board_link.bytes_per_s",
+          "enabled": true,
+          "label": "bytes/s"
+        },
+        {
+          "value": "/mongla/board_link.capacity_bytes_per_s",
+          "enabled": true,
+          "label": "the line, 115200 8N1"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!drops": {
+      "paths": [
+        {
+          "value": "/mongla/board_link.board_drop_pct",
+          "enabled": true,
+          "label": "board drop %"
+        },
+        {
+          "value": "/mongla/board_link.board_errors",
+          "enabled": true,
+          "label": "board errors"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "RawMessages!named": {
+      "topicPath": "/mongla/board_link.named"
+    },
+    "RawMessages!rates": {
+      "topicPath": "/mongla/board_link.rates"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "Plot!link",
+      "second": "Plot!drops",
+      "splitPercentage": 60
+    },
+    "second": {
+      "direction": "row",
+      "first": "RawMessages!named",
+      "second": "RawMessages!rates",
+      "splitPercentage": 55
+    },
+    "splitPercentage": 45
+  }
+}

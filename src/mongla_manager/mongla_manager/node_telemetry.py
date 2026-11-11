@@ -294,6 +294,23 @@ class TelemetryMixin:
             return None, 'N/A'
         return float(yaw), 'AHRS'
 
+    def board_link_tick(self) -> None:
+        """`/mongla/board_link`: what the link carries, once a second (link_meter.py)."""
+        from mongla_interfaces.msg import BoardLink, MessageRate, NamedValue
+        from .link_meter import LINE_BYTES_PER_S
+        bps, rates = self._link_meter.read(time.monotonic())
+        msg = BoardLink()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.bytes_per_s = float(bps)
+        msg.capacity_bytes_per_s = float(LINE_BYTES_PER_S)
+        msg.board_drop_pct = float(self._link_meter.drop_pct)
+        msg.board_errors = float(self._link_meter.errors)
+        msg.rates = [MessageRate(type=k, hz=float(v)) for k, v in rates.items()]
+        msg.named = [NamedValue(name=k, value=math.nan if v is None else float(v),
+                                age_s=float(age))
+                     for k, (v, age) in sorted(self.fc.named_values().items())]
+        self.board_link_publisher.publish(msg)
+
     def telemetry_tick(self):
         attitude = self.fc.get_attitude()
         battery  = self.fc.get_battery()
