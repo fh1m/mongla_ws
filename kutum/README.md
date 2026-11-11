@@ -58,6 +58,16 @@ RTC agrees with the system clock, and whether network time has synchronised
 since boot. Timing measured on Kutum, and why it stays on `systemd-timesyncd`:
 measured-bars §68.
 
+## The processor's speed
+
+`setup.sh --system` also sets the cores to 2.8 GHz (`arm_freq=2800` and
+`over_voltage_delta=50000` in the same file; stock is 2.4). Measured on the
+open bench for 20 minutes at each: 18.2 % more CPU work and 13.8 % more Hailo
+rate under full load, 67.5 C at the hottest, never throttled (measured-bars
+§82). The sealed hull has not been run at this clock. The doctor reports the
+clock and warns on any throttle flag since boot; to go back to stock, delete
+the two lines and reboot.
+
 ## Every day
 
 ```bash

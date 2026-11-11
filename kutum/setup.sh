@@ -189,7 +189,7 @@ if [ "${1:-}" = "--system" ]; then
                      REBOOT="$REBOOT netplan"; }
   systemctl enable --now avahi-daemon
 
-  say "7/8  the RTC: keep its battery charged"
+  say "7/8  boot settings: the RTC battery, and the ARM clock"
   # The Pi 5's clock keeps time through a power-off only on its battery, and
   # the firmware leaves charging off. The official RTC battery (a rechargeable
   # ML-2020) is charged at 3.0 V, Raspberry Pi's documented value. Do NOT
@@ -200,6 +200,18 @@ if [ "${1:-}" = "--system" ]; then
     echo "  charging enabled in $cfg; reboot to apply"
     REBOOT="$REBOOT rtc-charging"
   else echo "  already set: $(grep '^dtparam=rtc_bbat_vchg=' "$cfg")"; fi
+
+  # The ARM clock: 2.8 GHz in place of the stock 2.4. Measured for 20 minutes
+  # at each on the open bench with the fan as fitted: +18.2 % CPU work, +13.8 %
+  # Hailo rate, 67.5 C at the hottest, never throttled (measured-bars 82). The
+  # sealed hull is hotter and has not been run; if it throttles there, the
+  # firmware slows the cores by itself and the doctor and the health board
+  # both say so. To go back: delete the two lines and reboot.
+  if ! grep -q '^arm_freq=' "$cfg"; then
+    printf '\n# kutum: ARM clock (measured-bars 82); delete both lines to return to stock\n[all]\narm_freq=2800\nover_voltage_delta=50000\n' >> "$cfg"
+    echo "  arm_freq=2800 written to $cfg; reboot to apply"
+    REBOOT="$REBOOT arm-clock"
+  else echo "  already set: $(grep '^arm_freq=' "$cfg")"; fi
 
   say "8/8  the user half, as $OWNER"
   sudo -u "$OWNER" -H bash "$KUTUM/setup.sh"
