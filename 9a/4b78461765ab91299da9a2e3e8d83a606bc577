@@ -1,0 +1,14 @@
+tools/bench/cv_hot_path.py
+  h_f1b9066eb9899c 7-9,23-33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "9a4b78461765ab91299da9a2e3e8d83a606bc577",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
