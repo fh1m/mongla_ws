@@ -4,6 +4,9 @@ Bar, written before the run (2026-11-11): a newer OpenCV is worth leaving the
 distro's for if the summed per-frame hot path (decode + letterbox resize +
 BGR2RGB + BGR2GRAY + corners + pyramidal LK) drops by at least 25 %, AND
 cv_bridge and hailo_platform still import and convert in the same interpreter.
+That bar was measured with cv_bridge (measured-bars 77); the stack has since
+dropped it for `mongla_vision.image_msg` (measured-bars 78), so the check below
+is that our own conversion still round-trips under the cv2 and NumPy on test.
 Falsifier for the bench: every op's output is hashed or summarised, so two
 builds that disagree on pixels show it.
 """
@@ -17,19 +20,17 @@ try:
     out['kleidicv'] = any('KleidiCV' in l for l in bi.splitlines())
 except Exception as e:
     out['cv2_error'] = repr(e)[:200]; print(json.dumps(out)); sys.exit(0)
-for mod in ('cv_bridge', 'hailo_platform'):
-    try:
-        __import__(mod); out[mod] = 'imports'
-    except Exception as e:
-        out[mod] = 'FAILS: ' + repr(e)[:160]
-if out['cv_bridge'] == 'imports':
-    try:
-        from cv_bridge import CvBridge
-        b = CvBridge(); a = np.zeros((36, 64, 3), np.uint8); a[3, 5] = (1, 2, 3)
-        back = b.imgmsg_to_cv2(b.cv2_to_imgmsg(a, 'bgr8'), 'bgr8')
-        out['cv_bridge'] = 'round-trips' if (back == a).all() else 'WRONG PIXELS'
-    except Exception as e:
-        out['cv_bridge'] = 'FAILS at convert: ' + repr(e)[:160]
+try:
+    __import__('hailo_platform'); out['hailo_platform'] = 'imports'
+except Exception as e:
+    out['hailo_platform'] = 'FAILS: ' + repr(e)[:160]
+try:
+    from mongla_vision import image_msg
+    a = np.zeros((36, 64, 3), np.uint8); a[3, 5] = (1, 2, 3)
+    back = image_msg.to_array(image_msg.to_msg(a, 'bgr8'), 'bgr8')
+    out['image_msg'] = 'round-trips' if (back == a).all() else 'WRONG PIXELS'
+except Exception as e:
+    out['image_msg'] = 'FAILS: ' + repr(e)[:160]
 rng = np.random.default_rng(0)
 base = cv2.GaussianBlur(rng.integers(0, 255, (360, 640, 3), dtype=np.uint8), (0, 0), 3)
 base = cv2.add(base, rng.integers(0, 40, base.shape, dtype=np.uint8))
