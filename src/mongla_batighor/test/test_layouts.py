@@ -52,3 +52,36 @@ def test_every_layout_topic_is_published_somewhere(path):
 def test_the_layouts_are_found():
     # A moved folder parametrizes the test above over nothing, and passes.
     assert len(_LAYOUTS) >= 5, _LAYOUTS
+
+
+# std_msgs types carry no header. Lichtblick 1.30 plots a path by its header
+# stamp unless the path says `receiveTime`, so a plot of one of these topics
+# without it stays empty while the topic publishes (seen on Kutum, 2026-11-12,
+# the `flow` layout's distance and quality plots).
+_HEADERLESS = ('Float32', 'Float64', 'UInt8', 'Int32', 'Bool', 'String',
+               'Float32MultiArray', 'Float64MultiArray')
+
+
+def _headerless(src, topic):
+    leaf = topic.rsplit('/', 1)[-1]
+    return re.search(rf"create_publisher\(\s*(?:{'|'.join(_HEADERLESS)})\s*,"
+                     rf"\s*f?'[^']*/{re.escape(leaf)}'", src) is not None
+
+
+@pytest.mark.parametrize('path', _LAYOUTS, ids=lambda p: p.name)
+def test_a_plot_of_a_headerless_topic_is_stamped_on_arrival(path):
+    src = _published()
+    for name, cfg in json.loads(path.read_text())['configById'].items():
+        for p in cfg.get('paths', []):
+            topic = p['value'].split('.', 1)[0]
+            if _headerless(src, topic):
+                assert p.get('timestampMethod') == 'receiveTime', (
+                    f'{path.name} {name}: {topic} has no header, so this plot '
+                    f'draws nothing unless the path sets timestampMethod receiveTime')
+
+
+def test_the_headerless_check_sees_a_headerless_topic():
+    # A regex that matches nothing passes every layout above.
+    src = _published()
+    assert _headerless(src, '/mongla/vision/downward/flow_quality')
+    assert not _headerless(src, '/mongla/vision/downward/velocity')
