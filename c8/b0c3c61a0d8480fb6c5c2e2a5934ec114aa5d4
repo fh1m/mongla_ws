@@ -1,0 +1,18 @@
+.claude/context/ROADMAP.md
+  h_f1b9066eb9899c 260
+test/test_no_capability_is_unreachable_anywhere.py
+  h_f1b9066eb9899c 111-113
+test/test_the_retired_stack_stays_retired.py
+  h_f1b9066eb9899c 15-17,56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c8b0c3c61a0d8480fb6c5c2e2a5934ec114aa5d4",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
