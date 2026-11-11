@@ -396,11 +396,16 @@ class HelmNode(Node):
 
 
 def main(args=None):
+    from mongla_localization.params_file import refuse_unknown
+    from mongla_localization.spin import spin
     rclpy.init(args=args)
     node = HelmNode()
+    refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     node._publish_state(force=True)
     try:
-        rclpy.spin(node)
+        # Every callback returns at once (service calls finish in their
+        # done-callbacks), so the single-threaded events executor fits.
+        spin(node)
     except KeyboardInterrupt:
         pass
     finally:

@@ -4,9 +4,11 @@
 # operator names themselves; the command log trusts that name.
 string   who          # the name the operator typed, remembered by their browser
                       # (not `operator`: a C++ keyword, and the field must build in C++)
-string   op           # heartbeat | request | give | release | command | mission | abort
+string   op           # heartbeat | request | give | release | command | mission | abort | tune | camera
 string   cmd          # op=command: a verb from mongla_control/commands.py
+                      # op=tune: '<camera>.<setting>'; op=camera: a camera name
 string   fields_json  # op=command: {"field": value} for that verb's own fields only
+                      # op=tune: the new value, as JSON
 string   mission      # op=mission: a name `ros2 run mongla_planner mission --list` prints
 string[] confirms     # op=command, cmd=arm: 'propellers_clear' and 'kill_switch_manned'
 ---
