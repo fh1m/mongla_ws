@@ -257,7 +257,7 @@ own formula. Dev suite before any change: 3220 passed, 0 failed.
 | Item | Resolution |
 |---|---|
 | `run_budget.py` (Tier 5.1) | wired into the DSL, opt-in: `use_budget(total_s, reserve_s)` starts the clock on a successful `arm()`; `worth_attempting(name, points=, worst_case_s=, fallback_s=, fallback_points=)` returns full / fallback / skip and logs it on the scoreboard. No budget = always attempt |
-| `mongla_control/nav_filter.py` | **false positive** of the `src/`-only census: `tools/pool/srot_console_server.py` and `tools/pool/srot_replay.py` import it. Kept |
+| `mongla_control/nav_filter.py` | **false positive** of the `src/`-only census: `tools/pool/srot_replay.py` imports it. Kept |
 | `estimator/thrust_model.py` | stays uncalled on purpose until G2 (thrusters fitted) |
 | topic `*/vision_info` | `mongla.active_models(cam)`; `set_model(name, confirm_s=N)` waits for the detector to announce `name`, then drops detections cached from the old model. Matched by NAME, not epoch (a restarted detector resets the epoch). `confirm_s=0` (default) is the old behaviour |
 | topic `*/contours` | `mongla.outline(cls)` → largest `Outline(class_name, score, angle_deg, area_px, points)`; a box model gives 4 corners, a seg model the mask outline |
