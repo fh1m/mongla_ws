@@ -1,0 +1,40 @@
+.claude/context/kutum/pi-and-env-traps.md
+  h_f1b9066eb9899c 20-24
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 145-146,7624-7725
+.claude/context/packages/mongla_localization/README.md
+  h_f1b9066eb9899c 146
+README.md
+  h_f1b9066eb9899c 64-65,797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+kutum/doctor.sh
+  h_f1b9066eb9899c 143-145,171
+kutum/setup.sh
+  h_f1b9066eb9899c 136-137
+kutum/system/limits/99-mongla-realtime.conf
+  h_f1b9066eb9899c 1-6
+src/mongla_localization/mongla_localization/realtime.py
+  h_f1b9066eb9899c 1-66
+src/mongla_localization/test/test_the_manager_asks_for_realtime.py
+  h_f1b9066eb9899c 1-89
+src/mongla_manager/mongla_manager/auv_manager_node.py
+  h_f1b9066eb9899c 350-353,355
+tools/README.md
+  h_f1b9066eb9899c 58,99
+tools/bench/cv_hot_path.py
+  h_f1b9066eb9899c 1-57
+tools/bench/wake_latency.py
+  h_f1b9066eb9899c 1-168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "873828e7481584d6d73483899d10c28cc3d85987",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
