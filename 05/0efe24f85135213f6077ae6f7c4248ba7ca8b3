@@ -1,0 +1,40 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 523-526
+.claude/context/README.md
+  h_f1b9066eb9899c 60,64-70,74-82,86-88,92-95,99-105,109-112,116-118
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 7393-7415,7422-7424
+.claude/context/perception/hailo-vision.md
+  h_f1b9066eb9899c 673-676
+.claude/context/perception/vision-pipeline.md
+  h_f1b9066eb9899c 1-209
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 472,487-488
+.claude/skills/train-model/SKILL.md
+  h_f1b9066eb9899c 66-68
+README.md
+  h_f1b9066eb9899c 797
+docs/index.html
+  h_f1b9066eb9899c 1734,1736
+src/mongla_vision/mongla_vision/detection/hailo.py
+  h_f1b9066eb9899c 27-32,354-404,450-451
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  h_f1b9066eb9899c 91-92,133
+src/mongla_vision/mongla_vision/detector_setup.py
+  h_f1b9066eb9899c 47-56,292-331,449-471
+src/mongla_vision/test/test_detector_nms_is_live.py
+  h_f1b9066eb9899c 1-93
+src/mongla_vision/test/test_hailo_arbiter.py
+  h_f1b9066eb9899c 139-141,162,168,501-571
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "050efe24f85135213f6077ae6f7c4248ba7ca8b3",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
