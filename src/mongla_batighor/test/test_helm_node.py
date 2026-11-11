@@ -140,7 +140,9 @@ def test_a_silent_pilots_running_verb_is_followed_by_stop(rig):
     call('ana', 'command', cmd='move_forward', fields_json='{"duration": 3}')
     # No heartbeat: the helm is lost after LOST_S, while the move still runs.
     assert sent(2, timeout=3.0) == ['move_forward', 'stop']
-    assert states and states[-1]['pilot'] == ''
+    # The stop is sent first and the freed helm published after it, so the
+    # state may arrive a moment later (seen on jazzy CI).
+    assert _until(lambda: states and states[-1]['pilot'] == '')
 
 
 def test_a_beating_pilot_keeps_the_helm_and_nothing_is_stopped(rig):
