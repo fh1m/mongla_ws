@@ -504,6 +504,30 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-112: the detector treated a HEF's compiled score threshold as a floor nothing could lower `READ 2026-11-11` **FIXED 2026-11-11**
+
+**What.** B-58 found a model compiled at the stock 0.200 and concluded that
+only a recompile could lower it. Every note since repeated that: the detector
+clamped `assoc_conf` to the compiled value, warned that a lower `conf` could
+not be had, and a stock graph could not run at the 0.10 to 0.15 this stack
+operates at. Nobody had asked the runtime. The NMS of these graphs runs in
+libhailort on the host, and `set_nms_score_threshold` on the model's output
+replaces the value at configure time.
+
+**Measured** (measured-bars 79): on a graph compiled at 0.200, 323 boxes
+came back below 0.200, all 18 boxes at or above it were unchanged, and the
+inference took 0.16 % longer.
+
+**Fix.** `HailoDetector._lower_floor` configures any detection graph compiled
+above `EMIT_FLOOR` (0.05) at `EMIT_FLOOR`, and `_floor` is what the clamp and
+the warning now read. A refusal keeps and reports the compiled value.
+`test_hailo_arbiter.py` holds it: the call is made, before the configure, only
+when needed, and a refusal is not reported as success.
+
+**How it survived.** The compiled value was read from `parse-hef`, a lower
+host `conf` changed nothing, and both facts fitted "it is baked". The check
+that would have refuted it was one call on the runtime.
+
 ### B-110: a process or camera that died mid-run stayed dead for the run `READ 2026-11-10` **FIXED 2026-11-10**
 
 **What.** No process bringup starts had a restart. A detector that `os._exit`s
