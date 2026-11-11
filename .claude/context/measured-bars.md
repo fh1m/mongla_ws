@@ -142,6 +142,8 @@ is how `recommend()` happened.
 - [75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)](#75-rectify-the-image-once-at-the-camera--not-chosen-468-ms-a-frame-against-a-4-ms-bar-and-points-cost-37-microseconds-2026-11-10) — *measured, not adopted*
 - [82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; 3.0 GHz is slower under load; open bench only (2026-11-11)](#82-the-arm-clock-at-28-ghz--kept-182--cpu-work-and-138--hailo-rate-under-full-load-675-c-never-throttled-30-ghz-is-slower-under-load-open-bench-only-2026-11-11)
 - [83. THE HAILORT SERVICE DIES MID-RUN — back in 0.31 s, and its clients fail fast (2026-11-11)](#83-the-hailort-service-dies-mid-run--back-in-031-s-and-its-clients-fail-fast-2026-11-11)
+- [76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11)](#76-a-realtime-kernel--not-chosen-the-stock-kernel-wakes-a-loaded-50-hz-loop-within-002-ms-once-the-loop-has-a-realtime-priority-2026-11-11) — *measured, not adopted*
+- [77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11)](#77-numpy-2-and-a-newer-opencv-on-kutum--not-chosen-10-to-16--of-the-hot-path-and-cv_bridge-stops-converting-2026-11-11) — *measured, not adopted*
 <!-- contents:end -->
 
 ---
@@ -7619,3 +7621,105 @@ The drill above, re-run against the installed confined unit: back in
 **0.525 s** after SIGKILL, running as `hailort`; the running client raised
 `HAILO_RPC_FAILED` (77) at once; a new process opened through the service.
 The restart, surface and rejoin bars still hold.
+## 76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11)
+
+**The question.** Ubuntu offers a PREEMPT_RT kernel for the Pi 5 through
+Ubuntu Pro (`pro status` on Kutum lists `realtime-kernel` as available; it
+needs a Pro token attached). Kutum runs `6.8.0-1065-raspi`, `CONFIG_PREEMPT=y`.
+Would the realtime kernel make the host's timing tighter?
+
+**The bar, written before the first run** (`tools/bench/wake_latency.py`). The
+fastest host loop is 50 Hz, the vision verbs' `MANUAL_CONTROL` stream. A new
+kernel is worth it only if, with every core busy, a `SCHED_FIFO` loop on the
+stock kernel is later than **1 ms at p99.9 or 2 ms at worst**. The bench's own
+falsifier: under load the default scheduler must be clearly later than
+`SCHED_FIFO`, or the load is not competing.
+
+**Measured on Kutum**, 60 s each, a 50 Hz Python loop on absolute deadlines,
+four busy processes, and a thread in the same process parsing MAVLink at the
+full 115200-baud rate (the manager's own shape):
+
+| scheduler | interpreter switch interval | p50 | p99.9 | wake-ups later than 2 ms, of 3000 |
+|---|---|---|---|---|
+| default | 5 ms (Python's default) | 0.056 ms | **2.28 to 2.93 ms** | **13** |
+| `SCHED_FIFO` 10 | 0.5 ms | 0.005 ms | **0.014 to 0.021 ms** | **0** |
+
+The worst single wake-up in every `SCHED_FIFO` run (0.54, 1.53 and 5.43 ms
+across three runs) was the first one, 0.02 s in, while the reader thread was
+still importing; nothing after start-up passed the bar.
+
+Two separate causes, measured apart (30 s runs):
+
+| case | worst wake-up |
+|---|---|
+| `SCHED_FIFO` 80, four busy processes, nothing else in the process | 0.035 ms |
+| `SCHED_FIFO` 80, reader thread beside it, 5 ms switch interval | 5.08 ms |
+| the same, 0.5 ms switch interval | 0.56 ms |
+| default scheduler, idle | 0.063 ms, of which 0.050 ms is the default timer slack |
+
+So the scheduler costs up to 2.9 ms and a realtime priority removes it, and
+the interpreter lock costs exactly its 5 ms switch interval whatever the
+priority and a shorter interval bounds it. Two busy pure-Python threads in the
+process put the loop hundreds of milliseconds behind under any scheduler: the
+lock, not the kernel, is the timing risk in a Python process.
+
+**Verdict.** The realtime kernel is not adopted: with the two settings the
+stock kernel is 50 times inside the bar, and there is nothing left for it to
+remove at a 20 ms period. **What ships:** `mongla_localization/realtime.py`,
+called by the manager before it starts its threads (`SCHED_FIFO` 10, 0.5 ms
+switch interval, `MONGLA_REALTIME=off` to disable);
+`kutum/system/limits/99-mongla-realtime.conf` permits it and `doctor.sh`
+checks it.
+
+**Caution:** NOT MEASURED in the running manager with the board attached; no
+board was on Kutum on the day. The bench reproduces its thread shape, not its
+callbacks. This also closes entry 68's open caution only for the wake-up, not
+for the full graph's callback times.
+
+---
+
+## 77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11)
+
+**The rule being questioned.** Kutum's Python must keep NumPy 1.x
+(`kutum/constraints.txt`). The reason, re-measured rather than quoted: in a
+scratch venv over the system packages with NumPy 2.5.4, the distribution's
+`cv2` 4.6.0 fails at import (`numpy.core.multiarray failed to import`), because
+it was compiled against the NumPy 1 ABI. Every vision node imports it.
+
+**The way out, and its bar.** The same venv with `opencv-python-headless`
+5.0.0 (built for NumPy 2, with KleidiCV, Arm's accelerated kernels).
+Written before the run (`tools/bench/cv_hot_path.py`): leave the distribution's
+OpenCV only if the summed per-frame hot path drops by at least **25 %** and
+`cv_bridge` and `hailo_platform` still work in the same interpreter.
+
+| operation, 640x360, median ms | system 4.6.0, NumPy 1.26.4 | pip 5.0.0 + KleidiCV, NumPy 2.5.4 |
+|---|---|---|
+| JPEG decode | 2.141 | 1.803 |
+| resize to 640x640 | 0.712 | 0.573 |
+| BGR to RGB | 0.064 | 0.040 |
+| BGR to gray | 0.086 | 0.041 |
+| `goodFeaturesToTrack`, 200 corners | 6.752 | 6.326 |
+| pyramidal LK, 200 points | 1.928 | 1.683 |
+| **sum** | **11.682** | **10.465** (-10.4 %) |
+
+Every operation returned the same pixels and points in both (identical
+checksums). `hailo_platform` 4.24.0 imports under NumPy 2. `cv_bridge` imports
+and then fails at the first conversion (`KeyError(16)`).
+
+**Verdict: FAIL on both halves of the bar.** The rule stays, and now has its
+reason and its price beside it. It would be reversed by a hot path where
+colour conversion or resize dominates (KleidiCV halves those) or by an Ubuntu
+release whose `python3-opencv` is built for NumPy 2. The step that would make
+the switch a one-line change is replacing `CvBridge` in the nine modules that
+import it with a direct array view; that is not done, because nothing measured
+here pays for it.
+
+**Caution:** the sum counts corner detection once per frame, and the flow node
+does not: it detects corners only when it re-anchors and tracks them with LK
+in between. Without that row the per-frame sum is 4.93 ms against 4.14 ms,
+**-16 %**, still under the bar. How often the vehicle re-anchors was not
+measured here.
+
+**Found on the way.** `trackers` 2.4.0 declares `numpy>=2.0.2` and runs on
+1.26.4. `goodFeaturesToTrack` is 6.75 ms a call and neither build speeds it
+up, so a re-anchor is the most expensive single step in the flow path.

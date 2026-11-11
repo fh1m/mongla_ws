@@ -17,6 +17,11 @@
   JetPack/ROS system numpy. ROS Humble's `cv_bridge` boost extension **and** the
   system `cv2` are compiled against the NumPy 1.x C-ABI and segfault under 2.x.
   `ultralytics` also pins `numpy<2.0.0`.
+  **The rule has a price, measured (measured-bars 77):** a NumPy 2 OpenCV 5.0.0
+  with KleidiCV is 10.4 % faster on our per-frame hot path, under the 25 % bar,
+  and `cv_bridge` stops converting beside it. It is reversed by a hot path where
+  colour conversion or resize dominates, or by a distribution `python3-opencv`
+  built for NumPy 2.
 - **Fix:** `pip3 install "numpy==1.26.4"` (last 1.x; correct target for this stack).
 - **Guard:** do not let any `pip install` pull numpy 2 back. If something forces it,
   reinstall 1.26.4 and that package with `--no-deps`.

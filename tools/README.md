@@ -55,6 +55,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `chip_share_bench.py` | XFeat + detector on one Hailo-8, via the scheduler and the sync API. |
 | `chip_throttle_bench.py` | The production configuration: XFeat at the rate the ANCHOR actually wants. |
 | `control_bench/` | The board's own control code, running on this machine. |
+| `cv_hot_path.py` | Hot-path OpenCV cost, per frame, for whichever cv2 this interpreter imports. |
 | `dataset_survey.py` | Characterise every labelled dataset by its WATER, not by its task. |
 | `executor_cost.py` | What an rclpy executor costs to deliver one callback, per executor. |
 | `fit_free_decay.py` | Fit a free-decay rotation: the drag-to-inertia ratio the controller needs. |
@@ -95,6 +96,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `v4l2_latency.py` | Measure camera latency against the KERNEL's own capture timestamp. |
 | `vision_latency_bench.py` | How OLD is the picture when the control loop acts on it? Every FPS number in this repo answers "how many frames per second". |
 | `vision_stage_profile.py` | Where the milliseconds go, stage by stage, on ONE clock. |
+| `wake_latency.py` | How late a periodic Python loop wakes on this kernel, idle and loaded. |
 | `xfeat_export.py` | Export XFeat to ONNX for the vehicle. |
 | `xfeat_export_hailo.py` | Export XFeat to an ONNX the Hailo compiler can parse -- and prove it is the same network. |
 | `xfeat_finetune.py` | Fine-tune XFeat on OUR water. |
