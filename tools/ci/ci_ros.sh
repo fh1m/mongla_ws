@@ -129,5 +129,21 @@ set -e
   grep -E '^SKIPPED' "$report" | sed 's/^/- /' || echo "- none"
   echo
   echo "Hardware validation not performed here: the board, the Hailo-8 and the cameras run on Kutum."
+  echo
+  # The bill of materials this result was measured against (#95): every pip
+  # package at its exact version, and the installed ROS and Python apt
+  # packages (dpkg also lists known, uninstalled ones with no version). The
+  # vehicle's own is release.json, written per deploy on Kutum.
+  pip_bom="$(python3 -m pip freeze --all 2>/dev/null | sort)"
+  apt_bom="$(dpkg-query -W -f '${Package}=${Version}\n' "ros-$distro-*" 'python3-*' 2>/dev/null | grep -v '=$' | sort)"
+  echo "<details><summary>Bill of materials: $(grep -c . <<<"$pip_bom") pip, $(grep -c . <<<"$apt_bom") apt</summary>"
+  echo
+  echo '```'
+  echo "$pip_bom"
+  echo
+  echo "$apt_bom"
+  echo '```'
+  echo
+  echo '</details>'
 } >> "$summary"
 exit "$rc"
