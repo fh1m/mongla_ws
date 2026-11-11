@@ -1,0 +1,34 @@
+.claude/context/kutum/README.md
+  h_f1b9066eb9899c 77
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 143,7465-7549
+.claude/context/upstream/README.md
+  h_f1b9066eb9899c 41,110
+.claude/context/upstream/pr-z-four-new-senses.md
+  h_f1b9066eb9899c 1-269
+README.md
+  h_f1b9066eb9899c 64,797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+kutum/README.md
+  h_f1b9066eb9899c 61-70
+kutum/doctor.sh
+  h_f1b9066eb9899c 57-63
+kutum/setup.sh
+  h_f1b9066eb9899c 202,214-225
+tools/README.md
+  h_f1b9066eb9899c 87
+tools/bench/overclock_soak.py
+  h_f1b9066eb9899c 1-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "eeb23bee9a680b4393269cd08cfe73159ad6940a",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
