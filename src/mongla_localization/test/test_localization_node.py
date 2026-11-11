@@ -29,6 +29,8 @@ class _NullLogger:
     def warning(self, *_a, **_k):
         pass
 
+    error = warning
+
 
 class _Stamp:
     def __init__(self, t):
@@ -1084,6 +1086,18 @@ def test_aiding_is_reported_as_aided_on_a_healthy_filter():
     assert n._pub_aiding.sent == ['aided']
 
 
+def test_an_unreadable_aiding_gate_reports_unaided():
+    """Issue #52: the feed is a safety input, so it fails closed."""
+    n = _node()
+    n._pub_aiding = _Recorder()
+
+    def boom():
+        raise RuntimeError('covariance is not finite')
+    n._filter._velocity_is_observed = boom
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['unaided']
+
+
 def test_aiding_flips_to_unaided_when_velocity_stops_being_observed():
     """The signal a mission needs. The pose keeps publishing and keeps
     looking healthy the whole time velocity is unobserved -- that is exactly
@@ -1121,10 +1135,9 @@ def test_aiding_recovers_when_velocity_is_measured_again():
     assert n._pub_aiding.sent == ['aided', 'unaided', 'aided']
 
 
-def test_a_filter_without_the_gate_reports_aided_rather_than_crashing():
-    """The node must survive a filter that predates the gate -- a replayed
-    bag, or a swapped estimator. An unreadable gate is reported as aided, which
-    is the pre-B-56 behaviour, rather than stopping the node."""
+def test_a_filter_without_the_gate_reports_unaided_and_does_not_crash():
+    """The node survives a filter with no gate (a swapped estimator), and says
+    unaided: a gate that is not there has not vouched for the position (#52)."""
     n = _node()
     n._pub_aiding = _Recorder()
 
@@ -1133,7 +1146,7 @@ def test_a_filter_without_the_gate_reports_aided_rather_than_crashing():
 
     n._filter = _Old()
     n._report_aiding()
-    assert n._pub_aiding.sent == ['aided']
+    assert n._pub_aiding.sent == ['unaided']
 
 
 def test_the_aiding_topic_is_not_the_motion_topic():

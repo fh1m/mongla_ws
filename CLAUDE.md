@@ -121,6 +121,11 @@ surfacing until the board confirms it, and refuses every verb but `disarm`, `sto
 board's link-loss failsafe acts. A restart does not clear this: a board heard ARMED at
 start-up latches the new manager until DISARMED (`BUGS.md` B-93, B-94, B-97).
 
+**Key point: the depth floor is the deck's to set.** `shield_max_depth_m` (under `nodes:`
+`mongla_manager:`) surfaces a hull that stays past it for a second while armed, whatever the
+mission asked for, and holds the same latch. It is 0, off, until set, and `bringup_check`
+warns. The board has no floor of its own yet (upstream ask Y, `BUGS.md` B-111).
+
 **Warning: `AUTO` never exits by itself.** After a move, MANUAL_CONTROL frames are discarded until
 the mode changes. The vision verbs handle this by setting the mode and **verifying it took**
 (`set_mode` is best-effort on this wire — a silent refusal looks exactly like success).
@@ -314,7 +319,7 @@ card). The chapter is [`.claude/context/kutum/`](.claude/context/kutum/README.md
 | `backup.sh fh1m@mongla.local` | the dev box | pull what only the vehicle has, into `~/kutum-backup/mongla/` (`--runs` adds runs and footage) |
 | `env.sh` | every shell on the Pi | ROS and the workspace, already sourced |
 
-**Caution:** the Pi's Python must keep **NumPy 1.x**. `cv_bridge` and the system `cv2` are
+**Caution:** the Pi's Python must keep **NumPy 1.x**. The system `cv2` is
 built against it, and a NumPy 2 pulled in by any `pip install` kills every vision node at
 import. `kutum/constraints.txt` pins it for every install, and the doctor checks it. The
 other environment traps (shadowed OpenCV, the empty `trackers 2.5.0` wheel, the board with

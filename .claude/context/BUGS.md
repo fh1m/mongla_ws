@@ -223,8 +223,11 @@ Separately, 34 tools were named nowhere else in the repository.
 fails it. `tools/README.md` indexes every tool from its own docstring
 (`tools/ci/gen_tools_index.py`), and `test/test_every_tool_is_indexed.py`, in the
 integrity gate, fails a stale index, a tool with no description, or a test file
-outside the collected tree. The control bench is the one named exemption: it
-compiles the firmware and needs that checkout in CI (#132).
+outside the collected tree. The control bench was the one named exemption;
+CI now fetches the firmware at the commit in
+`tools/bench/control_bench/FIRMWARE_PIN`, builds the bench from it and runs
+its 94 tests in the ROS job, and the wire drift guard reads the same checkout
+instead of skipping (#132).
 
 ### B-105: process teardown counted zombies as survivors `REPRODUCED 2026-11-09 (CI container)` **FIXED 2026-11-09**
 
@@ -520,7 +523,10 @@ inference took 0.16 % longer.
 
 **Fix.** `HailoDetector._lower_floor` configures any detection graph compiled
 above `EMIT_FLOOR` (0.05) at `EMIT_FLOOR`, and `_floor` is what the clamp and
-the warning now read. A refusal keeps and reports the compiled value.
+the warning now read. A refusal keeps and reports the compiled value. The
+floor and the overlap threshold are also live parameters (`nms_floor`,
+`nms_iou`), and a live `iou`, which nothing read after a model was built and
+which was accepted in silence, is now rejected with the parameter that works.
 `test_hailo_arbiter.py` holds it: the call is made, before the configure, only
 when needed, and a refusal is not reported as success.
 
@@ -559,6 +565,24 @@ publishes in `odom` until it is re-anchored, which `pose()` refuses.
 Tests run real processes under a real `LaunchService`. Injection checks:
 removing the limit, restarting a clean exit, reopening a video file, skipping
 the source swap, and a bare node in any of the three launch files each fail.
+
+### B-111: nothing below the mission stopped a dive, and the aiding feed failed open `READ 2026-11-10` **FIXED 2026-11-10** (host half)
+
+**What.** Two gaps the same shape (issue #52). A mission with a sign or units
+error could command any depth up to the 10 m move envelope, and the only thing
+that would refuse it was the process that made the mistake. And
+`/mongla/localization/aiding`, the estimator's own "do not act on this
+position" signal, reported `aided` whenever its observability gate raised or
+was missing, so the one case where the estimator could not vouch for itself
+read as healthy.
+
+**Fix.** `shield_max_depth_m` on the manager (`node_support.depth_shield`):
+past the floor for one second while armed, it aborts, surfaces and holds the
+same latch a dead mission does until the board confirms. It is off until the
+deck sets it, the manager says so at start-up, and `bringup_check` warns. The
+aiding feed fails closed. The board half, where a floor belongs, is
+[upstream ask Y](upstream/pr-y-a-floor-below-the-mission.md); the host does
+not send the `AIDED` flag until the board reads it.
 
 ### B-91: the floor's yaw bound was applied on arrival, against the heading now `READ 2026-11-07` **FIXED 2026-11-07**
 
