@@ -139,6 +139,7 @@ is how `recommend()` happened.
 - [73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)](#73-the-executor--what-delivering-one-callback-costs-and-what-that-is-worth-in-a-real-node-2026-11-10)
 - [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
 - [79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)](#79-the-compiled-score-threshold-is-a-default--the-floor-is-set-when-the-model-is-configured-2026-11-11)
+- [75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)](#75-rectify-the-image-once-at-the-camera--not-chosen-468-ms-a-frame-against-a-4-ms-bar-and-points-cost-37-microseconds-2026-11-10) — *measured, not adopted*
 <!-- contents:end -->
 
 ---
@@ -7422,3 +7423,39 @@ is untouched.
 **Not measured:** the 100-boxes-per-class cap, which a very low floor on a
 many-class graph could reach, and a change made while a second model is
 mid-inference on the same chip.
+
+**Not measured:** a floor below 0.05, and the 100-boxes-per-class cap, which
+a very low floor on a many-class graph could reach.
+
+---
+
+## 75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)
+
+**The idea (issue #42).** Three consumers once read `CameraInfo.k` and ignored
+`CameraInfo.d`. Remapping every frame in `camera_node` and publishing a
+pinhole image with `D = 0` would make that mistake impossible.
+
+**The bar, from the issue, written before the run.** `cv2.remap` on Kutum at
+1280x720 BGR with `CV_16SC2` maps, 1000 frames: an added p95 above **4 ms**
+kills it, and the lens is then removed from points per consumer, behind a
+guard.
+
+**Measured on Kutum** (Pi 5, system OpenCV 4.6.0, the downward lens's own
+calibration, `alpha = 0`):
+
+| frame | remap p50 | remap p95 | 8 points undistorted, p50 | HFOV in air, raw to rectified |
+|---|---|---|---|---|
+| 1280x720 | 4.61 ms | **4.68 ms** | 3.7 us | 63.82 to 64.15 deg |
+| 640x360 | 0.96 ms | 0.97 ms | 3.7 us | 63.82 to 64.19 deg |
+
+**Verdict: FAIL at the bar's resolution.** At the 640x360 the vehicle runs it
+is 0.97 ms, which at the downward camera's 210 Hz is a fifth of one core spent
+on pixels no consumer measures. A consumer measures a box centre or four
+corners, and removing the lens from eight points costs 3.7 microseconds. The
+other two falsifiers (detector accuracy on rectified frames, field of view)
+were not run: the first had already decided it.
+
+**What ships instead.** Every reader of `CameraInfo.k` already reads `d`
+(`pnp_node`, `lock_inputs`, `dsl_detections`, `vision_state`).
+`test/test_every_camera_matrix_reader_removes_the_lens.py` fails a new one that
+does not.
