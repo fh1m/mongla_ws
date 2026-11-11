@@ -55,15 +55,12 @@ def test_only_the_helm_is_a_service_a_browser_may_call():
         assert not _allowed(lim['service_whitelist'], name), name
 
 
-def test_a_browser_tunes_the_detectors_and_nothing_else():
+def test_a_browser_sets_no_parameter_itself():
+    """Tuning goes through the helm, which closes it during a mission; the
+    bridge cannot know when one runs, so it allows none."""
     lim = _bringup().BRIDGE_LIMITS
-    for name in ('/mongla_detector_forward.conf', '/mongla_detector_downward.nms_floor',
-                 '/mongla_detector_forward.nms_iou', '/mongla_detector_forward.active_model',
-                 '/mongla_detector_downward.classes'):
-        assert _allowed(lim['param_whitelist'], name), name
-    for name in ('/mongla_manager.shield_max_depth_m', '/mongla_detector_forward.paused',
-                 '/mongla_detector_forward.confx', '/x/mongla_detector_forward.conf',
-                 '/mongla_lock.lock_s'):
+    assert 'parameters' not in lim['capabilities']
+    for name in ('/mongla_detector_forward.conf', '/mongla_manager.shield_max_depth_m'):
         assert not _allowed(lim['param_whitelist'], name), name
 
 

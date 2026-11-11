@@ -84,6 +84,7 @@ def test_the_workspace_lists_the_helm_and_hands_over_its_foxe(kutum):
     assert pkg['version'] == e['version'] and pkg['name'] == e['name']
     code = z.read('dist/extension.js').decode()
     assert code.startswith('const VERBS = ') and 'registerPanel' in code
+    assert 'const TUNABLE = {"conf": "float"' in code and 'const CAMERAS = ["forward"' in code
     org = json.loads(_get(kutum + '/api/workspaces/mongla/layouts')[2])['data']
     assert [(l['name'], l['permission'], l['data']) for l in org] == \
         [('mongla_layout', 'ORG_READ', {})]

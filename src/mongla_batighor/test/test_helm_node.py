@@ -41,13 +41,34 @@ class FakeManager(Node):
         return Move.Result(success=True, message='ok')
 
 
+class Rig(tuple):
+    """(call, sent, manager, states, log), with the fake detectors as `.dets`."""
+
+    def __new__(cls, items, dets):
+        r = super().__new__(cls, items)
+        r.dets = dets
+        return r
+
+
+class FakeDetector(Node):
+    """A detector's settings and nothing else, under the real node's name."""
+
+    def __init__(self, camera):
+        super().__init__(f'mongla_detector_{camera}')
+        for name, value in (('conf', 0.35), ('nms_floor', 0.05), ('nms_iou', 0.0),
+                            ('active_model', 'gate_sharks'), ('classes', ''),
+                            ('paused', camera != 'forward')):
+            self.declare_parameter(name, value)
+
+
 @pytest.fixture
 def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(seat_rules, 'LOST_S', 0.6)
     rclpy.init()
     helm, mgr, me = HelmNode(log_path=tmp_path / 'helm.log'), FakeManager(), Node('browser')
+    dets = {c: FakeDetector(c) for c in ('forward', 'downward')}
     ex = MultiThreadedExecutor(num_threads=4)
-    for n in (helm, mgr, me):
+    for n in (helm, mgr, me, *dets.values()):
         ex.add_node(n)
     spin = threading.Thread(target=ex.spin, daemon=True)
     spin.start()
@@ -57,6 +78,8 @@ def rig(tmp_path, monkeypatch):
     me.create_subscription(String, '/mongla/batighor/helm_state',
                            lambda m: states.append(json.loads(m.data)), LATCHED)
     assert helm.move.wait_for_server(timeout_sec=5.0)
+    for c in dets:
+        assert helm._set[c].wait_for_service(timeout_sec=5.0)
 
     def call(who, op, **kw):
         req = Helm.Request(who=who, op=op, **kw)
@@ -72,9 +95,9 @@ def rig(tmp_path, monkeypatch):
             time.sleep(0.02)
         return [g[0] for g in mgr.goals]
 
-    yield call, sent, mgr, states, tmp_path / 'helm.log'
+    yield Rig((call, sent, mgr, states, tmp_path / 'helm.log'), dets)
     ex.shutdown()
-    for n in (helm, mgr, me):
+    for n in (helm, mgr, me, *dets.values()):
         n.destroy_node()
     rclpy.shutdown()
 
@@ -157,3 +180,58 @@ def test_a_running_mission_is_not_stopped_when_the_pilot_goes_quiet(rig):
         assert sent(2, timeout=2.0) == ['move_forward']
     finally:
         stop_beating.set()
+
+
+def _until(check, timeout=3.0):
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < timeout:
+        if check():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _param(node, name):
+    return node.get_parameter(name).value
+
+
+def test_any_named_operator_tunes_a_detector_when_no_mission_runs(rig):
+    call, _, _, states, _ = rig
+    det = rig.dets['forward']
+    r = call('raf', 'tune', cmd='forward.conf', fields_json='0.6')
+    assert r.ok, r.message
+    assert _until(lambda: _param(det, 'conf') == 0.6)
+    # and the state every browser reads says so, within the 1 s poll
+    assert _until(lambda: states and states[-1].get('tuning', {})
+                  .get('forward', {}).get('conf') == 0.6)
+
+
+def test_tuning_is_closed_while_a_mission_runs(rig):
+    call, _, mgr, _, _ = rig
+    beat = mgr.create_publisher(String, '/mongla/mission_alive', 10)
+    for _ in range(5):
+        beat.publish(String(data='qualify'))
+        time.sleep(0.05)
+    r = call('raf', 'tune', cmd='forward.conf', fields_json='0.6')
+    assert not r.ok and 'qualify' in r.message
+    time.sleep(0.3)
+    assert _param(rig.dets['forward'], 'conf') == 0.35
+
+
+def test_a_setting_outside_the_list_or_of_the_wrong_type_is_refused(rig):
+    call, _, _, _, _ = rig
+    for target, raw in (('forward.paused', 'true'), ('forward.conf', '"high"'),
+                        ('side.conf', '0.5'), ('forward.classes', '3')):
+        assert not call('raf', 'tune', cmd=target, fields_json=raw).ok, target
+    assert _param(rig.dets['forward'], 'paused') is False
+
+
+def test_the_pilot_switches_the_camera_as_use_camera_does(rig):
+    call, _, _, states, _ = rig
+    fwd, dwn = rig.dets['forward'], rig.dets['downward']
+    assert not call('raf', 'camera', cmd='downward').ok
+    call('ana', 'request')
+    r = call('ana', 'camera', cmd='downward')
+    assert r.ok, r.message
+    assert _until(lambda: _param(fwd, 'paused') is True and _param(dwn, 'paused') is False)
+    assert _until(lambda: states and states[-1].get('camera') == 'downward')
