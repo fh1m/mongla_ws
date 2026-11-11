@@ -18,6 +18,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from mongla_localization import launch_defaults
 from mongla_localization.launch_respawn import respawning
 
 # What a browser may do through foxglove_bridge. The bridge cannot tell one
@@ -44,6 +45,9 @@ def generate_launch_description():
         DeclareLaunchArgument('foxglove_port', default_value='8765',
                               description='foxglove_bridge WebSocket port'),
     ]
+    # `launch: batighor:` in ~/.mongla/bringup.yaml re-defaults these, and its
+    # `nodes:` reach the nodes below -- only when this file is the one typed.
+    args, settings = launch_defaults.for_launch_file(args, __file__)
     # The bridge exposes every topic over a WebSocket that Lichtblick, in the
     # browser or on the desktop, renders. use_compression cuts tether
     # bandwidth; still confirm detection FPS is unperturbed with it up and
@@ -75,7 +79,7 @@ def generate_launch_description():
     # log (helm.py). The terminal does not need it.
     helm = partial(Node, package='mongla_batighor', executable='helm',
                    name='batighor_helm', output='screen')
-    return LaunchDescription(args + [
+    return LaunchDescription(args + settings + [
         *respawning(bridge, 'the Foxglove bridge'),
         *respawning(serve, 'the Batighor web app'),
         *respawning(overlay, 'the Batighor overlay'),
