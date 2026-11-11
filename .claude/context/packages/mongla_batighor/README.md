@@ -25,6 +25,9 @@ ros2 launch mongla_vision vision_dual.launch.py fwd_video:=/path/gate.mp4 dwn_vi
 ros2 launch mongla_batighor batighor.launch.py
 ```
 
+`vision_dual` starts both detectors paused, as a mission expects: take the helm and choose a
+camera to resume one, or add `paused:=false` for both.
+
 ## How it is built
 
 | piece | what it does |
