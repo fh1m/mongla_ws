@@ -30,7 +30,42 @@ ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 | `layouts/` | our Lichtblick layouts; `test_layouts.py` fails when one shows a topic nothing publishes. `weak_link` is the one for a slow connection |
 
 `batighor:=true` in `bringup.launch.py` starts `foxglove_bridge` (port 8765), the server
-(port 8000) and the overlay, each respawned like every other process.
+(port 8000), the overlay and the helm, each respawned like every other process. The deck is
+started by hand, in a terminal.
+
+## Who drives: one pilot, everyone watches
+
+Decided with the owner (bead `mongla_ws-102.25.3`). Each job gets the surface that suits it:
+
+| surface | for | how |
+|---|---|---|
+| **GUI**, Lichtblick | what has to be seen: video and overlays, plots, the 3D scene, the planner | browsers drive through the helm, and only its pilot may |
+| **TUI**, `ros2 run mongla_batighor deck` | the person at the pool, over mosh: the vehicle, the pilot, missions and the command log live; `s` stop, `u` surface, `d` disarm, `:` any verb | a terminal is trusted and sends to `/mongla/move` itself |
+| **CLI**, `ros2 run mongla_planner mongla <verb>` | one verb, scripted | unchanged, and trusted |
+
+**The helm** (`helm.py`, rules in `seat.py`) is the only way a browser drives. It serves
+`/mongla/batighor/helm` (`mongla_interfaces/srv/Helm`), because `foxglove_bridge` relays service
+calls but not actions and cannot tell browsers apart, so each operator types a name and the
+log trusts it.
+
+- One pilot. `disarm`, `stop` and `surface`, and aborting a mission, are open to every operator.
+- To take over, ask: the pilot presses Give, or says nothing for 10 s and it passes.
+- A pilot whose browser is silent for 3 s loses the helm, and a verb they sent by hand that is
+  still running is followed by `stop`. A mission is not stopped: a dropped laptop must not end a
+  run the vehicle flies by itself.
+- `arm` needs two ticks from the pilot: propellers clear, kill switch manned.
+- A verb is checked against `commands.py` (the verb exists, every field is its own and of the
+  right type) before it is sent.
+- Every request and every change of pilot goes to `/mongla/batighor/log` and
+  `~/.mongla/batighor/helm.log`; the deck adds its own commands, marked `term:<user>`.
+  `/mongla/batighor/helm_state` (latched) says who is pilot, who is asking, which mission runs,
+  and the missions there are.
+
+Seen on Kutum: from Chrome through the bridge, `ana` took the helm, `raf` was refused
+`move_forward` with the reason, and `ana`, sending no heartbeat, lost it after 3 s; the deck in
+tmux showed the same three lines and refused its own `stop` with "the manager is not answering
+/mongla/move", since no manager ran. The browser panel that carries the heartbeat comes with our
+Lichtblick build: the release cannot load server panels (its `apiUrl` is unset).
 
 ## Video, by link
 
@@ -58,8 +93,11 @@ with no summary line shows as *(no summary)* until it gets one.
 
 | module | what it is |
 |---|---|
+| `deck.py` | The deck: Batighor in a terminal, for the person standing at the pool. |
 | `fetch.py` | Put the pinned Lichtblick web build on this machine. |
+| `helm.py` | The helm: the one way a browser drives the vehicle, and the log of who did. |
 | `overlay.py` | What the vision stack sees, drawn by the browser over the camera's own picture. |
 | `pin.py` | The Lichtblick build Batighor serves: one pinned version, one hash. |
+| `seat.py` | Who is the pilot: Batighor's token, as rules with no ROS in them. |
 | `serve.py` | Serve Lichtblick and our layouts to every operator's browser. |
 <!-- modules:end -->

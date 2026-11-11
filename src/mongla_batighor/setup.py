@@ -24,6 +24,8 @@ setup(
             'serve = mongla_batighor.serve:main',
             'fetch = mongla_batighor.fetch:main',
             'overlay = mongla_batighor.overlay:main',
+            'helm = mongla_batighor.helm:main',
+            'deck = mongla_batighor.deck:main',
         ],
     },
 )
