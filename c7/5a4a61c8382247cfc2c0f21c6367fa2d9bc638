@@ -1,0 +1,34 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 7596-7621
+README.md
+  h_f1b9066eb9899c 797
+docs/index.html
+  h_f1b9066eb9899c 1734,1736
+kutum/doctor.sh
+  h_f1b9066eb9899c 66-68,167
+kutum/env.sh
+  h_f1b9066eb9899c 24-27
+kutum/setup.sh
+  h_f1b9066eb9899c 142-146
+kutum/system/systemd/hailort.service
+  h_f1b9066eb9899c 15-28,31-38,43,45-50
+src/mongla_vision/mongla_vision/detection/__init__.py
+  h_f1b9066eb9899c 6-15
+src/mongla_vision/mongla_vision/detection/hailo_device.py
+  h_f1b9066eb9899c 147-151
+src/mongla_vision/test/test_hailo_service_open.py
+  h_f1b9066eb9899c 91-119
+test/test_kutum.py
+  h_f1b9066eb9899c 175-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c75a4a61c8382247cfc2c0f21c6367fa2d9bc638",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
