@@ -71,6 +71,39 @@ def test_a_mirror_blip_is_retried_before_it_fails_a_required_check():
     assert '/etc/apt/sources.list.d/ubuntu.sources' in code and '/etc/apt/sources.list ' in code
 
 
+def test_an_unreachable_mirror_fails_the_refresh_so_the_retry_runs(tmp_path):
+    """`apt-get update` against one source that answers and one that cannot
+    be resolved, for real: it exits 0 by default, which is how a dead mirror
+    skipped the retry loop, and non-zero under the mode the script sets."""
+    import shutil
+    import subprocess
+    code = '\n'.join(l for l in SCRIPT.splitlines() if not l.lstrip().startswith('#'))
+    mode = code.index('APT::Update::Error-Mode "any"')
+    assert mode < code.index('apt-get update'), 'the mode must be set before apt runs'
+    if not shutil.which('apt-get'):
+        return
+    repo = tmp_path / 'repo'
+    repo.mkdir()
+    (repo / 'Packages').write_text('')
+    (tmp_path / 'state' / 'lists' / 'partial').mkdir(parents=True)
+    (tmp_path / 'cache' / 'archives' / 'partial').mkdir(parents=True)
+    (tmp_path / 'sources.list').write_text(
+        f'deb [trusted=yes] file:{repo} ./\n'
+        'deb http://no-such-host.invalid/ubuntu jammy main\n')
+    base = ['apt-get', 'update', '-qq',
+            '-o', f'Dir::Etc::sourcelist={tmp_path}/sources.list',
+            '-o', 'Dir::Etc::sourceparts=/nonexistent',
+            '-o', f'Dir::State={tmp_path}/state',
+            '-o', f'Dir::Cache={tmp_path}/cache',
+            '-o', 'Debug::NoLocking=1']
+    lax = subprocess.run(base, capture_output=True, text=True)
+    strict = subprocess.run(base + ['-o', 'APT::Update::Error-Mode=any'],
+                            capture_output=True, text=True)
+    assert 'Could not resolve' in lax.stderr + strict.stderr, lax.stderr
+    assert lax.returncode == 0, 'apt changed its default; re-read this guard'
+    assert strict.returncode != 0
+
+
 def test_an_index_refresh_that_never_succeeds_still_fails_the_job(tmp_path):
     """The retry loop runs for real against an apt-get that always fails: a
     loop whose last command is `sleep` would exit 0 and pass the check."""
