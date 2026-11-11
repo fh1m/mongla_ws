@@ -75,7 +75,7 @@ Take yours.
 | If you are… | Start here | Then |
 |---|---|---|
 | **judging this project** (a professor, a competition judge, a reviewer) | [What is true today](#what-is-true-today) · [Capability map](https://fh1m.github.io/mongla_ws/capability-map.html) — every capability with its evidence and an honest state | [The ledger](#the-ledger), including everything we got wrong |
-| **thinking of contributing** | [Run it](#run-it) · [The six packages](#the-six-packages) | [Adding a verb](#adding-a-verb-is-two-edits) — it is two edits, and `.claude/context/` has a page per package |
+| **thinking of contributing** | [Run it](#run-it) · [The seven packages](#the-seven-packages) | [Adding a verb](#adding-a-verb-is-two-edits) — it is two edits, and `.claude/context/` has a page per package |
 | **an embedded / firmware engineer** | [What crosses the cable](#what-crosses-the-cable-44-bytes) · [The four repositories](#four-repositories-one-wire) | [`fc/srot_protocol.py`](src/mongla_control/mongla_control/fc/srot_protocol.py) — our single copy of the wire contract, and the [asks we have sent upstream](.claude/context/upstream/README.md) |
 | **learning robotics** (you have never built one of these) | [The fundamentals](#the-fundamentals) — control loops, PID, state estimation, optical flow, detection, underwater optics, from first principles | the **[interactive explainers](https://fh1m.github.io/mongla_ws/#pid)** on the site, where you can turn the gains yourself and watch it fail |
 | **here for the story** | [Three acts](#three-acts) | [Why keep going](#why-keep-going) |
@@ -88,7 +88,7 @@ Most of it runs without the vehicle. The vision pipeline replays real footage or
 bag, the missions run against the real DSL in the test suite, and only the verbs need the board.
 
 ```bash
-# 1. build (mirrors ~/models and ~/missions in, then builds all six packages)
+# 1. build (mirrors ~/models and ~/missions in, then builds all seven packages)
 ./build_mongla.sh && source install/setup.bash
 
 # 2. no hardware: the full vision pipeline on recorded footage
@@ -116,7 +116,7 @@ The first **reports**. The second **grades and gates** — it is the one that re
 
 ```bash
 git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
-./build_mongla.sh                      # colcon build, six packages
+./build_mongla.sh                      # colcon build, seven packages
 source install/setup.bash
 
 # the tests (6 suites, 4 749 of them, ~5 minutes)
@@ -594,7 +594,7 @@ rather than a desk, so they are written to be reused:
 
 ---
 
-## The six packages
+## The seven packages
 
 | package | what it owns | Python LOC | test files |
 |---|---|---:|---:|
@@ -604,6 +604,7 @@ rather than a desk, so they are written to be reused:
 | [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 8 021 | 67 |
 | [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 5 077 | 31 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
+| [`mongla_batighor`](.claude/context/packages/mongla_batighor/README.md) | Batighor, the operator center: Lichtblick served from Kutum, on our layouts | 267 | 2 |
 
 **330 test files against the source.** The ROS surface really is that small: one action
 `/mongla/move` carrying one verb per goal, and one topic `/mongla/state` publishing on change,

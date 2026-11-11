@@ -32,7 +32,7 @@ source tools/pool/pool_session.sh gate_am     # exports MONGLA_RUN_DIR + ROS_LOG
 `-p` params become `arg:=`, and an empty `mav_device` finds the board):
 ```bash
 ros2 run mongla_manager bringup_check  # graded preflight; fix any FAIL first
-ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
+ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 ```
 > Prefer your existing `ros2 run mongla_manager start …`? It has no Foxglove arg — start
 > the bridge yourself in a spare terminal:
@@ -49,8 +49,9 @@ ros2 run mongla_planner mission sauvc_qualification
 #   or hand-fly:  ros2 run mongla_planner mongla arm ; ... ; mongla disarm
 ```
 
-**Topside laptop — watch live:** Foxglove desktop → *Open connection → Foxglove WebSocket*
-→ `ws://<pi-ip>:8765`, load `src/mongla_vision/foxglove/mongla_layout.json`.
+**Topside laptop — watch live:** open `http://mongla.local:8000/` in any browser. Batighor
+serves Lichtblick already connected to `ws://<the same host>:8765` and opened on
+`src/mongla_batighor/layouts/mongla_layout.json`; `/?layout=board_health` opens another.
 
 **After the run — one folder has everything:**
 ```bash
@@ -70,7 +71,7 @@ Sections 1–3 below detail each piece.
 
 ---
 
-## 1. Foxglove — live telemetry (`foxglove:=true`)
+## 1. Batighor and Foxglove — live telemetry (`batighor:=true`)
 
 BumblebeeAS's `controlkitv3` is Foxglove-based; the borrowable idea is **Foxglove
 itself**, not their code. `foxglove_bridge` is a stock ROS 2 package — a C++
@@ -95,12 +96,15 @@ by hand if rosdep isn't set up. (`foxglove_bridge` = live telemetry;
 
 **Run (opt-in launch arg, off by default):**
 ```bash
-ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
-# custom port: foxglove:=true foxglove_port:=8766
+ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
+# custom ports: batighor_port:=8001 foxglove_port:=8766
 ```
-Then in the **Foxglove desktop app**: *Open connection → Foxglove WebSocket →*
-`ws://<pi-ip>:8765` (the Pi's IP). Load the shared layout at
-`src/mongla_vision/foxglove/mongla_layout.json` so the whole team sees the same view.
+Then open **`http://mongla.local:8000/`** in any browser: `mongla_batighor` serves the
+Lichtblick web app (the pinned build in `LICHTBLICK.json`, installed once with
+`ros2 run mongla_batighor fetch`, which checks its hash), connected to the bridge and opened
+on `src/mongla_batighor/layouts/mongla_layout.json`, so the whole team sees the same view.
+A desktop app connects the same way: *Open connection → Foxglove WebSocket →*
+`ws://mongla.local:8765`.
 The bridge is launched with `include_hidden:=true` so the `/mongla/move/_action/feedback`
 plot (err_x_px/err_y_px) isn't silently empty. **The layout is a starting point** — its
 panel-config schema is Foxglove-version-sensitive; if a panel loads blank, add it manually
@@ -116,7 +120,7 @@ tether bandwidth + serialization on the Pi — the classic "new bottleneck." So:
 ```bash
 # baseline (bridge OFF):
 ros2 topic hz /mongla/vision/forward/detections
-# repeat with foxglove:=true AND an operator viewing images in Foxglove.
+# repeat with batighor:=true AND an operator viewing images in Lichtblick.
 # Detection Hz must be essentially unchanged.
 ```
 Mitigations, in order: the bridge already sets `use_compression:=true`; **view one
@@ -191,7 +195,7 @@ see the mission terminal). `tools/pool/pool_session.sh` sets both `MONGLA_RUN_DI
 ```bash
 source tools/pool/pool_session.sh 2026-champs     # → MONGLA_RUN_DIR=~/mongla_runs/2026-champs, ROS_LOG_DIR=.../logs
 # terminal 1:
-ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true 2>&1 | tee $MONGLA_RUN_DIR/manager_console.log
+ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true 2>&1 | tee $MONGLA_RUN_DIR/manager_console.log
 # terminal 2 (same `source pool_session.sh 2026-champs`):
 ros2 run mongla_planner mission sauvc_qualification  2>&1 | tee $MONGLA_RUN_DIR/mission_console.log
 ```
@@ -229,7 +233,7 @@ sudo apt install -y ros-humble-rosbag2-storage-mcap
 
 **Connect to the live AUV:** launch `lichtblick` → *Open connection → Foxglove WebSocket*
 → `ws://<pi-ip>:8765` (the Pi). Then *Layouts → Import* and pick
-`src/mongla_vision/foxglove/mongla_layout.json`. This is pure WebSocket over the
+`src/mongla_batighor/layouts/mongla_layout.json`. This is pure WebSocket over the
 tether/switch — it needs **no** matching `ROS_DOMAIN_ID` and **no** DDS discovery on the
 dev box (that's why it's robust across the network).
 

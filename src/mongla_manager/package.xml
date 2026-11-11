@@ -20,10 +20,11 @@
   <depend>mongla_vision</depend>
 
   <!-- Optional operator-debug tooling (off the mission path, opt-in via
-       `foxglove:=true` / pool_record.sh). exec_depend so a fresh-image
+       `batighor:=true` / pool_record.sh). exec_depend so a fresh-image
        `rosdep install` restores them after an SSD reflash instead of the
        launch failing with "package foxglove_bridge not found". -->
   <exec_depend>foxglove_bridge</exec_depend>
+  <exec_depend>mongla_batighor</exec_depend>
   <exec_depend>rosbag2_storage_mcap</exec_depend>
 
   <!-- imported by the code; test_package_xml_declares_imports.py keeps these true -->

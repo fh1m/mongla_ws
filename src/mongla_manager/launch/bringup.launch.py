@@ -16,8 +16,8 @@ The one command for the vehicle (SROT board + Pi 5 + Hailo-8):
     # On the bench, in air: the optics change by ~1.33, so say so.
     ros2 launch mongla_manager bringup.launch.py vision:=true medium:=air
 
-    # Telemetry for the Foxglove app on ws://<pi>:8765 (pure viewing).
-    ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
+    # Batighor, the operator center: open http://mongla.local:8000/ in any browser.
+    ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 
     # Single camera, .pt model on a dev box (footage replay; not the vehicle path).
     ros2 launch mongla_manager bringup.launch.py vision:=true \\
@@ -314,11 +314,13 @@ def generate_launch_description():
         # Pass viewer:=true only where there is a display.
         DeclareLaunchArgument('viewer',     default_value='false',
                               description='Open vision_display (OpenCV viewer) alongside vision pipeline'),
-        DeclareLaunchArgument('foxglove',   default_value='false',
-                              description='Start foxglove_bridge (WebSocket telemetry on foxglove_port). '
-                                          'Off the mission path -- pure viz. Needs '
-                                          'ros-humble-foxglove-bridge installed. Connect the Foxglove '
-                                          'desktop app to ws://<pi>:<foxglove_port>.'),
+        DeclareLaunchArgument('batighor',   default_value='false',
+                              description='Batighor, the operator center: foxglove_bridge on '
+                                          'foxglove_port and the Lichtblick app on batighor_port '
+                                          '(open http://<pi>:<batighor_port>/). Off the mission '
+                                          'path; any number of browsers.'),
+        DeclareLaunchArgument('batighor_port', default_value='8000',
+                              description='Batighor web port'),
         DeclareLaunchArgument('foxglove_port', default_value='8765',
                               description='foxglove_bridge WebSocket port'),
     ]
@@ -463,8 +465,9 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('localization')),
     )
 
-    # Foxglove telemetry bridge -- opt-in, off the mission path (pure viz). Auto-
-    # exposes every topic over a WebSocket the Foxglove desktop app renders (our
+    # Batighor (mongla_batighor): the bridge and the web app. Opt-in, off the
+    # mission path. The bridge exposes every topic over a WebSocket that
+    # Lichtblick, in the browser or on the desktop, renders (our
     # detections/images/state are standard vision_msgs/sensor_msgs). use_compression
     # cuts tether bandwidth; still confirm detection FPS is unperturbed with it up
     # and images being viewed (Mongla is FPS-coupled). See foxglove-and-bags.md.
@@ -484,7 +487,17 @@ def generate_launch_description():
             # err_y_px convergence plot is silently empty (default is false).
             'include_hidden':  True,
         }],
-        condition=IfCondition(LaunchConfiguration('foxglove')),
+        condition=IfCondition(LaunchConfiguration('batighor')),
+    )
+    batighor_node = partial(
+        Node,
+        package='mongla_batighor',
+        executable='serve',
+        name='batighor',
+        output='screen',
+        arguments=['--port', LaunchConfiguration('batighor_port'),
+                   '--bridge-port', LaunchConfiguration('foxglove_port')],
+        condition=IfCondition(LaunchConfiguration('batighor')),
     )
 
     # The same file's `nodes:` section: node parameters, applied to every node
@@ -520,4 +533,5 @@ def generate_launch_description():
         GroupAction([vision_pi_launch], scoped=True),
         GroupAction([vision_launch], scoped=True),
         *respawning(foxglove_node, 'the Foxglove bridge'),
+        *respawning(batighor_node, 'the Batighor web app'),
     ])

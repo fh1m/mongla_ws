@@ -1,6 +1,6 @@
 # The packages
 
-Six ROS 2 packages under [`src/`](../../../src). One page each, written so someone who has
+Seven ROS 2 packages under [`src/`](../../../src). One page each, written so someone who has
 never seen this codebase can find where a thing lives and how to run it.
 
 ![Package map](../../../docs/assets/diagrams/package-map.svg)
@@ -13,6 +13,7 @@ never seen this codebase can find where a thing lives and how to run it.
 | [`mongla_localization`](mongla_localization/README.md) | 4.5k | 348 | Where the vehicle is: the invariant filter, replay of late measurements, course priors, pose fusion. |
 | [`mongla_planner`](mongla_planner/README.md) | 7.3k | 338 | The mission language, the CLI, the missions and the state machines. |
 | [`mongla_interfaces`](mongla_interfaces/README.md) | — | — | The messages. One action and one state topic are the entire cross-package surface. |
+| [`mongla_batighor`](mongla_batighor/README.md) | 0.3k | 15 | Batighor, the lighthouse: the operator center. Serves Lichtblick from Kutum, connected to the vehicle and opened on our layouts. |
 
 Counts are non-test Python lines and `def test_` functions, measured 2026-11-06 (a
 parametrized test counts once here; `pytest --collect-only` counts it per case).

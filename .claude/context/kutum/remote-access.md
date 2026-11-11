@@ -12,7 +12,7 @@ inside it down too. So nothing runs inside one. Two jobs, two tools:
 | Job | Tool | Why |
 |---|---|---|
 | Terminal: launches, missions, the CLI, debugging | **mosh + tmux** | instant echo; survives a tether unplug; **the run outlives the link** |
-| Watching vision | **Foxglove** (`foxglove:=true`) or **`web_video_server`** in a browser | no desktop pixels at all |
+| Watching vision | **Batighor** (`batighor:=true`, then `http://mongla.local:8000/`) or **`web_video_server`** in a browser | no desktop pixels at all |
 
 ---
 
@@ -27,7 +27,7 @@ mosh fh1m@mongla.local              # from the laptop
 tmux new -s run                     # or, after a drop: tmux attach -t run
 # inside tmux -- pin the run folder, then launch as usual
 source tools/pool/pool_session.sh gate_am
-ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
+ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 ```
 
 Drop the tether and `mosh` reconnects. If the whole link died, `mosh` again and
@@ -39,8 +39,8 @@ Drop the tether and `mosh` reconnects. If the whole link died, `mosh` again and
 
 ## Vision without a desktop
 
-- **Foxglove / Lichtblick** (recommended, already wired): launch with `foxglove:=true`, then
-  on the laptop *Open connection → Foxglove WebSocket →* `ws://mongla.local:8765`. Setup, the
+- **Batighor** (recommended, already wired): launch with `batighor:=true`, then open
+  `http://mongla.local:8000/` in any browser: Lichtblick, connected and on our layout. Setup, the
   FPS check and offline replay: [`foxglove-and-bags.md`](../platform/foxglove-and-bags.md).
 - **Browser MJPEG** (`web_video_server`): no app needed.
   ```bash
