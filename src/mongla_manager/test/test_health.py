@@ -379,3 +379,53 @@ def test_a_gain_just_under_the_bar_is_not_called_full():
     reduction. The bar must not be so generous it stops reporting."""
     assert R.pilot_gain(0.90).state is State.DEGRADED
     assert R.pilot_gain(0.995).state is State.OK
+
+
+# ── /diagnostics: the whole board, in the message every viewer draws (#41) ───
+def _diag_node(board):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    import mongla_manager.auv_manager_node as M
+    n = SimpleNamespace(_health=board, _diagnostics_pub=MagicMock())
+    n.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(
+        to_msg=lambda: __import__('builtin_interfaces.msg', fromlist=['Time']).Time()))
+    M.AUVManagerNode._publish_diagnostics(n)
+    return n._diagnostics_pub.publish.call_args[0][0]
+
+
+def test_every_subsystem_is_on_diagnostics_with_its_evidence():
+    from mongla_manager import health as H
+    board = H.HealthBoard()
+    board.register('barometer', lambda: H.ok('barometer', 'BARO_HEALTH 0'))
+    board.register('leak', lambda: H.failed('leak', 'LEAK_EN is 0'))
+    board.register('allocator', lambda: H.degraded('allocator', 'saturating'))
+    board.register('thrusters', lambda: (_ for _ in ()).throw(RuntimeError('x')))
+    board.poll()
+    arr = _diag_node(board)
+    got = {s.name: (s.level[0] if isinstance(s.level, bytes) else int(s.level),
+                    s.message) for s in arr.status}
+    assert got['mongla: barometer'] == (0, 'BARO_HEALTH 0')
+    assert got['mongla: allocator'][0] == 1
+    assert got['mongla: leak'] == (2, 'LEAK_EN is 0')
+    assert got['mongla: thrusters'][0] == 3, 'not reporting is STALE, never OK'
+    assert len(arr.status) == 4
+
+
+def test_a_subsystem_gone_quiet_is_stale_on_diagnostics():
+    from mongla_manager import health as H
+    board = H.HealthBoard(stale_s=0.0)
+    board._last['barometer'] = H.Health('barometer', H.State.OK, 'fine',
+                                        time.monotonic() - 5.0)
+    arr = _diag_node(board)
+    level = arr.status[0].level
+    assert (level[0] if isinstance(level, bytes) else int(level)) == 3
+
+
+def test_a_run_recording_keeps_the_diagnostics():
+    import re
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[3] / 'tools/pool/pool_record.sh').read_text()
+    for name in ('ALLOW_DEBUG', 'ALLOW_FULL'):
+        regex = re.search(rf"^{name}='(.+)'$", text, re.M).group(1)
+        assert re.match(regex, '/diagnostics'), f'{name} drops /diagnostics'
+        assert not re.match(regex, '/diagnostics_agg')

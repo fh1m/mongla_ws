@@ -12,6 +12,7 @@
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
+  <depend>diagnostic_msgs</depend>
   <depend>vision_msgs</depend>
   <depend>mongla_control</depend>
   <depend>mongla_interfaces</depend>

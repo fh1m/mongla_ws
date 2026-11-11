@@ -57,61 +57,62 @@ lives, whole, at the tag `last-with-pixhawk-and-sim`.
 29. [The vision→control pipeline: what is verified, and what could still bite](perception/pipeline-hardening.md)
 30. [Video-File Testing Guide](perception/video-testing.md)
 31. [The vision subsystem — what to add, what to fix, what to stop](perception/vision-what-to-do-next.md)
+32. [The machine-vision pipeline — raw video to a model on the vehicle, and every control over it during a run](perception/vision-pipeline.md)
 
 ## Part IV — Deciding
 
-32. [Command reference — every verb on `/mongla/move`](missions/command-reference.md)
-33. [Mission DSL and client API](missions/client-and-dsl-api.md)
-34. [Vision verb results, mid-hold fire & live feedback](missions/vision-results.md)
-35. [Precision terminal alignment — hold steady & don't miss the hole](missions/precision-alignment.md)
-36. [`mongla.detected()` paradigm — complete reference](missions/detected-paradigm.md)
-37. [Mongla Mission Cookbook](missions/mission-cookbook.md)
-38. [The verbs the board could give us, and has not yet](missions/verbs-srot-unlocks.md)
+33. [Command reference — every verb on `/mongla/move`](missions/command-reference.md)
+34. [Mission DSL and client API](missions/client-and-dsl-api.md)
+35. [Vision verb results, mid-hold fire & live feedback](missions/vision-results.md)
+36. [Precision terminal alignment — hold steady & don't miss the hole](missions/precision-alignment.md)
+37. [`mongla.detected()` paradigm — complete reference](missions/detected-paradigm.md)
+38. [Mongla Mission Cookbook](missions/mission-cookbook.md)
+39. [The verbs the board could give us, and has not yet](missions/verbs-srot-unlocks.md)
 
 ## Part V — Running it
 
-39. [The operator runbook — every command, verified](platform/launch-combinations.md)
-40. [First pool day — what to verify, in order](platform/first-pool-verification.md)
-41. [Pool day](platform/pool-day.md)
-42. [The first swim — control only, as a script](platform/first-swim.md)
-43. [Round 4a — the identification pool day, as a script](platform/pool-day-round-4a.md)
-44. [Environment traps — dependency pitfalls that take down the vision launch](kutum/pi-and-env-traps.md)
-45. [Ground-station remote access — drive the Pi without a remote desktop](kutum/remote-access.md)
-46. [Operator tooling — Foxglove, rosbag record/replay, scorecards](platform/foxglove-and-bags.md)
-47. [ROS 2 conventions — the surface and the coding standards](platform/ros2-conventions.md)
+40. [The operator runbook — every command, verified](platform/launch-combinations.md)
+41. [First pool day — what to verify, in order](platform/first-pool-verification.md)
+42. [Pool day](platform/pool-day.md)
+43. [The first swim — control only, as a script](platform/first-swim.md)
+44. [Round 4a — the identification pool day, as a script](platform/pool-day-round-4a.md)
+45. [Environment traps — dependency pitfalls that take down the vision launch](kutum/pi-and-env-traps.md)
+46. [Ground-station remote access — drive the Pi without a remote desktop](kutum/remote-access.md)
+47. [Operator tooling — Foxglove, rosbag record/replay, scorecards](platform/foxglove-and-bags.md)
+48. [ROS 2 conventions — the surface and the coding standards](platform/ros2-conventions.md)
 
 ## Part VI — Reference
 
-48. [Command reference — generated from the code](reference/commands.md)
-49. [The packages](packages/README.md)
-50. [How the docs stay true — the wiki, the files, and the guards](reference/how-the-docs-stay-true.md)
+49. [Command reference — generated from the code](reference/commands.md)
+50. [The packages](packages/README.md)
+51. [How the docs stay true — the wiki, the files, and the guards](reference/how-the-docs-stay-true.md)
 
 ## Part VII — The record
 
-51. [Measured bars — every number the stack ships, and what measured it](measured-bars.md)
-52. [Bug register — every defect in mongla_ws, open and fixed](BUGS.md)
-53. [Upstream asks — `mongla_ws` → `srot-control-board`](upstream/README.md)
-54. [Read coverage of the SROT / Hengla / Bondor repos](upstream/COVERAGE.md)
+52. [Measured bars — every number the stack ships, and what measured it](measured-bars.md)
+53. [Bug register — every defect in mongla_ws, open and fixed](BUGS.md)
+54. [Upstream asks — `mongla_ws` → `srot-control-board`](upstream/README.md)
+55. [Read coverage of the SROT / Hengla / Bondor repos](upstream/COVERAGE.md)
 
 ## Part VIII — Against the world
 
-55. [The verdict — Mongla against the world, in one document](sota/VERDICT.md)
-56. [Against the world — how Mongla compares to the best work there is](sota/README.md)
-57. [Control, against the world](sota/control.md)
-58. [Vision, against the world](sota/vision.md)
-59. [Localization, against the world](sota/localization.md)
-60. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
-61. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
+56. [The verdict — Mongla against the world, in one document](sota/VERDICT.md)
+57. [Against the world — how Mongla compares to the best work there is](sota/README.md)
+58. [Control, against the world](sota/control.md)
+59. [Vision, against the world](sota/vision.md)
+60. [Localization, against the world](sota/localization.md)
+61. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
+62. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
 
 ## Part IX — The workbench
 
-62. [The workbench — what is being measured, and what it said](workbench/README.md)
-63. [Bench — everything provable without water](workbench/BENCH.md)
-64. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
-65. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
+63. [The workbench — what is being measured, and what it said](workbench/README.md)
+64. [Bench — everything provable without water](workbench/BENCH.md)
+65. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
+66. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
 
 ## Appendix — Elsewhere
 
-66. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
-67. [Bumblebee — RoboSub 2025 (1st Place)](scouting/bumblebee-2025.md)
-68. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
+67. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
+68. [Bumblebee — RoboSub 2025 (1st Place)](scouting/bumblebee-2025.md)
+69. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
