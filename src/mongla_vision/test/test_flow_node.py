@@ -95,7 +95,7 @@ class TestScaleRefusal:
             n.destroy_node()
 
     def test_it_accepts_an_explicit_pool_depth(self):
-        n = _make(pool_depth_m=4.0)
+        n = _make(pool_depth_m=4.0, calibration=_cal_path())
         try:
             ok, why = n._scale_ready()
             assert ok, why
@@ -579,6 +579,7 @@ class TestDeRotationSignConvention:
         rotational residual -- exactly the quantity the gain controls.
         """
         n = _make(pool_depth_m=1.0, medium='air', undistort=False,
+                  allow_uncalibrated=True,  # the math is on the focal params
                   estimate_time_offset=False,
                   gyro_gain_x=gain, gyro_gain_y=gain)
         try:
@@ -683,6 +684,7 @@ class TestRefusalTravelIsThePriceOfRefusing:
 
     def _run(self, refuse_every):
         n = _make(pool_depth_m=self.H, medium='air', undistort=False,
+                  allow_uncalibrated=True,  # the math is on the focal params
                   estimate_time_offset=False,
                   gyro_gain_x=1.0, gyro_gain_y=1.0)
         try:
