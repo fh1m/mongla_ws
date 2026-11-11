@@ -7390,14 +7390,35 @@ and set to 0.6 it returned none, so the call takes effect in both directions.
 
 **Shipped:** `EMIT_FLOOR = 0.05` in `detection/hailo.py`. A detection graph
 compiled above it is configured at it; one compiled at or below it is left
-alone. The value is read at configure and cannot move afterwards, so `conf`
-and `assoc_conf` filter above it as before. A refusal from the runtime keeps
-and reports the compiled floor.
+alone. `conf` and `assoc_conf` filter above it as before. A refusal from the
+runtime keeps and reports the compiled floor.
+
+**Changing it during a run.** The score floor and the overlap threshold are
+both read when the model is configured, so a live change hands the configured
+model back and configures it again. Bars written first: the output follows
+the new values 20 changes in a row with no error and no growth in time, and
+the detector is without a result for under 250 ms.
+
+| graph | changes | output follows | release to first result, first four / last four | worst |
+|---|---|---|---|---|
+| stock `yolov11n` | 20 | yes, repeatably (651 / 426 / 0 / 161 boxes at 0.01+0.70, 0.01+0.30, 0.50+0.70, 0.05+0.95) | 88.0 87.6 86.2 85.3 / 88.6 86.8 87.0 85.5 ms | **89.1 ms** |
+| `gate_sharks` | 20 | yes | 81.3 81.1 82.2 80.9 / 81.3 80.9 81.5 81.3 ms | **82.2 ms** |
+
+Through the shipping `HailoDetector.update_nms` the first inference after a
+change took 63.4 to 64.8 ms, and a floor raised to 0.5 and returned to 0.05
+went 17 boxes, 0, 17. The first run of that check returned 0 at the end: the
+change had raised the association floor with it and nothing lowered it again.
+Fixed, and held by a test.
+
+**Shipped:** `nms_floor` (0.05) and `nms_iou` (0.0, meaning as compiled) on
+the detector node, live. A live `iou` is now rejected: it is read once when a
+`.pt` model is built, and accepting it reported a change nothing made.
 
 **What this does not change.** 0.05 is still the value to compile with: the
 blocking diagnostic path does not lower it, and a graph that already carries
 it needs nothing from the runtime. A segmentation graph has no NMS output and
 is untouched.
 
-**Not measured:** a floor below 0.05, and the 100-boxes-per-class cap, which
-a very low floor on a many-class graph could reach.
+**Not measured:** the 100-boxes-per-class cap, which a very low floor on a
+many-class graph could reach, and a change made while a second model is
+mid-inference on the same chip.
