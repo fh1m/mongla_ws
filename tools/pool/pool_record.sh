@@ -27,8 +27,8 @@ RUN_DIR="${MONGLA_RUN_DIR:-$HOME/mongla_runs}"
 # can never separate a bad solve from bad evidence. Replay into `pnp_node`
 # with a different `max_reproj_px` and the shot is re-solvable. ~8 kB per
 # message at the anchor's 3 Hz, which is nothing beside image_debug.
-ALLOW_DEBUG='^/mongla/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|vis_range.*)|vision/[^/]+/distance.*)$'
-ALLOW_FULL='^/mongla/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|image_raw|camera_info|vis_range.*)|vision/[^/]+/distance.*)$'
+ALLOW_DEBUG='^/diagnostics$|^/mongla/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|vis_range.*)|vision/[^/]+/distance.*)$'
+ALLOW_FULL='^/diagnostics$|^/mongla/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|image_raw|camera_info|vis_range.*)|vision/[^/]+/distance.*)$'
 
 usage() { sed -n '2,20p' "$0"; exit "${1:-0}"; }
 

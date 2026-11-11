@@ -79,6 +79,11 @@ WebSocket server that auto-exposes every topic. Our vision topics are standard
 (2D boxes over the image); `/mongla/state` (custom `MonglaState`) shows in the
 Raw-Messages panel; `/mongla/move` action feedback (`err_x_px`/`err_y_px`) plots live.
 
+The **Diagnostics** panel reads `/diagnostics`: the manager's health board, one row per
+subsystem with its evidence, once a second. A subsystem that is not reporting shows as
+stale, not as healthy. The same topic is in every recorded bag, so a run can be read
+afterwards subsystem by subsystem.
+
 **Install (once, on the Pi — ROS 2 Jazzy):**
 ```bash
 sudo apt install ros-jazzy-foxglove-bridge ros-jazzy-rosbag2-storage-mcap
