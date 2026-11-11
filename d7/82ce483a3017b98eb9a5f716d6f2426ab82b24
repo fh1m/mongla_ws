@@ -1,0 +1,26 @@
+src/mongla_batighor/launch/batighor.launch.py
+  h_f1b9066eb9899c 21,48-50,82
+src/mongla_batighor/mongla_batighor/deck.py
+  h_f1b9066eb9899c 146-147,150-151
+src/mongla_batighor/mongla_batighor/helm.py
+  h_f1b9066eb9899c 401-402,405,408-410
+src/mongla_batighor/mongla_batighor/overlay.py
+  h_f1b9066eb9899c 126-127,130,132
+src/mongla_batighor/test/test_helm_node.py
+  h_f1b9066eb9899c 143-145
+src/mongla_interfaces/srv/Helm.srv
+  h_f1b9066eb9899c 7,9,11
+src/mongla_localization/mongla_localization/launch_defaults.py
+  h_f1b9066eb9899c 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "d782ce483a3017b98eb9a5f716d6f2426ab82b24",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
