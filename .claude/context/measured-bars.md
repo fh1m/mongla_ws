@@ -140,6 +140,11 @@ is how `recommend()` happened.
 - [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
 - [79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)](#79-the-compiled-score-threshold-is-a-default--the-floor-is-set-when-the-model-is-configured-2026-11-11)
 - [75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)](#75-rectify-the-image-once-at-the-camera--not-chosen-468-ms-a-frame-against-a-4-ms-bar-and-points-cost-37-microseconds-2026-11-10) — *measured, not adopted*
+- [82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; 3.0 GHz is slower under load; open bench only (2026-11-11)](#82-the-arm-clock-at-28-ghz--kept-182--cpu-work-and-138--hailo-rate-under-full-load-675-c-never-throttled-30-ghz-is-slower-under-load-open-bench-only-2026-11-11)
+- [83. THE HAILORT SERVICE DIES MID-RUN — back in 0.31 s, and its clients fail fast (2026-11-11)](#83-the-hailort-service-dies-mid-run--back-in-031-s-and-its-clients-fail-fast-2026-11-11)
+- [76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11)](#76-a-realtime-kernel--not-chosen-the-stock-kernel-wakes-a-loaded-50-hz-loop-within-002-ms-once-the-loop-has-a-realtime-priority-2026-11-11) — *measured, not adopted*
+- [77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11)](#77-numpy-2-and-a-newer-opencv-on-kutum--not-chosen-10-to-16--of-the-hot-path-and-cv_bridge-stops-converting-2026-11-11) — *measured, not adopted*
+- [78. CV_BRIDGE REPLACED — the same bytes, a frame read 75 times cheaper, and one copy fewer to send (2026-11-11)](#78-cv_bridge-replaced--the-same-bytes-a-frame-read-75-times-cheaper-and-one-copy-fewer-to-send-2026-11-11)
 - [80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11)](#80-the-hailort-service--two-processes-on-one-chip-at-no-cost-a-frame-built-measured-not-installed-2026-11-11)
 - [81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11)](#81-the-rtc-is-not-a-control-clock--one-second-steps-read-with-tens-of-milliseconds-of-jitter-2026-11-11)
 <!-- contents:end -->
@@ -7461,6 +7466,304 @@ were not run: the first had already decided it.
 (`pnp_node`, `lock_inputs`, `dsl_detections`, `vision_state`).
 `test/test_every_camera_matrix_reader_removes_the_lens.py` fails a new one that
 does not.
+
+## 82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; 3.0 GHz is slower under load; open bench only (2026-11-11)
+
+The Pi 5's cores run at 2.4 GHz as shipped and the firmware accepts more.
+The question was whether a faster clock arrives as work done, and whether the
+machine stays inside its own limits while doing it.
+
+**Bar, written before any run** (`tools/bench/overclock_soak.py`). The faster
+clock is kept only if all hold over 20 minutes, open air, fan as fitted:
+
+| bar | falsified by |
+|---|---|
+| throttle | `vcgencmd get_throttled` other than 0x0 at any 5 s sample |
+| heat | any sample at 80 C or above |
+| clock | the firmware reporting a clock other than the one asked for |
+| gain | CPU work per second less than 10 % above stock |
+| chip | Hailo-8 inferences per second more than 1 % below stock |
+
+**Load:** four processes, one per core, each decoding a JPEG of a real frame
+from the gate clip, resizing, converting colour and finding corners, with one
+OpenCV thread each; a fifth process runs `gate_sharks` on the Hailo-8 flat
+out. The candidate was booted once through `tryboot`, so a failed boot would
+have fallen back to stock by itself: `arm_freq=2800`, `over_voltage_delta=50000`.
+
+**Measured on Kutum**, 20 minutes each, the same hour, the same script:
+
+| | 2.4 GHz (stock) | 2.8 GHz | bar |
+|---|---|---|---|
+| throttle flags, every sample | 0x0 | 0x0 | holds |
+| hottest sample | 62.6 C | **67.5 C** | holds (under 80) |
+| clock reported, min to max | 2400 | 2800 | holds |
+| CPU work per second | 68.2 | **80.58** (+18.2 %) | holds (10 %) |
+| Hailo-8 inferences per second | 37.29 | **42.44** (+13.8 %) | holds |
+| core voltage | 0.892 V | 0.997 V | |
+| fan, fastest | 5400 rpm | 7192 rpm | |
+
+The clock rises 16.7 % and the work rises 18.2 %; the difference is inside
+what one run can resolve. The chip figure is not the chip getting faster:
+alone it runs 95 Hz, and here its feeding process shares four cores with four
+others, so its rate is the host's share and rises with the host.
+
+**Two scorers were discarded before this one, and the first result with
+them.** They are recorded because each produced a confident number.
+
+- The first stock run read 129.0 work units a second and the first 2.8 GHz
+  run 58.0, which would have ended the test as a failure. The stock figure
+  never reproduced: the same clock an hour later, after a reboot, read 55.4.
+  Each worker had been left at OpenCV's default of four threads, sixteen
+  threads on four cores, and the count measured how the scheduler shared
+  them. Fixed to one thread a worker.
+- The frame was random noise. On noise every pixel is a corner, and four
+  corner searches side by side wait on memory, not on the clock: 8.9 ms alone
+  and 37.1 ms beside three others, where the JPEG decode went 4.1 to 5.4 ms.
+  Replaced by a real frame. The same search on the real frame still slows
+  from 7.0 to 29.8 ms with four at once (at 2.8 GHz), so **corner detection
+  on every core at once is bound by memory on this board**, which is the
+  measurement the memory-timing work needs.
+
+**And 3.0 GHz.** The same soak once more, booted through `tryboot` at
+`arm_freq=3000` (the firmware set 1.000 V): 0x0 throughout, 68.1 C at the
+hottest, the clock held, **77.55** CPU units a second and **41.61** inferences
+a second. Against stock that clears every bar (+13.7 %), but it is **3.8 %
+below 2.8 GHz**. The operations explain why, timed alone and then four at once
+(one OpenCV thread each, nothing else running):
+
+| | 2.8 GHz alone | 3.0 GHz alone | 2.8 GHz, four at once | 3.0 GHz, four at once |
+|---|---|---|---|---|
+| decode + resize + grey + corners | 11.09 ms | 10.47 ms | 36.98 ms | 40.12 ms |
+
+Alone the faster clock arrives (5.6 % of a 7.1 % rise). With every core busy
+the corner search waits on memory and the extra clock buys nothing. So the
+clock ladder stops at 2.8: past it the limit is memory, and the next lever is
+memory timing, not frequency. 3.1 and 3.2 GHz were not run.
+
+**Decision: 2.8 GHz kept.** `kutum/setup.sh --system` writes the two lines to
+`/boot/firmware/config.txt`; `kutum/doctor.sh` reports the clock and warns
+when it is not 2800.
+
+**What this does not show.** The run was on the open bench. The sealed hull
+is hotter and has not been run: **BUILT, NEVER FLOWN** there. If it reaches
+80 C the firmware slows the cores by itself, the doctor warns on any throttle
+flag since boot and the health board reports it during a run, so the failure
+is a slower vehicle that says so, not a crash. Reversal: any throttle flag in
+the sealed hull during a full-length run, or any instability; delete the two
+lines and reboot.
+
+## 83. THE HAILORT SERVICE DIES MID-RUN — back in 0.31 s, and its clients fail fast (2026-11-11)
+
+The service is installed (section 80) and every vision process opens the chip
+through it, so it is one process that every camera depends on. The owner's
+order for losing it: restart everything first; if the service stays down,
+the forward process opens the chip itself and the downward one runs without
+it. `hailo_device._open` implements the order; `kutum/system/systemd/hailort.service`
+restarts the daemon 200 ms after it dies, with no limit on how often.
+
+**Bars, written before the drill** (`tools/bench/hailo_service_drill.py`):
+
+| bar | falsified by |
+|---|---|
+| restart | systemd has the service running again more than 1 s after a SIGKILL |
+| surface | an inference through the dead service hangs, or raises more than 1 s after the kill (a hang never reaches the node's exit) |
+| rejoin | a process started after the restart does not open through the service |
+| order | with the service stopped, the forward process does not open the chip, or the downward one does |
+
+**Measured on Kutum**, `gate_sharks`, the drill run twice:
+
+| | run 1 | run 2 |
+|---|---|---|
+| daemon back after SIGKILL | | **0.31 s** |
+| the running client's next inference | raised `HAILO_RPC_FAILED` (77) | raised 77, 25 ms after the kill |
+| a new process after the restart | opened through the service in 0.15 s | 0.15 s |
+| service stopped, downward (`none`) | refused after its 3.0 s wait | refused, 3.0 s |
+| service stopped, forward (`direct`) | opened the chip after 3.09 s | 3.09 s |
+| 50 inferences, through the service / direct | 0.548 s / 0.525 s | 0.548 s / 0.525 s |
+
+All four bars hold. The restart time of run 1 was not captured: the timing
+loop's output was cut by the log filter.
+
+**What a vision process does with it.** A client of a dead service never
+recovers by itself: the error is "non-recoverable" in HailoRT's own words.
+The detector node already counts consecutive failures, rebuilds at 15 and
+exits at 45 (`detector_node._on_infer_failure`), and the launch respawns the
+process 2 s later, up to three times (`launch_respawn`). At 30 frames a
+second that is about 1.5 s of failures, 2 s of respawn and the model load,
+then the process is back through the restarted service. The cost is a few
+seconds without detections on a service crash, which has not been seen
+outside this drill.
+
+**Not shown here:** a crash while two processes share the chip, and the
+respawn limit of three being reached by a service that keeps dying. The
+second leaves the cameras down and says so, which is the existing policy for
+any process.
+
+**Confined, as its own user (2026-11-12).** Every Kutum service runs as its
+own user (#67), and the first confined unit failed: as user `hailort`, every
+client got `HAILO_NOT_FOUND` at its first inference, or a timeout. Bisected
+on Kutum with runtime drop-ins, 50 `yolov8n` inferences through the service
+each time:
+
+| configuration | result |
+|---|---|
+| user `hailort`, no capabilities | fails (timeout or `HAILO_NOT_FOUND`) |
+| root, full confinement, no capabilities | fails |
+| root, full confinement, `CAP_KILL` only | 0.808 s, three runs |
+| user `hailort`, full confinement, `CAP_KILL` only | 0.808 s and 0.805 s |
+
+The service checks that each client is alive by signalling its pid; a
+different user may not do that, so every client looked dead and its network
+was released. `CAP_KILL` is the one capability the unit keeps, both bounding
+and ambient. Full confinement here means `NoNewPrivileges`, `ProtectSystem=strict`,
+`ProtectHome`, `PrivateTmp`, `UMask=0007` and the socket in `/run/hailo`,
+group `hailort`; it costs nothing measurable against the 0.548 s above
+(a different model, `gate_sharks`).
+
+The drill above, re-run against the installed confined unit: back in
+**0.525 s** after SIGKILL, running as `hailort`; the running client raised
+`HAILO_RPC_FAILED` (77) at once; a new process opened through the service.
+The restart, surface and rejoin bars still hold.
+## 76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11)
+
+**The question.** Ubuntu offers a PREEMPT_RT kernel for the Pi 5 through
+Ubuntu Pro (`pro status` on Kutum lists `realtime-kernel` as available; it
+needs a Pro token attached). Kutum runs `6.8.0-1065-raspi`, `CONFIG_PREEMPT=y`.
+Would the realtime kernel make the host's timing tighter?
+
+**The bar, written before the first run** (`tools/bench/wake_latency.py`). The
+fastest host loop is 50 Hz, the vision verbs' `MANUAL_CONTROL` stream. A new
+kernel is worth it only if, with every core busy, a `SCHED_FIFO` loop on the
+stock kernel is later than **1 ms at p99.9 or 2 ms at worst**. The bench's own
+falsifier: under load the default scheduler must be clearly later than
+`SCHED_FIFO`, or the load is not competing.
+
+**Measured on Kutum**, 60 s each, a 50 Hz Python loop on absolute deadlines,
+four busy processes, and a thread in the same process parsing MAVLink at the
+full 115200-baud rate (the manager's own shape):
+
+| scheduler | interpreter switch interval | p50 | p99.9 | wake-ups later than 2 ms, of 3000 |
+|---|---|---|---|---|
+| default | 5 ms (Python's default) | 0.056 ms | **2.28 to 2.93 ms** | **13** |
+| `SCHED_FIFO` 10 | 0.5 ms | 0.005 ms | **0.014 to 0.021 ms** | **0** |
+
+The worst single wake-up in every `SCHED_FIFO` run (0.54, 1.53 and 5.43 ms
+across three runs) was the first one, 0.02 s in, while the reader thread was
+still importing; nothing after start-up passed the bar.
+
+Two separate causes, measured apart (30 s runs):
+
+| case | worst wake-up |
+|---|---|
+| `SCHED_FIFO` 80, four busy processes, nothing else in the process | 0.035 ms |
+| `SCHED_FIFO` 80, reader thread beside it, 5 ms switch interval | 5.08 ms |
+| the same, 0.5 ms switch interval | 0.56 ms |
+| default scheduler, idle | 0.063 ms, of which 0.050 ms is the default timer slack |
+
+So the scheduler costs up to 2.9 ms and a realtime priority removes it, and
+the interpreter lock costs exactly its 5 ms switch interval whatever the
+priority and a shorter interval bounds it. Two busy pure-Python threads in the
+process put the loop hundreds of milliseconds behind under any scheduler: the
+lock, not the kernel, is the timing risk in a Python process.
+
+**Verdict.** The realtime kernel is not adopted: with the two settings the
+stock kernel is 50 times inside the bar, and there is nothing left for it to
+remove at a 20 ms period. **What ships:** `mongla_localization/realtime.py`,
+called by the manager before it starts its threads (`SCHED_FIFO` 10, 0.5 ms
+switch interval, `MONGLA_REALTIME=off` to disable);
+`kutum/system/limits/99-mongla-realtime.conf` permits it and `doctor.sh`
+checks it.
+
+**Caution:** NOT MEASURED in the running manager with the board attached; no
+board was on Kutum on the day. The bench reproduces its thread shape, not its
+callbacks. This also closes entry 68's open caution only for the wake-up, not
+for the full graph's callback times.
+
+---
+
+## 77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11)
+
+**The rule being questioned.** Kutum's Python must keep NumPy 1.x
+(`kutum/constraints.txt`). The reason, re-measured rather than quoted: in a
+scratch venv over the system packages with NumPy 2.5.4, the distribution's
+`cv2` 4.6.0 fails at import (`numpy.core.multiarray failed to import`), because
+it was compiled against the NumPy 1 ABI. Every vision node imports it.
+
+**The way out, and its bar.** The same venv with `opencv-python-headless`
+5.0.0 (built for NumPy 2, with KleidiCV, Arm's accelerated kernels).
+Written before the run (`tools/bench/cv_hot_path.py`): leave the distribution's
+OpenCV only if the summed per-frame hot path drops by at least **25 %** and
+`cv_bridge` and `hailo_platform` still work in the same interpreter.
+
+| operation, 640x360, median ms | system 4.6.0, NumPy 1.26.4 | pip 5.0.0 + KleidiCV, NumPy 2.5.4 |
+|---|---|---|
+| JPEG decode | 2.141 | 1.803 |
+| resize to 640x640 | 0.712 | 0.573 |
+| BGR to RGB | 0.064 | 0.040 |
+| BGR to gray | 0.086 | 0.041 |
+| `goodFeaturesToTrack`, 200 corners | 6.752 | 6.326 |
+| pyramidal LK, 200 points | 1.928 | 1.683 |
+| **sum** | **11.682** | **10.465** (-10.4 %) |
+
+Every operation returned the same pixels and points in both (identical
+checksums). `hailo_platform` 4.24.0 imports under NumPy 2. `cv_bridge` imports
+and then fails at the first conversion (`KeyError(16)`).
+
+**Verdict: FAIL on both halves of the bar.** The rule stays, and now has its
+reason and its price beside it. It would be reversed by a hot path where
+colour conversion or resize dominates (KleidiCV halves those) or by an Ubuntu
+release whose `python3-opencv` is built for NumPy 2. The step that would make
+the switch a one-line change is replacing `CvBridge` in the nine modules that
+import it with a direct array view; that is not done, because nothing measured
+here pays for it.
+
+**Caution:** the sum counts corner detection once per frame, and the flow node
+does not: it detects corners only when it re-anchors and tracks them with LK
+in between. Without that row the per-frame sum is 4.93 ms against 4.14 ms,
+**-16 %**, still under the bar. How often the vehicle re-anchors was not
+measured here.
+
+**Found on the way.** `trackers` 2.4.0 declares `numpy>=2.0.2` and runs on
+1.26.4. `goodFeaturesToTrack` is 6.75 ms a call and neither build speeds it
+up, so a re-anchor is the most expensive single step in the flow path.
+## 78. CV_BRIDGE REPLACED — the same bytes, a frame read 75 times cheaper, and one copy fewer to send (2026-11-11)
+
+**Why.** Entry 77 found that `cv_bridge` is what breaks first beside a NumPy 2
+OpenCV, and the stack used it for three encodings in two directions.
+`mongla_vision/image_msg.py` does that directly on the message's buffer.
+
+**The bar, written before the swap.** Byte-identical messages and
+pixel-identical arrays against `cv_bridge` in every encoding and conversion the
+stack uses, and no slower in either direction.
+
+**Measured on Kutum** against `cv_bridge` 4.1.0, 640x360 `bgr8`, median of
+400, two runs while a compile was using two cores:
+
+| direction | `cv_bridge` | `image_msg` |
+|---|---|---|
+| array to message | 0.29 to 0.44 ms | 0.17 to 0.24 ms |
+| message to array, same encoding | 0.31 to 0.42 ms | **0.004 ms** |
+
+Identical in `bgr8`, `rgb8`, `mono8` and `32FC1`, and in every conversion
+between the first three. Reading is a view on the message's buffer;
+`cv_bridge` converted through `cvtColor` even when nothing needed converting.
+
+**Where the sending copy went.** Jazzy's generated setter for `Image.data`
+assigns an `array.array` as it is only when the message was built with field
+checks on. With them off, the default, it copies the whole frame into a new
+array: **0.129 ms** for 640x360, measured apart. `image_msg` builds the
+message with checks on and so pays one copy, not two. Humble's setter has no
+such branch.
+
+**On the real path:** the forward camera publishing through `to_msg` and a
+subscriber decoding through `to_array` over DDS on Kutum: 239 frames in 8 s,
+360x640x3, with `cv_bridge` never imported in either process. Under NumPy
+2.5.4 and OpenCV 5.0.0 the module round-trips where `cv_bridge` fails.
+
+**On the dev box** `cv_bridge` does not raise beside NumPy 2.2.6, it takes the
+interpreter down (exit -11), so the two vision test files that
+`importorskip`'d it now run there instead of being skipped. The agreement test
+runs `cv_bridge` in a child process for that reason.
 
 ## 80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11)
 

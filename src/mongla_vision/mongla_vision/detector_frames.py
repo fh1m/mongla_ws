@@ -6,6 +6,7 @@ import queue as _queue
 import time
 from sensor_msgs.msg import Image
 from mongla_vision import qos
+from mongla_vision import image_msg
 from typing import NamedTuple
 
 
@@ -139,10 +140,10 @@ class DetectorFramesMixin:
             # it. No serialise, no transport, no second copy.
             return item.frame, item.header
         try:
-            frame = self._bridge.imgmsg_to_cv2(item, desired_encoding='bgr8')
+            frame = image_msg.to_array(item, 'bgr8')
         except Exception as exc:
             self.get_logger().warning(
-                f"[DET  ] cv_bridge decode failed: {exc!r}")
+                f"[DET  ] image decode failed: {exc!r}")
             return None
         return frame, item.header
 

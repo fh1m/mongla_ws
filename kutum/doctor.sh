@@ -54,6 +54,21 @@ if [ -z "$thr" ]; then warn "vcgencmd missing -- throttling cannot be read"
 elif [ "$thr" = "0x0" ]; then ok "never throttled since boot, ${temp} C now"
 else warn "throttled=$thr since boot (${temp} C now): undervoltage or heat; the detector rate will not hold"; fi
 
+# The clock setup asks for (measured-bars 82). The firmware reports what it
+# was told, so a card rebuilt without the system half shows as stock here.
+arm="$(vcgencmd get_config arm_freq 2>/dev/null | cut -d= -f2)"
+if   [ -z "$arm" ]; then warn "vcgencmd missing -- the ARM clock cannot be read"
+elif [ "$arm" = 2800 ]; then ok "ARM clock: 2800 MHz"
+else warn "ARM clock: $arm MHz, not the 2800 setup.sh --system writes -- about 15 % less CPU and Hailo rate under full load"; fi
+
+# The Hailo-8 is shared through HailoRT's service (measured-bars 80). Without
+# it each vision process opens the chip itself, and only one can.
+if systemctl is-active --quiet hailort.service 2>/dev/null && ! id -nG | grep -qw hailort; then
+  warn "hailort.service runs, but $(id -un) is not in group hailort -- log in again after setup.sh --system"
+elif systemctl is-active --quiet hailort.service 2>/dev/null; then ok "hailort.service: running"
+elif [ -x /usr/local/bin/hailort_service ]; then warn "hailort.service is not running -- the vision processes cannot share the chip; the forward one opens it alone"
+else warn "no hailort_service: HailoRT was built without it (sudo kutum/setup.sh --system rebuilds it)"; fi
+
 gov="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)"
 [ "$gov" = performance ] && ok "CPU governor: performance" \
   || warn "CPU governor: $gov -- the first milliseconds of every frame run at the idle clock (cpu-performance.service)"
@@ -112,7 +127,7 @@ PY
 case "$np" in
   1.*) ok "numpy $np" ;;
   "")  fail "numpy or cv2 does not import" ;;
-  *)   fail "numpy $np -- cv_bridge is built against numpy 1 and every vision node dies (E1)" ;;
+  *)   fail "numpy $np -- the system cv2 is built against numpy 1 and every vision node dies at import (E1)" ;;
 esac
 case "$cv2f" in
   /usr/*) ok "cv2 is the system build" ;;
@@ -125,6 +140,9 @@ case "$trk" in
 esac
 if readlink -f /usr/lib/aarch64-linux-gnu/libblas.so.3 | grep -q openblas; then ok "numpy BLAS is OpenBLAS"
 else warn "numpy runs on the reference BLAS -- the anchor matcher is ~4.5x slower (libopenblas0-pthread)"; fi
+rt="$(ulimit -r 2>/dev/null || echo 0)"
+if [ "$rt" = unlimited ] || [ "${rt:-0}" -ge 10 ] 2>/dev/null; then ok "realtime priority permitted (rtprio $rt)"
+else warn "no realtime priority for this login (rtprio ${rt:-0}) -- the manager's worst wake-up is ~3 ms instead of 0.6 ms; setup.sh --system installs the limits file, then log in again"; fi
 
 # --------------------------------------------------------------------------- #
 say "The board's serial link"
@@ -149,6 +167,8 @@ same "$KUTUM/system/udev/99-mongla-cameras.rules" /etc/udev/rules.d/99-mongla-ca
 same "$KUTUM/system/udev/51-hailo-udev.rules"     /etc/udev/rules.d/51-hailo-udev.rules     "Hailo device permissions"
 same "$KUTUM/system/systemd/set-cpu-performance"  /usr/local/sbin/set-cpu-performance      "governor script"
 same "$KUTUM/system/systemd/cpu-performance.service" /etc/systemd/system/cpu-performance.service "cpu-performance.service"
+same "$KUTUM/system/systemd/hailort.service"  /etc/systemd/system/hailort.service     "hailort.service"
+same "$KUTUM/system/limits/99-mongla-realtime.conf" /etc/security/limits.d/99-mongla-realtime.conf "realtime limits"
 same "$KUTUM/system/netplan/60-kutum-eth.yaml"  /etc/netplan/60-kutum-eth.yaml          "Ethernet link-local"
 systemctl is-enabled cpu-performance.service >/dev/null 2>&1 && ok "cpu-performance.service enabled" \
   || warn "cpu-performance.service not enabled"

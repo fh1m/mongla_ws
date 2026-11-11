@@ -135,13 +135,12 @@ def main():
 
     # ---- ROS: encode + serialise, once per published frame ---------------
     try:
-        from cv_bridge import CvBridge
-        br = CvBridge()
-        _measure('cv_bridge cv2_to_imgmsg',
-                 lambda: br.cv2_to_imgmsg(img, encoding='bgr8'),
+        from mongla_vision import image_msg
+        _measure('image_msg.to_msg',
+                 lambda: image_msg.to_msg(img, 'bgr8'),
                  a.seconds, rate_hz=10, note='camera, viewer feed only')
     except Exception as exc:
-        print(f'  cv_bridge                    SKIPPED: {exc!r}'[:110])
+        print(f'  image_msg                    SKIPPED: {exc!r}'[:110])
 
     # ---- control: the serial read the srot driver does at 200 Hz ---------
     try:
