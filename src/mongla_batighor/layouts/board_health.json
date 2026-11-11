@@ -44,23 +44,35 @@
     },
     "RawMessages!order": {
       "topicPath": "/mongla/flare_order"
+    },
+    "DiagnosticSummary!health": {
+      "minLevel": 0,
+      "pinnedIds": [],
+      "hardwareIdFilter": "mongla",
+      "topicToRender": "/diagnostics",
+      "sortByLevel": true
     }
   },
   "layout": {
-    "direction": "column",
+    "direction": "row",
     "first": {
-      "direction": "row",
-      "first": "Plot!depthyaw",
-      "second": "Plot!gyro",
-      "splitPercentage": 50
+      "direction": "column",
+      "first": {
+        "direction": "row",
+        "first": "Plot!depthyaw",
+        "second": "Plot!gyro",
+        "splitPercentage": 50
+      },
+      "second": {
+        "direction": "row",
+        "first": "RawMessages!esc",
+        "second": "RawMessages!order",
+        "splitPercentage": 50
+      },
+      "splitPercentage": 60
     },
-    "second": {
-      "direction": "row",
-      "first": "RawMessages!esc",
-      "second": "RawMessages!order",
-      "splitPercentage": 50
-    },
-    "splitPercentage": 60
+    "second": "DiagnosticSummary!health",
+    "splitPercentage": 62
   },
   "globalVariables": {},
   "userNodes": {},
