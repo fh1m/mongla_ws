@@ -108,8 +108,24 @@ A desktop app connects the same way: *Open connection → Foxglove WebSocket →
 The bridge is launched with `include_hidden:=true` so the `/mongla/move/_action/feedback`
 plot (err_x_px/err_y_px) isn't silently empty. **The layout is a starting point** — its
 panel-config schema is Foxglove-version-sensitive; if a panel loads blank, add it manually
-(Image → `/mongla/vision/forward/image_debug`, Plot → the `_action/feedback` err fields)
-and re-save the JSON.
+(Image → `/mongla/vision/forward/stream/compressed` with the annotations topic ticked, Plot →
+the `_action/feedback` err fields) and re-save the JSON.
+
+**The video is the camera's own JPEG.** Each camera already compresses every frame on the
+USB wire; `camera_node` republishes those bytes unchanged, so Kutum never encodes a frame for
+an operator and a viewer costs a message (0.062 ms a frame, `measured-bars` 84). The boxes are
+drawn by the browser: Batighor's `overlay` node turns detections, track ids and the lock into
+`foxglove_msgs/ImageAnnotations` on `<cam>/annotations`.
+
+| topic | rate | for |
+|---|---|---|
+| `/mongla/vision/<cam>/stream/compressed` | the camera's, capped at `stream_rate_hz` (30) | the tether: `mongla_layout`, `bins_downward` |
+| `/mongla/vision/<cam>/preview/compressed` | `preview_rate_hz` (5) | a weak link: `/?layout=weak_link`, about 1.7 Mbit/s a camera at 640x360 |
+| `/mongla/vision/<cam>/annotations` | one per detector frame | drawn over either |
+
+Pick by link, in the address: `http://mongla.local:8000/` on the tether,
+`http://mongla.local:8000/?layout=weak_link` on anything slower. A topic nobody watches is
+never built. `image_debug` (boxes burned in on Kutum) remains for a recorder that wants them.
 
 ### Gate A — prove FPS is unperturbed (mandatory before trusting it in-water)
 
@@ -124,7 +140,8 @@ ros2 topic hz /mongla/vision/forward/detections
 # Detection Hz must be essentially unchanged.
 ```
 Mitigations, in order: the bridge already sets `use_compression:=true`; **view one
-camera at a time**; prefer the `image_debug` overlay over `image_raw`; if Hz still drops,
+camera at a time**; view `stream/compressed` (the camera's JPEG, 41 KB) or `preview`, never
+`image_raw` (691 KB of pixels a frame); if Hz still drops,
 un-check the image panels and keep only `detections` / `state` / `move` feedback — still
 very useful, near-zero cost.
 
@@ -213,8 +230,8 @@ gives you the exact colored terminal output too. (Manual equivalent, no helper:
 > [`remote-access.md`](../kutum/remote-access.md). This section is just the **viewer**.
 
 The Pi runs the **bridge** (server); the dev box / operator laptop runs the **viewer**
-(client) and **replays bags**. The viewer we standardized on is **Lichtblick** — Bosch's
-MIT open-source fork of Foxglove Studio — chosen over the official Foxglove desktop app
+(client) and **replays bags**. The viewer we standardized on is **Lichtblick** — BMW's
+MPL-2.0 open-source fork of Foxglove Studio — chosen over the official Foxglove desktop app
 precisely because it has **no account / no login wall** and is guaranteed to work fully
 offline at the venue (Gate B). It loads the same layout and speaks the same
 Foxglove-WebSocket protocol as the bridge.

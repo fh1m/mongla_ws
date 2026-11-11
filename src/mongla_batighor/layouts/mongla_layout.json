@@ -2,7 +2,12 @@
   "configById": {
     "Image!forward": {
       "imageMode": {
-        "imageTopic": "/mongla/vision/forward/image_debug"
+        "imageTopic": "/mongla/vision/forward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/forward/annotations": {
+            "visible": true
+          }
+        }
       }
     },
     "RawMessages!state": {
