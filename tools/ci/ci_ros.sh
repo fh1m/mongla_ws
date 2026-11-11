@@ -17,7 +17,25 @@ summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 # without this, git refuses the tree and every git-reading test skips.
 git config --global --add safe.directory "$PWD"
 echo "== ROS $distro at $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-apt-get update -qq
+# The Ubuntu mirror failed required checks twice on 2026-11-10: a dropped
+# connection mid-download (iproute2), and an index that changed size during a
+# mirror sync. apt retries a download itself; the index refresh is retried
+# here, 30 s apart. Either still failing after that fails the job.
+echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+# The archive mirror GitHub's own runners use, beside them in Azure: on
+# 2026-11-10 archive.ubuntu.com took 33 of a 45 minute budget to serve the
+# dependencies. Same archive, same packages; only the host changes.
+for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+  if [[ -f "$f" ]]; then
+    sed -i 's|http://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g' "$f"
+  fi
+done
+for attempt in 1 2 3 4; do
+  if apt-get update -qq; then break; fi
+  if [[ "$attempt" == 4 ]]; then echo "ERROR: apt-get update failed 4 times"; exit 100; fi
+  echo "WARNING: apt-get update failed (attempt $attempt); the mirror may be syncing"
+  sleep 30
+done
 # The distro's own pytest: ROS's launch_testing plugin is built against it,
 # and pip's newest (9) no longer accepts the hook argument it declares.
 # procps (pgrep) and iproute2 (ss): the manager's process-tree teardown and
@@ -26,7 +44,17 @@ apt-get install -y -qq python3-venv python3-pip python3-pytest procps iproute2 >
 
 echo "== the dependencies the package.xml files declare (rosdep)"
 rosdep update --rosdistro "$distro" > /dev/null
-rosdep install --from-paths src --ignore-src -y -q --rosdistro "$distro"
+# A package's 404 means the index is older than the pool: the security archive
+# published libgphoto2 mid-run on 2026-11-10 and failed three PRs at once. The
+# index is refreshed and the install tried again; a real missing dependency
+# still fails, after the third try.
+for attempt in 1 2 3; do
+  if rosdep install --from-paths src --ignore-src -y -q --rosdistro "$distro"; then break; fi
+  if [[ "$attempt" == 3 ]]; then echo "ERROR: rosdep install failed 3 times"; exit 100; fi
+  echo "WARNING: rosdep install failed (attempt $attempt); refreshing the package index"
+  sleep 30
+  if ! apt-get update -qq; then echo "WARNING: the index refresh failed too"; fi
+done
 
 # Built with the SYSTEM Python, as on the vehicle, before any pip package
 # exists: torch drags a new setuptools into the venv, and that broke the
@@ -101,5 +129,21 @@ set -e
   grep -E '^SKIPPED' "$report" | sed 's/^/- /' || echo "- none"
   echo
   echo "Hardware validation not performed here: the board, the Hailo-8 and the cameras run on Kutum."
+  echo
+  # The bill of materials this result was measured against (#95): every pip
+  # package at its exact version, and the installed ROS and Python apt
+  # packages (dpkg also lists known, uninstalled ones with no version). The
+  # vehicle's own is release.json, written per deploy on Kutum.
+  pip_bom="$(python3 -m pip freeze --all 2>/dev/null | sort)"
+  apt_bom="$(dpkg-query -W -f '${Package}=${Version}\n' "ros-$distro-*" 'python3-*' 2>/dev/null | grep -v '=$' | sort)"
+  echo "<details><summary>Bill of materials: $(grep -c . <<<"$pip_bom") pip, $(grep -c . <<<"$apt_bom") apt</summary>"
+  echo
+  echo '```'
+  echo "$pip_bom"
+  echo
+  echo "$apt_bom"
+  echo '```'
+  echo
+  echo '</details>'
 } >> "$summary"
 exit "$rc"

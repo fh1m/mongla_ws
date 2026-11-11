@@ -335,6 +335,11 @@ class LocalizationInputsMixin:
             except Exception:                              # noqa: BLE001
                 observed = True      # an unreadable gate must not stop the node
         state = 'aided' if observed else 'unaided'
+        # Aided by a velocity the flow node scaled with no valid calibration
+        # (#80) is not the same claim as aided: say which, on the same topic.
+        cal = getattr(self, '_flow_cal', None)
+        if observed and cal is not None and cal != 'calibrated':
+            state = 'aided (flow uncalibrated)'
         if state == self._aiding_state:
             return
         self._aiding_state = state
@@ -448,6 +453,14 @@ class LocalizationInputsMixin:
         self._apply(None, lambda f, s=self._zupt_sigma: f.update_zero_velocity(sigma=s))
         self._n['zupt'] += 1
         self._still.clear()
+
+    def _on_flow_calibration(self, msg) -> None:
+        """The flow node's latched calibration state; re-reported on change."""
+        self._flow_cal = str(msg.data)
+        if self._flow_cal != 'calibrated':
+            self.get_logger().warning(
+                f'[LOCAL] flow velocity is {self._flow_cal}: its scale is the '
+                f'focal parameters, not a calibration')
 
     def _on_heading(self, msg: Float32) -> None:
         """An absolute world heading from the landmark anchor.
