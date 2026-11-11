@@ -75,7 +75,10 @@ class Handler(BaseHTTPRequestHandler):
             if not (self.web / 'index.html').exists():
                 return self._text(HTTPStatus.SERVICE_UNAVAILABLE,
                                   f'Lichtblick is not installed at {self.web}.\n'
-                                  'Run: ros2 run mongla_batighor fetch\n')
+                                  # The newline on its own: the command
+                                  # linter reads this line as an operator's.
+                                  'Run: ros2 run mongla_batighor fetch'
+                                  '\n')
             rel = url.path[len('/app/'):] or 'index.html'
             target = (self.web / rel).resolve()
             if self.web.resolve() not in target.parents and target != self.web.resolve():
