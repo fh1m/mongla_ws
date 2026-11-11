@@ -1,0 +1,38 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 507-530
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 141,159-163,7361-7405
+.claude/context/perception/hailo-vision.md
+  h_f1b9066eb9899c 392,667-674
+.claude/skills/train-model/SKILL.md
+  h_f1b9066eb9899c 65-66
+README.md
+  h_f1b9066eb9899c 64,797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+src/mongla_vision/mongla_vision/detection/hailo.py
+  h_f1b9066eb9899c 19-29,88-93,248,256,260,324-350,352,354-356,373-375,378,381-384,388,391,393-397
+src/mongla_vision/mongla_vision/detection/hef_file.py
+  h_f1b9066eb9899c 61,63-65,67-71
+src/mongla_vision/test/test_assoc_conf.py
+  h_f1b9066eb9899c 39
+src/mongla_vision/test/test_hailo_arbiter.py
+  h_f1b9066eb9899c 49-50,128-137,158,163,449-495,498-499
+tools/README.md
+  h_f1b9066eb9899c 77
+tools/bench/hailo_compile.py
+  h_f1b9066eb9899c 10-13
+tools/bench/hailo_nms_floor.py
+  h_f1b9066eb9899c 1-184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "47a5db76a2bf808eb065949644102d35ef2b2a4a",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
