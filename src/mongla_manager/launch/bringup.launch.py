@@ -511,6 +511,17 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('batighor')),
     )
 
+    # The browsers' helm: the pilot token and the command log
+    # (mongla_batighor/helm.py). The terminal does not need it.
+    batighor_helm = partial(
+        Node,
+        package='mongla_batighor',
+        executable='helm',
+        name='batighor_helm',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('batighor')),
+    )
+
     # The same file's `nodes:` section: node parameters, applied to every node
     # below. Each node refuses a key it does not declare.
     params = launch_defaults.node_actions()
@@ -546,4 +557,5 @@ def generate_launch_description():
         *respawning(foxglove_node, 'the Foxglove bridge'),
         *respawning(batighor_node, 'the Batighor web app'),
         *respawning(batighor_overlay, 'the Batighor overlay'),
+        *respawning(batighor_helm, 'the Batighor helm'),
     ])

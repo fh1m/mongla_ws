@@ -1,6 +1,6 @@
 # mongla_interfaces — the whole cross-package surface
 
-**Messages only · [`src/mongla_interfaces`](../../../../src/mongla_interfaces)**
+**Messages, and one service for the operators · [`src/mongla_interfaces`](../../../../src/mongla_interfaces)**
 
 One action and one state topic. That is the entire contract between the mission layer and the
 vehicle; everything else in this codebase is an implementation detail behind it.
@@ -64,6 +64,7 @@ suppresses values it cannot stand behind rather than sending a plausible number.
 | `msg/TargetPose.msg` | the pose of a recognised prop |
 | `msg/TargetContours.msg` | outlines from segmentation |
 | `msg/TargetCorrespondences.msg` | image points matched to model points, for pose solving |
+| `srv/Helm.srv` | an operator's browser to Batighor's helm: take, give or release the pilot token, send a verb, start or abort a mission. Not on the mission path: it ends in a `Move` goal like any other ([`mongla_batighor`](../mongla_batighor/README.md)) |
 | `msg/FloorHeading.msg` | a heading read off the pool floor (tile grid or lane line), stamped with its camera frame so localization can replay it there (BUGS B-91) |
 
 ---
