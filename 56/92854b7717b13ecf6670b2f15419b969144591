@@ -1,0 +1,46 @@
+src/mongla_control/test/test_srot_fc.py
+  h_f1b9066eb9899c 848-860
+src/mongla_manager/test/test_link_meter.py
+  h_f1b9066eb9899c 1-52
+src/mongla_manager/mongla_manager/node_setup.py
+  h_f1b9066eb9899c 261-262,492-494,551
+src/mongla_manager/test/test_manager_end_to_end.py
+  h_f1b9066eb9899c 188-212
+src/mongla_interfaces/msg/NamedValue.msg
+  h_f1b9066eb9899c 1-5
+src/mongla_interfaces/CMakeLists.txt
+  h_f1b9066eb9899c 16-18
+src/mongla_interfaces/msg/BoardLink.msg
+  h_f1b9066eb9899c 1-10
+.claude/context/packages/mongla_manager/README.md
+  h_f1b9066eb9899c 69,189
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 40
+src/mongla_manager/mongla_manager/auv_manager_node.py
+  h_f1b9066eb9899c 177
+src/mongla_manager/mongla_manager/link_meter.py
+  h_f1b9066eb9899c 1-56
+src/mongla_control/mongla_control/fc/srot_fc.py
+  h_f1b9066eb9899c 61-63,192,220-233
+src/mongla_batighor/layouts/board_link.json
+  h_f1b9066eb9899c 1-65
+CLAUDE.md
+  h_f1b9066eb9899c 192-193
+src/mongla_interfaces/msg/MessageRate.msg
+  h_f1b9066eb9899c 1-2
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  h_f1b9066eb9899c 48-51
+src/mongla_manager/mongla_manager/node_telemetry.py
+  h_f1b9066eb9899c 297-313
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5692854b7717b13ecf6670b2f15419b969144591",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
