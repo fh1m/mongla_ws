@@ -46,6 +46,8 @@ class _Chip:
         self.overlap = False         # two models were mid-inference together
         # Set by a test to hold one model's inference open until released.
         self.hold = {}
+        self.models = []             # every InferModel created
+        self.refuse_floor = False    # set_nms_score_threshold raises
 
 
 CHIP = _Chip()
@@ -123,6 +125,19 @@ class _InferModel:
     def __init__(self, name, nclasses):
         self.name = name
         self._nclasses = nclasses
+        CHIP.models.append(self)
+        self.nms_floor = None       # what set_nms_score_threshold was given
+        self.floor_set_after_configure = False
+        self.configured = False
+
+    def _set_floor(self, value):
+        if CHIP.refuse_floor:
+            raise RuntimeError('HAILO_INVALID_OPERATION')
+        self.floor_set_after_configure = self.configured
+        self.nms_floor = value
+
+    def _set_iou(self, value):
+        self.nms_iou = value
 
     def input(self):
         return types.SimpleNamespace(set_format_type=lambda t: None)
@@ -143,10 +158,14 @@ class _InferModel:
         # API you imagined tests the code you imagined.
         return types.SimpleNamespace(
             set_format_type=lambda t: None,
+            set_nms_score_threshold=self._set_floor,
+            set_nms_iou_threshold=self._set_iou,
             shape=(self._nclasses * (1 + self._CAP * 5),))
 
     def configure(self):
         CHIP.configures += 1
+        self.configured = True
+        self.configured_at = (self.nms_floor, getattr(self, 'nms_iou', None))
         return _Cim(self.name)
 
 
@@ -432,11 +451,128 @@ def test_an_unmeasured_model_is_quiet(hailo, tmp_path, monkeypatch):
     assert warned['warn'] == []
 
 
+def test_a_graph_compiled_above_the_floor_is_configured_at_the_floor(
+        hailo, tmp_path, monkeypatch):
+    """A stock graph is compiled at 0.200. Its NMS runs on the host and takes
+    a new threshold when the model is configured (measured-bars 79), so the
+    detector asks for EMIT_FLOOR before the configure, and 0.10 is then a
+    conf this model can run at: no BELOW warning."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.200\n')
+    warned, log = _logger()
+    det = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                              conf=0.10, class_allowlist=None, warmup=False,
+                              logger=log)
+    model = CHIP.models[-1]
+    assert model.nms_floor == pytest.approx(hailo.EMIT_FLOOR)
+    assert det._floor == pytest.approx(hailo.EMIT_FLOOR)
+    assert not any('BELOW' in w for w in warned['warn'])
+    det.infer(np.zeros((64, 64, 3), np.uint8))
+    assert model.configured and not model.floor_set_after_configure
+
+
+def test_a_graph_already_at_the_floor_is_left_alone(
+        hailo, tmp_path, monkeypatch):
+    """Ours are compiled at 0.05. Setting the same value again is a call into
+    the runtime that can only go wrong; a graph compiled lower keeps its own."""
+    for baked in ('0.050', '0.020'):
+        _stub_parse_hef(monkeypatch, hailo, f'Score threshold: {baked}\n')
+        det = hailo.HailoDetector(
+            model_path=_model(tmp_path, f'm{baked[-2:]}', ['gate']),
+            conf=0.45, class_allowlist=None, warmup=False)
+        assert CHIP.models[-1].nms_floor is None
+        assert det._floor == pytest.approx(float(baked))
+
+
+def test_a_refused_lowering_keeps_and_reports_the_compiled_floor(
+        hailo, tmp_path, monkeypatch):
+    """If the runtime refuses, the floor is still the compiled one. Reporting
+    EMIT_FLOOR then would bring back the silent overrule this log exists for."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.200\n')
+    monkeypatch.setattr(CHIP, 'refuse_floor', True)
+    warned, log = _logger()
+    det = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                              conf=0.10, class_allowlist=None, warmup=False,
+                              logger=log)
+    assert det._floor == pytest.approx(0.2)
+    assert any('could not lower' in w for w in warned['warn'])
+    assert any('BELOW' in w and '0.200' in w for w in warned['warn'])
+
+
+def test_the_nms_changes_on_a_live_model_by_configuring_it_again(
+        hailo, tmp_path, monkeypatch):
+    """Both values are read at the configure. A change on a running model
+    hands the configured model back, and the next inference configures it
+    with the new values (measured-bars 79: about 85 ms, once)."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    det = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                              conf=0.45, class_allowlist=None, warmup=False)
+    frame = np.zeros((64, 64, 3), np.uint8)
+    det.infer(frame)
+    model, before = CHIP.models[-1], CHIP.configures
+    det.update_nms(floor=0.02, iou=0.5)
+    assert CHIP.configures == before, 'configured eagerly, under the caller'
+    det.infer(frame)
+    assert CHIP.configures == before + 1
+    assert model.configured_at == (0.02, 0.5)
+    assert det._floor == pytest.approx(0.02)
+    det.infer(frame)
+    assert CHIP.configures == before + 1, 'configured again with no change'
+
+
+def test_an_nms_change_before_the_first_frame_costs_no_configure(
+        hailo, tmp_path, monkeypatch):
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    before = CHIP.configures
+    det = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                              conf=0.45, class_allowlist=None, warmup=False)
+    det.update_nms(iou=0.6)
+    assert CHIP.configures == before
+    det.infer(np.zeros((64, 64, 3), np.uint8))
+    assert CHIP.configures == before + 1
+    assert CHIP.models[-1].configured_at[1] == 0.6
+
+
+def test_a_floor_raised_and_put_back_leaves_the_other_floors_alone(
+        hailo, tmp_path, monkeypatch):
+    """On the vehicle a floor raised to 0.5 and returned to 0.05 left the
+    detector returning nothing: the change had dragged the association floor
+    up with it, and nothing brought it back down."""
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    det = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                              conf=0.45, class_allowlist=None, warmup=False)
+    det.update_assoc_conf(0.10)
+    det.update_nms(floor=0.50)
+    det.update_nms(floor=0.05)
+    assert det._assoc_conf == pytest.approx(0.10)
+    assert det.acting_conf() == pytest.approx(0.45)
+
+
+@pytest.mark.parametrize('kwargs', [{'floor': 0.0}, {'floor': 1.0},
+                                    {'iou': 0.0}, {'iou': 1.5}])
+def test_an_nms_value_out_of_range_is_refused(hailo, tmp_path, monkeypatch,
+                                              kwargs):
+    _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.050\n')
+    det = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                              conf=0.45, class_allowlist=None, warmup=False)
+    with pytest.raises(ValueError):
+        det.update_nms(**kwargs)
+    assert det._floor == pytest.approx(0.05)
+
+
+def test_a_graph_with_no_nms_output_refuses_the_change(
+        hailo, tmp_path, monkeypatch):
+    """A caller must never report a change that did not happen."""
+    _stub_parse_hef(monkeypatch, hailo, 'no post-process here\n')
+    det = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
+                              conf=0.45, class_allowlist=None, warmup=False)
+    with pytest.raises(ValueError, match='no NMS'):
+        det.update_nms(floor=0.02)
+
+
 def test_a_stock_model_baked_at_0_2_does_not_get_the_int8_advice(
         hailo, tmp_path, monkeypatch):
-    """The advice is 'run at 0.12-0.15', and on a stock HEF that is not
-    reachable -- its floor IS 0.200. Repeating it there would be advice the
-    operator cannot follow."""
+    """A conf at the bar a model measured gets no operating-point advice,
+    whatever the graph was compiled at."""
     _stub_parse_hef(monkeypatch, hailo, 'Score threshold: 0.200\n')
     warned, log = _logger()
     hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),

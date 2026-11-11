@@ -30,8 +30,8 @@ def test_the_real_workflow_keeps_the_contract():
 @pytest.mark.parametrize('old, new', [
     ('distro: [humble, jazzy]', 'distro: [jazzy]'),                 # a distro dropped
     ('fail-fast: false', 'fail-fast: true'),                       # a sibling cancelled
-    ('    timeout-minutes: 45\n', '    timeout-minutes: 45\n    if: false\n'),
-    ('    timeout-minutes: 45\n', '    timeout-minutes: 45\n    continue-on-error: true\n'),
+    ('    timeout-minutes: 90\n', '    timeout-minutes: 90\n    if: false\n'),
+    ('    timeout-minutes: 90\n', '    timeout-minutes: 90\n    continue-on-error: true\n'),
     ('run: bash tools/ci/ci_ros.sh', 'run: bash tools/ci/ci_ros.sh || true'),
     ('run: bash tools/ci/ci_ros.sh', 'run: echo bash tools/ci/ci_ros.sh'),
     ('ros:${{ matrix.distro }}-ros-base', 'ros:jazzy-ros-base'),     # one image for both
@@ -60,6 +60,38 @@ def test_the_script_never_turns_a_failure_into_a_pass():
     assert 'rc=${PIPESTATUS[0]}' in code
 
 
+def test_a_mirror_blip_is_retried_before_it_fails_a_required_check():
+    code = '\n'.join(l for l in SCRIPT.splitlines() if not l.lstrip().startswith('#'))
+    retries = code.index('Acquire::Retries "5"')
+    assert retries < code.index('apt-get update'), 'retries must be set before apt runs'
+    assert 'Fix-Missing' not in code and '--fix-missing' not in code
+    mirror = code.index('azure.archive.ubuntu.com')
+    assert mirror < code.index('apt-get update'), 'the mirror must be set before apt runs'
+    # Both layouts: jammy's sources.list (humble) and noble's deb822 (jazzy).
+    assert '/etc/apt/sources.list.d/ubuntu.sources' in code and '/etc/apt/sources.list ' in code
+
+
+def test_an_index_refresh_that_never_succeeds_still_fails_the_job(tmp_path):
+    """The retry loop runs for real against an apt-get that always fails: a
+    loop whose last command is `sleep` would exit 0 and pass the check."""
+    import subprocess
+    start = SCRIPT.index('for attempt in')
+    loop = SCRIPT[start:SCRIPT.index('done', start) + 4]
+    fake = tmp_path / 'apt-get'
+    fake.write_text('#!/bin/sh\nexit 100\n')
+    fake.chmod(0o755)
+    (tmp_path / 'sleep').write_text('#!/bin/sh\nexit 0\n')
+    (tmp_path / 'sleep').chmod(0o755)
+    env = {'PATH': f'{tmp_path}:/usr/bin:/bin'}
+    r = subprocess.run(['bash', '-c', loop + '\necho after'], env=env,
+                       capture_output=True, text=True)
+    assert r.returncode == 100 and 'after' not in r.stdout
+    fake.write_text('#!/bin/sh\nexit 0\n')
+    r = subprocess.run(['bash', '-c', loop + '\necho after'], env=env,
+                       capture_output=True, text=True)
+    assert r.returncode == 0 and 'after' in r.stdout
+
+
 def test_numpy_stays_below_two_in_ci_too():
     assert '-c kutum/constraints.txt' in SCRIPT
     assert "numpy 2 would break cv_bridge" in SCRIPT
@@ -80,3 +112,25 @@ def test_ci_resolves_the_vehicles_pymavlink():
     vehicle = _pin('kutum/requirements.txt', 'pymavlink')
     assert vehicle, 'kutum/requirements.txt no longer pins pymavlink'
     assert _pin('requirements.txt', 'pymavlink') == vehicle
+
+
+def test_every_run_publishes_the_bill_of_materials_it_ran_against():
+    """#95: a CI result is evidence for one set of package versions. The job
+    summary carries them: pip at exact versions, and the installed ROS and
+    Python apt packages."""
+    code = SCRIPT[SCRIPT.index('echo "### ROS $distro"'):]
+    assert 'pip freeze --all' in code
+    assert re.search(r"dpkg-query -W .*ros-\$distro-\*.*python3-\*", code)
+    assert "grep -v '=$'" in code, 'uninstalled packages would read as installed'
+    assert '>> "$summary"' in code
+
+
+def test_a_stale_package_index_is_refreshed_before_the_install_gives_up():
+    """The security archive published a package mid-run and every job that
+    held the older index failed on a 404. The install refreshes and retries,
+    and still fails for good on the third try."""
+    code = SCRIPT
+    install = code.index('rosdep install --from-paths')
+    block = code[install:code.index('done', install)]
+    assert 'apt-get update' in block, 'no index refresh between attempts'
+    assert 'exit 100' in block, 'the retry must still fail the job in the end'
