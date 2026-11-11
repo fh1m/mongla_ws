@@ -1,0 +1,26 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 226-230
+.claude/context/platform/cross-repo-contract.md
+  h_f1b9066eb9899c 132,135-144
+test/test_every_tool_is_indexed.py
+  h_f1b9066eb9899c 25-29,63-64,66-67,71-80
+test/test_ros_ci_workflow.py
+  h_f1b9066eb9899c 137-165
+tools/bench/control_bench/FIRMWARE_PIN
+  h_f1b9066eb9899c 1-7
+tools/bench/control_bench/build.sh
+  h_f1b9066eb9899c 29-36
+tools/ci/ci_ros.sh
+  h_f1b9066eb9899c 107-123,131,138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "fc7125e9e1e0edf26f3187c1f58a792eb8573f70",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
