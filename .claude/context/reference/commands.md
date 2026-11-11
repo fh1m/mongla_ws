@@ -40,6 +40,7 @@
 |---|---|
 | `ros2 run mongla_batighor serve` | `mongla_batighor.serve:main` |
 | `ros2 run mongla_batighor fetch` | `mongla_batighor.fetch:main` |
+| `ros2 run mongla_batighor overlay` | `mongla_batighor.overlay:main` |
 | `ros2 run mongla_localization localization_node` | `mongla_localization.localization_node:main` |
 | `ros2 run mongla_localization pnp_node` | `mongla_localization.pnp_node:main` |
 | `ros2 run mongla_localization pose_fuse_node` | `mongla_localization.pose_fuse_node:main` |
@@ -372,6 +373,12 @@ Listed by source file, literal `declare_parameter` calls only. The
 manager's `vision.*` gains are declared from a table and are listed in
 `bringup.example.yaml` instead, with their defaults.
 
+**`mongla_batighor/overlay.py`** — 1 parameters
+
+| parameter | default |
+|---|---|
+| `cameras` | `['forward'` |
+
 **`mongla_localization/localization_node.py`** — 15 parameters
 
 | parameter | default |
@@ -434,7 +441,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `allow_unknown_kill_switch` | `False` |
 | `shield_max_depth_m` | `0.0` |
 
-**`mongla_vision/camera_node.py`** — 15 parameters
+**`mongla_vision/camera_node.py`** — 17 parameters
 
 | parameter | default |
 |---|---|
@@ -450,6 +457,8 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `frame_id` | `''` |
 | `calibration` | `''` |
 | `publish_rate_hz` | `0` |
+| `stream_rate_hz` | `30.0` |
+| `preview_rate_hz` | `5.0` |
 | `path` | `''` |
 | `loop` | `True` |
 | `discover_on_start` | `False` |

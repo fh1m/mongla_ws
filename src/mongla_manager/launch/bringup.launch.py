@@ -500,6 +500,17 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('batighor')),
     )
 
+    # The detector's boxes as annotations the browser draws over the camera's
+    # own JPEG (mongla_batighor/overlay.py). Publishes only while watched.
+    batighor_overlay = partial(
+        Node,
+        package='mongla_batighor',
+        executable='overlay',
+        name='batighor_overlay',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('batighor')),
+    )
+
     # The same file's `nodes:` section: node parameters, applied to every node
     # below. Each node refuses a key it does not declare.
     params = launch_defaults.node_actions()
@@ -534,4 +545,5 @@ def generate_launch_description():
         GroupAction([vision_launch], scoped=True),
         *respawning(foxglove_node, 'the Foxglove bridge'),
         *respawning(batighor_node, 'the Batighor web app'),
+        *respawning(batighor_overlay, 'the Batighor overlay'),
     ])
