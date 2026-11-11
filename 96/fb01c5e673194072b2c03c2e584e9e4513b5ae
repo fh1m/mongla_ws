@@ -1,0 +1,22 @@
+.claude/context/packages/mongla_vision/README.md
+  h_f1b9066eb9899c 180
+.claude/context/upstream/pr-w-the-board-triggers-the-eyes.md
+  h_f1b9066eb9899c 106-123
+src/mongla_vision/mongla_vision/trigger_stamps.py
+  h_f1b9066eb9899c 1-130
+src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py
+  h_f1b9066eb9899c 81-90
+src/mongla_vision/test/test_trigger_stamps.py
+  h_f1b9066eb9899c 1-130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "96fb01c5e673194072b2c03c2e584e9e4513b5ae",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
