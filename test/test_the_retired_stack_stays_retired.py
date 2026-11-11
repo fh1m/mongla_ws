@@ -11,6 +11,10 @@ deleted page, and a `downward-camera.md` documenting a fill-driven descent that
 `align_loop` now raises `ValueError` on. Each one looked finished. Each one would
 have cost a pool day.
 
+The operator consoles Batighor replaced are retired the same way: the mission web
+console, with its `web_video_server` stream, left on 2026-11-12, and only the
+ledger and the defect history may still name them.
+
 The earlier guard checked four exact strings in four entry points. This one reads
 EVERY file git knows about (tracked and untracked-not-ignored), so a stale claim
 cannot hide in a skill, an agent prompt, a test docstring or a launch comment.
@@ -48,6 +52,7 @@ TOKENS = re.compile(r'''
     | UNSUPPORTED_VERBS | PayloadDriver
     | mongla\.can\( | mongla\.require\( | mongla\.backend\b
     | mongla_sim | sim_vehicle | \bsim/src\b | sim/COLCON_IGNORE
+    | mission_web | dashboard_state | web_video_server
 ''', re.I | re.X)
 
 # Names on the firmware team's repositories. Stripped before matching.

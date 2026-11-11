@@ -73,7 +73,6 @@ a confident zero.
 | `lock_node` | `lock`, `correspondences` | the continuity ladder and the feature anchor |
 | `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled`, `flow_calibration` | everything the downward camera can tell us |
 | `depth_estimation_node` | `vis_range` | monocular proximity, off by default |
-| `mission_web_node` | — | the pool-day browser console |
 
 `lock_node` is one class in seven files. `lock_node.py` holds the per-frame loop (detection
 in, rung chosen, anchor run) and the list of files. The other six are mixins of the same class,
@@ -109,7 +108,6 @@ and direct feed), `detector_publish.py` (topics and operator log lines) and
 ros2 run mongla_vision vision_check          # is the pipeline alive and seeing?
 ros2 run mongla_vision calibrate             # measure this camera, in air or in water
 ros2 run mongla_vision vision_thrust_check   # detection → thrust, disarmed and safe
-ros2 launch mongla_vision mission_web.launch.py   # both cameras in a browser
 ```
 
 ## What is deliberately *not* here
@@ -249,6 +247,4 @@ with no summary line shows as *(no summary)* until it gets one.
 | `utils/display_node.py` | smooth OpenCV viewer for the perception pipeline. |
 | `utils/switch_camera.py` | resume ONE detector, pause the others (CLI exclusivity). |
 | `utils/water_check.py` | Which water is this? Characterise the pool before trusting a model in it. |
-| `web/dashboard_state.py` | Pure (rclpy-free) helpers for the mission-web console. |
-| `web/mission_web_node.py` | browser mission-control console for the Mongla vision stack. |
 <!-- modules:end -->

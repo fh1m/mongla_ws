@@ -22,11 +22,13 @@ pull request, a crafted file), what they get, and the commit you read.
 
 ## Deliberately open, not a vulnerability
 
-The mission web console listens on every interface with no login. At the pool
-everyone on the vehicle's network is the team, and any device must be able to
-change things (owner decision, 2026-11-09; `kutum/README.md`, "Security, on
-purpose"). It is off unless launched, and it never talks to the board. If it is
-ever reachable beyond the team's network, that is in scope.
+Batighor (`batighor:=true`) listens on every interface with no login. At the
+pool everyone on the vehicle's network is the team, and any device must be able
+to watch and act (owner decision, 2026-11-09; `kutum/README.md`, "Security, on
+purpose"). A browser reaches the vehicle only through the helm, whose names
+are typed, not authenticated: it keeps operators from colliding, not attackers
+out. It is off unless launched. If it is ever reachable beyond the team's
+network, that is in scope.
 
 ## What we turn on
 

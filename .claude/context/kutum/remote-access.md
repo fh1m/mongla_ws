@@ -12,7 +12,7 @@ inside it down too. So nothing runs inside one. Two jobs, two tools:
 | Job | Tool | Why |
 |---|---|---|
 | Terminal: launches, missions, the CLI, debugging | **mosh + tmux** | instant echo; survives a tether unplug; **the run outlives the link** |
-| Watching vision | **Batighor** (`batighor:=true`, then `http://mongla.local:8000/`) or **`web_video_server`** in a browser | no desktop pixels at all |
+| Watching vision | **Batighor** (`batighor:=true`, then `http://mongla.local:8000/`) in a browser | no desktop pixels at all |
 
 ---
 
@@ -39,15 +39,9 @@ Drop the tether and `mosh` reconnects. If the whole link died, `mosh` again and
 
 ## Vision without a desktop
 
-- **Batighor** (recommended, already wired): launch with `batighor:=true`, then open
-  `http://mongla.local:8000/` in any browser: Lichtblick, connected and on our layout. Setup, the
-  FPS check and offline replay: [`foxglove-and-bags.md`](../platform/foxglove-and-bags.md).
-- **Browser MJPEG** (`web_video_server`): no app needed.
-  ```bash
-  ros2 run web_video_server web_video_server        # on the Pi, in tmux
-  ```
-  Laptop browser:
-  `http://mongla.local:8080/stream_viewer?topic=/mongla/vision/forward/image_debug`
+Launch with `batighor:=true`, then open `http://mongla.local:8000/` in any browser:
+Lichtblick, connected and on our layout, with the helm. Setup, the FPS check and offline replay:
+[`foxglove-and-bags.md`](../platform/foxglove-and-bags.md).
 
 > **The viewer must not cost frames.** Confirm
 > `ros2 topic hz /mongla/vision/forward/detections` is unchanged with a viewer attached, and

@@ -138,8 +138,8 @@ nodes:                               # node parameters, by node name
 
 ### The other launch files: the same file, under `launch:`
 
-`vision.launch.py`, `vision_dual.launch.py`, `vision_pi.launch.py`,
-`video.launch.py` and `mission_web.launch.py` are typed directly on the bench
+`vision.launch.py`, `vision_dual.launch.py`, `vision_pi.launch.py` and
+`video.launch.py` are typed directly on the bench
 and against footage. Each reads its own section, named after the file:
 
 ```yaml
@@ -302,8 +302,8 @@ ros2 launch mongla_vision vision.launch.py camera:=forward models:=gate=gate_sha
 # archive footage through the full pipeline
 ros2 launch mongla_vision video.launch.py fwd_video:=/path/clip.mp4 fwd_model:=gate_sharks
 
-# the browser console on http://localhost:8090
-ros2 launch mongla_vision mission_web.launch.py cameras:=forward fwd_model:=gate_sharks
+# beside it, the same footage in a browser on http://localhost:8000
+ros2 launch mongla_batighor batighor.launch.py
 ```
 
 Is the pipeline alive?

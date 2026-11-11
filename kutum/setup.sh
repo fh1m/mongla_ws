@@ -60,7 +60,7 @@ if [ "${1:-}" = "--system" ]; then
   # mosh and tmux are off the mission path: a mission runs inside tmux over
   # mosh so a dropped tether never kills it (kutum/remote-access.md).
   PKGS="ros-jazzy-vision-msgs ros-jazzy-cv-bridge ros-jazzy-foxglove-bridge ros-jazzy-foxglove-msgs
-        ros-jazzy-rosbag2-storage-mcap ros-jazzy-web-video-server
+        ros-jazzy-rosbag2-storage-mcap
         python3-numpy python3-opencv python3-pil python3-serial python3-yaml
         python3-colcon-common-extensions python3-rosdep
         libopenblas0-pthread mosh tmux wpasupplicant avahi-daemon"

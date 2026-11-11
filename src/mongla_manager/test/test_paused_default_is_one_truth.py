@@ -59,8 +59,6 @@ _EXPECTED: dict[str, tuple[str, str]] = {
     # --- surfaces where BOTH live is the point, and no mission is steering ---
     'vision.launch.py':      ('false', 'single camera: one detector, nothing to '
                                        'contend with'),
-    'mission_web.launch.py': ('false', 'operator console: both panels live IS '
-                                       'the product'),
     'video.launch.py':       ('false', 'offline dataset replay, not a mission'),
 }
 
