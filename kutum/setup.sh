@@ -112,12 +112,17 @@ if [ "${1:-}" = "--system" ]; then
         /lib/firmware/hailo/hailo8_fw.bin
     modprobe hailo_pci
   else echo "  driver hailo_pci $HAILORT_V present for $(uname -r)"; fi
-  if [ "$(hailortcli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" != "$HAILORT_V" ]; then
+  # Built WITH the service (measured-bars 80): the packaged library leaves
+  # its client out, and then `multi_process_service` raises in every process.
+  # A library built before this line has no `hailort_service` beside it, so
+  # the check below rebuilds it.
+  if [ "$(hailortcli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" != "$HAILORT_V" ] \
+     || [ ! -x /usr/local/bin/hailort_service ]; then
     [ -d "$OWNER_HOME/hailort_src" ] || as_owner git clone --depth 1 -b "v$HAILORT_V" \
         https://github.com/hailo-ai/hailort.git "$OWNER_HOME/hailort_src"
     # -j2: a 4 GB Pi runs out of memory at -j4.
     as_owner cmake -S "$OWNER_HOME/hailort_src" -B "$OWNER_HOME/hailort_src/build" \
-        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_BUILD_TYPE=Release -DHAILO_BUILD_SERVICE=1
     as_owner cmake --build "$OWNER_HOME/hailort_src/build" -j2
     cmake --install "$OWNER_HOME/hailort_src/build"
     ldconfig
@@ -134,6 +139,16 @@ if [ "${1:-}" = "--system" ]; then
   udevadm trigger --subsystem-match=video4linux --subsystem-match=hailo_chardev
   systemctl daemon-reload
   systemctl enable --now cpu-performance.service
+  # HailoRT's own install drops a unit that points at /usr/bin; ours replaces it.
+  rm -f /usr/local/lib/systemd/system/hailort.service /lib/systemd/system/hailort.service
+  # It runs as its own user (#67); the operator joins its group to reach the
+  # socket, which takes effect at the next login.
+  id -u hailort >/dev/null 2>&1 \
+    || useradd --system --user-group --no-create-home --shell /usr/sbin/nologin hailort
+  id -nG "$OWNER" | grep -qw hailort || usermod -aG hailort "$OWNER"
+  install -m 0644 "$KUTUM/system/systemd/hailort.service" /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now hailort.service
 
   say "5/8  units that start a program that no longer exists"
   # hailo-web.service (a model switcher from before this repo) pointed into
