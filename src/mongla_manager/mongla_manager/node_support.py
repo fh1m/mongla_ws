@@ -222,6 +222,31 @@ def mission_recovery(rec, now: float, armed, mode,
     return rec, 'none'
 
 
+DEPTH_SHIELD_HOLD_S = 1.0
+
+
+def depth_shield(since, depth_m, floor_m: float, armed, now: float,
+                 hold_s: float = DEPTH_SHIELD_HOLD_S):
+    """(since, trip) for the depth floor; pure.
+
+    `floor_m` is metres below the surface, positive; 0 or less switches the
+    shield off. `depth_m` is the board's reading, negative below the surface.
+    The hull must sit past the floor for `hold_s` without a break before the
+    shield trips, so one bad barometer sample cannot surface a run. A reading
+    that is absent (NaN) is not evidence either way and restarts the count.
+
+    Issue #52: a mission that passes every static check can still command a
+    dive past the pool, and nothing below the mission stopped it. The board
+    half is upstream ask Y (`FS_DEPTH_MAX`); this is the host's until then.
+    """
+    past = (floor_m > 0.0 and armed is not False and depth_m is not None
+            and math.isfinite(depth_m) and depth_m < -floor_m)
+    if not past:
+        return None, False
+    since = now if since is None else since
+    return since, (now - since) >= hold_s
+
+
 class _HeartbeatThread:
     """The companion HEARTBEAT on its own daemon thread -- nothing may starve it.
 

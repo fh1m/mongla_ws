@@ -139,6 +139,7 @@ is how `recommend()` happened.
 - [73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)](#73-the-executor--what-delivering-one-callback-costs-and-what-that-is-worth-in-a-real-node-2026-11-10)
 - [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
 - [79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)](#79-the-compiled-score-threshold-is-a-default--the-floor-is-set-when-the-model-is-configured-2026-11-11)
+- [75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)](#75-rectify-the-image-once-at-the-camera--not-chosen-468-ms-a-frame-against-a-4-ms-bar-and-points-cost-37-microseconds-2026-11-10) — *measured, not adopted*
 - [76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11)](#76-a-realtime-kernel--not-chosen-the-stock-kernel-wakes-a-loaded-50-hz-loop-within-002-ms-once-the-loop-has-a-realtime-priority-2026-11-11) — *measured, not adopted*
 - [77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11)](#77-numpy-2-and-a-newer-opencv-on-kutum--not-chosen-10-to-16--of-the-hot-path-and-cv_bridge-stops-converting-2026-11-11) — *measured, not adopted*
 <!-- contents:end -->
@@ -7392,19 +7393,74 @@ and set to 0.6 it returned none, so the call takes effect in both directions.
 
 **Shipped:** `EMIT_FLOOR = 0.05` in `detection/hailo.py`. A detection graph
 compiled above it is configured at it; one compiled at or below it is left
-alone. The value is read at configure and cannot move afterwards, so `conf`
-and `assoc_conf` filter above it as before. A refusal from the runtime keeps
-and reports the compiled floor.
+alone. `conf` and `assoc_conf` filter above it as before. A refusal from the
+runtime keeps and reports the compiled floor.
+
+**Changing it during a run.** The score floor and the overlap threshold are
+both read when the model is configured, so a live change hands the configured
+model back and configures it again. Bars written first: the output follows
+the new values 20 changes in a row with no error and no growth in time, and
+the detector is without a result for under 250 ms.
+
+| graph | changes | output follows | release to first result, first four / last four | worst |
+|---|---|---|---|---|
+| stock `yolov11n` | 20 | yes, repeatably (651 / 426 / 0 / 161 boxes at 0.01+0.70, 0.01+0.30, 0.50+0.70, 0.05+0.95) | 88.0 87.6 86.2 85.3 / 88.6 86.8 87.0 85.5 ms | **89.1 ms** |
+| `gate_sharks` | 20 | yes | 81.3 81.1 82.2 80.9 / 81.3 80.9 81.5 81.3 ms | **82.2 ms** |
+
+Through the shipping `HailoDetector.update_nms` the first inference after a
+change took 63.4 to 64.8 ms, and a floor raised to 0.5 and returned to 0.05
+went 17 boxes, 0, 17. The first run of that check returned 0 at the end: the
+change had raised the association floor with it and nothing lowered it again.
+Fixed, and held by a test.
+
+**Shipped:** `nms_floor` (0.05) and `nms_iou` (0.0, meaning as compiled) on
+the detector node, live. A live `iou` is now rejected: it is read once when a
+`.pt` model is built, and accepting it reported a change nothing made.
 
 **What this does not change.** 0.05 is still the value to compile with: the
 blocking diagnostic path does not lower it, and a graph that already carries
 it needs nothing from the runtime. A segmentation graph has no NMS output and
 is untouched.
 
+**Not measured:** the 100-boxes-per-class cap, which a very low floor on a
+many-class graph could reach, and a change made while a second model is
+mid-inference on the same chip.
+
 **Not measured:** a floor below 0.05, and the 100-boxes-per-class cap, which
 a very low floor on a many-class graph could reach.
 
 ---
+
+## 75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)
+
+**The idea (issue #42).** Three consumers once read `CameraInfo.k` and ignored
+`CameraInfo.d`. Remapping every frame in `camera_node` and publishing a
+pinhole image with `D = 0` would make that mistake impossible.
+
+**The bar, from the issue, written before the run.** `cv2.remap` on Kutum at
+1280x720 BGR with `CV_16SC2` maps, 1000 frames: an added p95 above **4 ms**
+kills it, and the lens is then removed from points per consumer, behind a
+guard.
+
+**Measured on Kutum** (Pi 5, system OpenCV 4.6.0, the downward lens's own
+calibration, `alpha = 0`):
+
+| frame | remap p50 | remap p95 | 8 points undistorted, p50 | HFOV in air, raw to rectified |
+|---|---|---|---|---|
+| 1280x720 | 4.61 ms | **4.68 ms** | 3.7 us | 63.82 to 64.15 deg |
+| 640x360 | 0.96 ms | 0.97 ms | 3.7 us | 63.82 to 64.19 deg |
+
+**Verdict: FAIL at the bar's resolution.** At the 640x360 the vehicle runs it
+is 0.97 ms, which at the downward camera's 210 Hz is a fifth of one core spent
+on pixels no consumer measures. A consumer measures a box centre or four
+corners, and removing the lens from eight points costs 3.7 microseconds. The
+other two falsifiers (detector accuracy on rectified frames, field of view)
+were not run: the first had already decided it.
+
+**What ships instead.** Every reader of `CameraInfo.k` already reads `d`
+(`pnp_node`, `lock_inputs`, `dsl_detections`, `vision_state`).
+`test/test_every_camera_matrix_reader_removes_the_lens.py` fails a new one that
+does not.
 
 ## 76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11)
 
