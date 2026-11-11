@@ -44,6 +44,16 @@ class DetectorSetupMixin:
         # threshold). Empty = every model uses `conf`. Live-tunable.
         self.declare_parameter('model_conf',          '')
         self.declare_parameter('iou',                 0.5)
+        # The NMS of a Hailo detection graph, live. `nms_floor` is the lowest
+        # score the runtime returns (`conf` filters above it); `nms_iou` is the
+        # overlap above which two boxes of one class are one object, and 0.0
+        # leaves the value the graph was compiled with. Changing either
+        # configures the model again: about 85 ms without frames
+        # (measured-bars 79). `iou` above is the .pt backend's, read at
+        # construction; it is not sent to a HEF, because its default differs
+        # from the compiled 0.70 and would change every graph unasked.
+        self.declare_parameter('nms_floor',           0.05)
+        self.declare_parameter('nms_iou',             0.0)
         self.declare_parameter('imgsz',               640)
         self.declare_parameter('max_det',             100)   # post-NMS cap (live-tunable)
         self.declare_parameter('classes',             'person')
@@ -279,6 +289,46 @@ class DetectorSetupMixin:
         a = float(self.get_parameter('assoc_conf').value)
         if a > 0.0 and hasattr(det, 'update_assoc_conf'):
             det.update_assoc_conf(a)
+        self._apply_nms(det)
+
+    def _apply_nms(self, det) -> None:
+        """Push `nms_floor` / `nms_iou` onto a freshly built detector.
+
+        Only when an operator moved one off its default, and only onto a
+        detector that has an NMS to set; a refusal is logged with its reason,
+        because a floor the launch asked for and did not get is a blind spot.
+        """
+        floor = float(self.get_parameter('nms_floor').value)
+        iou = float(self.get_parameter('nms_iou').value)
+        want_floor = None if abs(floor - 0.05) < 1e-9 else floor
+        want_iou = iou if iou > 0.0 else None
+        if (want_floor is None and want_iou is None) \
+                or not hasattr(det, 'update_nms'):
+            return
+        try:
+            det.update_nms(floor=want_floor, iou=want_iou)
+        except ValueError as exc:
+            self.get_logger().error(f'[DET  ] NMS not applied: {exc}')
+
+    def _set_nms_live(self, floor=None, iou=None) -> str:
+        """Apply a live NMS change to every loaded model. '' or the refusal.
+
+        All or nothing is not possible across models, so the first refusal is
+        returned and the parameter is rejected; a mission then sees a failure
+        instead of believing every model moved.
+        """
+        dets = (list(self._registry.values()) if self._registry
+                else ([self._det] if self._det is not None else []))
+        takers = [d for d in dets if hasattr(d, 'update_nms')]
+        if not takers:
+            return ('no loaded model has a Hailo NMS to set (a .pt model reads '
+                    '`iou` at construction; relaunch to change it)')
+        for det in takers:
+            try:
+                det.update_nms(floor=floor, iou=iou)
+            except ValueError as exc:
+                return str(exc)
+        return ''
 
     def _resolve_model_key(self, name: str) -> Optional[str]:
         """Map a set_model()/active_model argument to a registry key.
@@ -395,6 +445,29 @@ class DetectorSetupMixin:
                     self.get_logger().warning(
                         f"[DET  ] masks → {want} IGNORED: no loaded model is a "
                         f"segmentation model. Contours will stay box corners.")
+
+            elif p.name in ('nms_floor', 'nms_iou'):
+                value = float(p.value)
+                if p.name == 'nms_iou' and value <= 0.0:
+                    return SetParametersResult(
+                        successful=False,
+                        reason='nms_iou 0.0 means "as compiled" and is a '
+                               'launch value; set a number in (0, 1] live')
+                why = self._set_nms_live(
+                    **{'floor' if p.name == 'nms_floor' else 'iou': value})
+                if why:
+                    return SetParametersResult(successful=False, reason=why)
+                self.get_logger().info(
+                    f"[DET  ] {p.name} → {value:.3f} (models configured again)")
+
+            elif p.name == 'iou':
+                # Read at construction by the .pt backend and never by a HEF.
+                # Accepting a live value would report a change nothing made.
+                return SetParametersResult(
+                    successful=False,
+                    reason='iou is read once, when a .pt model is built. On '
+                           'the vehicle set nms_iou, which changes the Hailo '
+                           'NMS live.')
 
             elif p.name == 'max_det':
                 new_max = int(p.value)

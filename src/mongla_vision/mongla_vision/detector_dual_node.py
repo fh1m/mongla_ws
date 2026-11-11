@@ -88,7 +88,8 @@ from .detector_node import DetectorNode
 # ones an operator sets globally (max_det, debug_image_hz, paused).
 _PER_CAMERA = ('model_path', 'models', 'active_model', 'classes', 'conf',
                'assoc_conf', 'model_conf', 'image_topic')
-_SHARED = ('device', 'half', 'iou', 'imgsz', 'max_det', 'publish_contours',
+_SHARED = ('device', 'half', 'iou', 'nms_floor', 'nms_iou', 'imgsz', 'max_det',
+           'publish_contours',
            'publish_debug_image',
            'debug_image_hz', 'alignment_deadband', 'paused',
            'preprocess', 'preprocess_clip', 'vision_profile',
@@ -129,6 +130,7 @@ _DEFAULTS = {
     # vehicle launch turns it on (vision_pi.launch.py, `assoc_conf`).
     'assoc_conf': 0.0,
     'device': 'auto', 'half': True, 'iou': 0.5, 'imgsz': 640,
+    'nms_floor': 0.05, 'nms_iou': 0.0,
     'max_det': 100, 'publish_contours': True,
     'publish_debug_image': True, 'debug_image_hz': 5.0,
     'alignment_deadband': 0.05, 'paused': False,
