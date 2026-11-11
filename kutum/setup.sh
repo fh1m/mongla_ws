@@ -128,6 +128,8 @@ if [ "${1:-}" = "--system" ]; then
   install -m 0644 "$KUTUM/system/udev/51-hailo-udev.rules"     /etc/udev/rules.d/
   install -m 0755 "$KUTUM/system/systemd/set-cpu-performance"  /usr/local/sbin/
   install -m 0644 "$KUTUM/system/systemd/cpu-performance.service" /etc/systemd/system/
+  # The manager asks for a realtime priority (measured-bars 76); this permits it.
+  install -m 0644 "$KUTUM/system/limits/99-mongla-realtime.conf" /etc/security/limits.d/
   udevadm control --reload-rules
   udevadm trigger --subsystem-match=video4linux --subsystem-match=hailo_chardev
   systemctl daemon-reload
