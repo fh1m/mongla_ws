@@ -64,14 +64,14 @@ def test_root_opens_the_app_on_this_host_bridge_and_layout(site):
     loc = headers['Location']
     assert loc.startswith('/app/?ds=foxglove-websocket')
     assert 'ws%3A%2F%2F127.0.0.1%3A8765' in loc
-    port = base.rsplit(':', 1)[1]
-    assert f'layoutUrl=http%3A%2F%2F127.0.0.1%3A{port}%2Flayouts%2Fmongla_layout.json' in loc
+    # Named, not sent: a layoutUrl raced the app's start-up (serve.app_link).
+    assert loc.endswith('&workspace=mongla&layout=mongla_layout') and 'layoutUrl' not in loc
 
 
 def test_the_link_names_the_host_the_browser_used():
     link = serve.app_link('mongla.local:8000', 9000, 'x')
     assert 'ws%3A%2F%2Fmongla.local%3A9000' in link
-    assert 'http%3A%2F%2Fmongla.local%3A8000%2Flayouts%2Fx.json' in link
+    assert link.endswith('&layout=x')
     assert 'ws%3A%2F%2F192.168.0.103%3A8765' in serve.app_link('192.168.0.103', 8765, 'x')
 
 
