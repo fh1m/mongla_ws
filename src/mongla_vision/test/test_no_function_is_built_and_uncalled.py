@@ -115,9 +115,6 @@ DEFERRED_FUNCTIONS = {
     'src/mongla_vision/mongla_vision/tracking/visibility.py:project_world_target':
         'object permanence; blocked on two missing signals, see '
         'perception/ladder-register.md item 5',
-    'src/mongla_vision/mongla_vision/tracking/visibility.py:region_conf_bar':
-        'object permanence; blocked on two missing signals, see '
-        'perception/ladder-register.md item 5',
 }
 
 

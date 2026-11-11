@@ -6,7 +6,9 @@ real competition footage are p50 0.155 s / p90 0.651 s / p99 2.418 s, so a stack
 with one source spends a real fraction of every run with nothing at all.
 
     rung        source                    horizon      failure mode
-    DETECTION   the detector              -            semantic: domain, blur
+    DETECTION   the detector, at the bar  -            semantic: domain, blur
+    HELD        the detector, under the   ~1 gap       a false box that lands
+                bar, where the lock is                 where the target was
     FOLLOW      sparse LK in the last box ~1 gap       drifts, unbounded
     ANCHOR      XFeat homography          long         needs texture
     LOST        nothing                   -            -
@@ -42,6 +44,7 @@ from typing import Optional, Tuple
 
 class Rung(Enum):
     DETECTION = 'detection'
+    HELD = 'held'
     FOLLOW = 'follow'
     ANCHOR = 'anchor'
     LOST = 'lost'
@@ -165,6 +168,8 @@ def authority_for(age_s: float,
 
 def arbitrate(*, now: float, last_detection_t: float,
               detection: Optional[Tuple] = None, detection_conf: float = 0.0,
+              held: Optional[Tuple] = None, held_conf: float = 0.0,
+              held_age_s: float = float('inf'),
               follow: Optional[Tuple] = None, follow_conf: float = 0.0,
               anchor: Optional[Tuple] = None, anchor_conf: float = 0.0,
               disagree_px: float = DISAGREE_PX,
@@ -252,6 +257,30 @@ def arbitrate(*, now: float, last_detection_t: float,
         acx = 0.5 * (float(anchor[0]) + float(anchor[2]))
         acy = 0.5 * (float(anchor[1]) + float(anchor[3]))
         disagree = math.hypot(fcx - acx, fcy - acy)
+
+    # HELD: the detector still sees the target, under the acting bar, where
+    # the lock already is. ByteTrack's second stage, inside the ladder: a weak
+    # box may KEEP a target that a strong one acquired, and never acquire one.
+    #
+    # Why it outranks FOLLOW. Both answer about this instant, but the follower
+    # integrates frame to frame and drifts, while a held box is the detector's
+    # own fresh look at the target. Measured on the gaps the ladder exists
+    # for: every gap contained weak detections, and 84 % of them sat within
+    # the prior radius of the last sighting against 28 % for random points
+    # (measured-bars section 56).
+    #
+    # Why it does NOT reset the decay clock. Rule 1: `age_s` counts from the
+    # last detection that cleared the bar. On the gate model the band under
+    # the bar includes half-frame boxes on empty water at 0.44-0.56 (B-59),
+    # so a held box that happened to land where the gate was could otherwise
+    # keep full authority on open water indefinitely. HELD buys a better
+    # position for the time the ladder already grants, and re-seeds the
+    # follower so it stops drifting; it never buys more time.
+    if (held is not None and held_conf >= min_rung_conf
+            and held_age_s <= live_s):
+        return LockState(rung=Rung.HELD, xyxy=tuple(held),
+                         rung_conf=float(held_conf), authority=auth,
+                         age_s=age)
 
     if follow is not None and follow_conf >= min_rung_conf:
         a = auth

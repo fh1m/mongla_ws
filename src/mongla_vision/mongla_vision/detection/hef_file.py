@@ -32,6 +32,31 @@ def load_class_index(model_path: str) -> Optional[Dict[int, str]]:
         return None
 
 
+def measured_bars(model_path: str) -> Dict[str, Optional[float]]:
+    """{class: recommended_conf} from the sidecar's `separation:` block.
+
+    Written by `tools/studies/negative_clip_check.py` from clips asserted to
+    hold the prop and clips asserted not to, so each number is the bar at
+    which empty water stops reading as the prop. A class mapped to None was
+    measured and found unusable; a class that is absent was never measured.
+    """
+    yaml_path = Path(model_path).with_suffix('.yaml')
+    try:
+        import yaml
+        data = yaml.safe_load(yaml_path.read_text())
+    except Exception:                                       # noqa: BLE001
+        return {}
+    sep = data.get('separation') if isinstance(data, dict) else None
+    if not isinstance(sep, dict):
+        return {}
+    out: Dict[str, Optional[float]] = {}
+    for cls, row in sep.items():
+        if isinstance(row, dict) and row.get('measured') is not None:
+            bar = row.get('recommended_conf')
+            out[str(cls)] = None if bar is None else float(bar)
+    return out
+
+
 def baked_score_threshold(hef_path: str) -> Optional[float]:
     """The NMS floor compiled INTO the HEF, or None if it cannot be read.
 

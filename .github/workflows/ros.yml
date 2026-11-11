@@ -23,7 +23,10 @@ jobs:
   ros:
     name: ROS ${{ matrix.distro }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # A clean run takes about 8 minutes. On 2026-11-10 packages.ros.org served
+    # at ~330 KB/s and three required checks were cancelled at 45 with every
+    # test unrun; the budget is for a hang, not a slow mirror.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:

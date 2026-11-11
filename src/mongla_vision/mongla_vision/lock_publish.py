@@ -97,6 +97,15 @@ class LockPublishMixin:
         from whichever frame it last finished. One shared stamp would make all
         three claim the freshest of them.
         """
+        # Where the lock is, for `_on_det` to judge the next weak box against.
+        # Set before the rate limit below could return, so a throttled publish
+        # still moves the prior.
+        self._lock_centre = None
+        if not st.have_target:
+            self._confirms = 0
+        if st.have_target:
+            x1, y1, x2, y2 = st.xyxy
+            self._lock_centre = ((x1 + x2) * 0.5, (y1 + y2) * 0.5)
         # Rate limit when one is configured, EXCEPT on a rung change. Default
         # is no limit: the board-side loop is 500 Hz and wants every frame.
         rung = st.rung.value if st.have_target else None

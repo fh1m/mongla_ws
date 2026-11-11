@@ -12,6 +12,8 @@ was wet. Kutum is the Pi and the chip together, so the rows sit together:
     kutum.hailo            the chip's two die sensors, graded by the zones and
                            throttling levels the chip's own firmware reports
     kutum.disk             free space, graded as the preflight does
+    kutum.clock            the RTC cell, the RTC against the system clock, and
+                           any wall-clock step during the session
 
 Report-only, by the owner's decision: these rows tell the operator, and
 nothing acts on them. A computer that is hot is still the only computer.
@@ -48,6 +50,21 @@ HAILO_DEV = '/dev/hailo0'
 # Raspberry Pi 5"). These are the vendor's numbers, not ours to tune.
 PI_SOFT_THROTTLE_C = 80.0
 PI_MAX_C = 85.0
+RTC = '/sys/class/rtc/rtc0'
+# systemd-timesyncd creates this file once network time has set the clock.
+NTP_SYNCED = '/run/systemd/timesync/synchronized'
+# Below this the cell may not carry the RTC through a power-off; the same bar
+# as kutum/doctor.sh, and a test holds the two together.
+RTC_CELL_LOW_V = 2.5
+# The kernel writes network time to the RTC every 11 minutes, so a synced pair
+# agrees to a second; the doctor allows 2 s.
+RTC_OFFSET_S = 2
+# Wall time minus monotonic time moves only when the wall clock is stepped or
+# slewed. A step is network time arriving, as when the tether goes back on
+# mid-session. A slew can reach the kernel's 500 ppm cap, 1.8 s an hour, and a
+# second of it misaligns wall stamps exactly as a step does, so both are
+# reported. A free-running crystal correction is tens of ppm and stays under.
+CLOCK_STEP_S = 1.0
 
 
 def read_temp_c(zone: str = THERMAL_ZONE) -> float:
@@ -87,6 +104,45 @@ def read_hailo() -> HailoReading:
                             bool(h.overcurrent_protection_active))
     finally:
         dev.release()
+
+
+@dataclass(frozen=True)
+class ClockReading:
+    cell_v: float           # the RTC's battery
+    rtc_offset_s: int       # system clock minus RTC, whole seconds
+    synced: bool            # network time has set the clock
+    stepped_s: float        # the largest wall-clock move since the sampler started
+
+
+class ClockProbe:
+    """Reads the RTC and remembers the largest wall-clock move it has seen.
+
+    Untethered there is no network, so the wall clock is whatever the RTC said
+    at boot; that is what bags, logs and the run folder are stamped with. The
+    hazard is not a wrong clock but one that moves: network time arriving
+    mid-session steps it, and wall-stamped records on either side stop lining
+    up. Monotonic stamps are unaffected, which is why everything that measures
+    an interval uses them.
+    """
+
+    def __init__(self, rtc: str = RTC, ntp_flag: str = NTP_SYNCED):
+        self._rtc, self._ntp_flag = rtc, ntp_flag
+        self._base: Optional[float] = None
+        self._step = 0.0
+
+    def __call__(self) -> ClockReading:
+        wall_minus_mono = time.time() - time.monotonic()
+        if self._base is None:
+            self._base = wall_minus_mono
+        moved = wall_minus_mono - self._base
+        if abs(moved) > abs(self._step):
+            self._step = moved
+        with open(os.path.join(self._rtc, 'battery_voltage'), encoding='ascii') as f:
+            cell_v = int(f.read().strip()) / 1e6
+        with open(os.path.join(self._rtc, 'since_epoch'), encoding='ascii') as f:
+            rtc_s = int(f.read().strip())
+        return ClockReading(cell_v, int(time.time()) - rtc_s,
+                            os.path.exists(self._ntp_flag), self._step)
 
 
 class HostSampler:
@@ -192,7 +248,24 @@ def disk(value: Optional[float], why: str = '', age_s: float = 0.0) -> Health:
     return _from_grade(name, *_disk_verdict(value))
 
 
-def register(board, is_pi: bool, has_hailo: Optional[bool] = None) -> HostSampler:
+def clock(value: Optional[ClockReading], why: str = '', age_s: float = 0.0) -> Health:
+    name = 'kutum.clock'
+    if value is None or age_s > STALE_S:
+        return _missing(name, why, age_s)
+    r = value
+    source = 'network time' if r.synced else 'RTC time, no network'
+    if abs(r.stepped_s) >= CLOCK_STEP_S:
+        return degraded(name, f'wall clock moved {r.stepped_s:+.1f} s this session ({source}); '
+                        f'wall-stamped bags and logs on either side do not line up')
+    if r.cell_v < RTC_CELL_LOW_V:
+        return degraded(name, f'RTC cell {r.cell_v:.2f} V -- the date may not survive a power-off')
+    if abs(r.rtc_offset_s) > RTC_OFFSET_S:
+        return degraded(name, f'RTC is {r.rtc_offset_s:+d} s from the system clock ({source})')
+    return ok(name, f'{source}; RTC cell {r.cell_v:.2f} V, RTC within {abs(r.rtc_offset_s)} s')
+
+
+def register(board, is_pi: bool, has_hailo: Optional[bool] = None,
+             has_rtc: Optional[bool] = None) -> HostSampler:
     """Start the sampler and put Kutum's rows on `board`.
 
     The Pi rows are graded against a Pi's firmware and the Hailo row against
@@ -210,6 +283,11 @@ def register(board, is_pi: bool, has_hailo: Optional[bool] = None) -> HostSample
     if has_hailo:
         probes['kutum.hailo'] = read_hailo
         rows['kutum.hailo'] = hailo
+    if has_rtc is None:
+        has_rtc = is_pi and os.path.exists(os.path.join(RTC, 'battery_voltage'))
+    if has_rtc:
+        probes['kutum.clock'] = ClockProbe()
+        rows['kutum.clock'] = clock
     sampler = HostSampler(probes).start()
     for name, row in rows.items():
         board.register(name, lambda row=row, name=name: row(*sampler.get(name)))

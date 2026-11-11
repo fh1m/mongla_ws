@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """lock_node -- run the ladder, publish one target position.
 
-    detections ─┐
+    candidates ─┐
     image_raw ──┼─→ follower (LK, fast) ─┐
                 └─→ anchor  (XFeat)  ────┼─→ arbitrate ─→ /lock
                                           │
@@ -55,7 +55,7 @@ from .lock_publish import LockPublishMixin
 from .lock_anchor import AnchorMixin
 
 
-def header_for(rung, *, detection, frame, anchor):
+def header_for(rung, *, detection, frame, anchor, held=None):
     """The stamp of the frame the WINNING RUNG actually observed.
 
     Each rung answers from a different instant. The follower ran on this frame;
@@ -72,6 +72,7 @@ def header_for(rung, *, detection, frame, anchor):
     `None` would suppress the publish entirely.
     """
     return {Rung.DETECTION: detection,
+            Rung.HELD: held,
             Rung.FOLLOW: frame,
             Rung.ANCHOR: anchor}.get(rung, frame) or frame
 
@@ -89,6 +90,10 @@ class _Tick(NamedTuple):
     live_s: float
     now: float
     gen: int = 0
+    held_box: object = None
+    held_conf: float = 0.0
+    held_t: float = 0.0
+    held_header: object = None
 
 
 class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
@@ -195,6 +200,8 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
             det_box, det_conf, det_t = (self._det_box, self._det_conf,
                                         self._det_t)
             det_cls = self._det_cls
+            held = (self._held_box, self._held_conf, self._held_t,
+                    self._held_header)
             live_s = live_window(self._det_dt)
             gen = self._gen
         now = time.monotonic()
@@ -205,7 +212,7 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
         # the downward camera's 104 frames a second were each converted
         # for nothing, on the thread that shares a GIL with the
         # detectors (26 % of the ladder's wall time, measured).
-        need = (det_box is not None
+        need = (det_box is not None or held[0] is not None
                 or (self._follower is not None
                     and self._follower.active)
                 or (self._anchor is not None
@@ -227,7 +234,9 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
             return None
         return _Tick(gray=gray, header=header, det_header=det_header,
                      det_box=det_box, det_conf=det_conf, det_t=det_t,
-                     det_cls=det_cls, live_s=live_s, now=now, gen=gen)
+                     det_cls=det_cls, live_s=live_s, now=now, gen=gen,
+                     held_box=held[0], held_conf=held[1], held_t=held[2],
+                     held_header=held[3])
 
     def _follow_rung(self, f):
         """The fast rung: reseed LK on a detection, else step it. -> (box, conf)."""
@@ -238,6 +247,13 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
                 # Reseed on every accepted detection: this is what keeps
                 # the follower's drift bounded to a single gap.
                 self._follower.reset(gray, det_box)
+            elif (f.held_box is not None
+                  and f.now - f.held_t <= f.live_s):
+                # A held box re-seeds too: the detector's fresh look at the
+                # target replaces LK's integrated one, so the follower's
+                # drift restarts from zero inside a gap instead of growing
+                # across it. HELD outranks FOLLOW this tick anyway.
+                self._follower.reset(gray, f.held_box)
             elif self._follower.active:
                 r = self._follower.step(gray)
                 if r.ok:
@@ -251,6 +267,9 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
                                                 f.det_header)
         st = arbitrate(now=now, last_detection_t=det_t,
                        detection=det_box, detection_conf=det_conf,
+                       held=f.held_box, held_conf=f.held_conf,
+                       held_age_s=(now - f.held_t if f.held_box is not None
+                                   else float('inf')),
                        follow=fb, follow_conf=fc or 0.0,
                        anchor=ab, anchor_conf=ac or 0.0,
                        live_s=min(live_s, self._full),
@@ -258,7 +277,8 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
         self._n_by_rung[st.rung] = self._n_by_rung.get(st.rung, 0) + 1
         self._publish(st, header_for(st.rung, detection=det_header,
                                      frame=header,
-                                     anchor=self._anchor_header))
+                                     anchor=self._anchor_header,
+                                     held=f.held_header))
         # The pose rides the ANCHOR's header: it is derived from that
         # frame's correspondences, not from whichever frame just arrived.
         #

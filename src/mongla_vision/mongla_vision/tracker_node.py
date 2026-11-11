@@ -273,8 +273,13 @@ class TrackerNode(Node):
                 'low-confidence ones.')
 
         ns  = f'/mongla/vision/{cam}'
+        # `candidates`: every box down to the detector's association floor.
+        # Creation stays at `detector_conf` (the acting bar, clamped below);
+        # the boxes under it can only extend a track the bar started, which is
+        # ByteTrack's second stage. The same boxes as `detections` while the
+        # detector's `assoc_conf` is off.
         self._sub_det  = self.create_subscription(
-            Detection2DArray, f'{ns}/detections',  self._on_detections,
+            Detection2DArray, f'{ns}/candidates',  self._on_detections,
             qos.DETECTIONS)
         self._sub_info = self.create_subscription(
             CameraInfo,       f'{ns}/camera_info', self._on_info,
