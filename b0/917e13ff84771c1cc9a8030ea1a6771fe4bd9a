@@ -1,0 +1,28 @@
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 28-29,47-48,102
+src/mongla_batighor/layouts/mongla_layout.json
+  h_f1b9066eb9899c 32-33,45-52
+src/mongla_batighor/mongla_batighor/panels.py
+  h_f1b9066eb9899c 1-104
+src/mongla_batighor/mongla_batighor/serve.py
+  h_f1b9066eb9899c 13-16,21-22,26,33,44-48,53,60,62,85-86,96-102,109-156,161-170,172,192-206,209,220-221
+src/mongla_batighor/panels/helm/extension.js
+  h_f1b9066eb9899c 1-271
+src/mongla_batighor/setup.py
+  h_f1b9066eb9899c 15
+src/mongla_batighor/test/test_panels.py
+  h_f1b9066eb9899c 1-132
+src/mongla_batighor/test/test_serve_and_fetch.py
+  h_f1b9066eb9899c 67-68,74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "b0917e13ff84771c1cc9a8030ea1a6771fe4bd9a",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
