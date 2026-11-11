@@ -1,0 +1,36 @@
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 61-65,73-75
+.claude/context/platform/foxglove-and-bags.md
+  h_f1b9066eb9899c 181-182
+src/mongla_batighor/layouts/mongla_layout.json
+  h_f1b9066eb9899c 33,48,50
+src/mongla_batighor/mongla_batighor/helm.py
+  h_f1b9066eb9899c 17-23,28-29,49-51,54,60-95,165-175,205-206,230-233,317-377
+src/mongla_batighor/mongla_batighor/panels.py
+  h_f1b9066eb9899c 11-13,77-80
+src/mongla_batighor/mongla_batighor/seat.py
+  h_f1b9066eb9899c 12-14,26-30,117-123
+src/mongla_batighor/panels/helm/extension.js
+  h_f1b9066eb9899c 5-6,179-204,218-220,243-256
+src/mongla_batighor/test/test_helm_node.py
+  h_f1b9066eb9899c 44-63,69,71,81-82,98,100,183-237
+src/mongla_batighor/test/test_panels.py
+  h_f1b9066eb9899c 87
+src/mongla_batighor/test/test_seat.py
+  h_f1b9066eb9899c 90-102
+src/mongla_manager/launch/bringup.launch.py
+  h_f1b9066eb9899c 72-76,78,80
+src/mongla_manager/test/test_the_bridge_only_lets_a_browser_drive_through_the_helm.py
+  h_f1b9066eb9899c 58-60,62-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7192ad23f5c41119b644323d1c15e24979dadab6",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
