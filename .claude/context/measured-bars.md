@@ -140,6 +140,7 @@ is how `recommend()` happened.
 - [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
 - [79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)](#79-the-compiled-score-threshold-is-a-default--the-floor-is-set-when-the-model-is-configured-2026-11-11)
 - [75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)](#75-rectify-the-image-once-at-the-camera--not-chosen-468-ms-a-frame-against-a-4-ms-bar-and-points-cost-37-microseconds-2026-11-10) — *measured, not adopted*
+- [82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; open bench only (2026-11-11)](#82-the-arm-clock-at-28-ghz--kept-182--cpu-work-and-138--hailo-rate-under-full-load-675-c-never-throttled-open-bench-only-2026-11-11)
 <!-- contents:end -->
 
 ---
@@ -7459,3 +7460,72 @@ were not run: the first had already decided it.
 (`pnp_node`, `lock_inputs`, `dsl_detections`, `vision_state`).
 `test/test_every_camera_matrix_reader_removes_the_lens.py` fails a new one that
 does not.
+
+## 82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; open bench only (2026-11-11)
+
+The Pi 5's cores run at 2.4 GHz as shipped and the firmware accepts more.
+The question was whether a faster clock arrives as work done, and whether the
+machine stays inside its own limits while doing it.
+
+**Bar, written before any run** (`tools/bench/overclock_soak.py`). The faster
+clock is kept only if all hold over 20 minutes, open air, fan as fitted:
+
+| bar | falsified by |
+|---|---|
+| throttle | `vcgencmd get_throttled` other than 0x0 at any 5 s sample |
+| heat | any sample at 80 C or above |
+| clock | the firmware reporting a clock other than the one asked for |
+| gain | CPU work per second less than 10 % above stock |
+| chip | Hailo-8 inferences per second more than 1 % below stock |
+
+**Load:** four processes, one per core, each decoding a JPEG of a real frame
+from the gate clip, resizing, converting colour and finding corners, with one
+OpenCV thread each; a fifth process runs `gate_sharks` on the Hailo-8 flat
+out. The candidate was booted once through `tryboot`, so a failed boot would
+have fallen back to stock by itself: `arm_freq=2800`, `over_voltage_delta=50000`.
+
+**Measured on Kutum**, 20 minutes each, the same hour, the same script:
+
+| | 2.4 GHz (stock) | 2.8 GHz | bar |
+|---|---|---|---|
+| throttle flags, every sample | 0x0 | 0x0 | holds |
+| hottest sample | 62.6 C | **67.5 C** | holds (under 80) |
+| clock reported, min to max | 2400 | 2800 | holds |
+| CPU work per second | 68.2 | **80.58** (+18.2 %) | holds (10 %) |
+| Hailo-8 inferences per second | 37.29 | **42.44** (+13.8 %) | holds |
+| core voltage | 0.892 V | 0.997 V | |
+| fan, fastest | 5400 rpm | 7192 rpm | |
+
+The clock rises 16.7 % and the work rises 18.2 %; the difference is inside
+what one run can resolve. The chip figure is not the chip getting faster:
+alone it runs 95 Hz, and here its feeding process shares four cores with four
+others, so its rate is the host's share and rises with the host.
+
+**Two scorers were discarded before this one, and the first result with
+them.** They are recorded because each produced a confident number.
+
+- The first stock run read 129.0 work units a second and the first 2.8 GHz
+  run 58.0, which would have ended the test as a failure. The stock figure
+  never reproduced: the same clock an hour later, after a reboot, read 55.4.
+  Each worker had been left at OpenCV's default of four threads, sixteen
+  threads on four cores, and the count measured how the scheduler shared
+  them. Fixed to one thread a worker.
+- The frame was random noise. On noise every pixel is a corner, and four
+  corner searches side by side wait on memory, not on the clock: 8.9 ms alone
+  and 37.1 ms beside three others, where the JPEG decode went 4.1 to 5.4 ms.
+  Replaced by a real frame. The same search on the real frame still slows
+  from 7.0 to 29.8 ms with four at once (at 2.8 GHz), so **corner detection
+  on every core at once is bound by memory on this board**, which is the
+  measurement the memory-timing work needs.
+
+**Decision: kept.** `kutum/setup.sh --system` writes the two lines to
+`/boot/firmware/config.txt`; `kutum/doctor.sh` reports the clock and warns
+when it is not 2800.
+
+**What this does not show.** The run was on the open bench. The sealed hull
+is hotter and has not been run: **BUILT, NEVER FLOWN** there. If it reaches
+80 C the firmware slows the cores by itself, the doctor warns on any throttle
+flag since boot and the health board reports it during a run, so the failure
+is a slower vehicle that says so, not a crash. Reversal: any throttle flag in
+the sealed hull during a full-length run, or any instability; delete the two
+lines and reboot.
