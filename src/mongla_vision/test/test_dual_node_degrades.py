@@ -41,7 +41,8 @@ def _run(camera_factory, replay=False, lock=False):
          patch.object(dn, '_Launcher', return_value=launcher), \
          patch.object(dn, 'DetectorNode', MagicMock()), \
          patch.object(dn, 'CameraNode', side_effect=_camera), \
-         patch.object(dn, 'MultiThreadedExecutor') as ex:
+         patch('mongla_localization.spin.make_executor',
+               return_value=(MagicMock(), 'fake')):
         try:
             dn.main()
         except SystemExit as exc:

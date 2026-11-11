@@ -94,6 +94,17 @@ class FlowSetupMixin:
         # axis-dependent, which is why they showed up as a 3 % asymmetry
         # between forward/back and lateral on real 30 cm slides.
         self.declare_parameter('calibration', '')
+        # The camera HARDWARE profile. With no `calibration` passed, the file
+        # whose `applies_to` names it is used -- the same lookup camera_node
+        # makes (calibration/binding.py), so the two cannot read different
+        # lenses.
+        self.declare_parameter('profile', '')
+        # A missing or invalid calibration REFUSES velocity (#80). It used to
+        # fall back to one focal length and the frame centre and publish with
+        # the calibrated sigma -- a 3 % scale error nothing downstream could
+        # see. Setting this runs on the focal parameters anyway, and the
+        # published sigma and the calibration status both say so.
+        self.declare_parameter('allow_uncalibrated', False)
         self.declare_parameter('undistort', True)
         # TIMING. Each of these is larger than the residual the estimator
         # removes, so they are corrected deterministically first.
@@ -145,14 +156,63 @@ class FlowSetupMixin:
             return False, f'medium={self._medium!r} is not air|water'
         if self._f_px <= 0.0:
             return False, 'focal length is not positive'
+        if self._cal_problem and not self._allow_uncal:
+            return False, (f'no valid calibration: {self._cal_problem} '
+                           f'(allow_uncalibrated:=true runs on the focal '
+                           f'parameters, with a wider sigma)')
         return True, ''
+
+    def _calibration_problem(self) -> str:
+        """Why the calibration cannot be used for this camera, or ''.
+
+        Checked before any frame arrives, so the refusal is in the startup
+        log. The frame's aspect ratio is checked later, in `_load_intrinsics`,
+        because only the first frame knows it.
+        """
+        import json
+        cal = self._cal_path
+        if not cal:
+            return 'none was passed (-p calibration:=<json>)'
+        try:
+            with open(cal) as fh:
+                d = json.load(fh)
+            if not (d.get('camera_matrix') or d.get('K')):
+                return f'{cal!r} has no camera_matrix'
+        except Exception as exc:                         # noqa: BLE001
+            return f'{cal!r} is unreadable ({exc})'
+        # The lens model is air-side: refraction is applied after it, from
+        # optics.N_WATER. A calibration taken through water already holds the
+        # port, and correcting it again would count the water twice.
+        medium = str(d.get('medium', 'air')).strip().lower()
+        if medium != 'air':
+            return (f'{cal!r} was calibrated in {medium!r}; this node needs '
+                    f'the dry lens and applies the port itself')
+        # Bound to a camera profile in its own metadata (B-75). A file for
+        # another lens scales every velocity by the ratio of the two.
+        names = [str(a) for a in (d.get('applies_to') or ())]
+        if not names:
+            return f'{cal!r} names no camera (applies_to)'
+        cam, prof = self._cam, self._profile
+        if not any(a == cam or a == prof or a.endswith('_' + cam) for a in names):
+            return f'{cal!r} describes {names}, not the {cam!r} camera'
+        return ''
+
+    def _publish_calibration_state(self) -> None:
+        """Latched: 'calibrated', or 'uncalibrated: <why>'. Read by localization."""
+        pub = getattr(self, '_pub_cal', None)
+        if pub is not None:
+            pub.publish(String(data='calibrated' if not self._cal_problem
+                               else f'uncalibrated: {self._cal_problem}'))
 
     # ── capture -> mailbox (callback thread, must never block) ──────────────
     def _load_intrinsics(self, width: int, height: int) -> None:
         """Scale the calibration -- or the focal parameters -- to WxH (#32)."""
         cal, f_water = self._cal_path, self._f_water
-        if not cal:
-            self._scale_focal_params(width, height, 'no calibration')
+        if not self._cal_problem:
+            self._cal_problem = self._aspect_problem(cal, width, height)
+        if self._cal_problem:
+            self._publish_calibration_state()
+            self._scale_focal_params(width, height, self._cal_problem)
             return
         if cal:
             try:
@@ -205,10 +265,35 @@ class FlowSetupMixin:
                 # the ratio. (Cloud audit, 2026-11-07.)
                 self._intr = None
                 self._refract = None
-                self._scale_focal_params(width, height, 'calibration unreadable')
+                self._cal_problem = f'{cal!r} failed to load ({exc})'
+                self._publish_calibration_state()
+                self._scale_focal_params(width, height, self._cal_problem)
         if self._intr is not None:
             self.get_logger().info(f'[FLOW ] intrinsics scaled to the first '
                                    f'frame, {width}x{height}: {self._intr}')
+
+    @staticmethod
+    def _aspect_problem(cal, width: int, height: int) -> str:
+        """A calibration scales to any size of the SAME aspect ratio, or ''.
+
+        `Intrinsics.from_json` scales x and y separately, which is right for a
+        resize and silently wrong for a crop: a 1280x720 file on 640x480
+        frames would stretch fy by 1.33 and no number would look odd.
+        """
+        import json
+        try:
+            with open(cal) as fh:
+                d = json.load(fh)
+            cw, ch = int(d.get('image_width') or 0), int(d.get('image_height') or 0)
+        except Exception as exc:                         # noqa: BLE001
+            return f'{cal!r} is unreadable ({exc})'
+        if cw <= 0 or ch <= 0:
+            return f'{cal!r} does not say what size it was taken at'
+        if abs((width / height) / (cw / ch) - 1.0) > 0.01:
+            return (f'{cal!r} was taken at {cw}x{ch} and the frames are '
+                    f'{width}x{height}: a different aspect ratio is a crop, '
+                    f'which scaling cannot undo')
+        return ''
 
     def _scale_focal_params(self, width: int, height: int, why: str) -> None:
         """No usable calibration: the focal parameters are for FOCAL_PARAMS_WIDTH."""

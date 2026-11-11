@@ -87,6 +87,9 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
         # Whether the OBSERVABILITY GATE is open, latched so it is published
         # only on change. See `_report_aiding`.
         self._aiding_state = None
+        # What the flow node says its velocity is scaled by (#80): None until
+        # it speaks, then 'calibrated' or 'uncalibrated: <why>'.
+        self._flow_cal = None
         self._still: deque = deque(maxlen=STILL_WINDOW)
         self._last_flow_t = 0.0
         self._attitude_seeded = False
@@ -178,6 +181,8 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
                              durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Float32, '/mongla/localization/heading',
                                  self._on_heading, latched)
+        self.create_subscription(String, f'/mongla/vision/{cam}/flow_calibration',
+                                 self._on_flow_calibration, latched)
         self.create_subscription(Vector3Stamped, '/mongla/demand',
                                  self._on_demand, sensor_qos)
         # The floor's grid, which BOUNDS yaw drift without a magnetometer.
@@ -237,7 +242,8 @@ def main(args=None):
     from mongla_localization.params_file import refuse_unknown
     refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
-        rclpy.spin(node)
+        from mongla_localization.spin import spin
+        spin(node)
     except KeyboardInterrupt:
         pass
     finally:

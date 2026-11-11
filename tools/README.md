@@ -57,6 +57,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `control_bench/` | The board's own control code, running on this machine. |
 | `cv_hot_path.py` | Hot-path OpenCV cost, per frame, for whichever cv2 this interpreter imports. |
 | `dataset_survey.py` | Characterise every labelled dataset by its WATER, not by its task. |
+| `executor_cost.py` | What an rclpy executor costs to deliver one callback, per executor. |
 | `fit_free_decay.py` | Fit a free-decay rotation: the drag-to-inertia ratio the controller needs. |
 | `fit_thruster_response.py` | Fit a thruster's step response: dead time, time constant, steady thrust. |
 | `flow_bench.py` | flow_bench -- measure the bottom camera AS A DVL against a tape measure. |
