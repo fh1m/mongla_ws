@@ -34,6 +34,10 @@ import sys
 import threading
 import time
 
+# MAVLink 2 is chosen before pymavlink is first imported, at module level, as
+# every importer does (test_every_pymavlink_importer_selects_mavlink2.py).
+os.environ['MAVLINK20'] = '1'
+
 BAR_P999_MS = 1.0
 BAR_MAX_MS = 2.0
 
@@ -67,7 +71,6 @@ def _reader(stop) -> None:
     competitor for the interpreter lock in the process that streams
     MANUAL_CONTROL.
     """
-    os.environ['MAVLINK20'] = '1'
     from pymavlink.dialects.v20 import ardupilotmega as mav
     enc = mav.MAVLink(None, srcSystem=1, srcComponent=1)
     blob = b''.join(m.pack(enc) for m in (
