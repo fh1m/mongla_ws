@@ -1,0 +1,18 @@
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 37,40
+src/mongla_batighor/layouts/board_health.json
+  h_f1b9066eb9899c 47-53,57,59-72,74-75,82
+src/mongla_batighor/test/test_layouts.py
+  h_f1b9066eb9899c 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5c1318e1bbf1d2eaaad4e44142310e2b1718d0a7",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
