@@ -241,8 +241,8 @@ fi
 # =========================================================================== #
 [ "$(id -u)" -ne 0 ] || { echo "the user half runs as the vehicle user, not root" >&2; exit 2; }
 
-say "1/4  Python: undo the two traps that break cv_bridge (E1, E2)"
-# Noble ships numpy 1.26.4 and cv2 4.6.0, and ROS Jazzy's cv_bridge is built
+say "1/4  Python: undo the two traps that break the system cv2 (E1, E2)"
+# Noble ships numpy 1.26.4 and a cv2 4.6.0 that is built
 # against numpy 1. A pip numpy>=2 or a pip opencv-python in ~/.local shadows
 # them and every vision node dies with "_ARRAY_API not found".
 python3 -m pip uninstall -y -q --break-system-packages numpy opencv-python \
