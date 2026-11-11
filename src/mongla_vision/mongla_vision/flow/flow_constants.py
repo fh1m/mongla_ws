@@ -131,6 +131,14 @@ _F_WATER_PX = 741.0
 #     calibrated gain removed 90 % (575.7 -> 57.1 mm/s, §12), so 10 % remains.
 FLOW_SCALE_SIGMA_FRAC = 0.036
 
+# The scale term an operator accepts by running WITHOUT a valid calibration
+# (`allow_uncalibrated`, #80): one focal length and the frame centre. Measured
+# in exactly that state on the downward camera as a 3.08 % asymmetry between
+# the forward and lateral axes (measured-bars, the calibration-binding entry).
+# An asymmetry between two axes is a LOWER bound on the absolute scale error,
+# so this is added on top of the calibrated term, never instead of it.
+FLOW_UNCALIBRATED_SCALE_SIGMA_FRAC = 0.0308
+
 
 # The camera<->gyro offset the online estimator STARTS from. Measured on the
 # vehicle's own downward camera and SROT board, three 60 s hand-wobble runs:
