@@ -13,6 +13,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TargetPose.msg"
   "msg/TargetCorrespondences.msg"
   "msg/TargetContours.msg"
+  "msg/BoardLink.msg"
+  "msg/MessageRate.msg"
+  "msg/NamedValue.msg"
   "srv/Helm.srv"
   DEPENDENCIES action_msgs std_msgs
 )

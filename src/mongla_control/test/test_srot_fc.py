@@ -845,6 +845,19 @@ def test_named_value_ages_out():
     assert fc._named_value('LEAK', max_age_s=3.0) is None
 
 
+def test_the_whole_named_table_keeps_a_stale_channel_absent_with_its_age():
+    """The operator's view lists every channel heard, but one that stopped reads
+    None with how long ago it was heard, never its last value."""
+    from mongla_control.fc.srot_fc import NAMED_MAX_AGE_S
+    fc = _fc()
+    fc.note_named_value(_nvf('LEAK', 0.0))
+    fc.note_named_value(_nvf('WTEMP', 21.5))
+    fc._named_cache['WTEMP'] = (21.5, time.monotonic() - (NAMED_MAX_AGE_S + 1.0))
+    table = fc.named_values()
+    assert table['LEAK'][0] == 0.0 and table['LEAK'][1] < 1.0
+    assert table['WTEMP'][0] is None and table['WTEMP'][1] > NAMED_MAX_AGE_S
+
+
 def test_reader_hook_is_lossless():
     """note_named_value() is the hook for the manager's reader thread, which sees EVERY
     NAMED_VALUE_FLOAT rather than only whichever last landed in pymavlink's slot."""
