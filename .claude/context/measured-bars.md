@@ -140,7 +140,7 @@ is how `recommend()` happened.
 - [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
 - [79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)](#79-the-compiled-score-threshold-is-a-default--the-floor-is-set-when-the-model-is-configured-2026-11-11)
 - [75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)](#75-rectify-the-image-once-at-the-camera--not-chosen-468-ms-a-frame-against-a-4-ms-bar-and-points-cost-37-microseconds-2026-11-10) — *measured, not adopted*
-- [82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; open bench only (2026-11-11)](#82-the-arm-clock-at-28-ghz--kept-182--cpu-work-and-138--hailo-rate-under-full-load-675-c-never-throttled-open-bench-only-2026-11-11)
+- [82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; 3.0 GHz is slower under load; open bench only (2026-11-11)](#82-the-arm-clock-at-28-ghz--kept-182--cpu-work-and-138--hailo-rate-under-full-load-675-c-never-throttled-30-ghz-is-slower-under-load-open-bench-only-2026-11-11)
 <!-- contents:end -->
 
 ---
@@ -7461,7 +7461,7 @@ were not run: the first had already decided it.
 `test/test_every_camera_matrix_reader_removes_the_lens.py` fails a new one that
 does not.
 
-## 82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; open bench only (2026-11-11)
+## 82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; 3.0 GHz is slower under load; open bench only (2026-11-11)
 
 The Pi 5's cores run at 2.4 GHz as shipped and the firmware accepts more.
 The question was whether a faster clock arrives as work done, and whether the
@@ -7518,7 +7518,23 @@ them.** They are recorded because each produced a confident number.
   on every core at once is bound by memory on this board**, which is the
   measurement the memory-timing work needs.
 
-**Decision: kept.** `kutum/setup.sh --system` writes the two lines to
+**And 3.0 GHz.** The same soak once more, booted through `tryboot` at
+`arm_freq=3000` (the firmware set 1.000 V): 0x0 throughout, 68.1 C at the
+hottest, the clock held, **77.55** CPU units a second and **41.61** inferences
+a second. Against stock that clears every bar (+13.7 %), but it is **3.8 %
+below 2.8 GHz**. The operations explain why, timed alone and then four at once
+(one OpenCV thread each, nothing else running):
+
+| | 2.8 GHz alone | 3.0 GHz alone | 2.8 GHz, four at once | 3.0 GHz, four at once |
+|---|---|---|---|---|
+| decode + resize + grey + corners | 11.09 ms | 10.47 ms | 36.98 ms | 40.12 ms |
+
+Alone the faster clock arrives (5.6 % of a 7.1 % rise). With every core busy
+the corner search waits on memory and the extra clock buys nothing. So the
+clock ladder stops at 2.8: past it the limit is memory, and the next lever is
+memory timing, not frequency. 3.1 and 3.2 GHz were not run.
+
+**Decision: 2.8 GHz kept.** `kutum/setup.sh --system` writes the two lines to
 `/boot/firmware/config.txt`; `kutum/doctor.sh` reports the clock and warns
 when it is not 2800.
 
