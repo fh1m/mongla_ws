@@ -58,19 +58,17 @@ def measured_bars(model_path: str) -> Dict[str, Optional[float]]:
 
 
 def baked_score_threshold(hef_path: str) -> Optional[float]:
-    """The NMS floor compiled INTO the HEF, or None if it cannot be read.
+    """The NMS score threshold the HEF was compiled with, or None if unread.
 
-    There is no Python API for this -- `HEF` exposes stream infos and nothing
-    about the post-process, and the configured network group has only
-    `set_scheduler_threshold`, which is a different thing entirely. So this
-    shells out to `hailortcli parse-hef`, which prints it and costs 15 ms once
-    per detector.
+    There is no Python API that reads it -- `HEF` exposes stream infos and
+    nothing about the post-process -- so this shells out to
+    `hailortcli parse-hef`, which prints it and costs 15 ms once per detector.
 
-    It matters because the floor is INVISIBLE otherwise: the HEF's NMS layer
-    drops everything below it before the host sees a byte, so a mission that
-    sets conf=0.03 gets 0.05 and is told nothing. Ours are 0.050 and the stock
-    Model Zoo models are 0.200 -- which is why the 0.12-0.15 operating point
-    this backend recommends is reachable on our models and NOT on a stock one.
+    It is a default, not a floor: `HailoDetector._lower_floor` configures a
+    graph compiled above `EMIT_FLOOR` at `EMIT_FLOOR` (measured-bars 79). The
+    value read here decides whether that call is needed and is what the
+    detector falls back to, and reports, if the runtime refuses it. Ours are
+    0.050 and the stock Model Zoo graphs are 0.200.
 
     Best effort by design. `hailortcli` may not be on PATH, and a detector that
     refused to start over a diagnostic would be worse than one that says it

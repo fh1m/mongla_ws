@@ -138,6 +138,7 @@ is how `recommend()` happened.
 - [72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10)](#72-the-held-rung--a-weak-box-where-the-lock-is-more-accurate-and-it-failed-its-own-safety-bar-2026-11-10)
 - [73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)](#73-the-executor--what-delivering-one-callback-costs-and-what-that-is-worth-in-a-real-node-2026-11-10)
 - [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
+- [79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)](#79-the-compiled-score-threshold-is-a-default--the-floor-is-set-when-the-model-is-configured-2026-11-11)
 - [75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)](#75-rectify-the-image-once-at-the-camera--not-chosen-468-ms-a-frame-against-a-4-ms-bar-and-points-cost-37-microseconds-2026-11-10) — *measured, not adopted*
 <!-- contents:end -->
 
@@ -155,6 +156,11 @@ is how `recommend()` happened.
 > models and on the GPU/ONNX path. See **B-58**; the fix is recompiling
 > `gate_rescue_repair` at 0.05, after which this sweep must be re-run on the
 > HEF before these bars are quoted as live for that model.
+>
+> **Corrected 2026-11-11 (section 79):** the compiled value is a default, not
+> a floor. The detector now configures every graph at 0.05 whatever it was
+> compiled with, so a model compiled at 0.200 no longer needs a recompile to
+> run below it.
 
 | quantity | shipped (file) | measured | bar |
 |---|---|---|---|
@@ -7351,6 +7357,51 @@ Measured on Kutum on real frames from the forward camera (`v4l2-ctl
 saving is the lock ladder, which works on a grayscale image: a gray decode is
 1.00 ms, but the detector needs colour from the same frame, so it would be a
 second decode, not a cheaper one.
+
+## 79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)
+
+B-58 and every note after it said a HEF's NMS score threshold is fixed at
+compile time: boxes below it are dropped before the host sees them, and only
+a recompile lowers it. That was inferred from `parse-hef` and from asking for
+a lower `conf` on the host, never from the runtime. The NMS of a YOLOv8-family
+graph runs in libhailort on the host (`engine=cpu` in the model script), and
+`InferModel.output().set_nms_score_threshold` replaces the value when the
+model is configured.
+
+**Bars, written before the run** (`tools/bench/hailo_nms_floor.py`, whose
+`--self-test` drives the verdict with a hard floor, a soft floor, a moved box,
+a dropped box and a slow run):
+
+| bar | what would falsify it |
+|---|---|
+| reach | no box with a score in [0.05, compiled) on a clip that shows the prop |
+| identity | any box at or above the compiled value that differs between the two runs |
+| cost | a median inference more than 5 % slower |
+
+**Measured on Kutum**, HailoRT 4.24.0, 150 frames of the Mirpur gate clip,
+three alternating rounds, while a compile was using two cores:
+
+| graph | compiled | boxes at compiled | boxes at 0.05 | below compiled | confident boxes that differ | median ms compiled / 0.05 |
+|---|---|---|---|---|---|---|
+| stock `yolov11n` | 0.200 | 18 | 341 | **323** | **0 of 18** | 11.526 / 11.545 (+0.16 %) |
+| `gate_sharks` | 0.050 | 150 | 150 | n/a | 0 of 150 | 9.589 / 9.573 |
+
+Set to 0.01 the stock graph returned 2383 boxes with a lowest score of 0.011,
+and set to 0.6 it returned none, so the call takes effect in both directions.
+
+**Shipped:** `EMIT_FLOOR = 0.05` in `detection/hailo.py`. A detection graph
+compiled above it is configured at it; one compiled at or below it is left
+alone. The value is read at configure and cannot move afterwards, so `conf`
+and `assoc_conf` filter above it as before. A refusal from the runtime keeps
+and reports the compiled floor.
+
+**What this does not change.** 0.05 is still the value to compile with: the
+blocking diagnostic path does not lower it, and a graph that already carries
+it needs nothing from the runtime. A segmentation graph has no NMS output and
+is untouched.
+
+**Not measured:** a floor below 0.05, and the 100-boxes-per-class cap, which
+a very low floor on a many-class graph could reach.
 
 ---
 
