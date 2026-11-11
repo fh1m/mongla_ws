@@ -127,7 +127,7 @@ PY
 case "$np" in
   1.*) ok "numpy $np" ;;
   "")  fail "numpy or cv2 does not import" ;;
-  *)   fail "numpy $np -- cv_bridge is built against numpy 1 and every vision node dies (E1)" ;;
+  *)   fail "numpy $np -- the system cv2 is built against numpy 1 and every vision node dies at import (E1)" ;;
 esac
 case "$cv2f" in
   /usr/*) ok "cv2 is the system build" ;;

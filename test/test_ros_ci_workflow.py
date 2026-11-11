@@ -94,7 +94,7 @@ def test_an_index_refresh_that_never_succeeds_still_fails_the_job(tmp_path):
 
 def test_numpy_stays_below_two_in_ci_too():
     assert '-c kutum/constraints.txt' in SCRIPT
-    assert "numpy 2 would break cv_bridge" in SCRIPT
+    assert "numpy 2 would break the system cv2" in SCRIPT
 
 
 def _pin(path, name):

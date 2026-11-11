@@ -69,7 +69,7 @@ colcon build --symlink-install --event-handlers console_cohesion+
 
 # A venv that still sees the system's ROS and apt Python packages. On Noble
 # pip may not touch the system site (PEP 668), and numpy must stay the one
-# cv_bridge was built against: kutum/constraints.txt caps it below 2.
+# the system cv2 was built against: kutum/constraints.txt caps it below 2.
 echo "== the pip requirements, under kutum/constraints.txt"
 python3 -m venv --system-site-packages /opt/ci-venv
 # shellcheck source=/dev/null
@@ -95,7 +95,7 @@ export PYTHONPATH
 python3 - <<'EOF'
 import numpy, sys
 print(f'python {sys.version.split()[0]}, numpy {numpy.__version__}')
-assert int(numpy.__version__.split('.')[0]) < 2, 'numpy 2 would break cv_bridge'
+assert int(numpy.__version__.split('.')[0]) < 2, 'numpy 2 would break the system cv2'
 EOF
 
 

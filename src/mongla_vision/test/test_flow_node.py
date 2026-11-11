@@ -20,7 +20,6 @@ import pytest
 
 rclpy = pytest.importorskip('rclpy')
 pytest.importorskip('cv2')
-pytest.importorskip('cv_bridge')
 
 from rclpy.parameter import Parameter                      # noqa: E402
 

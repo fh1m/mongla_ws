@@ -81,7 +81,7 @@ from collections import deque
 import cv2
 import numpy as np
 import rclpy
-from cv_bridge import CvBridge
+from mongla_vision import image_msg
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 from sensor_msgs.msg import Image
@@ -207,7 +207,6 @@ class VisionDisplayNode(Node):
 
         self.get_logger().info(f'[DISP ] subscribing {raw_topic} (full-rate) + {det_topic}')
 
-        self._bridge = CvBridge()
         self._state: MonglaState | None = None
         self._detections: list = []
         self._det_lock        = threading.Lock()
@@ -439,7 +438,7 @@ class VisionDisplayNode(Node):
 
     def _on_depth_map(self, msg: Image) -> None:
         try:
-            raw  = self._bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
+            raw  = image_msg.to_array(msg, '32FC1')
             norm = np.clip(raw, 0.0, 1.0)
             colorized = cv2.applyColorMap((norm * 255).astype(np.uint8), cv2.COLORMAP_TURBO)
             with self._depth_map_lock:
@@ -452,9 +451,9 @@ class VisionDisplayNode(Node):
         self._last_frame_t = time.monotonic()
 
         try:
-            frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            frame = image_msg.to_array(msg, 'bgr8')
         except Exception as exc:
-            self.get_logger().warning(f'[DISP ] cv_bridge decode failed: {exc!r}')
+            self.get_logger().warning(f'[DISP ] image decode failed: {exc!r}')
             return
 
         self._fps_count += 1

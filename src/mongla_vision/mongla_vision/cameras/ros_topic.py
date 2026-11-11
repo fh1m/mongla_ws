@@ -21,6 +21,7 @@ from typing import Optional, Tuple
 import numpy as np
 
 from .camera import Camera, FrameMeta
+from mongla_vision import image_msg
 
 
 class RosTopicCamera(Camera):
@@ -36,7 +37,6 @@ class RosTopicCamera(Camera):
                 "plain Python scripts.")
 
         from sensor_msgs.msg import Image
-        from cv_bridge        import CvBridge
         from rclpy.qos        import qos_profile_sensor_data
 
         self.name      = str(name)
@@ -44,7 +44,6 @@ class RosTopicCamera(Camera):
         self._frame_id = str(frame_id)
         self._node     = node
         self._log      = logger
-        self._bridge   = CvBridge()
 
         self._lock        = threading.Lock()
         self._latest      = None     # (np.ndarray, t_mono, w, h)
@@ -73,10 +72,10 @@ class RosTopicCamera(Camera):
 
     def _on_image(self, msg) -> None:
         try:
-            frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            frame = image_msg.to_array(msg, 'bgr8')
         except Exception as exc:
             if self._log:
-                self._log.warning(f"[CAM  ] cv_bridge convert failed: {exc!r}")
+                self._log.warning(f"[CAM  ] image convert failed: {exc!r}")
             return
         h, w = frame.shape[:2]
         with self._lock:

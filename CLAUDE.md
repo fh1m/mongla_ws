@@ -319,7 +319,7 @@ card). The chapter is [`.claude/context/kutum/`](.claude/context/kutum/README.md
 | `backup.sh fh1m@mongla.local` | the dev box | pull what only the vehicle has, into `~/kutum-backup/mongla/` (`--runs` adds runs and footage) |
 | `env.sh` | every shell on the Pi | ROS and the workspace, already sourced |
 
-**Caution:** the Pi's Python must keep **NumPy 1.x**. `cv_bridge` and the system `cv2` are
+**Caution:** the Pi's Python must keep **NumPy 1.x**. The system `cv2` is
 built against it, and a NumPy 2 pulled in by any `pip install` kills every vision node at
 import. `kutum/constraints.txt` pins it for every install, and the doctor checks it. The
 other environment traps (shadowed OpenCV, the empty `trackers 2.5.0` wheel, the board with
