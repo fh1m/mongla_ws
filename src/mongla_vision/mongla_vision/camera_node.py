@@ -761,7 +761,8 @@ def main():
     from mongla_localization.params_file import refuse_unknown
     refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
-        rclpy.spin(node)
+        from mongla_localization.spin import spin
+        spin(node)
     except KeyboardInterrupt:
         pass
     finally:

@@ -159,6 +159,17 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         # it "a clean 2x error nobody sees". The first frame's shape now decides
         # (`_on_image`), and a frame of any other size later is refused.
         self._cal_path = str(self.get_parameter('calibration').value or '').strip()
+        self._profile = str(self.get_parameter('profile').value or '').strip()
+        if not self._cal_path and self._profile:
+            from mongla_vision.calibration.binding import calibration_for_profile
+            self._cal_path = calibration_for_profile(self._profile)
+            if self._cal_path:
+                self.get_logger().info(
+                    f'[FLOW ] calibration auto-bound from profile '
+                    f'{self._profile!r}: {self._cal_path}')
+        self._allow_uncal = bool(self.get_parameter('allow_uncalibrated').value)
+        self._cal_problem = self._calibration_problem()
+        self._publish_calibration_state()
         self._f_water = f_water
         self._intr_wh = None
         self._n_wrong_size = 0
@@ -205,6 +216,11 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         self._pub_dist = self.create_publisher(Float32, f'{ns}/distance_traveled', 10)
         self._pub_debug = self.create_publisher(Float32MultiArray,
                                                 f'{ns}/distance_debug', 10)
+        # Whether the velocity is on the calibration or on the focal
+        # parameters (#80). Latched: it changes at most once, at the first
+        # frame, and localization must know it whenever it starts.
+        self._pub_cal = self.create_publisher(String, f'{ns}/flow_calibration',
+                                              ctrl_qos)
 
         self._acc = DistanceAccumulator()
         self._rate_buf: deque = deque(maxlen=128)
@@ -278,6 +294,12 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
                 f'(-p pool_depth_m:=<metres> -p medium:=air|water). A default '
                 f'here would turn an unknown SCALE into a confident wrong '
                 f'speed, which is invisible in every plot downstream.')
+        elif self._cal_problem:
+            self.get_logger().warning(
+                f'[FLOW ] UNCALIBRATED by request -- {self._cal_problem}. '
+                f'Velocity runs on one focal length and the frame centre '
+                f'(3.08 % axis asymmetry measured in this state); the sigma '
+                f'and {self._pub_cal.topic_name} say so.')
 
     # ── worker ──────────────────────────────────────────────────────────────
     def _flow_loop(self) -> None:
@@ -328,7 +350,8 @@ def main(args=None):
     from mongla_localization.params_file import refuse_unknown
     refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
-        rclpy.spin(node)
+        from mongla_localization.spin import spin
+        spin(node)
     except KeyboardInterrupt:
         pass
     except ExternalShutdownException:

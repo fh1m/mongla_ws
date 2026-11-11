@@ -314,8 +314,13 @@ def test_the_readme_ledger_counts_are_the_ledgers():
     text = ' '.join((ROOT / 'README.md').read_text(encoding='utf-8').split())
     for want in (f'**{n} entries, {rows:,} rows of numbers**',
                  f'**{back} of those {n} entries say in their own title',
+                 f'{n} measurement entries, of which {back} say',
                  f'{no} more measured an idea'):
-        assert want in text, f'README.md does not say {want!r} -- re-count from measured-bars.md'
+        assert want in text, (f'README.md does not say {want!r} -- run '
+                              'tools/site/ledger_strip.py, which writes these counts')
+    assert text.count('more measured an idea') == 2, (
+        'the README states the ledger counts in two places and ledger_strip.py '
+        'rewrites both; a third copy would go stale unseen')
 
 
 def test_every_css_token_the_site_uses_is_defined():
