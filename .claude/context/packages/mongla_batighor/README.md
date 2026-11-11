@@ -25,7 +25,8 @@ ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 |---|---|
 | `LICHTBLICK.json` | the one Lichtblick version we serve: release URL and SHA-256. `fetch` refuses any other bytes |
 | `fetch.py` | downloads (or takes `--from` a local tarball), checks the hash, leaves the source maps out (130 of 173 MB), and writes a gzip copy of every text asset |
-| `serve.py` | a static server. `/` answers with a link to the app carrying `ds=foxglove-websocket`, the bridge address *as the browser reached Kutum* (tether or Wi-Fi alike) and `layoutUrl`. Hashed assets are cached for good, `index.html` never |
+| `serve.py` | a static server. `/` answers with a link to the app carrying `ds=foxglove-websocket`, the bridge address *as the browser reached Kutum* (tether or Wi-Fi alike), `workspace=mongla` and the layout's name. Hashed assets are cached for good, `index.html` never. `/api/` answers the part of Lichtblick's workspace API the app reads, read only: our layouts as the organisation's, and our panels as its extensions. `/layouts/<name>.json` is the same layout as a file, for the desktop app |
+| `panels.py`, `panels/` | our own Lichtblick panels, plain JavaScript with no build step, zipped into a `.foxe` as served. The release bundle names no API, so `panels.py` turns it on in the one line that does, and serve says `WARNING` and serves no panels if a new release moved that line. `panels/helm` is the helm: name, Request/Give/Release, STOP/SURFACE/DISARM, Arm behind two ticks, any verb with its own fields (the list comes from `commands.py`), missions, and the log |
 | `overlay.py` | what the vision stack sees, as `foxglove_msgs/ImageAnnotations` on `/mongla/vision/<cam>/annotations`: detector boxes with class and score, track ids, and the lock drawn thicker. The browser draws them over the camera's own JPEG |
 | `layouts/` | our Lichtblick layouts; `test_layouts.py` fails when one shows a topic nothing publishes. `weak_link` is the one for a slow connection |
 
@@ -43,7 +44,8 @@ Decided with the owner (bead `mongla_ws-102.25.3`). Each job gets the surface th
 | **TUI**, `ros2 run mongla_batighor deck` | the person at the pool, over mosh: the vehicle, the pilot, missions and the command log live; `s` stop, `u` surface, `d` disarm, `:` any verb | a terminal is trusted and sends to `/mongla/move` itself |
 | **CLI**, `ros2 run mongla_planner mongla <verb>` | one verb, scripted | unchanged, and trusted |
 
-**The helm** (`helm.py`, rules in `seat.py`) is the only way a browser drives. It serves
+**The helm** (`helm.py`, rules in `seat.py`, the browser half in `panels/helm`) is the only
+way a browser drives. It serves
 `/mongla/batighor/helm` (`mongla_interfaces/srv/Helm`), because `foxglove_bridge` relays service
 calls but not actions and cannot tell browsers apart, so each operator types a name and the
 log trusts it.
@@ -97,6 +99,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `fetch.py` | Put the pinned Lichtblick web build on this machine. |
 | `helm.py` | The helm: the one way a browser drives the vehicle, and the log of who did. |
 | `overlay.py` | What the vision stack sees, drawn by the browser over the camera's own picture. |
+| `panels.py` | Our panels, served to Lichtblick as a workspace's extensions. |
 | `pin.py` | The Lichtblick build Batighor serves: one pinned version, one hash. |
 | `seat.py` | Who is the pilot: Batighor's token, as rules with no ROS in them. |
 | `serve.py` | Serve Lichtblick and our layouts to every operator's browser. |
