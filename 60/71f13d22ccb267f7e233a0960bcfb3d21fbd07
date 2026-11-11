@@ -1,0 +1,94 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 384-411
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 139-140,7266-7354
+.claude/context/packages/mongla_localization/README.md
+  h_f1b9066eb9899c 148
+.claude/context/packages/mongla_vision/README.md
+  h_f1b9066eb9899c 74,94-100
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 502,531-532
+.github/workflows/ros.yml
+  h_f1b9066eb9899c 26-29
+README.md
+  h_f1b9066eb9899c 64-65,797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+src/mongla_localization/mongla_localization/localization_inputs.py
+  h_f1b9066eb9899c 338-342,457-464
+src/mongla_localization/mongla_localization/localization_node.py
+  h_f1b9066eb9899c 90-92,184-185,245-246
+src/mongla_localization/mongla_localization/pnp_node.py
+  h_f1b9066eb9899c 222-223
+src/mongla_localization/mongla_localization/pose_fuse_node.py
+  h_f1b9066eb9899c 153-154
+src/mongla_localization/mongla_localization/spin.py
+  h_f1b9066eb9899c 1-67
+src/mongla_localization/test/test_every_node_spins_on_the_chosen_executor.py
+  h_f1b9066eb9899c 1-79
+src/mongla_localization/test/test_every_sensor_is_accounted_for.py
+  h_f1b9066eb9899c 39-40
+src/mongla_localization/test/test_localization_node.py
+  h_f1b9066eb9899c 1337-1363
+src/mongla_manager/test/test_docs_contract.py
+  h_f1b9066eb9899c 317,319-323
+src/mongla_manager/test/test_the_launched_graph_is_fed.py
+  h_f1b9066eb9899c 47-49
+src/mongla_vision/launch/vision.launch.py
+  h_f1b9066eb9899c 311-316
+src/mongla_vision/launch/vision_pi.launch.py
+  h_f1b9066eb9899c 629
+src/mongla_vision/mongla_vision/camera_node.py
+  h_f1b9066eb9899c 765-766
+src/mongla_vision/mongla_vision/depth/depth_estimation_node.py
+  h_f1b9066eb9899c 234-235
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  h_f1b9066eb9899c 66-71,400-402
+src/mongla_vision/mongla_vision/detector_node.py
+  h_f1b9066eb9899c 713-714
+src/mongla_vision/mongla_vision/flow/flow_checks.py
+  h_f1b9066eb9899c 18,256-259
+src/mongla_vision/mongla_vision/flow/flow_constants.py
+  h_f1b9066eb9899c 134-141
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  h_f1b9066eb9899c 163-173,220-224,299-304,355-356
+src/mongla_vision/mongla_vision/flow/flow_setup.py
+  h_f1b9066eb9899c 97-107,159-162,165-206,211-215,268-270,275-297
+src/mongla_vision/mongla_vision/lock_node.py
+  h_f1b9066eb9899c 334-335
+src/mongla_vision/mongla_vision/tracker_node.py
+  h_f1b9066eb9899c 483-484
+src/mongla_vision/mongla_vision/vision_node.py
+  h_f1b9066eb9899c 196-197
+src/mongla_vision/test/test_dual_node_degrades.py
+  h_f1b9066eb9899c 44-45
+src/mongla_vision/test/test_flow_calibration_is_valid_or_refused.py
+  h_f1b9066eb9899c 1-147
+src/mongla_vision/test/test_flow_node.py
+  h_f1b9066eb9899c 98,582,687
+src/mongla_vision/test/test_shipped_constants_match_the_ledger.py
+  h_f1b9066eb9899c 59-62
+test/test_ros_ci_workflow.py
+  h_f1b9066eb9899c 33-34,63-94,115-136
+tools/README.md
+  h_f1b9066eb9899c 59
+tools/bench/executor_cost.py
+  h_f1b9066eb9899c 1-172
+tools/ci/ci_ros.sh
+  h_f1b9066eb9899c 20-38,47-57,132-147
+tools/site/ledger_strip.py
+  h_f1b9066eb9899c 129-164,172
+tools/studies/composed_lock_harness.py
+  h_f1b9066eb9899c 180-183,187,190,216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "6071f13d22ccb267f7e233a0960bcfb3d21fbd07",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
