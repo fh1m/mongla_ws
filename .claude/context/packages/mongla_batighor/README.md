@@ -25,7 +25,7 @@ ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 |---|---|
 | `LICHTBLICK.json` | the one Lichtblick version we serve: release URL and SHA-256. `fetch` refuses any other bytes |
 | `fetch.py` | downloads (or takes `--from` a local tarball), checks the hash, leaves the source maps out (130 of 173 MB), and writes a gzip copy of every text asset |
-| `serve.py` | a static server. `/` answers with a link to the app carrying `ds=foxglove-websocket`, the bridge address *as the browser reached Kutum* (tether or Wi-Fi alike), `workspace=mongla` and the layout's name. Hashed assets are cached for good, `index.html` never. `/api/` answers the part of Lichtblick's workspace API the app reads, read only: our layouts as the organisation's, and our panels as its extensions. `/layouts/<name>.json` is the same layout as a file, for the desktop app |
+| `serve.py` | a static server. `/` answers with a link to the app carrying `ds=foxglove-websocket`, the bridge address *as the browser reached Kutum* (tether or Wi-Fi alike), `workspace=mongla` and the layout's name. Hashed assets are cached for good, `index.html` never. `/api/` answers the part of Lichtblick's workspace API the app reads, read only: our layouts as the organisation's, and our panels as its extensions. `/layouts/<name>.json` is the same layout as a file, for the desktop app. A browser shows Kutum's copy of a layout until its operator rearranges it; then it keeps theirs, marked with a dot, until they choose Revert in the layout's menu |
 | `panels.py`, `panels/` | our own Lichtblick panels, plain JavaScript with no build step, zipped into a `.foxe` as served. The release bundle names no API, so `panels.py` turns it on in the one line that does, and serve says `WARNING` and serves no panels if a new release moved that line. `panels/helm` is the helm: name, Request/Give/Release, STOP/SURFACE/DISARM, Arm behind two ticks, any verb with its own fields (the list comes from `commands.py`), missions, and the log |
 | `overlay.py` | what the vision stack sees, as `foxglove_msgs/ImageAnnotations` on `/mongla/vision/<cam>/annotations`: detector boxes with class and score, track ids, and the lock drawn thicker. The browser draws them over the camera's own JPEG |
 | `layouts/` | our Lichtblick layouts; `test_layouts.py` fails when one shows a topic nothing publishes. `weak_link` is the one for a slow connection |
@@ -60,6 +60,16 @@ log trusts it.
   right type) before it is sent.
 - Every request and every change of pilot goes to `/mongla/batighor/log` and
   `~/.mongla/batighor/helm.log`; the deck adds its own commands, marked `term:<user>`.
+
+**What a browser may do at all** is set in `bringup.launch.py` (`BRIDGE_LIMITS`), because
+the bridge cannot tell one browser from another and by default lets each call any service,
+set any parameter and publish anything. With hidden topics on, that reached the action's
+own `send_goal` and the manager's `shield_max_depth_m`, past the helm. Now a browser calls one
+service, the helm; sets the detectors' live settings and nothing else (`conf`, `nms_floor`,
+`nms_iou`, `active_model`, `classes` on `/mongla_detector_forward` and `_downward`, through
+Lichtblick's own Parameters panel); and publishes nothing. Checked on Kutum against the real
+bridge: only the helm offered, `conf` set, `paused` and the depth floor refused.
+`test_the_bridge_only_lets_a_browser_drive_through_the_helm.py` holds it.
   `/mongla/batighor/helm_state` (latched) says who is pilot, who is asking, which mission runs,
   and the missions there are.
 
