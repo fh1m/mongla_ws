@@ -137,7 +137,7 @@ is how `recommend()` happened.
 - [71. KUTUM'S CLOCK IN THE HEALTH REPORT — the RTC, and a wall clock that moves mid-session (2026-11-10)](#71-kutums-clock-in-the-health-report--the-rtc-and-a-wall-clock-that-moves-mid-session-2026-11-10)
 - [72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10)](#72-the-held-rung--a-weak-box-where-the-lock-is-more-accurate-and-it-failed-its-own-safety-bar-2026-11-10)
 - [76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11)](#76-a-realtime-kernel--not-chosen-the-stock-kernel-wakes-a-loaded-50-hz-loop-within-002-ms-once-the-loop-has-a-realtime-priority-2026-11-11) — *measured, not adopted*
-- [77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10.4 % of the hot path, and cv_bridge stops converting (2026-11-11)](#77-numpy-2-and-a-newer-opencv-on-kutum--not-chosen-104--of-the-hot-path-and-cv_bridge-stops-converting-2026-11-11) — *measured, not adopted*
+- [77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11)](#77-numpy-2-and-a-newer-opencv-on-kutum--not-chosen-10-to-16--of-the-hot-path-and-cv_bridge-stops-converting-2026-11-11) — *measured, not adopted*
 <!-- contents:end -->
 
 ---
@@ -7321,7 +7321,7 @@ for the full graph's callback times.
 
 ---
 
-## 77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10.4 % of the hot path, and cv_bridge stops converting (2026-11-11)
+## 77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11)
 
 **The rule being questioned.** Kutum's Python must keep NumPy 1.x
 (`kutum/constraints.txt`). The reason, re-measured rather than quoted: in a
@@ -7357,6 +7357,12 @@ the switch a one-line change is replacing `CvBridge` in the nine modules that
 import it with a direct array view; that is not done, because nothing measured
 here pays for it.
 
+**Caution:** the sum counts corner detection once per frame, and the flow node
+does not: it detects corners only when it re-anchors and tracks them with LK
+in between. Without that row the per-frame sum is 4.93 ms against 4.14 ms,
+**-16 %**, still under the bar. How often the vehicle re-anchors was not
+measured here.
+
 **Found on the way.** `trackers` 2.4.0 declares `numpy>=2.0.2` and runs on
-1.26.4; and 58 % of the hot path is `goodFeaturesToTrack`, which neither
-library speeds up.
+1.26.4. `goodFeaturesToTrack` is 6.75 ms a call and neither build speeds it
+up, so a re-anchor is the most expensive single step in the flow path.
