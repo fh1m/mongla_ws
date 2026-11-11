@@ -291,33 +291,9 @@
 # What each argument does: .claude/context/reference/commands.md.
 #
 # launch:
-#   mission_web:
-#     cameras: both
-#     web_port: 8090
-#     video_port: 8080
-#     no_browser: false
-#     paused: false
-#     debug_image_hz: 15.0
-#     viewer: false
-#     fwd_device: 0
-#     dwn_device: 4
-#     fwd_device_path: ''
-#     dwn_device_path: ''
-#     fwd_model: gate_sharks
-#     fwd_models: ''
-#     fwd_classes: 'gate,shark,shaw_fish'
-#     fwd_conf: 0.35
-#     fwd_model_conf: ''
-#     dwn_model: bin_fire_blood
-#     dwn_models: ''
-#     dwn_classes: 'fire,blood'
-#     dwn_conf: 0.35
-#     dwn_model_conf: ''
-#     fwd_video: ''
-#     dwn_video: ''
-#     imgsz: 640
-#     max_det: 100
-#     tracking: true
+#   batighor:
+#     batighor_port: 8000
+#     foxglove_port: 8765
 #   video:
 #     fwd_video: ''
 #     dwn_video: ''

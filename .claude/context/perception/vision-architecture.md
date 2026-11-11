@@ -64,10 +64,6 @@ src/mongla_vision/mongla_vision/
     display_node.py       # vision_display -- smooth OpenCV viewer for the perception pipeline.
     switch_camera.py      # switch_camera -- resume ONE detector, pause the others (CLI exclusivity).
     water_check.py        # Which water is this? Characterise the pool before trusting a model in it.
-  web/
-    static/
-    dashboard_state.py    # Pure (rclpy-free) helpers for the mission-web console.
-    mission_web_node.py   # mission_web -- browser mission-control console for the Mongla vision stack.
   _text_engine.py         # TrueType text rendering engine for HUD widgets.
   camera_node.py          # camera_node -- read from a Camera and publish standard ROS image topics.
   config.py               # Named camera profiles. THIS DICT IS THE ONE THE CODE READS.
@@ -115,31 +111,18 @@ consumer — `vision_display`, logging nodes, future HUD overlays — can subscr
 current class filter without polling `ros2 param get`. This means class changes from CLI, DSL
 (`mongla.set_classes()`), or mission code (`mongla.models(...)`) all propagate automatically.
 
-### Mission console (`mission_web`) — HTTP surface, not a ROS topic
+### Operators: Batighor, through the helm
 
-`mission_web` (`web/mission_web_node.py`) is a monitoring+control node, not part of the
-mission path. It SUBSCRIBES `detections`, `vis_range`, `camera_info` per camera + latched
-`/mongla/vision/active_camera` + `/mongla/state`, and POLLS the detector params it reflects
-(`active_model`/`conf`/`models`/`paused`/**`classes`**) at 1 Hz via `get_parameters`. NOTE:
-`classes` is polled, **not** read from `/classes_filter` — that topic is published VOLATILE
-(depth 10), so a TRANSIENT_LOCAL sub gets nothing (durability mismatch) and a VOLATILE sub
-misses the retained startup value on a late join → the console showed empty class chips.
-Polling the `classes` param is join-order-proof. It WRITES control through the **exact DSL
-surface** — `SetParameters` on `/mongla_detector_<cam>` and the latched `active_camera`
-publish + pause-others/resume-target — so UI and DSL converge. Video is served by a
-co-launched `web_video_server` (MJPEG of `image_debug`, `:8080`); the node never touches
-image bytes. Browser routes (`:8090`): `GET /` + `/static/*` (SPA), `GET /events` (SSE
-~12 Hz JSON snapshot), `POST /api/detector/<cam>/param {name,value}`,
-`POST /api/active_camera {camera}`. Launch: `mission_web.launch.py` (see
-[`launch-combinations.md`](../platform/launch-combinations.md)) — `cameras:=both` (vision_dual) | `forward` | `downward` (single via
-vision.launch.py; the node's `cameras` param is set to match so a single-camera console
-shows one panel, no phantom). **Robust to a missing `web_video_server`** (apt pkg, not a
-repo dep): the launch resolves it defensively and degrades to console-only with an
-`apt install` hint rather than aborting the whole launch. Convergence is
-one-directional-solid: **DSL→UI** always reflects. **UI→running-mission** is inherently
-racy — a UI camera-switch mid-verb can be overridden by the next DSL verb, which steers by
-its own `_live_camera`. Fine for a monitor; drive competition runs from the DSL and use the
-console to watch/plan/tune.
+Batighor (`mongla_batighor`) is the operator center, off the mission path. A browser watches
+every topic through foxglove_bridge and acts only through the helm service, which writes the
+**exact DSL surface**: `SetParameters` on `/mongla_detector_<cam>`, and the latched
+`active_camera` publish with pause-others/resume-target. So a camera chosen in the browser and
+one chosen by a mission are the same operation. The helm polls the detector settings once a
+second (`conf`, `nms_floor`, `nms_iou`, `active_model`, `classes`, `paused`, `models`).
+`classes` is polled, not read from `/classes_filter`, which is published VOLATILE: a late joiner
+would miss the startup value. A browser may tune only while no mission runs, and only the pilot
+switches the camera, so a running mission is never steered from under it.
+[`packages/mongla_batighor`](../packages/mongla_batighor/README.md).
 
 `/tracks` uses the same message type as `/detections`. The difference:
 - `Detection2D.id` is populated with a stable tracker integer ID (stringified; Roboflow OC-SORT by default)

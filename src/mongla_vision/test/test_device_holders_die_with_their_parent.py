@@ -70,7 +70,6 @@ def test_every_long_running_node_asks_for_it():
                  'mongla_vision.detector_dual_node', 'mongla_vision.lock_node',
                  'mongla_vision.tracker_node', 'mongla_vision.flow.flow_node',
                  'mongla_vision.depth.depth_estimation_node',
-                 'mongla_vision.web.mission_web_node',
                  'mongla_vision.utils.display_node', 'mongla_vision.vision_node',
                  'mongla_localization.localization_node',
                  'mongla_localization.pnp_node',

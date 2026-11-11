@@ -163,7 +163,7 @@ def generate_launch_description():
                               description='Start the detector paused (resume_detector(camera) per task)'),
         DeclareLaunchArgument('debug_image_hz', default_value='10.0',
                               description='Annotated image_debug publish rate (raise toward inference '
-                                          'FPS for a smoother web/mission_web stream)'),
+                                          'FPS for a smoother vision_display picture)'),
         DeclareLaunchArgument('viewer',        default_value='true',
                               description='Open the OpenCV vision_display HUD (viewer:=false = headless)'),
         DeclareLaunchArgument('tracking',      default_value='true',

@@ -57,7 +57,9 @@ from mongla_interfaces.srv import Helm
 
 LOG_PATH = Path.home() / '.mongla' / 'batighor' / 'helm.log'
 MISSION_ALIVE_S = 1.5     # the runner beats /mongla/mission_alive at 2 Hz
-POLLED = (*TUNABLE, 'paused')
+# Read, never set here: `paused` is the camera's, `models` the registry
+# `active_model` picks from (the panel offers its keys).
+POLLED = (*TUNABLE, 'paused', 'models')
 ACTIVE_CAMERA = '/mongla/vision/active_camera'
 
 
