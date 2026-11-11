@@ -30,10 +30,7 @@
       "isSynced": true,
       "xAxisVal": "timestamp"
     },
-    "mongla.batighor.Helm!helm": {},
-    "Parameters!detector": {
-      "title": "Detector settings"
-    }
+    "mongla.batighor.Helm!helm": {}
   },
   "globalVariables": {},
   "userNodes": {},
@@ -48,14 +45,9 @@
       "first": "mongla.batighor.Helm!helm",
       "second": {
         "direction": "column",
-        "first": {
-          "direction": "row",
-          "first": "RawMessages!state",
-          "second": "Parameters!detector",
-          "splitPercentage": 50
-        },
+        "first": "RawMessages!state",
         "second": "Plot!align",
-        "splitPercentage": 55
+        "splitPercentage": 45
       },
       "splitPercentage": 55
     },

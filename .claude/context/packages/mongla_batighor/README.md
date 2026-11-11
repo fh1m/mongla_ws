@@ -58,6 +58,11 @@ log trusts it.
 - `arm` needs two ticks from the pilot: propellers clear, kill switch manned.
 - A verb is checked against `commands.py` (the verb exists, every field is its own and of the
   right type) before it is sent.
+- The detectors' live settings (`conf`, `nms_floor`, `nms_iou`, `active_model`, `classes`, the
+  table in `seat.py`) may be set by anyone named, never while a mission runs: a run is not
+  retuned under the pilot. The helm reads each value once a second and shows it.
+- The camera is the pilot's: choosing one publishes `/mongla/vision/active_camera`, pauses the
+  other detector and resumes the chosen one, the way the DSL's `use_camera` does.
 - Every request and every change of pilot goes to `/mongla/batighor/log` and
   `~/.mongla/batighor/helm.log`; the deck adds its own commands, marked `term:<user>`.
 
@@ -65,10 +70,9 @@ log trusts it.
 the bridge cannot tell one browser from another and by default lets each call any service,
 set any parameter and publish anything. With hidden topics on, that reached the action's
 own `send_goal` and the manager's `shield_max_depth_m`, past the helm. Now a browser calls one
-service, the helm; sets the detectors' live settings and nothing else (`conf`, `nms_floor`,
-`nms_iou`, `active_model`, `classes` on `/mongla_detector_forward` and `_downward`, through
-Lichtblick's own Parameters panel); and publishes nothing. Checked on Kutum against the real
-bridge: only the helm offered, `conf` set, `paused` and the depth floor refused.
+service, the helm; sets no parameter itself; and publishes nothing. The bridge cannot know when
+a mission runs, so the detectors' live settings are changed through the helm, which can.
+Checked on Kutum against the real bridge: only the helm offered, every parameter refused.
 `test_the_bridge_only_lets_a_browser_drive_through_the_helm.py` holds it.
   `/mongla/batighor/helm_state` (latched) says who is pilot, who is asking, which mission runs,
   and the missions there are.

@@ -8,8 +8,9 @@ not silently, when a new version no longer carries the one line it changes.
 An extension is a `.foxe`: a zip of `package.json` and `dist/extension.js`.
 Ours are plain JavaScript with no build step; `foxe` zips one directory of
 `panels/` and puts the verb table above the code, read from
-`mongla_control/commands.py` and the Move action, so a verb added there
-reaches the browser with no edit here.
+`mongla_control/commands.py` and the Move action, and the tunable settings
+and cameras from `seat.py`, so a change there reaches the browser with no
+edit here.
 
 Lichtblick keeps an extension in the browser and downloads it again only when
 its version changes; the version is the content's hash, so every change is
@@ -73,7 +74,10 @@ def foxe(src: Path, preamble: str = '') -> tuple[dict, bytes]:
 
 def extensions(panels_dir: Path) -> dict:
     """extension id -> (entry, foxe bytes), for every panel directory."""
-    pre = f'const VERBS = {json.dumps(verbs(), sort_keys=True)};\n'
+    from mongla_batighor.seat import CAMERAS, TUNABLE
+    pre = (f'const VERBS = {json.dumps(verbs(), sort_keys=True)};\n'
+           f'const TUNABLE = {json.dumps({k: v.__name__ for k, v in TUNABLE.items()})};\n'
+           f'const CAMERAS = {json.dumps(list(CAMERAS))};\n')
     out = {}
     for d in sorted(p for p in panels_dir.iterdir() if (p / 'extension.js').is_file()):
         entry, data = foxe(d, pre)

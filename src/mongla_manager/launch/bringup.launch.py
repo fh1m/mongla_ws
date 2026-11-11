@@ -69,15 +69,15 @@ from mongla_localization.launch_respawn import respawning
 # browser from another, and its defaults let every one of them call any
 # service, set any node's parameters and publish on any topic -- which with
 # include_hidden reaches /mongla/move/_action/send_goal and
-# shield_max_depth_m, past the helm. So: drive only through the helm
-# (mongla_batighor/helm.py), tune only the detector's live settings, publish
-# nothing. test_the_bridge_only_lets_a_browser_drive_through_the_helm.
+# shield_max_depth_m, past the helm. So a browser calls the helm and nothing
+# else: it drives, tunes the detectors (not during a mission, owner
+# 2026-11-12) and switches the camera there, by the helm's rules
+# (mongla_batighor/seat.py), and it publishes nothing.
+# test_the_bridge_only_lets_a_browser_drive_through_the_helm.
 BRIDGE_LIMITS = {
-    'capabilities': ['parameters', 'parametersSubscribe', 'services',
-                     'connectionGraph', 'assets'],
+    'capabilities': ['services', 'connectionGraph', 'assets'],
     'service_whitelist': ['^/mongla/batighor/helm$'],
-    'param_whitelist': [
-        r'^/mongla_detector_(forward|downward)\.(conf|nms_floor|nms_iou|active_model|classes)$'],
+    'param_whitelist': ['^$'],
     'client_topic_whitelist': ['^$'],
 }
 

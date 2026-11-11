@@ -14,12 +14,19 @@ typed. The rules of the token are `seat.py`; this node adds the vehicle:
     `abort` reaches it the way Ctrl-C would (it cancels, stops and disarms);
   * when the pilot goes silent, a verb they sent by hand that is still running
     is followed by `stop`. A mission is not stopped: a dropped laptop must not
-    end a run the vehicle is flying by itself.
+    end a run the vehicle is flying by itself;
+  * `tune` sets one of a detector's live settings (`seat.TUNABLE`) for any
+    named operator while no mission runs, and `camera` makes one camera the
+    live one for the pilot -- the same operation as the DSL's `use_camera`:
+    the latched `/mongla/vision/active_camera`, the other detector paused.
+    The bridge gives browsers no parameter access of their own
+    (`bringup.launch.py` BRIDGE_LIMITS), so these are the only way.
 
 The terminal is trusted and does not come here (owner, 2026-11-12): `mongla`,
 a mission started in a shell and the TUI send to `/mongla/move` directly.
 
-Publishes `/mongla/batighor/helm_state` (latched JSON: pilot, asker, mission)
+Publishes `/mongla/batighor/helm_state` (latched JSON: pilot, asker, mission,
+the live camera and each detector's settings, read once a second)
 and `/mongla/batighor/log` (one JSON line per request and per change of
 pilot), and appends the same lines to `~/.mongla/batighor/helm.log`.
 """
@@ -39,14 +46,53 @@ import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
+from rcl_interfaces.msg import Parameter as ParamMsg
+from rcl_interfaces.msg import ParameterType, ParameterValue
+from rcl_interfaces.srv import GetParameters, SetParameters
 from std_msgs.msg import String
 
-from mongla_batighor.seat import Seat, Verdict
+from mongla_batighor.seat import CAMERAS, TUNABLE, Seat, Verdict
 from mongla_interfaces.action import Move
 from mongla_interfaces.srv import Helm
 
 LOG_PATH = Path.home() / '.mongla' / 'batighor' / 'helm.log'
 MISSION_ALIVE_S = 1.5     # the runner beats /mongla/mission_alive at 2 Hz
+POLLED = (*TUNABLE, 'paused')
+ACTIVE_CAMERA = '/mongla/vision/active_camera'
+
+
+def param_value(v):
+    """A ParameterValue as plain Python; None when the node has no such setting."""
+    return {ParameterType.PARAMETER_DOUBLE: lambda: v.double_value,
+            ParameterType.PARAMETER_INTEGER: lambda: v.integer_value,
+            ParameterType.PARAMETER_STRING: lambda: v.string_value,
+            ParameterType.PARAMETER_BOOL: lambda: v.bool_value}.get(v.type, lambda: None)()
+
+
+def param_msg(name: str, value) -> ParamMsg:
+    if isinstance(value, bool):
+        pv = ParameterValue(type=ParameterType.PARAMETER_BOOL, bool_value=value)
+    elif isinstance(value, float):
+        pv = ParameterValue(type=ParameterType.PARAMETER_DOUBLE, double_value=value)
+    else:
+        pv = ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=str(value))
+    return ParamMsg(name=name, value=pv)
+
+
+def tune_value(name: str, raw: str):
+    """(value, '') for a setting typed as JSON, or (None, why not)."""
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        return None, f'{raw!r} is not a value'
+    if TUNABLE[name] is float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                or not math.isfinite(value):
+            return None, f'{name} must be a number'
+        return float(value), ''
+    if not isinstance(value, str):
+        return None, f'{name} must be text'
+    return value, ''
 
 
 def build_goal(cmd: str, fields_json: str):
@@ -116,6 +162,17 @@ class HelmNode(Node):
         self.create_timer(0.2, self._tick)
         self.missions = []
         threading.Thread(target=self._list_missions, daemon=True).start()
+        # The detectors: their settings, read once a second, and the camera.
+        self.tuning = {}                # camera -> {setting: value}
+        self.camera = ''
+        self._get = {c: self.create_client(GetParameters, f'/mongla_detector_{c}/get_parameters')
+                     for c in CAMERAS}
+        self._set = {c: self.create_client(SetParameters, f'/mongla_detector_{c}/set_parameters')
+                     for c in CAMERAS}
+        self.pub_camera = self.create_publisher(String, ACTIVE_CAMERA, LATCHED)
+        self.create_subscription(String, ACTIVE_CAMERA,
+                                 lambda m: setattr(self, 'camera', m.data), LATCHED)
+        self.create_timer(1.0, self._poll)
 
     # -- the record ---------------------------------------------------
     def _log(self, **entry):
@@ -145,6 +202,8 @@ class HelmNode(Node):
             if self.seat.requester else None,
             'mission': self._mission_running(),
             'missions': self.missions,
+            'camera': self.camera,
+            'tuning': self.tuning,
         }, sort_keys=True)
         if force or state != self._last_state:
             self._last_state = state
@@ -168,6 +227,10 @@ class HelmNode(Node):
             v = self._start_mission(who, req.mission)
         elif op == 'abort':
             v = self._abort_mission(who)
+        elif op == 'tune':
+            v = self._tune(who, req.cmd, req.fields_json)
+        elif op == 'camera':
+            v = self._camera(who, req.cmd)
         else:
             v = Verdict(False, f'unknown op {op!r}')
         res.ok, res.message = v.ok, v.message
@@ -250,6 +313,67 @@ class HelmNode(Node):
         # Ctrl-C, exactly: the runner's abort path cancels, stops and disarms.
         os.killpg(self.mission[2].pid, signal.SIGINT)
         return Verdict(True, f'mission {self.mission[0]} interrupted')
+
+    # -- the detectors -------------------------------------------------
+    def _poll(self):
+        for cam, cli in self._get.items():
+            if not cli.service_is_ready():
+                self.tuning.pop(cam, None)
+                continue
+            fut = cli.call_async(GetParameters.Request(names=list(POLLED)))
+            fut.add_done_callback(lambda f, cam=cam: self._polled(cam, f))
+
+    def _polled(self, cam, fut):
+        res = fut.result()
+        if res is not None and len(res.values) == len(POLLED):
+            self.tuning[cam] = {n: param_value(v) for n, v in zip(POLLED, res.values)}
+
+    def _set_param(self, who, cam, name, value):
+        fut = self._set[cam].call_async(
+            SetParameters.Request(parameters=[param_msg(name, value)]))
+        fut.add_done_callback(lambda f: self._was_set(who, cam, name, value, f))
+
+    def _was_set(self, who, cam, name, value, fut):
+        res = fut.result()
+        r = res.results[0] if res is not None and res.results else None
+        if r is not None and r.successful:
+            self._log(operator=who, event=f'{cam} {name} is now {value!r}')
+        else:
+            self._log(operator=who, event=f'{cam} {name} refused by the detector: '
+                                          f'{r.reason if r is not None else "no answer"}')
+
+    def _tune(self, who, target, raw):
+        v = self.seat.may_tune(who, self._mission_running())
+        if not v.ok:
+            return v
+        cam, _, name = (target or '').partition('.')
+        if cam not in CAMERAS or name not in TUNABLE:
+            return Verdict(False, f'{target!r} is not camera.setting; settings: '
+                                  f'{", ".join(TUNABLE)}')
+        value, why = tune_value(name, raw)
+        if why:
+            return Verdict(False, why)
+        if not self._set[cam].service_is_ready():
+            return Verdict(False, f'the {cam} detector is not running')
+        self._set_param(who, cam, name, value)
+        return Verdict(True, f'{cam} {name} -> {value!r} sent')
+
+    def _camera(self, who, cam):
+        v = self.seat.may_send(who, 'camera')
+        if not v.ok:
+            return v
+        if cam not in CAMERAS:
+            return Verdict(False, f'no camera {cam!r}; cameras: {", ".join(CAMERAS)}')
+        if not self._set[cam].service_is_ready():
+            return Verdict(False, f'the {cam} detector is not running')
+        # What the DSL's use_camera does: the HUD follows, one detector infers.
+        self.pub_camera.publish(String(data=cam))
+        self.camera = cam
+        for other in CAMERAS:
+            if other != cam and self._set[other].service_is_ready():
+                self._set_param(who, other, 'paused', True)
+        self._set_param(who, cam, 'paused', False)
+        return Verdict(True, f'{cam} is the live camera')
 
     def _on_mission_alive(self, msg):
         self.mission_heard = (msg.data, time.monotonic())

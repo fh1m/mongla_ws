@@ -2,7 +2,8 @@
 //
 // Plain DOM, no build: serve.py zips this file into a .foxe and puts
 // `const VERBS = {...}` above it, read from mongla_control/commands.py and
-// the Move action, so the panel never keeps its own list of verbs.
+// the Move action, and `TUNABLE` and `CAMERAS` from seat.py, so the panel
+// keeps no list of its own.
 //
 // What it does, in the owner's rules (bead 102.25.3): a typed name, kept in
 // this browser; Request / Give / Release; a heartbeat each second while this
@@ -175,6 +176,32 @@ function initPanel(context) {
   const bStart = el("button", { onclick: () => call("mission", { mission: mPick.value }) }, "Start");
   const bAbort = el("button", { onclick: () => call("abort") }, "Abort mission");
 
+  // -- the detectors: the live camera (pilot) and their settings ------
+  // (anyone named, not during a mission). Built once: redrawing the inputs
+  // each frame would wipe what an operator is typing.
+  const camButtons = CAMERAS.map((c) =>
+    el("button", { onclick: () => call("camera", { cmd: c }) }, c));
+  const now = {};            // "camera.setting" -> the cell showing its value
+  const setButtons = [];
+  const tuneGrid = el("div", { class: "bh-fields" });
+  for (const cam of CAMERAS) {
+    for (const [s, kind] of Object.entries(TUNABLE)) {
+      const key = `${cam}.${s}`;
+      const input = el("input", { size: "10", type: kind === "float" ? "number" : "text", step: "any" });
+      const set = el("button", {
+        onclick: () => {
+          if (input.value === "") return undefined;
+          const value = kind === "float" ? Number(input.value) : input.value;
+          return call("tune", { cmd: key, fields_json: JSON.stringify(value) });
+        },
+      }, "Set");
+      setButtons.push(set);
+      now[key] = el("span");
+      tuneGrid.append(el("label", {}, key), el("div", { class: "bh-row" }, now[key], input, set));
+    }
+  }
+  const tuneNote = el("div", { class: "bh-msg" });
+
   const vehLine = el("div");
   const log = el("div", { class: "bh-log" });
 
@@ -188,6 +215,9 @@ function initPanel(context) {
     help,
     fields,
     el("div", { class: "bh-row" }, "mission", mPick, bStart, bAbort),
+    el("div", { class: "bh-row" }, "camera", ...camButtons),
+    tuneNote,
+    tuneGrid,
     log,
     armDlg,
   );
@@ -210,6 +240,20 @@ function initPanel(context) {
     bRelease.disabled = !mine;
     bArm.disabled = bSend.disabled = bStart.disabled = !mine;
     bAbort.disabled = !helm.mission;            // like stop: anyone may end a mission
+    for (const b of camButtons) {
+      b.disabled = !mine;
+      b.style.fontWeight = helm.camera === b.textContent ? "700" : "";
+    }
+    const tuning = helm.tuning || {};
+    for (const [key, cell] of Object.entries(now)) {
+      const [cam, s] = key.split(".");
+      const v = (tuning[cam] || {})[s];
+      cell.textContent = tuning[cam] ? (v === "" ? '""' : String(v)) : "--";
+    }
+    for (const b of setButtons) b.disabled = !named || Boolean(helm.mission);
+    tuneNote.textContent = helm.mission
+      ? `settings are closed while mission ${helm.mission} runs`
+      : "settings: anyone named, while no mission runs";
     const ms = helm.missions || [];
     if (mPick.options.length !== ms.length) {
       mPick.replaceChildren(...ms.map((m) => el("option", { value: m }, m)));

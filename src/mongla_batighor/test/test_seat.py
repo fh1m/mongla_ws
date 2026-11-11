@@ -87,3 +87,16 @@ def test_every_change_of_pilot_is_written_down():
     for name in ('ana is the pilot', 'raf asked ana', 'raf is the pilot (given by ana)',
                  'raf went silent'):
         assert name in text, (name, text)
+
+
+def test_anyone_named_may_tune_but_not_while_a_mission_runs():
+    s = Seat(pilot='ana')
+    assert s.may_tune('raf', '').ok
+    assert not s.may_tune('', '').ok
+    v = s.may_tune('ana', 'qualify')
+    assert not v.ok and 'qualify' in v.message
+
+
+def test_the_camera_is_the_pilots():
+    s = Seat(pilot='ana')
+    assert s.may_send('ana', 'camera').ok and not s.may_send('raf', 'camera').ok

@@ -9,6 +9,9 @@ Decided with the owner (bead mongla_ws-102.25.3):
   * To take over, an operator asks; the pilot gives it, or says nothing for
     `ANSWER_S` and it passes anyway.
   * Arming needs the pilot to have ticked both safety confirmations.
+  * The detectors' live settings may be tuned by any named operator, but not
+    while a mission runs (owner, 2026-11-12): a run must see what it started
+    with. Which camera the vision verbs use is the pilot's, like a verb.
 
 `helm.py` is the node around this; it owns the clock and the vehicle.
 """
@@ -20,6 +23,11 @@ LOST_S = 3.0              # the console beats every second; three missed is gone
 ANSWER_S = 10.0           # how long a pilot has to answer a request
 ANYONE = frozenset({'disarm', 'stop', 'surface'})
 ARM_CONFIRMS = frozenset({'propellers_clear', 'kill_switch_manned'})
+CAMERAS = ('forward', 'downward')
+# The detector settings an operator may change, with the type each holds.
+# Each one the detector applies live (detector_setup._on_parameter_change).
+TUNABLE = {'conf': float, 'nms_floor': float, 'nms_iou': float,
+           'active_model': str, 'classes': str}
 
 
 @dataclass
@@ -105,6 +113,13 @@ class Seat:
                 return Verdict(False, 'arm needs both confirmations: '
                                       + ', '.join(missing))
         return Verdict(True, 'pilot')
+
+    def may_tune(self, operator: str, mission: str) -> Verdict:
+        if not operator:
+            return Verdict(False, 'type your name first')
+        if mission:
+            return Verdict(False, f'tuning is closed while mission {mission} runs')
+        return Verdict(True, 'open to every operator while no mission runs')
 
     def _seat(self, operator: str, now: float, why: str) -> None:
         self.pilot = operator
