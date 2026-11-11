@@ -24,9 +24,12 @@ Four things differ from a `.pt`, and each is silent if missed
    `EMIT_FLOOR` is configured at `EMIT_FLOOR` here, and `conf` is a runtime
    decision on every model (measured-bars 79: 323 boxes returned below a
    compiled 0.200, every box at or above it unchanged, +0.16 % time). The
-   value cannot change after the configure, so `_floor` is what the host
-   receives for the life of the detector, and `update_conf()` filters above
-   it. Our own graphs are compiled at 0.05, which is the same floor.
+   value is read at the configure, so `_floor` is what the host
+   receives until `update_nms()` changes it, and `update_conf()` filters
+   above it. Our own graphs are compiled at 0.05, which is the same floor.
+   `update_nms()` moves the floor and the overlap threshold on a live model
+   by configuring it again, about 85 ms without frames (the node's
+   `nms_floor` and `nms_iou` parameters).
 
 3. **Run at conf 0.10-0.15, not the .pt path's 0.45.**
 
@@ -348,6 +351,57 @@ class HailoDetector(Detector):
             return baked
         return EMIT_FLOOR
 
+    def update_nms(self, floor: Optional[float] = None,
+                   iou: Optional[float] = None) -> None:
+        """Change the NMS score floor and overlap threshold on a live model.
+
+        Both are read when the model is configured, so this hands the
+        configured model back and the next `infer` configures it again with
+        the new values: the detector misses about 85 ms of frames, once
+        (measured-bars 79, 20 changes in a row, 89 ms worst). Before the first
+        inference nothing is configured and it costs nothing.
+
+        Raises `ValueError` when this detector cannot do it, so a caller never
+        reports a change that did not happen: the blocking diagnostic path,
+        and a graph with no NMS output to set.
+        """
+        if self._blocking:
+            raise ValueError('the blocking diagnostic path builds its streams '
+                             'once and cannot change the NMS')
+        if self._baked_conf is None:
+            raise ValueError(f'{Path(self._path).name} reports no NMS score '
+                             f'threshold, so it has no NMS output to set')
+        if floor is not None and not 0.0 < float(floor) < 1.0:
+            raise ValueError(f'nms_floor {floor!r} is outside (0, 1)')
+        if iou is not None and not 0.0 < float(iou) <= 1.0:
+            raise ValueError(f'nms_iou {iou!r} is outside (0, 1]')
+        with self._infer_lock:
+            out = self._model.output()
+            try:
+                if floor is not None:
+                    out.set_nms_score_threshold(float(floor))
+                if iou is not None:
+                    out.set_nms_iou_threshold(float(iou))
+            except Exception as exc:                        # noqa: BLE001
+                raise ValueError(f'HailoRT refused the NMS change: {exc!r}')
+            if self._cim is not None:
+                with hailo_device.DEVICE_LOCK:
+                    self._cim.__exit__(None, None, None)
+                self._cim = self._bindings = None
+                self._in_buf = self._out_buf = None
+            if floor is not None:
+                self._floor = float(floor)
+        if self._log is not None:
+            self._log.info(
+                f'[HAILO] {Path(self._path).name} NMS: floor='
+                f'{self._floor:.3f}'
+                + ('' if iou is None else f' iou={float(iou):.2f}'))
+        # `_assoc_conf` and `_conf` are left alone. A floor above them returns
+        # nothing below itself whatever they say, and moving them here would
+        # outlast the floor: raised to 0.5 and put back, the detector stayed
+        # blind at the old settings (found on the vehicle).
+        self._warn_conf(self._conf)
+
     def update_conf(self, conf: float) -> None:
         """Runtime confidence. Filters what the NMS returned.
 
@@ -393,8 +447,8 @@ class HailoDetector(Detector):
                 f'[HAILO] conf={conf:.3f} is BELOW the NMS floor of '
                 f'{self._floor:.3f} this model is configured at -- nothing '
                 f'under the floor is returned, so the effective threshold is '
-                f'{self._floor:.3f}. Lower EMIT_FLOOR (hailo.py) if a model '
-                f'needs less.')
+                f'{self._floor:.3f}. Lower the detector\'s nms_floor parameter '
+                f'if a model needs less.')
         self._warn_against_measured_bar(conf)
 
     def _warn_against_measured_bar(self, conf: float) -> None:

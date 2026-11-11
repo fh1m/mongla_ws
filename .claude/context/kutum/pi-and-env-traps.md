@@ -17,6 +17,11 @@
   JetPack/ROS system numpy. ROS Humble's `cv_bridge` boost extension **and** the
   system `cv2` are compiled against the NumPy 1.x C-ABI and segfault under 2.x.
   `ultralytics` also pins `numpy<2.0.0`.
+  **The rule has a price, measured (measured-bars 77):** a NumPy 2 OpenCV 5.0.0
+  with KleidiCV is 10.4 % faster on our per-frame hot path, under the 25 % bar.
+  It is reversed by a hot path where colour conversion or resize dominates, or
+  by a distribution `python3-opencv` built for NumPy 2.
+
   **The stack no longer imports `cv_bridge`** (measured-bars 78):
   `mongla_vision/image_msg.py` converts between an Image message and an array,
   byte-identical to it, and works under NumPy 2. What still holds the rule in

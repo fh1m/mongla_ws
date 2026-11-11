@@ -55,6 +55,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `chip_share_bench.py` | XFeat + detector on one Hailo-8, via the scheduler and the sync API. |
 | `chip_throttle_bench.py` | The production configuration: XFeat at the rate the ANCHOR actually wants. |
 | `control_bench/` | The board's own control code, running on this machine. |
+| `cv_hot_path.py` | Hot-path OpenCV cost, per frame, for whichever cv2 this interpreter imports. |
 | `dataset_survey.py` | Characterise every labelled dataset by its WATER, not by its task. |
 | `executor_cost.py` | What an rclpy executor costs to deliver one callback, per executor. |
 | `fit_free_decay.py` | Fit a free-decay rotation: the drag-to-inertia ratio the controller needs. |
@@ -75,6 +76,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `hailo_int8_shift.py` | What does INT8 cost a compiled model, measured off the chip? (issue #47) Runs an OPTIMIZED .har through the Dataflow Compiler's emulator twice on the same real frames -- `SDK_FP_OPTIMIZED` (the ... |
 | `hailo_latency.py` | Throughput is not latency, and a control loop pays latency. |
 | `hailo_nms_floor.py` | Is the score threshold compiled into a HEF a floor, or only a default? A detection HEF carries an NMS score threshold from its compile. |
+| `hailo_service_drill.py` | What happens to a vision process when the HailoRT service dies. |
 | `hailo_stages.py` | Where does a Hailo frame actually go? Per-stage, on real frames. |
 | `hef_vs_cpu.py` | Does XFeat still MATCH after INT8? The gate that makes the HEF a result. |
 | `hull_stations.py` | Read EXACT thruster stations out of an Onshape GLB export. |
@@ -83,6 +85,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `mine_hard_negatives.py` | Mine the frames the detector is most confidently WRONG about. |
 | `mixer_map.py` | Measure what the mixer ACTUALLY does, using the Pico's console as readback. |
 | `model_inventory.py` | Every model on this box, what it detects, and whether it has been checked. |
+| `overclock_soak.py` | Is a faster ARM clock worth keeping on Kutum? A soak with the answer. |
 | `restart_blind_time.py` | How long the vehicle is blind while its vision process starts: frame and detection. |
 | `srot_loop_soak.py` | Run the board link at the shipping vision-loop rate for minutes and report the jitter distribution. |
 | `srot_loop_sweep.py` | Where does the vision->thrust loop saturate, and on what? `VISION_LOOP_HZ = 20` was chosen when perception was 3-4 Hz on a .pt and 20-30 Hz on the old GPU path. |
@@ -93,6 +96,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `v4l2_latency.py` | Measure camera latency against the KERNEL's own capture timestamp. |
 | `vision_latency_bench.py` | How OLD is the picture when the control loop acts on it? Every FPS number in this repo answers "how many frames per second". |
 | `vision_stage_profile.py` | Where the milliseconds go, stage by stage, on ONE clock. |
+| `wake_latency.py` | How late a periodic Python loop wakes on this kernel, idle and loaded. |
 | `xfeat_export.py` | Export XFeat to ONNX for the vehicle. |
 | `xfeat_export_hailo.py` | Export XFeat to an ONNX the Hailo compiler can parse -- and prove it is the same network. |
 | `xfeat_finetune.py` | Fine-tune XFeat on OUR water. |
