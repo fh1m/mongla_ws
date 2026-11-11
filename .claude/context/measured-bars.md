@@ -141,6 +141,7 @@ is how `recommend()` happened.
 - [79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11)](#79-the-compiled-score-threshold-is-a-default--the-floor-is-set-when-the-model-is-configured-2026-11-11)
 - [75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10)](#75-rectify-the-image-once-at-the-camera--not-chosen-468-ms-a-frame-against-a-4-ms-bar-and-points-cost-37-microseconds-2026-11-10) — *measured, not adopted*
 - [82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; 3.0 GHz is slower under load; open bench only (2026-11-11)](#82-the-arm-clock-at-28-ghz--kept-182--cpu-work-and-138--hailo-rate-under-full-load-675-c-never-throttled-30-ghz-is-slower-under-load-open-bench-only-2026-11-11)
+- [83. THE HAILORT SERVICE DIES MID-RUN — back in 0.31 s, and its clients fail fast (2026-11-11)](#83-the-hailort-service-dies-mid-run--back-in-031-s-and-its-clients-fail-fast-2026-11-11)
 - [76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11)](#76-a-realtime-kernel--not-chosen-the-stock-kernel-wakes-a-loaded-50-hz-loop-within-002-ms-once-the-loop-has-a-realtime-priority-2026-11-11) — *measured, not adopted*
 - [77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11)](#77-numpy-2-and-a-newer-opencv-on-kutum--not-chosen-10-to-16--of-the-hot-path-and-cv_bridge-stops-converting-2026-11-11) — *measured, not adopted*
 <!-- contents:end -->
@@ -7548,6 +7549,78 @@ is a slower vehicle that says so, not a crash. Reversal: any throttle flag in
 the sealed hull during a full-length run, or any instability; delete the two
 lines and reboot.
 
+## 83. THE HAILORT SERVICE DIES MID-RUN — back in 0.31 s, and its clients fail fast (2026-11-11)
+
+The service is installed (section 80) and every vision process opens the chip
+through it, so it is one process that every camera depends on. The owner's
+order for losing it: restart everything first; if the service stays down,
+the forward process opens the chip itself and the downward one runs without
+it. `hailo_device._open` implements the order; `kutum/system/systemd/hailort.service`
+restarts the daemon 200 ms after it dies, with no limit on how often.
+
+**Bars, written before the drill** (`tools/bench/hailo_service_drill.py`):
+
+| bar | falsified by |
+|---|---|
+| restart | systemd has the service running again more than 1 s after a SIGKILL |
+| surface | an inference through the dead service hangs, or raises more than 1 s after the kill (a hang never reaches the node's exit) |
+| rejoin | a process started after the restart does not open through the service |
+| order | with the service stopped, the forward process does not open the chip, or the downward one does |
+
+**Measured on Kutum**, `gate_sharks`, the drill run twice:
+
+| | run 1 | run 2 |
+|---|---|---|
+| daemon back after SIGKILL | | **0.31 s** |
+| the running client's next inference | raised `HAILO_RPC_FAILED` (77) | raised 77, 25 ms after the kill |
+| a new process after the restart | opened through the service in 0.15 s | 0.15 s |
+| service stopped, downward (`none`) | refused after its 3.0 s wait | refused, 3.0 s |
+| service stopped, forward (`direct`) | opened the chip after 3.09 s | 3.09 s |
+| 50 inferences, through the service / direct | 0.548 s / 0.525 s | 0.548 s / 0.525 s |
+
+All four bars hold. The restart time of run 1 was not captured: the timing
+loop's output was cut by the log filter.
+
+**What a vision process does with it.** A client of a dead service never
+recovers by itself: the error is "non-recoverable" in HailoRT's own words.
+The detector node already counts consecutive failures, rebuilds at 15 and
+exits at 45 (`detector_node._on_infer_failure`), and the launch respawns the
+process 2 s later, up to three times (`launch_respawn`). At 30 frames a
+second that is about 1.5 s of failures, 2 s of respawn and the model load,
+then the process is back through the restarted service. The cost is a few
+seconds without detections on a service crash, which has not been seen
+outside this drill.
+
+**Not shown here:** a crash while two processes share the chip, and the
+respawn limit of three being reached by a service that keeps dying. The
+second leaves the cameras down and says so, which is the existing policy for
+any process.
+
+**Confined, as its own user (2026-11-12).** Every Kutum service runs as its
+own user (#67), and the first confined unit failed: as user `hailort`, every
+client got `HAILO_NOT_FOUND` at its first inference, or a timeout. Bisected
+on Kutum with runtime drop-ins, 50 `yolov8n` inferences through the service
+each time:
+
+| configuration | result |
+|---|---|
+| user `hailort`, no capabilities | fails (timeout or `HAILO_NOT_FOUND`) |
+| root, full confinement, no capabilities | fails |
+| root, full confinement, `CAP_KILL` only | 0.808 s, three runs |
+| user `hailort`, full confinement, `CAP_KILL` only | 0.808 s and 0.805 s |
+
+The service checks that each client is alive by signalling its pid; a
+different user may not do that, so every client looked dead and its network
+was released. `CAP_KILL` is the one capability the unit keeps, both bounding
+and ambient. Full confinement here means `NoNewPrivileges`, `ProtectSystem=strict`,
+`ProtectHome`, `PrivateTmp`, `UMask=0007` and the socket in `/run/hailo`,
+group `hailort`; it costs nothing measurable against the 0.548 s above
+(a different model, `gate_sharks`).
+
+The drill above, re-run against the installed confined unit: back in
+**0.525 s** after SIGKILL, running as `hailort`; the running client raised
+`HAILO_RPC_FAILED` (77) at once; a new process opened through the service.
+The restart, surface and rejoin bars still hold.
 ## 76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11)
 
 **The question.** Ubuntu offers a PREEMPT_RT kernel for the Pi 5 through
