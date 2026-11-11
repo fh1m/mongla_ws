@@ -1,0 +1,66 @@
+.claude/context/ROADMAP.md
+  h_f1b9066eb9899c 190,306
+.claude/context/kutum/remote-access.md
+  h_f1b9066eb9899c 15,30,42-43
+.claude/context/packages/README.md
+  h_f1b9066eb9899c 3,16
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 1-53
+.claude/context/platform/foxglove-and-bags.md
+  h_f1b9066eb9899c 35,52-54,74,99-100,102-107,123,198,236
+.claude/context/platform/launch-combinations.md
+  h_f1b9066eb9899c 73
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 41-42,119-120
+CLAUDE.md
+  h_f1b9066eb9899c 198,201-202
+README.md
+  h_f1b9066eb9899c 78,91,119,597,607
+kutum/doctor.sh
+  h_f1b9066eb9899c 57-61
+kutum/setup.sh
+  h_f1b9066eb9899c 215,222,231,243,255-262
+src/mongla_batighor/LICHTBLICK.json
+  h_f1b9066eb9899c 1-5
+src/mongla_batighor/README.md
+  h_f1b9066eb9899c 1-11
+src/mongla_batighor/mongla_batighor/__init__.py
+  h_f1b9066eb9899c 1-6
+src/mongla_batighor/mongla_batighor/fetch.py
+  h_f1b9066eb9899c 1-102
+src/mongla_batighor/mongla_batighor/pin.py
+  h_f1b9066eb9899c 1-24
+src/mongla_batighor/mongla_batighor/serve.py
+  h_f1b9066eb9899c 1-140
+src/mongla_batighor/package.xml
+  h_f1b9066eb9899c 1-24
+src/mongla_batighor/setup.cfg
+  h_f1b9066eb9899c 1-24
+src/mongla_batighor/setup.py
+  h_f1b9066eb9899c 1-28
+src/mongla_batighor/test/test_layouts.py
+  h_f1b9066eb9899c 13,43-47
+src/mongla_batighor/test/test_serve_and_fetch.py
+  h_f1b9066eb9899c 1-138
+src/mongla_manager/config/bringup.example.yaml
+  h_f1b9066eb9899c 157-163
+src/mongla_manager/launch/bringup.launch.py
+  h_f1b9066eb9899c 19-20,317-323,468-470,490-500,536
+src/mongla_manager/package.xml
+  h_f1b9066eb9899c 23,27
+test/test_no_capability_is_unreachable_anywhere.py
+  h_f1b9066eb9899c 57-58,179
+tools/ci/gen_reference.py
+  h_f1b9066eb9899c 336
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "adf6355797e669bee8087f3dbab06cdaa7ea4819",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
