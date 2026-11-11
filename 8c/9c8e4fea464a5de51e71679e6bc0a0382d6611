@@ -1,0 +1,30 @@
+.claude/context/kutum/README.md
+  h_f1b9066eb9899c 77
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 143,7466-7550
+README.md
+  h_f1b9066eb9899c 64,797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+kutum/README.md
+  h_f1b9066eb9899c 61-70
+kutum/doctor.sh
+  h_f1b9066eb9899c 57-63
+kutum/setup.sh
+  h_f1b9066eb9899c 194,206-217
+tools/README.md
+  h_f1b9066eb9899c 87
+tools/bench/overclock_soak.py
+  h_f1b9066eb9899c 1-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "8c9c8e4fea464a5de51e71679e6bc0a0382d6611",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
