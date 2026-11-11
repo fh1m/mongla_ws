@@ -192,7 +192,7 @@ The v4.24.0 source is on Kutum, and its Python surface was read against what
 | feature | state | what was measured or decided |
 |---|---|---|
 | `set_nms_score_threshold`, `set_nms_iou_threshold` on the model output | **now used** | the compiled score threshold is a default; both change during a run (measured-bars 79). This retracted B-58 |
-| `hailort_service`, several processes on one chip | built and measured, not installed | +0.012 ms a frame, two processes at 47.8 Hz each (measured-bars 80). The stack is one process by design |
+| `hailort_service`, several processes on one chip | **installed** | +0.012 ms a frame, two processes at 47.8 Hz each (measured-bars 80); a killed service is back in 0.31 s and its clients fail fast instead of hanging (measured-bars 83). Every vision process opens the chip through it |
 | `get_chip_temperature`, throttling state | already used | `kutum_health.py`, in the health report |
 | `set_scheduler_priority` | not used | all groups run at one priority. Worth a measurement only if the anchors are seen to delay a detector frame; the round-robin figures in `hailo_device.py` show they do not today |
 | `set_scheduler_threshold`, `set_scheduler_timeout`, batch size | not used, on purpose | they trade latency for throughput, which is the wrong trade for control |

@@ -108,6 +108,11 @@ class SetupMixin:
         # revision and accepting full uncommanded heave are different decisions.
         self.declare_parameter('allow_saturated_depth_arm', False)
         self.declare_parameter('allow_unknown_kill_switch', False)
+        # The depth floor (issue #52), metres below the surface. Past it for a
+        # second while armed, the manager aborts and surfaces, whatever the
+        # mission asked for. 0 is off: a floor is a property of the venue, so
+        # the deck sets it (under `nodes:` in ~/.mongla/bringup.yaml).
+        self.declare_parameter('shield_max_depth_m', 0.0)
         declare_vision_params(self)
 
         mav_device          = str(self.get_parameter('mav_device').value).strip()
@@ -502,6 +507,9 @@ class SetupMixin:
         self._register_health()
         self._publish_static_frames()
         self._health_last = None
+        from diagnostic_msgs.msg import DiagnosticArray
+        self._diagnostics_pub = self.create_publisher(DiagnosticArray,
+                                                      '/diagnostics', 10)
         self.create_timer(1.0, self._health_tick, callback_group=self.timer_group)
         # Issue #13: executor liveness (gates the heartbeat) and the mission
         # keep-alive watchdog. Each in its OWN group, so neither the blocking
@@ -512,6 +520,15 @@ class SetupMixin:
         self.create_timer(0.2, self._stamp_executor_alive,
                           callback_group=self._liveness_group)
         self._mission = {'attached': False, 'name': '', 'seen': 0.0}
+        self._shield_max_depth_m = float(
+            self.get_parameter('shield_max_depth_m').value)
+        if self._shield_max_depth_m > 0.0:
+            self.get_logger().info(f'[SHLD ] depth floor '
+                                   f'{self._shield_max_depth_m:.2f} m')
+        else:
+            self.get_logger().warning(
+                '[SHLD ] no depth floor (shield_max_depth_m is 0): nothing '
+                'below the mission stops a dive past the pool')
         # Undecided until the board's first heartbeat says armed or not (#98).
         self._boot_latch = 'pending'
         from std_msgs.msg import String as _String

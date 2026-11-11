@@ -77,10 +77,11 @@ def _node(armed, surface_heard=None):
     n._mission = {'attached': True, 'name': 'pool_day_practice',
                   'seen': time.monotonic() - 10.0}
     n.kill = None
+    n.depth = float('nan')
     n.heard = surface_heard
     n.fc = SimpleNamespace(
         armed_state=lambda: n.armed, is_armed=lambda: bool(n.armed),
-        telemetry=lambda: SimpleNamespace(kill_switch=n.kill),
+        telemetry=lambda: SimpleNamespace(kill_switch=n.kill, depth_m=n.depth),
         armed_heard_since=lambda t: n.heard[0] if n.heard else None,
         mode_heard_since=lambda t: n.heard[1] if n.heard else None)
     n.armed = armed
@@ -92,6 +93,7 @@ def _node(armed, surface_heard=None):
     # A manager that came up on a DISARMED board; the boot tests set 'pending'.
     n._boot_latch = None
     for name in ('_kill_watch_tick', '_recovery_tick', '_request_surface',
+                 '_depth_shield_tick',
                  '_heard_since', '_armed_now', '_executor_alive', '_boot_tick',
                  '_heartbeat_allowed', 'safety_latch_reason'):
         setattr(n, name, getattr(M.AUVManagerNode, name).__get__(n))
@@ -336,3 +338,83 @@ def test_no_heartbeat_yet_refuses_rather_than_guesses():
     n = _node(armed=None)
     n._boot_latch = 'pending'
     assert 'no heartbeat' in n.safety_latch_reason()
+
+
+# ── issue #52: the depth floor, below the mission ────────────────────────────
+@pytest.mark.parametrize('depth, floor, armed, held, want', [
+    (-2.0, 1.5, True, 1.0, True),       # past the floor for the hold
+    (-2.0, 1.5, None, 1.0, True),       # unknown is treated as armed
+    (-2.0, 1.5, True, 0.5, False),      # one bad sample is not a dive
+    (-1.4, 1.5, True, 9.0, False),      # inside the floor
+    (-2.0, 0.0, True, 9.0, False),      # the shield is off
+    (-2.0, 1.5, False, 9.0, False),     # a disarmed hull has nothing to stop
+    (float('nan'), 1.5, True, 9.0, False),   # an absent reading is not evidence
+])
+def test_the_depth_floor_rule(depth, floor, armed, held, want):
+    since, trip = node_support.depth_shield(None, depth, floor, armed, 100.0)
+    assert trip is False, 'the first sample past the floor never trips'
+    _, trip = node_support.depth_shield(since, depth, floor, armed, 100.0 + held)
+    assert trip is want
+
+
+def test_a_reading_back_inside_the_floor_restarts_the_count():
+    since, _ = node_support.depth_shield(None, -2.0, 1.5, True, 100.0)
+    since, _ = node_support.depth_shield(since, -1.0, 1.5, True, 100.6)
+    assert since is None
+    since, trip = node_support.depth_shield(since, -2.0, 1.5, True, 101.2)
+    assert trip is False
+
+
+def _attached_and_alive(n):
+    n._mission['seen'] = time.monotonic() + 1e6      # the mission is beating
+    n._shield_max_depth_m = 1.5
+    return n
+
+
+def test_a_hull_past_the_floor_is_SURFACED_under_a_live_mission():
+    """The mission is alive and asked for this; the shield does not care."""
+    n = _attached_and_alive(_node(armed=True))
+    n.depth = -2.0
+    _tick(n, 100.0)
+    n.mongla.surface.assert_not_called()
+    _tick(n, 101.1)
+    n.mongla.request_abort.assert_called_once()
+    n.mongla.surface.assert_called_once_with(wait=False)
+    assert 'floor' in n.safety_latch_reason()
+    assert 'died' not in n.safety_latch_reason(), 'no mission died here'
+
+
+def test_the_shield_holds_until_the_board_confirms_SURFACE():
+    n = _attached_and_alive(_node(armed=True))
+    n.depth = -2.0
+    _tick(n, 100.0)
+    _tick(n, 101.1)
+    for at in (103.2, 105.3):                        # unanswered: retried
+        _tick(n, at)
+    assert n.mongla.surface.call_count == 3
+    n.heard = (True, 'SURFACE')
+    n._fast_mode = 'SURFACE'
+    _tick(n, 105.9)
+    assert n._recovery is None and n.safety_latch_reason() == ''
+    _tick(n, 108.0)                                  # still deep, still rising
+    assert n.mongla.surface.call_count == 3, 'a hull in SURFACE is not re-tripped'
+
+
+def test_the_shield_is_off_until_the_deck_sets_a_floor():
+    n = _attached_and_alive(_node(armed=True))
+    n._shield_max_depth_m = 0.0
+    n.depth = -9.0
+    _tick(n, 100.0)
+    _tick(n, 105.0)
+    n.mongla.surface.assert_not_called()
+
+
+@pytest.mark.parametrize('nodes, want', [
+    ({'mongla_manager': {'shield_max_depth_m': 1.4}}, 'PASS'),
+    ({'mongla_manager': {'shield_max_depth_m': 0.0}}, 'WARN'),
+    ({'mongla_manager': {'shield_max_depth_m': 'deep'}}, 'WARN'),
+    ({}, 'WARN'),
+])
+def test_bringup_check_says_when_no_floor_is_set(nodes, want):
+    from mongla_manager import bringup_grade as G, bringup_host as H
+    assert H.depth_floor_verdict(nodes)[0] == getattr(G, want)
