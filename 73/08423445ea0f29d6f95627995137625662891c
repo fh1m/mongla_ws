@@ -1,0 +1,54 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 144,7549-7596
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 6,10-11,29-30,32-42,62
+.claude/context/platform/foxglove-and-bags.md
+  h_f1b9066eb9899c 111-128,143-144,233-234
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 43,376-381,444,460-461
+README.md
+  h_f1b9066eb9899c 64,798,801
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+kutum/setup.sh
+  h_f1b9066eb9899c 62
+src/mongla_batighor/layouts/bins_downward.json
+  h_f1b9066eb9899c 5-10,50
+src/mongla_batighor/layouts/mongla_layout.json
+  h_f1b9066eb9899c 5-10
+src/mongla_batighor/layouts/weak_link.json
+  h_f1b9066eb9899c 1-43
+src/mongla_batighor/mongla_batighor/overlay.py
+  h_f1b9066eb9899c 1-139
+src/mongla_batighor/package.xml
+  h_f1b9066eb9899c 10-11,18-21
+src/mongla_batighor/setup.py
+  h_f1b9066eb9899c 26
+src/mongla_batighor/test/test_layouts.py
+  h_f1b9066eb9899c 25-27,41-43,45-48,54
+src/mongla_batighor/test/test_overlay.py
+  h_f1b9066eb9899c 1-64
+src/mongla_manager/launch/bringup.launch.py
+  h_f1b9066eb9899c 503-513,548
+src/mongla_vision/mongla_vision/camera_node.py
+  h_f1b9066eb9899c 12-13,40,57-68,124-130,167-174,571-572,605,614-637
+src/mongla_vision/mongla_vision/cameras/camera.py
+  h_f1b9066eb9899c 60-63
+src/mongla_vision/mongla_vision/cameras/v4l2_mailbox.py
+  h_f1b9066eb9899c 603-604
+src/mongla_vision/test/test_camera_video_is_the_cameras_jpeg.py
+  h_f1b9066eb9899c 1-120
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  h_f1b9066eb9899c 52-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7308423445ea0f29d6f95627995137625662891c",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
