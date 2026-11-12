@@ -9,8 +9,14 @@ layout from a URL. So this, on the operator's machine:
   1. downloads every panel Kutum serves and unpacks the versions it does not
      have; an older version of one of ours moves to ~/attic/<date>/, never
      deleted;
-  2. opens the app connected to Kutum's bridge, on one of Kutum's views,
+  2. writes every view Kutum serves into `~/.lichtblick-suite/layouts/`, so
+     the app's layout menu offers all of them, as the browser's does;
+  3. opens the app connected to Kutum's bridge, on one of Kutum's views,
      which carries the hull's URL on the host named here.
+
+The app imports a layout file once per name and keeps its own copy, so a
+view changed on Kutum reaches the menu only as a new name; the view this
+opens is always fetched fresh.
 
     python3 tools/pool/batighor_desktop.py                    # mongla.local, the cockpit
     python3 tools/pool/batighor_desktop.py 192.168.0.103 --view localization
@@ -35,6 +41,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 EXTENSIONS = Path.home() / '.lichtblick-suite' / 'extensions'
+LAYOUTS = Path.home() / '.lichtblick-suite' / 'layouts'
 OURS = 'mongla.batighor-'          # panels.py: publisher `mongla`, name `batighor-<panel>`
 
 
@@ -69,6 +76,25 @@ def install(base: str, into: Path = EXTENSIONS) -> list[str]:
             (target / name).parent.mkdir(parents=True, exist_ok=True)
             (target / name).write_bytes(data)
         wrote.append(target.name)
+    return wrote
+
+
+def install_views(base: str, views: list[str], into: Path = LAYOUTS) -> list[str]:
+    """Each view as Kutum serves it for this host (the hull's URL absolute)."""
+    into.mkdir(parents=True, exist_ok=True)
+    attic = Path.home() / 'attic' / datetime.date.today().isoformat() / 'lichtblick-layouts'
+    wrote = []
+    for name in views:
+        data = get(f'{base}/layouts/{quote(name)}.json')
+        json.loads(data)                       # a page that is not a layout stops here
+        target = into / f'{name}.json'
+        if target.is_file() and target.read_bytes() == data:
+            continue
+        if target.is_file():
+            attic.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(target), attic / target.name)
+        target.write_bytes(data)
+        wrote.append(name)
     return wrote
 
 
@@ -114,6 +140,8 @@ def main(argv=None) -> int:
         return 1
     wrote = install(base)
     print(f'ok  panels: {", ".join(wrote) if wrote else "already current"}')
+    laid = install_views(base, views)
+    print(f'ok  views: {", ".join(laid) if laid else "already current"}')
     if a.no_launch:
         return 0
     app = shutil.which('lichtblick')
