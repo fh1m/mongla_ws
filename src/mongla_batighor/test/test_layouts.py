@@ -44,7 +44,7 @@ def test_every_layout_topic_is_published_somewhere(path):
         literal = topic in src
         alts = [rf"f'[^']*/{re.escape(cam)}/{re.escape(leaf)}'"]
         if cam in ('forward', 'downward'):
-            alts.append(rf"f'[^']*{{ns}}/{re.escape(leaf)}'")
+            alts.append(rf"f'[^']*{{ns(?:_out)?}}/{re.escape(leaf)}'")
         templated = any(re.search(a, src) for a in alts)
         assert literal or templated, f'{path.name}: nothing publishes {topic}'
 

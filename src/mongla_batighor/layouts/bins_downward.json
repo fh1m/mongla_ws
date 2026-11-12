@@ -28,7 +28,8 @@
       ],
       "showLegend": true,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
     }
   },
   "layout": {

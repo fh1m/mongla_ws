@@ -1,0 +1,188 @@
+{
+  "configById": {
+    "Image!forward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/forward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/forward/annotations": {
+            "visible": true
+          }
+        }
+      }
+    },
+    "Image!downward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          },
+          "/mongla/vision/downward/flow_annotations": {
+            "visible": true
+          }
+        }
+      }
+    },
+    "StateTransitions!ladder": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.class_id",
+          "label": "forward rung"
+        },
+        {
+          "value": "/mongla/vision/forward/lock.detections[0].id",
+          "label": "forward holds"
+        },
+        {
+          "value": "/mongla/vision/forward/seeing.data",
+          "label": "forward seeing",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.class_id",
+          "label": "downward rung"
+        },
+        {
+          "value": "/mongla/vision/downward/lock.detections[0].id",
+          "label": "downward holds"
+        },
+        {
+          "value": "/mongla/vision/downward/seeing.data",
+          "label": "downward seeing",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/active_camera.data",
+          "label": "live camera",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": true
+    },
+    "Plot!authority": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.score",
+          "enabled": true,
+          "label": "forward authority"
+        },
+        {
+          "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.score",
+          "enabled": true,
+          "label": "downward authority"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
+    },
+    "Plot!pose": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/target_pose_fused.range_m",
+          "enabled": true,
+          "label": "range m"
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_fused.bearing_deg",
+          "enabled": true,
+          "label": "bearing deg"
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_fused.yaw_deg",
+          "enabled": true,
+          "label": "target yaw deg"
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_fused.reproj_px",
+          "enabled": true,
+          "label": "reprojection px"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
+    },
+    "Plot!anchor": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/anchor_decomposition.vector.x",
+          "enabled": true,
+          "label": "anchor rotation"
+        },
+        {
+          "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
+          "enabled": true,
+          "label": "anchor scale"
+        },
+        {
+          "value": "/mongla/vision/downward/anchor_decomposition.vector.z",
+          "enabled": true,
+          "label": "anchor range m"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
+    },
+    "Plot!align": {
+      "paths": [
+        {
+          "value": "/mongla/move/_action/feedback.feedback.err_x_px",
+          "enabled": true,
+          "label": "align err x px",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/move/_action/feedback.feedback.err_y_px",
+          "enabled": true,
+          "label": "align err y px",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "Image!forward",
+      "second": "Image!downward",
+      "splitPercentage": 50
+    },
+    "second": {
+      "direction": "column",
+      "first": "StateTransitions!ladder",
+      "second": {
+        "direction": "column",
+        "first": "Plot!authority",
+        "second": {
+          "direction": "column",
+          "first": "Plot!pose",
+          "second": {
+            "direction": "column",
+            "first": "Plot!anchor",
+            "second": "Plot!align",
+            "splitPercentage": 50
+          },
+          "splitPercentage": 34
+        },
+        "splitPercentage": 26
+      },
+      "splitPercentage": 28
+    },
+    "splitPercentage": 55
+  }
+}

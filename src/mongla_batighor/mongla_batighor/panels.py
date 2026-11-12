@@ -10,7 +10,8 @@ Ours are plain JavaScript with no build step; `foxe` zips one directory of
 `panels/` and puts the verb table above the code, read from
 `mongla_control/commands.py` and the Move action, and the tunable settings
 and cameras from `seat.py`, so a change there reaches the browser with no
-edit here.
+edit here; then `panels/common.js`, the helpers every panel shares. The look
+is not in a panel: it is `theme/batighor.css`, linked into the app page.
 
 Lichtblick keeps an extension in the browser and downloads it again only when
 its version changes; the version is the content's hash, so every change is
@@ -77,7 +78,8 @@ def extensions(panels_dir: Path) -> dict:
     from mongla_batighor.seat import CAMERAS, TUNABLE
     pre = (f'const VERBS = {json.dumps(verbs(), sort_keys=True)};\n'
            f'const TUNABLE = {json.dumps({k: v.__name__ for k, v in TUNABLE.items()})};\n'
-           f'const CAMERAS = {json.dumps(list(CAMERAS))};\n')
+           f'const CAMERAS = {json.dumps(list(CAMERAS))};\n'
+           + (panels_dir / 'common.js').read_text())
     out = {}
     for d in sorted(p for p in panels_dir.iterdir() if (p / 'extension.js').is_file()):
         entry, data = foxe(d, pre)

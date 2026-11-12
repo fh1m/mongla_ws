@@ -15,7 +15,8 @@
       ],
       "showLegend": true,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
     },
     "Plot!gyro": {
       "paths": [
@@ -37,7 +38,8 @@
       ],
       "showLegend": true,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
     },
     "RawMessages!esc": {
       "topicPath": "/mongla/esc_rpm"

@@ -1,5 +1,36 @@
 {
   "configById": {
+    "3D!nav": {
+      "followTf": "mongla",
+      "followMode": "follow-position",
+      "topics": {
+        "/mongla/odom": {
+          "visible": true
+        }
+      },
+      "scene": {
+        "backgroundColor": "#05070c"
+      }
+    },
+    "StateTransitions!aiding": {
+      "paths": [
+        {
+          "value": "/mongla/localization/aiding.data",
+          "label": "aided by",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/localization/motion.data",
+          "label": "motion",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/state.mode",
+          "label": "mode"
+        }
+      ],
+      "isSynced": true
+    },
     "Plot!pos": {
       "paths": [
         {
@@ -16,11 +47,22 @@
           "value": "/mongla/odom.pose.pose.position.z",
           "enabled": true,
           "label": "z (+depth)"
+        },
+        {
+          "value": "/mongla/localization/fix.point.x",
+          "enabled": true,
+          "label": "prop fix x"
+        },
+        {
+          "value": "/mongla/localization/fix.point.y",
+          "enabled": true,
+          "label": "prop fix y"
         }
       ],
       "showLegend": true,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
     },
     "Plot!vel": {
       "paths": [
@@ -47,7 +89,37 @@
       ],
       "showLegend": true,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
+    },
+    "Plot!heading": {
+      "paths": [
+        {
+          "value": "/mongla/state.yaw_deg",
+          "enabled": true,
+          "label": "board heading"
+        },
+        {
+          "value": "/mongla/localization/heading.data",
+          "enabled": true,
+          "label": "filter heading",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/floor_grid_deg.heading_deg",
+          "enabled": true,
+          "label": "floor grid"
+        },
+        {
+          "value": "/mongla/vision/downward/lane_heading_deg.heading_deg",
+          "enabled": true,
+          "label": "lane line"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
     },
     "Plot!floor": {
       "paths": [
@@ -55,35 +127,76 @@
           "value": "/mongla/vision/downward/floor_height.range",
           "enabled": true,
           "label": "floor height m"
+        },
+        {
+          "value": "/mongla/state.depth_m",
+          "enabled": true,
+          "label": "depth m (negative down)"
         }
       ],
       "showLegend": true,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
     },
-    "RawMessages!motion": {
-      "topicPath": "/mongla/localization/motion"
+    "Plot!demand": {
+      "paths": [
+        {
+          "value": "/mongla/demand.vector.x",
+          "enabled": true,
+          "label": "demand surge"
+        },
+        {
+          "value": "/mongla/demand.vector.y",
+          "enabled": true,
+          "label": "demand sway"
+        },
+        {
+          "value": "/mongla/demand.vector.z",
+          "enabled": true,
+          "label": "demand heave"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
     }
-  },
-  "layout": {
-    "direction": "column",
-    "first": {
-      "direction": "row",
-      "first": "Plot!pos",
-      "second": "Plot!vel",
-      "splitPercentage": 50
-    },
-    "second": {
-      "direction": "row",
-      "first": "Plot!floor",
-      "second": "RawMessages!motion",
-      "splitPercentage": 60
-    },
-    "splitPercentage": 60
   },
   "globalVariables": {},
   "userNodes": {},
   "playbackConfig": {
     "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "3D!nav",
+    "second": {
+      "direction": "column",
+      "first": "StateTransitions!aiding",
+      "second": {
+        "direction": "column",
+        "first": "Plot!pos",
+        "second": {
+          "direction": "column",
+          "first": "Plot!vel",
+          "second": {
+            "direction": "column",
+            "first": "Plot!heading",
+            "second": {
+              "direction": "column",
+              "first": "Plot!floor",
+              "second": "Plot!demand",
+              "splitPercentage": 50
+            },
+            "splitPercentage": 34
+          },
+          "splitPercentage": 26
+        },
+        "splitPercentage": 21
+      },
+      "splitPercentage": 16
+    },
+    "splitPercentage": 50
   }
 }

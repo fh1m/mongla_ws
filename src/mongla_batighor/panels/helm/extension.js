@@ -2,8 +2,9 @@
 //
 // Plain DOM, no build: serve.py zips this file into a .foxe and puts
 // `const VERBS = {...}` above it, read from mongla_control/commands.py and
-// the Move action, and `TUNABLE` and `CAMERAS` from seat.py, so the panel
-// keeps no list of its own.
+// the Move action, `TUNABLE` and `CAMERAS` from seat.py, and the shared
+// helpers of panels/common.js, so the panel keeps no list of its own. Its
+// look is theme/batighor.css.
 //
 // What it does, in the owner's rules (bead 102.25.3): a typed name, kept in
 // this browser; Request / Give / Release; a heartbeat each second while this
@@ -15,48 +16,10 @@ const SERVICE = "/mongla/batighor/helm";
 const STATE = "/mongla/batighor/helm_state";
 const LOG = "/mongla/batighor/log";
 const VEHICLE = "/mongla/state";
-const NAME_KEY = "mongla.batighor.operator";
 const ANYONE = ["stop", "surface", "disarm"];
 
-const CSS = `
-.bh{font:13px/1.4 system-ui,sans-serif;padding:8px;display:flex;flex-direction:column;gap:8px;height:100%;box-sizing:border-box;overflow:auto}
-.bh-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.bh button{font:inherit;padding:4px 10px;border-radius:4px;border:1px solid #888;background:transparent;color:inherit;cursor:pointer}
-.bh button:disabled{opacity:.4;cursor:default}
-.bh .bh-safe{font-weight:700;letter-spacing:.04em;padding:8px 16px;border-color:#d33;color:#fff;background:#b22}
-.bh input,.bh select{font:inherit;padding:3px 6px;border-radius:4px;border:1px solid #888;background:transparent;color:inherit}
-.bh .bh-who{font-weight:700}
-.bh .bh-you{color:#3c3}
-.bh .bh-msg{min-height:1.4em}
-.bh .bh-bad{color:#e55}
-.bh .bh-fields{display:grid;grid-template-columns:max-content 1fr;gap:4px 8px;align-items:center}
-.bh .bh-log{font:12px/1.35 ui-monospace,monospace;white-space:pre;overflow:auto;flex:1;min-height:6em;border-top:1px solid #8884;padding-top:4px}
-.bh dialog{color:inherit;background:Canvas;border:1px solid #888;border-radius:6px}
-`;
-
-function el(tag, attrs, ...kids) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
-    else if (k === "class") e.className = v;
-    else e.setAttribute(k, v);
-  }
-  for (const k of kids) e.append(k);
-  return e;
-}
-
-function readName() {
-  try { return localStorage.getItem(NAME_KEY) || ""; } catch { return ""; }
-}
-function keepName(n) {
-  try { localStorage.setItem(NAME_KEY, n); } catch { /* private window */ }
-}
-
 function initPanel(context) {
-  const root = context.panelElement;
-  root.append(el("style", {}, CSS));
-  const box = el("div", { class: "bh" });
-  root.append(box);
+  const box = mount(context);
 
   let helm = {};
   let vehicle = null;
@@ -72,10 +35,10 @@ function initPanel(context) {
   name.addEventListener("input", () => draw());
   const me = () => name.value.trim();
 
-  const msg = el("div", { class: "bh-msg" });
+  const msg = el("div", { class: "msg" });
   function say(text, bad) {
     msg.textContent = text;
-    msg.className = "bh-msg" + (bad ? " bh-bad" : "");
+    msg.className = "msg" + (bad ? " bad" : "");
   }
 
   async function call(op, extra) {
@@ -98,28 +61,28 @@ function initPanel(context) {
   }
 
   // -- the helm -------------------------------------------------------
-  const pilotLine = el("div");
-  const bRequest = el("button", { onclick: () => call("request") }, "Request");
+  const pilotLine = el("div", { class: "row" });
+  const bRequest = el("button", { class: "go", onclick: () => call("request") }, "Request");
   const bGive = el("button", { onclick: () => call("give") }, "Give");
   const bRelease = el("button", { onclick: () => call("release") }, "Release");
 
   // -- one press for anyone -------------------------------------------
   const safe = ANYONE.map((v) =>
-    el("button", { class: "bh-safe", onclick: () => call("command", { cmd: v }) }, v.toUpperCase()),
-  );
+    el("button", { class: "danger", onclick: () => call("command", { cmd: v }) }, v));
 
   // -- arm, behind two ticks ------------------------------------------
   const tProps = el("input", { type: "checkbox" });
   const tKill = el("input", { type: "checkbox" });
-  const armGo = el("button", {}, "Arm");
+  const armGo = el("button", { class: "danger" }, "Arm");
   const armDlg = el(
     "dialog",
     {},
-    el("p", {}, "Before arming:"),
-    el("label", {}, tProps, " propellers clear"),
-    el("br"),
-    el("label", {}, tKill, " a person on the kill switch"),
-    el("div", { class: "bh-row" }, armGo, el("button", { onclick: () => armDlg.close() }, "Cancel")),
+    el("p", {}, "Before arming"),
+    el("div", { class: "kv" },
+      tProps, el("label", {}, "propellers clear"),
+      tKill, el("label", {}, "a person on the kill switch")),
+    el("div", { class: "row", style: "margin-top:12px" }, armGo,
+      el("button", { onclick: () => armDlg.close() }, "Cancel")),
   );
   const syncArm = () => { armGo.disabled = !(tProps.checked && tKill.checked); };
   tProps.addEventListener("change", syncArm);
@@ -138,8 +101,8 @@ function initPanel(context) {
   // -- any verb, with its own fields ----------------------------------
   const verbs = Object.keys(VERBS).filter((v) => v !== "arm" && !ANYONE.includes(v)).sort();
   const pick = el("select", {}, ...verbs.map((v) => el("option", { value: v }, v)));
-  const fields = el("div", { class: "bh-fields" });
-  const help = el("div", { class: "bh-msg" });
+  const fields = el("div", { class: "kv" });
+  const help = el("div", { class: "note" });
   function drawFields() {
     const v = VERBS[pick.value];
     fields.replaceChildren();
@@ -159,6 +122,7 @@ function initPanel(context) {
   }
   pick.addEventListener("change", drawFields);
   const bSend = el("button", {
+    class: "go",
     onclick: () => {
       // Only what the operator filled in is sent; the verb's defaults do the rest.
       const out = {};
@@ -173,8 +137,8 @@ function initPanel(context) {
 
   // -- missions -------------------------------------------------------
   const mPick = el("select");
-  const bStart = el("button", { onclick: () => call("mission", { mission: mPick.value }) }, "Start");
-  const bAbort = el("button", { onclick: () => call("abort") }, "Abort mission");
+  const bStart = el("button", { class: "go", onclick: () => call("mission", { mission: mPick.value }) }, "Start");
+  const bAbort = el("button", { onclick: () => call("abort") }, "Abort");
 
   // -- the detectors: the live camera (pilot) and their settings ------
   // (anyone named, not during a mission). Built once: redrawing the inputs
@@ -184,7 +148,7 @@ function initPanel(context) {
   const now = {};            // "camera.setting" -> the cell showing its value
   const setButtons = [];
   const modelLists = {};     // camera -> the datalist of its registry keys
-  const tuneGrid = el("div", { class: "bh-fields" });
+  const tuneGrid = el("div", { class: "kv" });
   for (const cam of CAMERAS) {
     for (const [s, kind] of Object.entries(TUNABLE)) {
       const key = `${cam}.${s}`;
@@ -204,44 +168,44 @@ function initPanel(context) {
         },
       }, "Set");
       setButtons.push(set);
-      now[key] = el("span");
-      tuneGrid.append(el("label", {}, key), el("div", { class: "bh-row" }, now[key], input, set));
+      now[key] = el("span", { class: "live" });
+      tuneGrid.append(el("label", {}, key), el("div", { class: "row" }, now[key], input, set));
     }
   }
-  const tuneNote = el("div", { class: "bh-msg" });
+  const tuneNote = el("span");
 
-  const vehLine = el("div");
-  const log = el("div", { class: "bh-log" });
+  const vehLine = el("div", { class: "row" });
+  const log = el("div", { class: "log" });
 
-  box.append(
-    el("div", { class: "bh-row" }, name, pilotLine),
-    el("div", { class: "bh-row" }, bRequest, bGive, bRelease),
-    el("div", { class: "bh-row" }, ...safe),
-    vehLine,
-    msg,
-    el("div", { class: "bh-row" }, bArm, pick, bSend),
-    help,
-    fields,
-    el("div", { class: "bh-row" }, "mission", mPick, bStart, bAbort),
-    el("div", { class: "bh-row" }, "camera", ...camButtons),
-    tuneNote,
-    tuneGrid,
-    log,
-    armDlg,
-  );
+  const cHelm = card(box, "helm");
+  cHelm.append(el("div", { class: "row" }, name, pilotLine),
+    el("div", { class: "row" }, bRequest, bGive, bRelease));
+  const cSafe = card(box, "anyone, one press");
+  cSafe.append(el("div", { class: "keys" }, ...safe), vehLine, msg);
+  const cVerb = card(box, "command", "pilot only");
+  cVerb.append(el("div", { class: "row" }, bArm, pick, bSend), help, fields);
+  const cMission = card(box, "mission");
+  cMission.append(el("div", { class: "row" }, mPick, bStart, bAbort));
+  const cDet = card(box, "detectors", tuneNote);
+  cDet.append(el("div", { class: "row" }, el("span", { class: "note" }, "live camera"), ...camButtons), tuneGrid);
+  const cLog = card(box, "log");
+  cLog.style.flex = "1";
+  cLog.append(log);
+  box.append(armDlg);
   drawFields();
 
   // -- drawing --------------------------------------------------------
-  const num = (x, fmt) => (x === undefined || x === null || Number.isNaN(x) ? "--" : fmt(x));
   function draw() {
     const pilot = helm.pilot || "";
     const mine = pilot !== "" && pilot === me();
-    pilotLine.replaceChildren(
-      "helm: ",
-      el("span", { class: "bh-who" + (mine ? " bh-you" : "") }, pilot ? (mine ? `${pilot} (you)` : pilot) : "free"),
-      helm.asker ? `   ${helm.asker} is asking${helm.answer_by != null ? `, ${Math.max(0, helm.answer_by).toFixed(0)} s to answer` : ""}` : "",
-      helm.mission ? `   mission ${helm.mission} running` : "",
-    );
+    // replaceChildren writes a null as the text "null": filter, as el() does.
+    pilotLine.replaceChildren(...[
+      el("span", { class: mine ? "good" : pilot ? "live" : "stale" },
+        pilot ? (mine ? `${pilot} (you)` : pilot) : "helm free"),
+      helm.asker && el("span", { class: "warn" },
+        `${helm.asker} is asking${helm.answer_by != null ? `, ${Math.max(0, helm.answer_by).toFixed(0)} s to answer` : ""}`),
+      helm.mission && el("span", { class: "live" }, `mission ${helm.mission} running`),
+    ].filter(Boolean));
     const named = me() !== "";
     bRequest.disabled = !named || mine;
     bGive.disabled = !mine || !helm.asker;
@@ -250,7 +214,7 @@ function initPanel(context) {
     bAbort.disabled = !helm.mission;            // like stop: anyone may end a mission
     for (const b of camButtons) {
       b.disabled = !mine;
-      b.style.fontWeight = helm.camera === b.textContent ? "700" : "";
+      b.classList.toggle("on", helm.camera === b.textContent);
     }
     const tuning = helm.tuning || {};
     for (const [key, cell] of Object.entries(now)) {
@@ -270,18 +234,19 @@ function initPanel(context) {
     }
     for (const b of setButtons) b.disabled = !named || Boolean(helm.mission);
     tuneNote.textContent = helm.mission
-      ? `settings are closed while mission ${helm.mission} runs`
-      : "settings: anyone named, while no mission runs";
+      ? `settings closed while ${helm.mission} runs`
+      : "settings: anyone named, no mission";
     const ms = helm.missions || [];
     if (mPick.options.length !== ms.length) {
       mPick.replaceChildren(...ms.map((m) => el("option", { value: m }, m)));
     }
-    vehLine.textContent = vehicle
-      ? `vehicle ${vehicle.armed ? "ARMED" : "disarmed"}  ${vehicle.mode || "--"}  ` +
-        `depth ${num(vehicle.depth_m, (x) => x.toFixed(2) + " m")}  ` +
-        `heading ${num(vehicle.yaw_deg, (x) => x.toFixed(0))}  ` +
-        `battery ${num(vehicle.battery_voltage, (x) => x.toFixed(1) + " V")}`
-      : "vehicle --  no /mongla/state yet";
+    vehLine.replaceChildren(...(vehicle
+      ? [el("span", { class: vehicle.armed ? "armed" : "ok" }, vehicle.armed ? "ARMED" : "disarmed"),
+        el("span", {}, vehicle.mode || "--"),
+        el("span", {}, `depth ${num(vehicle.depth_m, 2, " m")}`),
+        el("span", {}, `heading ${num(vehicle.yaw_deg, 0)}`),
+        el("span", {}, `battery ${num(vehicle.battery_voltage, 1, " V")}`)]
+      : [el("span", { class: "stale" }, "no /mongla/state yet")]));
     log.textContent = lines.slice(-200).join("\n");
     log.scrollTop = log.scrollHeight;
   }
