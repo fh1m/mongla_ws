@@ -23,6 +23,7 @@ import json
 import mimetypes
 import re
 import sys
+import zlib
 from datetime import datetime, timezone
 from functools import partial
 from http import HTTPStatus
@@ -30,10 +31,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
-from mongla_batighor import panels
+from mongla_batighor import model, panels
 from mongla_batighor.pin import pin, share, web_dir
 
 _NAME = re.compile(r'^[A-Za-z0-9_-]+$')
+# The Host header becomes the bridge address the app connects to. Any value but
+# a host name or address with an optional port is refused: a forged Host would
+# point a browser's helm at another machine's bridge.
+_HOST = re.compile(r'^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])'
+                   r'(?::[0-9]{1,5})?$')
+# Read only, and fetched by the desktop app from a page that is a file, which
+# a browser allows only with CORS: the hull and the theme's fonts.
+_SHARED = ('/model/', '/theme/')
 _HASHED = re.compile(r'\.[0-9a-f]{16,}\.')
 _THEME_FILE = re.compile(r'^(?:fonts/)?[a-z0-9-]+\.(?:css|woff2)$')
 
@@ -69,12 +78,27 @@ def app_link(host: str, bridge_port: int, layout: str) -> str:
             f'&workspace={panels.WORKSPACE}&layout={quote(layout, safe="")}')
 
 
+def absolute(layout, origin: str):
+    """`layout` with every 3D layer's root-path `url` made absolute on `origin`.
+
+    Lichtblick parses a layer URL with no base, so `/model/mongla.urdf` is
+    "Invalid URDF URL". The layouts keep the root path and Kutum writes in
+    the host the browser used, as it does for the bridge (`app_link`).
+    """
+    if isinstance(layout, dict):
+        return {k: (origin + v if k == 'url' and isinstance(v, str) and v.startswith('/')
+                    else absolute(v, origin)) for k, v in layout.items()}
+    if isinstance(layout, list):
+        return [absolute(v, origin) for v in layout]
+    return layout
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = 'batighor'
 
     def __init__(self, *a, web: Path, layouts: Path, bridge_port: int,
-                 default_layout: str, exts: dict, bundle, **kw):
-        self.web, self.layouts = web, layouts
+                 default_layout: str, exts: dict, bundle, hull: dict, **kw):
+        self.web, self.layouts, self.hull = web, layouts, hull
         self.theme = layouts.parent / 'theme'
         self.exts, self.bundle = exts, bundle      # see make_server
         self.bridge_port, self.default_layout = bridge_port, default_layout
@@ -98,13 +122,28 @@ class Handler(BaseHTTPRequestHandler):
             name = url.path[len('/layouts/'):].removesuffix('.json')
             if not _NAME.match(name):
                 return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-            return self._file(self.layouts / f'{name}.json', cache=False)
+            path = self.layouts / f'{name}.json'
+            host = self.headers.get('Host', '')
+            if not path.is_file() or not _HOST.match(host):
+                return self._file(path, cache=False)
+            # The desktop app opens this by `layoutUrl`: its 3D layers need
+            # the absolute URL the org layouts carry.
+            data = absolute(json.loads(path.read_text()), f'http://{host}')
+            return self._bytes(json.dumps(data).encode(), 'application/json', cache=False)
         if url.path.startswith('/theme/'):
             rel = url.path[len('/theme/'):]
             if not _THEME_FILE.match(rel):
                 return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
             # Fonts are immutable; the stylesheet changes with a deploy.
             return self._file(self.theme / rel, cache=rel.startswith('fonts/'))
+        if url.path.startswith('/model/'):
+            # The hull for the 3D scene (model.py), from memory: a name is a
+            # key or it is not found, so no path is ever built from the URL.
+            found = self.hull.get(url.path[len('/model/'):])
+            if found is None:
+                return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
+            return self._bytes(found[0], 'application/xml' if url.path.endswith('.urdf')
+                               else 'model/stl', cache=False, gz=found[1])
         if url.path.startswith('/api/'):
             return self._api(url.path[len('/api/'):])
         if url.path == '/app' or url.path.startswith('/app/'):
@@ -158,12 +197,25 @@ class Handler(BaseHTTPRequestHandler):
         Shape: lichtblick 1.30.0 `api/layouts/types.ts` `LayoutApiData`. The
         date is the file's, so an edited layout reaches a browser that has
         the old one.
+
+        Lichtblick replaces its copy when the date differs, earlier or later,
+        and only then (measured on Kutum 2026-11-12). The layouts carry the
+        browser's host (`absolute`), so the host is folded into the date's
+        microseconds: a deck that reaches Kutum by another name gets a fresh
+        copy instead of keeping URLs on the old one.
         """
+        host = self.headers.get('Host', '')
+        origin = f'http://{host}' if _HOST.match(host) else None
+        tag = zlib.crc32((origin or '').encode()) % 1_000_000
         out = []
         for f in sorted(self.layouts.glob('*.json')):
-            when = datetime.fromtimestamp(f.stat().st_mtime, timezone.utc).isoformat()
+            when = datetime.fromtimestamp(int(f.stat().st_mtime), timezone.utc).replace(
+                microsecond=tag).isoformat()
+            data = json.loads(f.read_text())
+            if origin:
+                data = absolute(data, origin)
             out.append({'id': f.stem, 'layoutId': f.stem, 'name': f.stem,
-                        'data': json.loads(f.read_text()), 'workspace': panels.WORKSPACE,
+                        'data': data, 'workspace': panels.WORKSPACE,
                         'permission': 'ORG_READ', 'from': 'kutum',
                         'createdAt': when, 'updatedAt': when})
         return out
@@ -197,6 +249,8 @@ class Handler(BaseHTTPRequestHandler):
         if use_gz:
             self.send_header('Content-Encoding', 'gzip')
         self.send_header('Vary', 'Accept-Encoding')
+        if urlsplit(self.path).path.startswith(_SHARED):
+            self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Cache-Control', 'public, max-age=31536000, immutable'
                          if cache else 'no-cache')
         self.send_header('Content-Length', str(len(body)))
@@ -228,9 +282,16 @@ def make_server(port: int, web: Path, layouts: Path, bridge_port: int,
         bundle = None
     if bundle:
         bundle = (*bundle, gzip.compress(bundle[2], compresslevel=9))
+    try:
+        # Gzipped once here: 4.2 MB of mesh is 1.4 MB over the tether.
+        hull = {k: (v, gzip.compress(v, compresslevel=6))
+                for k, v in model.files(layouts.parent / 'model' / 'hull.mgla').items()}
+    except (OSError, ValueError, KeyError) as exc:
+        print(f'[batighor] WARNING: no hull in the 3D scene: {exc}', file=sys.stderr, flush=True)
+        hull = {}
     return ThreadingHTTPServer(('0.0.0.0', port), partial(
         Handler, web=web, layouts=layouts, bridge_port=bridge_port,
-        default_layout=default_layout, exts=exts, bundle=bundle))
+        default_layout=default_layout, exts=exts, bundle=bundle, hull=hull))
 
 
 def main(argv=None) -> int:

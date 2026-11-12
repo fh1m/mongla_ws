@@ -84,7 +84,23 @@ def scene() -> tuple:
     """Lichtblick's 3D panel, following the vehicle in the odometry frame."""
     return '3D', {'followTf': 'mongla', 'followMode': 'follow-position',
                   'topics': {'/mongla/odom': {'visible': True}},
-                  'scene': {'backgroundColor': '#05070c'}}
+                  # The hull says where the body is; seven frame names drawn
+                  # on one point say nothing. Preloading acts on a recording
+                  # only, and the panel alerts without it once /tf exists.
+                  'scene': {'backgroundColor': '#05070c', 'labelScaleFactor': 0.3,
+                            'transforms': {'showLabel': False, 'enablePreloading': True}},
+                  # Close enough that the 0.7 m hull fills the panel, from
+                  # behind and above the way a pilot looks at a vehicle.
+                  'cameraState': {'distance': 2.2, 'perspective': True, 'phi': 55,
+                                  'thetaOffset': 200, 'targetOffset': [0, 0, 0],
+                                  'target': [0, 0, 0], 'targetOrientation': [0, 0, 0, 1],
+                                  'fovy': 45, 'near': 0.01, 'far': 5000},
+                  # The hull, hung on the body frame /tf moves (model.py). A
+                  # root path, so it resolves against Kutum whatever its name.
+                  'layers': {'hull': {'visible': True, 'label': 'Mongla',
+                                      'layerId': 'foxglove.Urdf', 'instanceId': 'hull',
+                                      'sourceType': 'url', 'url': '/model/mongla.urdf',
+                                      'order': 1}}}
 
 
 def instrument(name: str) -> tuple:
@@ -141,7 +157,7 @@ def _ladder_lines(detail: bool) -> list:
 
 
 def cockpit(v: View):
-    """The default: both cameras, the lock's history, the vehicle, and control."""
+    """The default: both cameras, the lock's history, the vehicle and its hull, and control."""
     extra = {'downward': ['flow_annotations']}
     cams = [(3 if i == 0 else 2, v(c, camera(c, *extra.get(c, []))))
             for i, c in enumerate(CAMERAS)]
@@ -151,7 +167,7 @@ def cockpit(v: View):
                                series('/mongla/localization/aiding.data', 'aided by', True)))
     return row((62, col(*cams, (1, strip))),
                (38, col((11, v('control', instrument('ControlCenter'))),
-                        (5, v('vehicle', instrument('Vehicle'))),
+                        (7, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
                         (5, v('vision', instrument('Vision'))))))
 
 
@@ -258,7 +274,8 @@ def board_link(v: View):
                                      series('/mongla/board_link.capacity_bytes_per_s',
                                             'the line, 115200 8N1')))),
                  (2, v('drops', plot(series('/mongla/board_link.board_drop_pct', 'board drop %'),
-                                     series('/mongla/board_link.board_errors', 'board errors')))))),
+                                     series('/mongla/board_link.board_errors',
+                                            'board errors')))))),
         (55, row((55, v('named', raw('/mongla/board_link.named'))),
                  (45, v('rates', raw('/mongla/board_link.rates'))))))
 

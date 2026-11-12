@@ -25,6 +25,11 @@ setup(
         # because the deck has no internet at the pool.
         ('share/' + package_name + '/theme/fonts',
          [f'../../docs/assets/fonts/{f}.woff2' for f in THEME_FONTS]),
+        # The site's hull, one copy in the repo: serve.py turns it into the
+        # 3D scene's meshes (model.py).
+        # And where its thrusters are, measured off the same CAD.
+        ('share/' + package_name + '/model', ['../../docs/assets/cad/hull.mgla',
+                                              '../mongla_control/config/hull_geometry.yaml']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

@@ -19,6 +19,7 @@ For the operator, on a pool or competition day: consoles, recorders, calibration
 
 | tool | what it does |
 |---|---|
+| `batighor_desktop.py` | Open Batighor in the Lichtblick desktop app: Kutum's panels, look and views, connected. |
 | `build_practice_bank.py` | Build a checkpoint bank BEFORE the run, from practice footage or stills. |
 | `depth_sign_check.py` | Prove the depth loop's SIGN on the bench, disarmed, with nothing spinning. |
 | `fov_board_check.py` | Live board screening in a browser: aim, identify the grid, measure flatness. |
