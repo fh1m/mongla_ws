@@ -1,0 +1,120 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 226-230
+.claude/context/kutum/pi-and-env-traps.md
+  h_f1b9066eb9899c 20-28
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 144-149,7556-7842
+.claude/context/packages/mongla_localization/README.md
+  h_f1b9066eb9899c 146
+.claude/context/packages/mongla_vision/README.md
+  h_f1b9066eb9899c 163,181
+.claude/context/perception/hailo-frontier.md
+  h_f1b9066eb9899c 187-203
+.claude/context/platform/cross-repo-contract.md
+  h_f1b9066eb9899c 132,135-144
+.claude/context/upstream/pr-w-the-board-triggers-the-eyes.md
+  h_f1b9066eb9899c 106-123
+CLAUDE.md
+  h_f1b9066eb9899c 323
+README.md
+  h_f1b9066eb9899c 64-65,798,801
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+kutum/doctor.sh
+  h_f1b9066eb9899c 69-76,135,148-150,175-176
+kutum/env.sh
+  h_f1b9066eb9899c 24-27
+kutum/setup.sh
+  h_f1b9066eb9899c 115-120,125,136-137,142-151,244-245
+kutum/system/limits/99-mongla-realtime.conf
+  h_f1b9066eb9899c 1-6
+kutum/system/systemd/hailort.service
+  h_f1b9066eb9899c 1-56
+requirements.txt
+  h_f1b9066eb9899c 4,14
+src/mongla_localization/mongla_localization/realtime.py
+  h_f1b9066eb9899c 1-66
+src/mongla_localization/test/test_the_manager_asks_for_realtime.py
+  h_f1b9066eb9899c 1-89
+src/mongla_manager/mongla_manager/auv_manager_node.py
+  h_f1b9066eb9899c 350-353,355
+src/mongla_manager/mongla_manager/bringup_host.py
+  h_f1b9066eb9899c 77
+src/mongla_vision/mongla_vision/camera_node.py
+  h_f1b9066eb9899c 44,574,576
+src/mongla_vision/mongla_vision/cameras/ros_topic.py
+  h_f1b9066eb9899c 24,75,78
+src/mongla_vision/mongla_vision/depth/depth_estimation_node.py
+  h_f1b9066eb9899c 17,128,130,148
+src/mongla_vision/mongla_vision/detection/__init__.py
+  h_f1b9066eb9899c 6-15
+src/mongla_vision/mongla_vision/detection/hailo_device.py
+  h_f1b9066eb9899c 3-7,24-32,140,142-223
+src/mongla_vision/mongla_vision/detector_frames.py
+  h_f1b9066eb9899c 9,143,146
+src/mongla_vision/mongla_vision/detector_publish.py
+  h_f1b9066eb9899c 6,78
+src/mongla_vision/mongla_vision/flow/flow_setup.py
+  h_f1b9066eb9899c 16,394,396
+src/mongla_vision/mongla_vision/image_msg.py
+  h_f1b9066eb9899c 1-111
+src/mongla_vision/mongla_vision/lock_frames.py
+  h_f1b9066eb9899c 10,40
+src/mongla_vision/mongla_vision/trigger_stamps.py
+  h_f1b9066eb9899c 1-130
+src/mongla_vision/mongla_vision/utils/display_node.py
+  h_f1b9066eb9899c 84,441,454,456
+src/mongla_vision/mongla_vision/utils/water_check.py
+  h_f1b9066eb9899c 73,80
+src/mongla_vision/mongla_vision/vision_node.py
+  h_f1b9066eb9899c 33,156
+src/mongla_vision/test/test_hailo_service_open.py
+  h_f1b9066eb9899c 1-119
+src/mongla_vision/test/test_image_msg.py
+  h_f1b9066eb9899c 1-159
+src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py
+  h_f1b9066eb9899c 81-90
+src/mongla_vision/test/test_trigger_stamps.py
+  h_f1b9066eb9899c 1-130
+test/test_every_tool_is_indexed.py
+  h_f1b9066eb9899c 25-29,63-64,66-67,71-80
+test/test_kutum.py
+  h_f1b9066eb9899c 175-187
+test/test_ros_ci_workflow.py
+  h_f1b9066eb9899c 97,137-165
+test/test_water_claims_have_a_scope.py
+  h_f1b9066eb9899c 144-178
+tools/README.md
+  h_f1b9066eb9899c 58,79,90,100
+tools/bench/control_bench/FIRMWARE_PIN
+  h_f1b9066eb9899c 1-7
+tools/bench/control_bench/build.sh
+  h_f1b9066eb9899c 29-36
+tools/bench/cv_hot_path.py
+  h_f1b9066eb9899c 1-58
+tools/bench/flow_derot_calibrate.py
+  h_f1b9066eb9899c 56,154-155
+tools/bench/gil_audit.py
+  h_f1b9066eb9899c 138-140,143
+tools/bench/hailo_service_drill.py
+  h_f1b9066eb9899c 1-60
+tools/bench/rtc_vs_counter.py
+  h_f1b9066eb9899c 1-44
+tools/bench/wake_latency.py
+  h_f1b9066eb9899c 1-168
+tools/ci/ci_ros.sh
+  h_f1b9066eb9899c 72,98,107-123,131,138
+tools/ci/gen_lineage.py
+  h_f1b9066eb9899c 9-14,20,27-75,140-141,143-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5d9d35278281af84996c1a771b05972a26427657",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
