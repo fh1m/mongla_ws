@@ -294,6 +294,15 @@
 #   batighor:
 #     batighor_port: 8000
 #     foxglove_port: 8765
+#   calibrate:
+#     device_path: /dev/mongla_cam_downward
+#     applies_to: pi_downward
+#     medium: air
+#     grid: 8x6
+#     square: 0.025
+#     width: 1280
+#     height: 720
+#     batighor: true
 #   video:
 #     fwd_video: ''
 #     dwn_video: ''

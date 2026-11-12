@@ -217,15 +217,16 @@ we measure **HFOV 73.1°**.
 
 `src/mongla_vision/config/calibration/` is the vehicle's permanent store.
 Every calibration this project has produced lives there, ships with the
-package, and is listed in the web tool under **Saved calibrations** with the
+package, and is listed in Batighor's **Calibrate** panel with the
 fields an operator actually picks by — medium, resolution, fx, view count,
 Max ERE, the camera it was taken on, and when.
 
-**One click applies a saved calibration to a CONNECTED camera.** That is the
+**One click applies a saved calibration to the camera being calibrated.** That is the
 whole point: a swapped camera on competition ground costs two minutes
-instead of ten with a printed board in a lit room. The apply button is only
-offered for cameras `/cameras` currently sees — applying to an absent device
-would write a file claiming a unit nobody can check.
+instead of ten with a printed board in a lit room. Apply writes for the
+`device_path` the running calibration reads, so it always names a camera that
+is plugged in and delivering: applying to an absent device would write a file
+claiming a unit nobody can check.
 
 **Warning: APPLYING IS AN ASSERTION, AND THE FILE SAYS SO.** The operator is
 claiming "this is the same physical unit". The written file records
@@ -238,7 +239,7 @@ and a forged provenance. An existing file at the destination is moved to
 
 ## 9. CALIBRATING IN WATER — a validation, not the method
 
-`--medium air|water`, and a matching pair of buttons on the page.
+`medium:=air|water` on the launch, and the same choice in the Calibrate panel.
 
 **The primary method is still AIR.** The Pinax model says calibrate once in
 air and correct the flat port's refraction analytically, which is what
@@ -264,7 +265,7 @@ Three consequences, all implemented and tested:
    overwrote the air one would be a silent 44 % scale error on every range
    and velocity downstream — the size that still looks plausible. The naming
    rule has **one definition**, `solver.calibration_filename()`, shared by
-   the writer and the download route; a second copy is how a calibration
+   the writer and the apply; a second copy is how a calibration
    once outlived the camera it was named for.
 2. **In water the FITTED FOV is the WATER figure.** The solver measures
    whatever medium the board was actually in. So in water mode
@@ -297,10 +298,14 @@ string literals, and the parser gives up on the **whole block**. You need
 `\\'` and `\\n` in the source.
 
 **The guard is one command and it would have caught it from the start:**
-`node --check` on the extracted script (`test_calibration_page.py`, verified
-against the exact 1e27851 defect). A second test asserts every route the page
-`fetch`es is a route the server serves — the page's per-poll `catch(e){}`
-turns a renamed route into the same "panel stopped updating" symptom.
+`node --check`. The page is gone now: calibration is a node, and its page is
+Batighor's `calibrate` layout and panel, plain JavaScript in its own file
+(`mongla_batighor/panels/calibrate/extension.js`), so the escaping trap cannot
+recur. `test_panels.py::test_every_served_panel_parses` still runs
+`node --check` on every panel exactly as served, preamble and all, and fails on
+a one-character break; the same file checks that the panel's buttons are the
+node's ops and its topic is the node's topic, so a rename cannot leave a panel
+that silently stopped updating.
 
 **The general lesson, and it is the one this project keeps relearning:** a
 server that returns 200 for every route proves the server works, not that the

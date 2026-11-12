@@ -31,8 +31,8 @@ pytest.importorskip('cv2')
 
 @pytest.fixture(scope='module')
 def g():
-    from mongla_vision.calibration import guide
-    return guide
+    from mongla_vision.calibration import guide_files
+    return guide_files
 
 
 def _write(d, name, **over):
@@ -78,7 +78,7 @@ def test_apply_stamps_the_identity_as_OPERATOR_ASSERTED(g, tmp_path,
                                                         monkeypatch):
     d = str(tmp_path)
     _write(d, 'pi_forward_1280x720.json')
-    monkeypatch.setattr(g.files, 'camera_identity', lambda dev: {
+    monkeypatch.setattr(g, 'camera_identity', lambda dev: {
         'usb_vid': '1bcf', 'usb_pid': '2c99', 'usb_serial': 'X1',
         'card': 'Other Cam', 'bus': 'usb-xhci-1'})
     name, err = g.apply_calibration(d, 'pi_forward_1280x720.json',
@@ -97,7 +97,7 @@ def test_apply_refuses_a_camera_with_no_usb_identity(g, tmp_path,
                                                      monkeypatch):
     d = str(tmp_path)
     _write(d, 'pi_forward_1280x720.json')
-    monkeypatch.setattr(g.files, 'camera_identity', lambda dev: {})
+    monkeypatch.setattr(g, 'camera_identity', lambda dev: {})
     name, err = g.apply_calibration(d, 'pi_forward_1280x720.json',
                                     '/dev/video7', 'pi_downward')
     assert name is None and 'identity' in err
@@ -110,7 +110,7 @@ def test_apply_keeps_the_medium_in_the_destination_name(g, tmp_path,
                                                         monkeypatch):
     d = str(tmp_path)
     _write(d, 'pi_forward_1280x720_water.json', medium='water')
-    monkeypatch.setattr(g.files, 'camera_identity', lambda dev: {'usb_vid': 'a'})
+    monkeypatch.setattr(g, 'camera_identity', lambda dev: {'usb_vid': 'a'})
     name, _ = g.apply_calibration(d, 'pi_forward_1280x720_water.json',
                                   '/dev/video7', 'pi_downward')
     assert name == 'pi_downward_1280x720_water.json'
@@ -123,7 +123,7 @@ def test_apply_backs_up_rather_than_destroying_an_existing_calibration(
     _write(d, 'pi_downward_1280x720.json',
            applies_to=['pi_downward'],
            camera_matrix=[[111.0, 0, 1], [0, 111.0, 1], [0, 0, 1]])
-    monkeypatch.setattr(g.files, 'camera_identity', lambda dev: {'usb_vid': 'a'})
+    monkeypatch.setattr(g, 'camera_identity', lambda dev: {'usb_vid': 'a'})
     g.apply_calibration(d, 'src_1280x720.json', '/dev/video7', 'pi_downward')
     baks = [f for f in os.listdir(d) if '.bak-' in f]
     assert len(baks) == 1
@@ -145,34 +145,6 @@ def test_the_shipped_calibrations_are_all_loadable_and_named_by_medium(g):
             assert e['medium'] in e['file'], (
                 f"{e['file']} is a {e['medium']} calibration whose name does "
                 'not say so -- it can overwrite the air one')
-
-
-def test_the_guide_never_imports_its_own_PACKAGE(g):
-    """The calibration tool must run without a ROS environment.
-
-    `tools/pool/fov_calibrate_web.py` loads this module BY PATH for exactly that
-    reason. A `from mongla_vision...` anywhere in it -- including inside a
-    function, which is where it slipped in -- re-enters
-    `mongla_vision/__init__.py`, which imports `preflight`, which imports
-    `rclpy`, and the tool dies on any box without ROS sourced. That is not
-    hypothetical: it happened on the first live run of the library panel,
-    and the traceback named `ModuleNotFoundError: rclpy`.
-
-    Parsed, not grepped -- a substring search matches this docstring.
-    """
-    import ast
-    bad = []
-    for node in (n for f in (g.__file__, g.files.__file__)
-                 for n in ast.walk(ast.parse(open(f).read()))):
-        if isinstance(node, ast.Import):
-            bad += [n.name for n in node.names
-                    if n.name.split('.')[0] == 'mongla_vision']
-        elif isinstance(node, ast.ImportFrom):
-            if (node.module or '').split('.')[0] == 'mongla_vision':
-                bad.append(node.module)
-    assert not bad, (
-        f'guide.py imports the package ({bad}) -- that drags in rclpy and '
-        'breaks the ROS-free tools/ entry point. Load by path instead.')
 
 
 def _fake_ws(root):
@@ -206,7 +178,7 @@ def test_the_calibration_dir_is_never_inside_a_GENERATED_tree(
     """
     root = str(tmp_path / 'mongla_ws')
     real, guide_home = _fake_ws(root)
-    monkeypatch.setattr(g.files, '__file__', os.path.join(guide_home, 'guide_files.py'))
+    monkeypatch.setattr(g, '__file__', os.path.join(guide_home, 'guide_files.py'))
     monkeypatch.chdir(tmp_path)
     got = g.default_calibration_dir()
     assert os.path.realpath(got) == os.path.realpath(real), got
@@ -222,7 +194,7 @@ def test_the_installed_layout_finds_the_source_tree(g, tmp_path, monkeypatch):
                         'python3.12', 'site-packages', 'mongla_vision',
                         'calibration')
     os.makedirs(home)
-    monkeypatch.setattr(g.files, '__file__', os.path.join(home, 'guide_files.py'))
+    monkeypatch.setattr(g, '__file__', os.path.join(home, 'guide_files.py'))
     monkeypatch.chdir(tmp_path)
     assert os.path.realpath(g.default_calibration_dir()) == \
         os.path.realpath(real)
@@ -238,13 +210,13 @@ def test_the_installed_layout_finds_the_source_tree(g, tmp_path, monkeypatch):
 ])
 def test_apply_refuses_a_name_that_could_leave_the_folder(g, tmp_path, monkeypatch,
                                                           profile, medium):
-    """The guide listens on every interface with no login, and both names
-    become part of a path (CodeQL py/path-injection). Nothing may be written
+    """Any operator's browser can ask for an apply through the helm, and both
+    names become part of a path (CodeQL py/path-injection). Nothing may be written
     outside the calibration folder, and the refusal must say why."""
     cal = tmp_path / 'cal'
     cal.mkdir()
     _write(str(cal), 'src_1280x720.json', medium=medium)
-    monkeypatch.setattr(g.files, 'camera_identity', lambda dev: {
+    monkeypatch.setattr(g, 'camera_identity', lambda dev: {
         'usb_vid': '1bcf', 'usb_pid': '2c99'})
     before = set(tmp_path.rglob('*'))
     name, err = g.apply_calibration(str(cal), 'src_1280x720.json', '/dev/video7', profile)
@@ -254,7 +226,7 @@ def test_apply_refuses_a_name_that_could_leave_the_folder(g, tmp_path, monkeypat
 
 def test_a_switch_to_a_bad_profile_is_refused_before_a_path_is_made(g):
     with pytest.raises(ValueError):
-        g.files.capture_dir('../../home', 'air')
+        g.capture_dir('../../home', 'air')
     with pytest.raises(ValueError):
-        g.files.capture_dir('pi_forward', 'water/../../x')
-    assert g.files.capture_dir('pi_forward', 'water').endswith('calib_pi_forward_water')
+        g.capture_dir('pi_forward', 'water/../../x')
+    assert g.capture_dir('pi_forward', 'water').endswith('calib_pi_forward_water')

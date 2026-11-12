@@ -1,9 +1,10 @@
 """The capture half of the guided calibration: the pose script and its threads.
 
-Streaming and detection run on separate threads, and detection works on a
-downscale (see `guide.py` for why). `assess` refits from what has been
-captured and suggests the next pose. Nothing here serves HTTP or imports the
-package: `guide.py` loads this file by path, so it runs without ROS.
+`calibrate_node.py` feeds `State.raw` from the camera node's frames;
+`detect_loop` matches the live pose against the current step on a downscale
+and saves the full-resolution frame when it is held, and `assess` refits from
+what has been captured and suggests the next pose. Both loops end when
+`State.stopped` is set, so the node can start a new capture without a restart.
 """
 import glob
 import os
@@ -91,25 +92,21 @@ class State:
         self.square = None
         self.steps = steps
         self.i = 0                     # current step index
-        self.frame = None
-        self.raw = None
+        self.raw = None                # the newest camera frame, full size
         self.corners = None
         self.taken = []                # (y, x, band) actually captured
         self.msg = 'starting...'
         self.err = None
-        self.fps = 0.0
         self.det_ms = 0.0
         self.cell = None               # live: which cell the board is in
         self.band = None               # live: which tilt band
         self.hold = 0.0                # 0..1 progress of the hold timer
         self.sharp = None              # OpenCV chessboard sharpness, px
-        self.device = None
         # AIR or WATER. Recorded, shown, and part of the filename, because
         # the two differ by ~1.44x and mixing them is a silent 44 % scale
         # error on every range the vehicle computes.
         self.medium = 'air'
-        self.undistort = False     # preview the correction, live
-        self.K = self.D = None     # latest fit, for that preview
+        self.K = self.D = None     # latest fit, for the undistorted preview
         self.solve = 'idle'
         self.solve_out = ''
         # AprilCal state: how uncertain the calibration still is, and where
@@ -123,6 +120,7 @@ class State:
         self.fx = self.fy = self.cx = self.cy = None
         self.fx_sd = self.hfov_air = self.hfov_water = None
         self.worst_px = None
+        self.stopped = False       # set to end both loops
 
 
 def tilt_of(corners, cols):
@@ -179,92 +177,10 @@ def set_camera(dev, exposure, brightness):
     for k, v in (('auto_exposure', 1),
                  ('exposure_time_absolute', exposure),
                  ('brightness', brightness)):
-        r = subprocess.run(['v4l2-ctl', '-d', f'/dev/video{dev}',
+        r = subprocess.run(['v4l2-ctl', '-d', str(dev),
                             '-c', f'{k}={v}'], capture_output=True)
         ok = ok and r.returncode == 0
     return ok
-
-
-def capture_loop(st, dev, width, height, jpeg_w, exposure, brightness):
-    """Read and stream only. Detection lives in its own thread, deliberately."""
-    cap = cv2.VideoCapture(dev, cv2.CAP_V4L2)
-    if not cap.isOpened():
-        with st.lock:
-            st.err = (f'cannot open camera {dev} -- the vision launch holds '
-                      f'the cameras, stop it first.')
-        return
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    # AFTER opening: cv2 resets the controls when it configures the stream,
-    # so setting them before this point is silently undone.
-    if exposure:
-        set_camera(dev, exposure, brightness)
-        time.sleep(0.5)
-        for _ in range(5):
-            cap.read()
-    n, t0 = 0, time.time()
-    while True:
-        ok, f = cap.read()
-        if not ok:
-            time.sleep(0.01)
-            continue
-        with st.lock:
-            st.raw = f
-            corners = st.corners
-            i = st.i
-            worst = st.worst_px
-            undist = st.undistort
-            K, D = st.K, st.D
-        shown = f
-        if undist and K is not None:
-            # The only check an operator can make with their eyes. Every
-            # other number here is a statistic; this is the calibration doing
-            # its job. Straight edges in the world must come out straight --
-            # if the frame edges still bow, the distortion model is wrong and
-            # no reprojection RMS will say so.
-            try:
-                shown = cv2.undistort(f, K, D)
-            except Exception:
-                shown = f
-        vis = cv2.resize(shown, (jpeg_w, int(jpeg_w * h / w)))
-        vh = vis.shape[0]
-        sc = jpeg_w / w
-        if corners is not None:
-            cv2.drawChessboardCorners(vis, (st.cols, st.rows),
-                                      (corners * sc).astype(np.float32), True)
-        # Only the TARGET region is drawn. Nine boxes was a puzzle to read;
-        # one box is an instruction.
-        if i < len(st.steps):
-            ty, tx, _ = st.steps[i]
-            x0, y0 = int(tx * jpeg_w / GRID), int(ty * vh / GRID)
-            x1, y1 = int((tx + 1) * jpeg_w / GRID), int((ty + 1) * vh / GRID)
-            cv2.rectangle(vis, (x0 + 3, y0 + 3), (x1 - 3, y1 - 3),
-                          (80, 220, 255), 3)
-        # The least-certain point, drawn. Max ERE says WHERE the model is
-        # weakest; a number in a sidebar is a fact, a target on the video is
-        # an instruction.
-        if worst is not None:
-            wx, wy = int(worst[0] * sc), int(worst[1] * sc)
-            if 0 <= wx < jpeg_w and 0 <= wy < vh:
-                cv2.circle(vis, (wx, wy), 16, (60, 120, 255), 2)
-                cv2.line(vis, (wx - 22, wy), (wx - 8, wy), (60, 120, 255), 2)
-                cv2.line(vis, (wx + 8, wy), (wx + 22, wy), (60, 120, 255), 2)
-                cv2.putText(vis, 'least certain', (wx - 44, wy - 22),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (60, 120, 255), 1)
-        if undist and K is not None:
-            cv2.putText(vis, 'UNDISTORTED', (10, 22),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (60, 220, 60), 2)
-        ok, jpg = cv2.imencode('.jpg', vis, [cv2.IMWRITE_JPEG_QUALITY, 70])
-        n += 1
-        if ok:
-            with st.lock:
-                st.frame = jpg.tobytes()
-                if time.time() - t0 >= 1.0:
-                    st.fps = n / (time.time() - t0)
-                    n, t0 = 0, time.time()
 
 
 def detect_loop(st, det_w):
@@ -299,7 +215,7 @@ def detect_loop(st, det_w):
     nothing still costs the next reader an explanation.
     """
     held_since = None
-    while True:
+    while not st.stopped:
         with st.lock:
             f = st.raw
             i = st.i
@@ -392,7 +308,7 @@ def assess(st, cols, rows, square, size, fs):
     and the video must not stall for it. `fs` is the solver module.
     """
     objp = fs.board_points(cols, rows, square)
-    while True:
+    while not st.stopped:
         with st.lock:
             files = sorted(glob.glob(os.path.join(st.outdir, 'cal_*.png')))
             n_seen = st.assessed_n

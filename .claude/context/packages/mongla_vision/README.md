@@ -106,7 +106,7 @@ and direct feed), `detector_publish.py` (topics and operator log lines) and
 
 ```bash
 ros2 run mongla_vision vision_check          # is the pipeline alive and seeing?
-ros2 run mongla_vision calibrate             # measure this camera, in air or in water
+ros2 launch mongla_batighor calibrate.launch.py device_path:=<camera>   # measure it, air or water
 ros2 run mongla_vision vision_thrust_check   # detection → thrust, disarmed and safe
 ```
 
@@ -190,10 +190,9 @@ with no summary line shows as *(no summary)* until it gets one.
 | `anchor/xfeat_hailo.py` | XFeat on the Hailo-8, so the anchor rung stops burning the Pi's CPU. |
 | `anchor/xfeat_onnx.py` | XFeat on the vehicle: ONNX + numpy, no torch. |
 | `calibration/binding.py` | Which calibration belongs to which camera -- resolved ONCE, from the data. |
-| `calibration/guide.py` | Step-by-step guided camera calibration in a browser. |
+| `calibration/calibrate_node.py` | Guided camera calibration as a node; Batighor is its page. |
 | `calibration/guide_capture.py` | The capture half of the guided calibration: the pose script and its threads. |
 | `calibration/guide_files.py` | Where calibrations and captures live on disk, and which camera is which. |
-| `calibration/guide_page.py` | The calibration page `guide.py` serves at `/`: one HTML document, inline |
 | `calibration/solver.py` | Camera calibration that PROVES its own answer instead of asserting it. |
 | `cameras/camera.py` | Abstract Camera — every image source implements this. |
 | `cameras/discover.py` | discover_cameras() -- probe connected USB cameras. |

@@ -67,12 +67,6 @@ WIRED = {
     # slow real drift was never reported. The orphan was the BETTER
     # implementation of a comparison already happening.
     'mongla_vision/mongla_vision/flow/scale_check.py': 'flow/flow_node.py',
-    # Loaded by path, not imported, so the calibration tool runs without ROS:
-    # `guide.py` calls `sibling('guide_capture')`, `sibling('guide_files')`
-    # and `sibling('guide_page')`.
-    'mongla_vision/mongla_vision/calibration/guide_files.py': 'calibration/guide.py',
-    'mongla_vision/mongla_vision/calibration/guide_capture.py': 'calibration/guide.py',
-    'mongla_vision/mongla_vision/calibration/guide_page.py': 'calibration/guide.py',
 }
 
 # NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a
