@@ -1,0 +1,20 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 510-529
+kutum/README.md
+  h_f1b9066eb9899c 29
+kutum/setup.sh
+  h_f1b9066eb9899c 180-181
+kutum/system/netplan/60-kutum-eth.yaml
+  h_f1b9066eb9899c 2,6-9,16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "6788e22438857002c68d4649d12daf9d53b0c7ac",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
