@@ -1,12 +1,17 @@
 # Kutum: Ethernet. Merged with cloud-init's 50-cloud-init.yaml, which already
-# asks for DHCP on eth0. This adds the two things that file does not:
+# asks for DHCP on eth0. This adds the three things that file does not:
 #   link-local   an address with no DHCP server at all (a cable straight to a
 #                laptop), so mongla.local still resolves over it
 #   optional     boot does not wait for a cable that is not plugged in
+#   critical     a lost DHCP lease keeps its address (networkd KeepConfiguration).
+#                A router that lets a lease lapse would otherwise renumber eth0
+#                under a running stack and cut every session to the bridge
+#                (BUGS.md B-113)
 network:
   version: 2
   ethernets:
     eth0:
       dhcp4: true
       optional: true
+      critical: true
       link-local: [ipv4, ipv6]

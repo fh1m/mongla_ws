@@ -177,8 +177,8 @@ if [ "${1:-}" = "--system" ]; then
   systemctl reset-failed
 
   say "6/8  network: Wi-Fi on boot, and mongla.local on every interface"
-  # Ethernet stays as cloud-init wrote it (DHCP); 60-kutum-eth.yaml only adds a
-  # link-local address, so a cable straight to a laptop with no DHCP server
+  # Ethernet stays as cloud-init wrote it (DHCP); 60-kutum-eth.yaml keeps a
+  # lapsed lease's address and adds a link-local one, so a cable straight to a laptop with no DHCP server
   # still answers on mongla.local. A laptop sharing its internet over that
   # cable (NetworkManager: IPv4 "Shared to other computers") hands out an
   # address by DHCP, and the Pi takes it like any router's.
