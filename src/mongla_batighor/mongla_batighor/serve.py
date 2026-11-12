@@ -27,6 +27,11 @@ from mongla_batighor.pin import pin, share, web_dir
 
 _NAME = re.compile(r'^[A-Za-z0-9_-]+$')
 _HASHED = re.compile(r'\.[0-9a-f]{16,}\.')
+# The Host header becomes the bridge address the app connects to. Any value but
+# a host name or address with an optional port is refused: a forged Host would
+# point a browser's helm at another machine's bridge.
+_HOST = re.compile(r'^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])'
+                   r'(?::[0-9]{1,5})?$')
 mimetypes.add_type('application/wasm', '.wasm')
 
 
@@ -61,9 +66,11 @@ class Handler(BaseHTTPRequestHandler):
             layout = parse_qs(url.query).get('layout', [self.default_layout])[0]
             if not _NAME.match(layout) or not (self.layouts / f'{layout}.json').exists():
                 return self._text(HTTPStatus.NOT_FOUND, f'no layout {layout!r}\n')
+            host = self.headers.get('Host', 'localhost')
+            if not _HOST.match(host):
+                return self._text(HTTPStatus.BAD_REQUEST, 'bad Host header\n')
             self.send_response(HTTPStatus.FOUND)
-            self.send_header('Location', app_link(self.headers.get('Host', 'localhost'),
-                                                  self.bridge_port, layout))
+            self.send_header('Location', app_link(host, self.bridge_port, layout))
             self.end_headers()
             return
         if url.path.startswith('/layouts/'):
