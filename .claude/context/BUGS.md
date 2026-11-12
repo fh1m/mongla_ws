@@ -223,8 +223,11 @@ Separately, 34 tools were named nowhere else in the repository.
 fails it. `tools/README.md` indexes every tool from its own docstring
 (`tools/ci/gen_tools_index.py`), and `test/test_every_tool_is_indexed.py`, in the
 integrity gate, fails a stale index, a tool with no description, or a test file
-outside the collected tree. The control bench is the one named exemption: it
-compiles the firmware and needs that checkout in CI (#132).
+outside the collected tree. The control bench was the one named exemption;
+CI now fetches the firmware at the commit in
+`tools/bench/control_bench/FIRMWARE_PIN`, builds the bench from it and runs
+its 94 tests in the ROS job, and the wire drift guard reads the same checkout
+instead of skipping (#132).
 
 ### B-105: process teardown counted zombies as survivors `REPRODUCED 2026-11-09 (CI container)` **FIXED 2026-11-09**
 

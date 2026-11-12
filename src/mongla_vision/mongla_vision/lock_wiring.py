@@ -8,7 +8,6 @@ import collections
 import threading
 
 import rclpy
-from cv_bridge import CvBridge
 from geometry_msgs.msg import PointStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CameraInfo, Image, Range
@@ -51,7 +50,6 @@ class LockWiringMixin:
         self._full = float(self.get_parameter('full_authority_s').value)
         self._zero = float(self.get_parameter('zero_authority_s').value)
 
-        self._bridge = CvBridge()
         self._lock = threading.Lock()
         self._gray = None
         # A decoded BGR frame handed over by reference (`submit_frame`), not

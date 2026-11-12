@@ -83,7 +83,6 @@ import numpy as np                                              # noqa: E402
 import pytest                                                   # noqa: E402
 
 pytest.importorskip('rclpy')
-pytest.importorskip('cv_bridge')
 pytest.importorskip('mongla_localization.tile_grating')
 
 

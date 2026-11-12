@@ -94,7 +94,7 @@ def test_an_index_refresh_that_never_succeeds_still_fails_the_job(tmp_path):
 
 def test_numpy_stays_below_two_in_ci_too():
     assert '-c kutum/constraints.txt' in SCRIPT
-    assert "numpy 2 would break cv_bridge" in SCRIPT
+    assert "numpy 2 would break the system cv2" in SCRIPT
 
 
 def _pin(path, name):
@@ -134,3 +134,32 @@ def test_a_stale_package_index_is_refreshed_before_the_install_gives_up():
     block = code[install:code.index('done', install)]
     assert 'apt-get update' in block, 'no index refresh between attempts'
     assert 'exit 100' in block, 'the retry must still fail the job in the end'
+
+
+PIN = ROOT / 'tools/bench/control_bench/FIRMWARE_PIN'
+
+
+def test_the_firmware_is_pinned_to_one_exact_commit():
+    """A branch name or a short hash moves under us: the bench and the drift
+    guard would then pass or fail on a firmware nobody chose (#132)."""
+    lines = [l for l in PIN.read_text().splitlines()
+             if l.strip() and not l.startswith('#')]
+    assert len(lines) == 1, lines
+    repo, rev = lines[0].split()
+    assert repo == 'https://github.com/RakibulIslam1/srot-control-board.git'
+    assert re.fullmatch(r'[0-9a-f]{40}', rev), rev
+
+
+def test_ci_builds_the_bench_from_the_pin_and_checks_what_it_fetched():
+    code = '\n'.join(l for l in SCRIPT.splitlines() if not l.lstrip().startswith('#'))
+    assert 'tools/bench/control_bench/FIRMWARE_PIN' in code
+    assert 'fetch -q --depth 1 "$fw_repo" "$fw_rev"' in code
+    assert '!= "$fw_rev"' in code, 'the fetched commit is not compared with the pin'
+    assert 'export SROT_FW_DIR="$fw_dir" SROT_FIRMWARE="$fw_dir"' in code
+    assert 'bash tools/bench/control_bench/build.sh' in code
+    build = code.index('bash tools/bench/control_bench/build.sh')
+    run = code.index('-m pytest')
+    assert build < run, 'the bench is built after the tests that need it'
+    assert 'tools/bench/control_bench' in code[run:].splitlines()[0]
+    assert re.search(r'git (-C \S+ )?(push|commit)', code) is None, \
+        'CI only ever reads the firmware repository'
