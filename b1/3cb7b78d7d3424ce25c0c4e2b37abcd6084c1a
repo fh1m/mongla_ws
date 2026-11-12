@@ -1,0 +1,84 @@
+.claude/context/kutum/README.md
+  h_f1b9066eb9899c 106
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 31-38,46-48,83-84,121-122
+.claude/context/packages/mongla_vision/README.md
+  h_f1b9066eb9899c 109,193
+.claude/context/perception/camera-and-calibration.md
+  h_f1b9066eb9899c 220,224,226-229,242,268,301-308
+.claude/context/perception/vision-architecture.md
+  h_f1b9066eb9899c 23-25
+.claude/context/platform/first-pool-verification.md
+  h_f1b9066eb9899c 175
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 69,85-97
+src/mongla_batighor/launch/calibrate.launch.py
+  h_f1b9066eb9899c 1-72
+src/mongla_batighor/layouts/calibrate.json
+  h_f1b9066eb9899c 1-36
+src/mongla_batighor/mongla_batighor/helm.py
+  h_f1b9066eb9899c 23-26,67,182,241-242,387-408
+src/mongla_batighor/mongla_batighor/overlay.py
+  h_f1b9066eb9899c 9-11,20-21,31-32,126-159,165-167,171-172,212-222
+src/mongla_batighor/panels/calibrate/extension.js
+  h_f1b9066eb9899c 1-196
+src/mongla_batighor/setup.py
+  h_f1b9066eb9899c 16
+src/mongla_batighor/test/test_helm_node.py
+  h_f1b9066eb9899c 249-283
+src/mongla_batighor/test/test_layouts.py
+  h_f1b9066eb9899c 66-74,94
+src/mongla_batighor/test/test_overlay.py
+  h_f1b9066eb9899c 10,89-122
+src/mongla_batighor/test/test_panels.py
+  h_f1b9066eb9899c 10-11,77-78,136-177
+src/mongla_interfaces/srv/Helm.srv
+  h_f1b9066eb9899c 8-9,12,15
+src/mongla_localization/mongla_localization/launch_defaults.py
+  h_f1b9066eb9899c 80
+src/mongla_manager/config/bringup.example.yaml
+  h_f1b9066eb9899c 297-305
+src/mongla_manager/test/test_every_launch_file_renders.py
+  h_f1b9066eb9899c 42-43
+src/mongla_vision/mongla_vision/calibration/__init__.py
+  h_f1b9066eb9899c 11,13-19,21
+src/mongla_vision/mongla_vision/calibration/calibrate_node.py
+  h_f1b9066eb9899c 1-33,35-36,40,46-47,49-51,53-59,61-100,102-107,109-230,232-388,390,393-397
+src/mongla_vision/mongla_vision/calibration/guide_capture.py
+  h_f1b9066eb9899c 3-7,95,109,123,180,218,311
+src/mongla_vision/mongla_vision/calibration/guide_files.py
+  h_f1b9066eb9899c 5-6,15
+src/mongla_vision/mongla_vision/camera_node.py
+  h_f1b9066eb9899c 115,343-345,653
+src/mongla_vision/mongla_vision/preflight.py
+  h_f1b9066eb9899c 28-29
+src/mongla_vision/setup.py
+  h_f1b9066eb9899c 49
+src/mongla_vision/test/test_aprilcal.py
+  h_f1b9066eb9899c 152,191,208,243,245-254
+src/mongla_vision/test/test_calibration_library.py
+  h_f1b9066eb9899c 34-35,81,100,113,126,181,197,213-214,219,229,231-232
+src/mongla_vision/test/test_calibration_water.py
+  h_f1b9066eb9899c 83,86-87,198-204,213,215-221,225-236
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  h_f1b9066eb9899c 65-69
+test/test_every_launched_process_restarts.py
+  h_f1b9066eb9899c 19-20,24-25
+test/test_the_retired_stack_stays_retired.py
+  h_f1b9066eb9899c 57-58
+tools/ci/dead_function_sweep.py
+  h_f1b9066eb9899c 57-60
+tools/pool/fov_solve.py
+  h_f1b9066eb9899c 5-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "b13cb7b78d7d3424ce25c0c4e2b37abcd6084c1a",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
