@@ -141,6 +141,41 @@ def test_the_lineage_page_is_generated_from_the_registry():
     assert page == gen_lineage.render(_registry()), 'run tools/ci/gen_lineage.py'
 
 
+def test_the_front_pages_state_the_status_the_registry_derives():
+    """The README footnote and the site's "In water" gauge are written by
+    gen_lineage from the registry, not checked against it by hand."""
+    for path, text in gen_lineage.front_pages(_registry()).items():
+        assert path.read_text(encoding='utf-8') == text, (
+            f'{path.name}: run tools/ci/gen_lineage.py')
+
+
+def test_a_first_dive_in_the_registry_changes_both_front_pages():
+    reg = _registry()
+    assert gen_lineage.status(reg)['dives'] == 0
+    reg['events'].append({
+        'id': 'W-TEST', 'platform': reg['current_platform'],
+        'status': 'CURRENT_WATER', 'date': '2099-01-02'})
+    st = gen_lineage.status(reg)
+    assert st['dives'] == 1 and 'never' not in st['sentence']
+    assert '1 recorded dive, the latest on 2099-01-02 (W-TEST)' in st['sentence']
+    pages = gen_lineage.front_pages(reg)
+    assert '<b>1 dive</b>' in pages[gen_lineage.SITE]
+    assert 'has never been in water; its predecessors' \
+        not in pages[gen_lineage.README]
+    assert st['sentence'] in pages[gen_lineage.README]
+
+
+def test_a_status_sentence_reworded_by_hand_is_refused(tmp_path, monkeypatch):
+    """A sentence the generator cannot find is one it no longer writes."""
+    copy = tmp_path / 'README.md'
+    copy.write_text(gen_lineage.README.read_text(encoding='utf-8').replace(
+        '<sub>The current platform,', '<sub>Our vehicle,'), encoding='utf-8')
+    monkeypatch.setattr(gen_lineage, 'README', copy)
+    monkeypatch.setattr(gen_lineage, 'ROOT', tmp_path)
+    with pytest.raises(SystemExit, match='found it 0 times'):
+        gen_lineage.front_pages(_registry())
+
+
 def test_the_record_keeps_the_predecessors_and_the_current_platform_honest():
     reg = _registry()
     by = {e['id']: e for e in reg['events']}

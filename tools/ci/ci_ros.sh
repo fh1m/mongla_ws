@@ -69,7 +69,7 @@ colcon build --symlink-install --event-handlers console_cohesion+
 
 # A venv that still sees the system's ROS and apt Python packages. On Noble
 # pip may not touch the system site (PEP 668), and numpy must stay the one
-# cv_bridge was built against: kutum/constraints.txt caps it below 2.
+# the system cv2 was built against: kutum/constraints.txt caps it below 2.
 echo "== the pip requirements, under kutum/constraints.txt"
 python3 -m venv --system-site-packages /opt/ci-venv
 # shellcheck source=/dev/null
@@ -95,7 +95,7 @@ export PYTHONPATH
 python3 - <<'EOF'
 import numpy, sys
 print(f'python {sys.version.split()[0]}, numpy {numpy.__version__}')
-assert int(numpy.__version__.split('.')[0]) < 2, 'numpy 2 would break cv_bridge'
+assert int(numpy.__version__.split('.')[0]) < 2, 'numpy 2 would break the system cv2'
 EOF
 
 
@@ -104,6 +104,23 @@ set +u
 source install/setup.bash
 set -u
 
+echo "== the board's control code, at the pinned firmware commit"
+# tools/bench/control_bench compiles the firmware's own control sources for
+# the host, and the wire drift guard reads its headers (#132). Both skipped or
+# never ran here, so "matches the board" was only ever checked on a dev box,
+# against whatever checkout it had. The commit is the one line in
+# FIRMWARE_PIN; the repository is fetched read-only, at exactly that commit.
+read -r fw_repo fw_rev < <(grep -v '^#' tools/bench/control_bench/FIRMWARE_PIN)
+fw_dir=/opt/srot-control-board
+git init -q "$fw_dir"
+git -C "$fw_dir" fetch -q --depth 1 "$fw_repo" "$fw_rev"
+git -C "$fw_dir" checkout -q FETCH_HEAD
+if [[ "$(git -C "$fw_dir" rev-parse HEAD)" != "$fw_rev" ]]; then
+  echo "ERROR: fetched $(git -C "$fw_dir" rev-parse HEAD), the pin is $fw_rev"; exit 1
+fi
+export SROT_FW_DIR="$fw_dir" SROT_FIRMWARE="$fw_dir"
+bash tools/bench/control_bench/build.sh
+
 echo "== every test"
 # No autoloaded plugins, as in the integrity gate: Jazzy's apt pytest loads
 # ROS's launch_testing plugins, and the first run collected one module of
@@ -111,14 +128,14 @@ echo "== every test"
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
 report="$(mktemp)"
 set +e
-python3 -m pytest -q -p no:cacheprovider -rs src/*/test test 2>&1 | tee "$report"
+python3 -m pytest -q -p no:cacheprovider -rs src/*/test test tools/bench/control_bench 2>&1 | tee "$report"
 rc=${PIPESTATUS[0]}
 set -e
 
 {
   echo "### ROS $distro"
   echo
-  echo "Commit \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`, $(python3 --version)."
+  echo "Commit \`$(git rev-parse HEAD 2>/dev/null || echo unknown)\`, $(python3 --version). Firmware \`$fw_rev\`."
   echo
   echo '```'
   tail -1 "$report"

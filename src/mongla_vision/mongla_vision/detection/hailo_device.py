@@ -1,8 +1,10 @@
 """The process's one Hailo VDevice, shared by every detector and XFeat anchor.
 
-A second VDevice in the same process, or in another one, fails; so every
-network group on the chip is configured on this one, under HailoRT's
-ROUND_ROBIN scheduler, and handed back at exit before the device is.
+Opened through the HailoRT service when it runs, so several processes share
+the chip; otherwise directly, and then a second VDevice in another process
+fails (`_open` has the order). Within a process every network group on the
+chip is configured on this one, under HailoRT's ROUND_ROBIN scheduler, and
+handed back at exit before the device is.
 `hailo.py` (the detectors) and `anchor/xfeat_hailo.py` (the anchors) both
 use `shared_device()`, `register()` and `DEVICE_LOCK`.
 """
@@ -19,9 +21,15 @@ import weakref
 #
 #   two PROCESSES, a VDevice each   -> HAILO_OUT_OF_PHYSICAL_DEVICES (74) on the
 #                                      second. Sharing happens in ONE process.
-#   multi_process_service + scheduler -> HailoRTInvalidOperationException. The
-#                                      API accepts the flag; the `hailort_service`
-#                                      daemon it needs is not installed.
+#   multi_process_service + scheduler -> HailoRTInvalidOperationException from
+#                                      the packaged library, which was built
+#                                      without the service client. Built with
+#                                      HAILO_BUILD_SERVICE (kutum/setup.sh),
+#                                      processes share the chip: +0.012 ms a
+#                                      frame, two at 47.8 Hz each
+#                                      (measured-bars 80). `shared_device`
+#                                      opens through it when it runs; a killed
+#                                      service is back in 0.31 s (83).
 #   ONE process, activation handed back and forth by hand (what shipped until
 #   2026-10-03)                      -> works: 73.8 Hz across two detectors
 #                                      swapping every frame, 4.15 ms a swap.
@@ -129,8 +137,87 @@ def shared_device():
         # Re-checked inside: the thread that waited here must see the device
         # the winner made, not make a second one.
         if _DEVICE is None:
-            from hailo_platform import HailoSchedulingAlgorithm, VDevice
-            params = VDevice.create_params()
-            params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
-            _DEVICE = VDevice(params)
+            _DEVICE = _open()
     return _DEVICE
+
+
+# Where the service is, and how long a starting process waits for it.
+SERVICE_BIN = '/usr/local/bin/hailort_service'
+SERVICE_PID = '/run/hailo/hailort_service.pid'
+# Not HailoRT's default /tmp socket: the service runs with a private /tmp
+# (kutum/system/systemd/hailort.service). Set before the library loads, by the
+# package's __init__; kutum/env.sh and the unit say the same, and a test holds
+# all three equal.
+SERVICE_ADDR = 'unix:///run/hailo/hailort_uds.sock'
+GROUP_ID = 'mongla'
+SERVICE_WAIT_S = 3.0
+# How this process falls back when the service is not there:
+# 'direct' opens the chip itself (only one process can), 'none' refuses and
+# the caller runs without the chip. The forward vision process is 'direct',
+# the downward one 'none': a lost service costs the downward detector, never
+# the forward one.
+FALLBACK_ENV = 'MONGLA_HAILO_FALLBACK'
+
+# What the last open did, for the start-up log and the health board:
+# 'service', 'direct', or '' before the first open.
+opened_via = ''
+
+
+def _open(*, installed=None, running=None, wait_s=None, sleep=None,
+          make=None, fallback=None):
+    """The VDevice this process uses, in the order the owner chose.
+
+    1. Through the HailoRT service, when it is installed. A process started
+       while the service is restarting waits up to `SERVICE_WAIT_S` for it:
+       systemd brings it back 200 ms after a crash (hailort.service).
+    2. Otherwise, by `MONGLA_HAILO_FALLBACK`: 'direct' (the default, and what
+       a bench or a single-process launch gets) opens the chip in this
+       process; 'none' raises, and the caller runs without the chip.
+
+    A process that loses the service mid-run fails its inferences, exits
+    after its rebuild also fails (`DetectorNode._on_infer_failure`) and is
+    respawned by its launch, which brings it back here. The keyword
+    arguments are for the tests.
+    """
+    import os
+    import time
+    global opened_via
+    installed = os.path.exists(SERVICE_BIN) if installed is None else installed
+    running = running or (lambda: os.path.exists(SERVICE_PID))
+    wait_s = SERVICE_WAIT_S if wait_s is None else wait_s
+    sleep = sleep or time.sleep
+    make = make or _make
+    fallback = fallback or os.environ.get(FALLBACK_ENV, 'direct')
+    if fallback not in ('direct', 'none'):
+        raise ValueError(f'{FALLBACK_ENV}={fallback!r}: expected direct or none')
+    service_error = None
+    if installed:
+        waited = 0.0
+        while not running() and waited < wait_s:
+            sleep(0.1)
+            waited += 0.1
+        if running():
+            try:
+                dev = make(service=True)
+                opened_via = 'service'
+                return dev
+            except Exception as exc:                         # noqa: BLE001
+                service_error = exc
+    if fallback == 'none':
+        raise RuntimeError(
+            'the HailoRT service is not available and this process does not '
+            'open the chip itself (' + FALLBACK_ENV + '=none)'
+            + (f': {service_error!r}' if service_error else ''))
+    dev = make(service=False)
+    opened_via = 'direct'
+    return dev
+
+
+def _make(*, service: bool):
+    from hailo_platform import HailoSchedulingAlgorithm, VDevice
+    params = VDevice.create_params()
+    params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
+    if service:
+        params.multi_process_service = True
+        params.group_id = GROUP_ID
+    return VDevice(params)

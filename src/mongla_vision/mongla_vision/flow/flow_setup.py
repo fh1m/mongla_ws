@@ -13,6 +13,7 @@ from geometry_msgs.msg import Vector3Stamped
 from mongla_interfaces.msg import MonglaState
 from mongla_vision.flow.flow_math import Intrinsics, RefractiveRectifier
 from mongla_vision.stamps import capture_monotonic
+from mongla_vision import image_msg
 from .flow_constants import (  # noqa: F401
     FLOW_TD_MEASURED_S,
     FOCAL_PARAMS_WIDTH,
@@ -390,9 +391,9 @@ class FlowSetupMixin:
 
     def _on_image(self, msg: Image) -> None:
         try:
-            frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            frame = image_msg.to_array(msg, 'bgr8')
         except Exception as exc:
-            self.get_logger().warning(f'[FLOW ] cv_bridge decode failed: {exc!r}')
+            self.get_logger().warning(f'[FLOW ] image decode failed: {exc!r}')
             return
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         if not self._admit_frame_size((int(gray.shape[1]), int(gray.shape[0]))):
