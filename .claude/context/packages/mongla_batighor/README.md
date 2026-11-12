@@ -130,10 +130,13 @@ Lichtblick build: the release cannot load server panels (its `apiUrl` is unset).
 
 ## Video, by link
 
-Kutum never encodes a frame for an operator. `camera_node` republishes the JPEG the camera
-sent, unchanged, on `<cam>/stream/compressed` (the camera's rate, capped at 30) and
-`<cam>/preview/compressed` (5 a second), and builds neither while nobody watches; the
-overlay is drawn by the browser. On Kutum's USB camera at 640x360 a frame is 41 KB and costs
+Kutum does not re-encode a camera's frame for an operator. `camera_node` republishes the
+JPEG the camera sent, unchanged, on `<cam>/stream/compressed` (the camera's rate, capped at
+30) and `<cam>/preview/compressed` (5 a second), and builds neither while nobody watches;
+the overlay is drawn by the browser. A source with no JPEG of its own (a recorded video, a
+ROS topic, the OpenCV fallback a camera takes when its mailbox fails) is encoded once per
+due frame, at quality 80, only while someone watches: before that it sent nothing, and a
+camera that fell back showed the operator an empty panel. On Kutum's USB camera at 640x360 a frame is 41 KB and costs
 0.062 ms to publish (`measured-bars` 84). Open `/` on the tether and `/?layout=weak_link` on
 anything slower.
 
