@@ -175,6 +175,9 @@ same "$KUTUM/system/systemd/cpu-performance.service" /etc/systemd/system/cpu-per
 same "$KUTUM/system/systemd/hailort.service"  /etc/systemd/system/hailort.service     "hailort.service"
 same "$KUTUM/system/limits/99-mongla-realtime.conf" /etc/security/limits.d/99-mongla-realtime.conf "realtime limits"
 same "$KUTUM/system/netplan/60-kutum-eth.yaml"  /etc/netplan/60-kutum-eth.yaml          "Ethernet link-local"
+same "$KUTUM/system/networkd-dispatcher/50-kutum-source-routes" /etc/networkd-dispatcher/routable.d/50-kutum-source-routes "per-interface reply routes"
+same "$KUTUM/system/sysctl/60-kutum-multihome.conf" /etc/sysctl.d/60-kutum-multihome.conf "per-interface ARP"
+same "$KUTUM/system/motd/01-kutum" /etc/update-motd.d/01-kutum "login banner"
 systemctl is-enabled cpu-performance.service >/dev/null 2>&1 && ok "cpu-performance.service enabled" \
   || warn "cpu-performance.service not enabled"
 [ -e /dev/srot ] && ok "/dev/srot (the board, pinned to its port)" \
@@ -188,6 +191,17 @@ for i in eth0 wlan0; do
   elif [ "$i" = eth0 ]; then warn "eth0 has no IPv4 address (no cable, or no DHCP and no link-local)"
   else warn "wlan0 has no address -- not joined (kutum/setup.sh --system asks for a network)"; fi
 done
+# Two interfaces with an address each and no rule from each address: a reply
+# to the Wi-Fi address leaves by Ethernet and is lost, and the laptop's ssh
+# times out while the Pi is up (2026-11-12). The rules come from
+# 50-kutum-source-routes, run by networkd-dispatcher.
+for a in $(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1); do
+  if [ "$(ip -4 -o addr show scope global | wc -l)" -gt 1 ] && ! ip rule | grep -q "from $a lookup"; then
+    fail "no reply route from $a -- with two interfaces up, traffic to it is answered by the wrong one (kutum/setup.sh --system)"
+  fi
+done
+systemctl is-active networkd-dispatcher >/dev/null 2>&1 && ok "networkd-dispatcher: reply routes follow every new address" \
+  || warn "networkd-dispatcher not running -- a new DHCP address gets no reply route"
 systemctl is-active avahi-daemon >/dev/null 2>&1 && ok "avahi-daemon: answers as $(hostname).local" \
   || fail "avahi-daemon not running -- $(hostname).local will not resolve from the laptop"
 installed() { [ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" = "install ok installed" ]; }

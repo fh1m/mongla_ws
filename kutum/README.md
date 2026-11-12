@@ -26,7 +26,7 @@ kutum/
     udev/51-hailo-udev.rules       /dev/hailo0 readable without root
     udev/make_srot_rule.sh         pin the SROT board to /dev/srot (once per board)
     systemd/cpu-performance.service + set-cpu-performance   CPU governor at boot
-    netplan/60-kutum-eth.yaml      Ethernet: DHCP plus a link-local fallback
+    netplan/60-kutum-eth.yaml      Ethernet: DHCP that keeps its address, plus a link-local fallback
 ```
 
 ## The network
@@ -45,6 +45,28 @@ The Wi-Fi password is typed into `setup.sh --system` by whoever runs it and
 lives only in `/etc/netplan/61-kutum-wifi.yaml` (root, mode 0600). To change
 networks: `sudo rm /etc/netplan/61-kutum-wifi.yaml`, then rerun
 `sudo ~/mongla_ws/kutum/setup.sh --system`.
+
+**Ethernet and Wi-Fi on one router.** Each gets its own address on the same
+network, and the main routing table sends everything for that network out of
+Ethernet. Without help, a reply to the Wi-Fi address leaves by Ethernet and is
+lost: the Pi answers ARP and nothing else, and `ssh mongla.local` times out
+while the vehicle is up. `setup.sh --system` installs the fix, and the doctor
+fails without it:
+
+- `system/networkd-dispatcher/50-kutum-source-routes` gives each interface a
+  table and a rule, "from my address, use my table", rerun by
+  `networkd-dispatcher` whenever an interface gets an address;
+- `system/sysctl/60-kutum-multihome.conf` makes each interface answer ARP for
+  its own address only.
+
+If Kutum is up but `mongla.local` does not answer, its link-local IPv6
+address still does (`ssh -o HostKeyAlias=mongla.local fh1m@fe80::<id>%wlan0`,
+the id from `getent hosts mongla.local`); from there, rerun the hook:
+`sudo env IFACE=wlan0 /etc/networkd-dispatcher/routable.d/50-kutum-source-routes`.
+
+**The login banner** is `system/motd/01-kutum`: the release, the CPU clock and
+temperature, the Hailo, the board's port and what runs in tmux, read from
+files so a login never waits on ROS.
 
 ## The clock
 
