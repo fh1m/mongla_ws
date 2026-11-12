@@ -184,33 +184,35 @@ const INSTRUMENTS = {
     draw(s) {
       const out = [];
       for (const c of CAMERAS) {
+        // One block per camera; the theme sets them side by side when the tile is wide.
+        const cam = [];
         const { rung, id, authority } = rungOf((s.lock || {})[c]);
         const at = (s.lockAt || {})[c];
         const stale = ageS(at) > 1.0;
         const live = s.active === c;
-        out.push(el("div", { class: "row" },
+        cam.push(el("div", { class: "row" },
           el("b", { class: live ? "live" : "" }, c), live && el("span", { class: "note" }, "live"),
           stale ? el("span", { class: "stale" }, at ? `lock silent ${num(ageS(at), 1)} s` : "no lock node")
             : el("span", {}, `${id || "--"}  authority ${num(authority, 2)}`)));
-        out.push(el("div", { class: "ladder" }, ...RUNGS.map((r) => {
+        cam.push(el("div", { class: "ladder" }, ...RUNGS.map((r) => {
           const on = !stale && r === rung;
           return el("i", on ? { class: "on", style: `background:${RUNG_COLOUR[r]}` } : {}, r);
         })));
-        out.push(el("div", { class: "bar" }, el("b", { style: `width:${stale || !fin(authority) ? 0 : 100 * Math.min(1, authority)}%;background:${RUNG_COLOUR[rung] || "var(--mb-sea)"}` })));
+        cam.push(el("div", { class: "bar" }, el("b", { style: `width:${stale || !fin(authority) ? 0 : 100 * Math.min(1, authority)}%;background:${RUNG_COLOUR[rung] || "var(--mb-sea)"}` })));
         const notes = [(s.model || {})[c] && `model ${s.model[c]}`, (s.seeing || {})[c] && `seeing ${s.seeing[c]}`].filter(Boolean);
-        if (notes.length) out.push(el("div", { class: "note" }, notes.join("   ")));
-        // What runs on this camera, and what is off with the switch that turns it on.
-        // The overlay node counts publishers: a topic the graph lists is not
-        // a stage that runs (a subscriber alone lists it too).
+        if (notes.length) cam.push(el("div", { class: "note" }, notes.join("   ")));
+        // What runs on this camera; an off stage carries the switch that turns
+        // it on. The overlay node counts publishers: a topic the graph lists
+        // is not a stage that runs (a subscriber alone lists it too).
         const st = (s.stages || {})[c];
         if (st) {
-          out.push(el("div", { class: "stages" }, ...st.map((x) =>
-            el("i", { class: x.on ? "on" : "off", title: x.on ? x.topic : `off: ${x.switch}` }, x.stage))));
-          const off = st.filter((x) => !x.on);
-          if (off.length) out.push(el("div", { class: "note" }, "off: " + off.map((x) => `${x.stage} (${x.switch})`).join("  ")));
-        } else out.push(el("div", { class: "note" }, "stages: no word from the overlay node (batighor:=true)"));
+          cam.push(el("div", { class: "stages" }, ...st.map((x) => x.on
+            ? el("i", { class: "on", title: x.topic }, x.stage)
+            : el("i", { class: "off", title: `off: ${x.switch}` }, el("s", {}, x.stage), el("small", {}, x.switch)))));
+        } else cam.push(el("div", { class: "note" }, "stages: no word from the overlay node (batighor:=true)"));
+        out.push(el("div", { class: "cam" }, ...cam));
       }
-      return out;
+      return [el("div", { class: "cams" }, ...out)];
     },
   },
 

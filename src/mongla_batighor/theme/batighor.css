@@ -123,7 +123,13 @@
 .mb .stages i{font-style:normal;font-size:10px;letter-spacing:.06em;padding:3px 6px;border-radius:2px;
   border:1px solid var(--mb-rule);background:var(--mb-d3);color:var(--mb-ink-3)}
 .mb .stages i.on{background:color-mix(in srgb,var(--mb-sea) 22%,transparent);border-color:var(--mb-sea);color:var(--mb-ink)}
-.mb .stages i.off{text-decoration:line-through;opacity:.6}
+.mb .stages i.off{opacity:.7;border-style:dashed;display:inline-flex;gap:5px;align-items:baseline}
+.mb .stages i.off small{font-size:9px;color:var(--mb-ink-3);letter-spacing:0}
+/* Each camera one block; side by side once the tile is wide, so both fit the
+   cockpit's tile without scrolling the downward camera out of sight. */
+.mb .cams{display:flex;flex-direction:column;gap:14px}
+.mb .cam{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+@container (min-width:440px){.mb .cams{flex-direction:row;gap:18px}}
 .mb .bar{height:4px;background:var(--mb-d3);border-radius:2px;overflow:hidden}
 .mb .bar b{display:block;height:100%;background:var(--mb-sea)}
 .mb .health{display:grid;grid-template-columns:fit-content(45%) minmax(0,1fr);gap:2px 12px}

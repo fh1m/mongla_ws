@@ -83,6 +83,22 @@ def test_flow_pairs_are_drawn_from_anchor_to_now_on_the_frame_they_were_found_in
     assert out.texts[0].text == 'flow 2 points'
 
 
+def test_the_flow_count_sits_above_the_stats_clear_of_box_labels():
+    """A box at the frame's top edge has its label pinned there; the flow
+    count at the top left covered it (seen on the bench, 2026-11-12)."""
+    from mongla_interfaces.msg import FlowTracks
+
+    from mongla_batighor.overlay import HUD_LINES, LABEL_PX, annotate, flow_annotate, hud
+    m = FlowTracks()
+    m.anchor_xy, m.now_xy = [10.0, 20.0], [12.0, 21.0]
+    lines = hud('downward', 'm', (640, 480), [], None)
+    assert len(lines) == HUD_LINES
+    stats = annotate(STAMP, None, None, None, None, None, None, (640, 480), lines)
+    top_stat = min(t.position.y for t in stats.texts)
+    y = flow_annotate(m, (640, 480)).texts[0].position.y
+    assert top_stat - (LABEL_PX + 6) <= y < top_stat and y > 240
+
+
 def test_no_pairs_draw_nothing():
     from mongla_interfaces.msg import FlowTracks
 
