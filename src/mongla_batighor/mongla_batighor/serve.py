@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
-import mimetypes
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -35,7 +35,33 @@ from mongla_batighor.pin import pin, share, web_dir
 
 _NAME = re.compile(r'^[A-Za-z0-9_-]+$')
 _HASHED = re.compile(r'\.[0-9a-f]{16,}\.')
-mimetypes.add_type('application/wasm', '.wasm')
+# The Host header becomes the bridge address the app connects to. Any value but
+# a host name or address with an optional port is refused: a forged Host would
+# point a browser's helm at another machine's bridge.
+_HOST = re.compile(r'^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])'
+                   r'(?::[0-9]{1,5})?$')
+# The types Kutum serves, from a fixed table: a type guessed from the asked-for
+# name would carry that name into a header (CodeQL py/http-response-splitting).
+TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json',
+         '.css': 'text/css', '.wasm': 'application/wasm', '.png': 'image/png',
+         '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.ttf': 'font/ttf',
+         '.woff2': 'font/woff2', '.map': 'application/json'}
+
+
+def index(base: Path) -> dict[str, Path]:
+    """Every file under `base`, keyed by its path relative to it.
+
+    A request is a lookup in this, so no path is ever built from a URL
+    (py/path-injection): `..`, an absolute path and a symlink out are simply
+    not keys. A file whose real path leaves `base` is left out here.
+    """
+    root = os.path.realpath(base) + os.sep
+    out = {}
+    for p in Path(base).rglob('*') if Path(base).is_dir() else ():
+        real = os.path.realpath(p)
+        if p.is_file() and real.startswith(root):
+            out[p.relative_to(base).as_posix()] = Path(real)
+    return out
 
 
 def app_link(host: str, bridge_port: int, layout: str) -> str:
@@ -57,8 +83,8 @@ class Handler(BaseHTTPRequestHandler):
     server_version = 'batighor'
 
     def __init__(self, *a, web: Path, layouts: Path, bridge_port: int,
-                 default_layout: str, exts: dict, bundle, **kw):
-        self.web, self.layouts = web, layouts
+                 default_layout: str, exts: dict, bundle, files: dict, **kw):
+        self.web, self.layouts, self.files = web, layouts, files
         self.exts, self.bundle = exts, bundle      # see make_server
         self.bridge_port, self.default_layout = bridge_port, default_layout
         super().__init__(*a, **kw)
@@ -72,16 +98,19 @@ class Handler(BaseHTTPRequestHandler):
             layout = parse_qs(url.query).get('layout', [self.default_layout])[0]
             if not _NAME.match(layout) or not (self.layouts / f'{layout}.json').exists():
                 return self._text(HTTPStatus.NOT_FOUND, f'no layout {layout!r}\n')
+            host = self.headers.get('Host', 'localhost')
+            if not _HOST.match(host):
+                return self._text(HTTPStatus.BAD_REQUEST, 'bad Host header\n')
             self.send_response(HTTPStatus.FOUND)
-            self.send_header('Location', app_link(self.headers.get('Host', 'localhost'),
-                                                  self.bridge_port, layout))
+            self.send_header('Location', app_link(host, self.bridge_port, layout))
             self.end_headers()
             return
         if url.path.startswith('/layouts/'):
             name = url.path[len('/layouts/'):].removesuffix('.json')
             if not _NAME.match(name):
                 return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-            return self._file(self.layouts / f'{name}.json', cache=False)
+            # Read per request: a layout regenerated on Kutum is served at once.
+            return self._file(index(self.layouts), f'{name}.json', cache=False)
         if url.path.startswith('/api/'):
             return self._api(url.path[len('/api/'):])
         if url.path == '/app' or url.path.startswith('/app/'):
@@ -100,10 +129,9 @@ class Handler(BaseHTTPRequestHandler):
             if self.bundle and rel == self.bundle[1]:
                 return self._bytes(self.bundle[2], 'text/javascript', cache=True,
                                    gz=self.bundle[3])
-            target = (self.web / rel).resolve()
-            if self.web.resolve() not in target.parents and target != self.web.resolve():
-                return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-            return self._file(target, cache=bool(_HASHED.search(target.name)))
+            if not self.files:                  # fetched after this server started
+                self.files.update(index(self.web))
+            return self._file(self.files, rel, cache=bool(_HASHED.search(rel.rsplit('/', 1)[-1])))
         return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
 
     def _api(self, rel: str):
@@ -154,13 +182,13 @@ class Handler(BaseHTTPRequestHandler):
                            'timestamp': '1970-01-01T00:00:00Z'}).encode()
         return self._bytes(body, 'application/json', cache=False)
 
-    def _file(self, path: Path, cache: bool):
-        if not path.is_file():
+    def _file(self, files: dict, rel: str, cache: bool):
+        """`rel` if it is a key of `files` (see `index`), typed from TYPES."""
+        path = files.get(rel)
+        if path is None:
             return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-        gz = Path(str(path) + '.gz')
-        return self._bytes(path, mimetypes.guess_type(path.name)[0]
-                           or 'application/octet-stream', cache,
-                           gz=gz if gz.is_file() else None)
+        return self._bytes(path, TYPES.get(path.suffix, 'application/octet-stream'), cache,
+                           gz=files.get(rel + '.gz'))
 
     def _bytes(self, body, ctype: str, cache: bool, gz=None):
         """Send `body`, or `gz` to a browser that takes gzip; each is bytes or a file."""
@@ -206,7 +234,7 @@ def make_server(port: int, web: Path, layouts: Path, bridge_port: int,
         bundle = (*bundle, gzip.compress(bundle[2], compresslevel=9))
     return ThreadingHTTPServer(('0.0.0.0', port), partial(
         Handler, web=web, layouts=layouts, bridge_port=bridge_port,
-        default_layout=default_layout, exts=exts, bundle=bundle))
+        default_layout=default_layout, exts=exts, bundle=bundle, files=index(web)))
 
 
 def main(argv=None) -> int:

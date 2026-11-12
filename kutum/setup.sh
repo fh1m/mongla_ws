@@ -177,8 +177,8 @@ if [ "${1:-}" = "--system" ]; then
   systemctl reset-failed
 
   say "6/8  network: Wi-Fi on boot, and mongla.local on every interface"
-  # Ethernet stays as cloud-init wrote it (DHCP); 60-kutum-eth.yaml only adds a
-  # link-local address, so a cable straight to a laptop with no DHCP server
+  # Ethernet stays as cloud-init wrote it (DHCP); 60-kutum-eth.yaml keeps a
+  # lapsed lease's address and adds a link-local one, so a cable straight to a laptop with no DHCP server
   # still answers on mongla.local. A laptop sharing its internet over that
   # cable (NetworkManager: IPv4 "Shared to other computers") hands out an
   # address by DHCP, and the Pi takes it like any router's.
@@ -204,7 +204,26 @@ if [ "${1:-}" = "--system" ]; then
   REBOOT=""
   netplan apply || { echo "  netplan apply failed: the change takes effect on reboot"
                      REBOOT="$REBOOT netplan"; }
+  # Ethernet and Wi-Fi on one router: each interface answers for its own
+  # address and replies by its own route, or traffic to the Wi-Fi address is
+  # answered through Ethernet and lost (2026-11-12). The hook runs whenever an
+  # interface gets an address, so DHCP is followed.
+  install -m 0644 "$KUTUM/system/sysctl/60-kutum-multihome.conf" /etc/sysctl.d/
+  sysctl -q --load /etc/sysctl.d/60-kutum-multihome.conf
+  install -m 0755 "$KUTUM/system/networkd-dispatcher/50-kutum-source-routes" \
+    /etc/networkd-dispatcher/routable.d/
+  systemctl enable --now networkd-dispatcher
+  for i in /sys/class/net/*; do
+    IFACE="${i##*/}" /etc/networkd-dispatcher/routable.d/50-kutum-source-routes || true
+  done
   systemctl enable --now avahi-daemon
+  # The login banner (kutum/system/motd/01-kutum). Ubuntu's generic header,
+  # help links, landscape sysinfo and news are made non-executable, not
+  # deleted; its update, reboot and fsck notices stay.
+  install -m 0755 "$KUTUM/system/motd/01-kutum" /etc/update-motd.d/
+  for m in 00-header 10-help-text 50-landscape-sysinfo 50-motd-news; do
+    [ -e "/etc/update-motd.d/$m" ] && chmod -x "/etc/update-motd.d/$m"
+  done
 
   say "7/8  boot settings: the RTC battery, and the ARM clock"
   # The Pi 5's clock keeps time through a power-off only on its battery, and
