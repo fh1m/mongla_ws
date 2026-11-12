@@ -147,6 +147,7 @@ def cockpit(v: View):
             for i, c in enumerate(CAMERAS)]
     strip = v('ladder', states(*_ladder_lines(False),
                                series('/mongla/state.mode', 'mode'),
+                               series('/mongla/mission_alive.data', 'mission', True),
                                series('/mongla/localization/aiding.data', 'aided by', True)))
     return row((62, col(*cams, (1, strip))),
                (38, col((11, v('control', instrument('ControlCenter'))),
@@ -156,8 +157,10 @@ def cockpit(v: View):
 
 def vision(v: View):
     """Detection and tracking in depth: every rung, its authority, the pose solved."""
-    cams = [v(c, camera(c)) for c in CAMERAS]
+    cams = [(3, v(c, camera(c))) for c in CAMERAS]
     fwd, dwn = f'{V}/forward', f'{V}/downward'
+    # How far each detection is, when depth_estimation runs (off by default).
+    depth = row(v('range_map', image(f'{fwd}/vis_range_map')), v('range', raw(f'{fwd}/vis_range')))
     right = col(
         (3, v('vision', instrument('Vision'))),
         (3, v('ladder', states(*_ladder_lines(True)))),
@@ -171,7 +174,7 @@ def vision(v: View):
                              series(f'{dwn}/anchor_decomposition.vector.y', 'anchor scale'),
                              series(f'{dwn}/anchor_decomposition.vector.z', 'anchor range m')))),
         (2, v('align', align('align err x px', 'align err y px'))))
-    return row((55, col(*cams)), (45, right))
+    return row((55, col(*cams, (2, depth))), (45, right))
 
 
 def flow(v: View):
@@ -185,6 +188,8 @@ def flow(v: View):
                                series('/mongla/odom.twist.twist.linear.x', 'filter vx m/s'),
                                series('/mongla/odom.twist.twist.linear.y', 'filter vy m/s'))),
             v('distance', plot(series(f'{d}/distance_traveled.data', 'distance m', True))),
+            v('calibration', states(series(f'{d}/flow_calibration.data', 'velocity scale from',
+                                           True))),
             v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
                               series(f'{d}/distance_debug.data[2]', 'tracks', True),
                               series(f'{d}/distance_debug.data[1]', 'height m', True),
@@ -279,6 +284,19 @@ def weak_link(v: View):
                (30, col(v('vehicle', instrument('Vehicle')),
                         v('control', instrument('ControlCenter')))))
 
+
+# What the stack publishes and no view shows, each with the reason. A topic
+# not shown and not here fails test_views: an operator cannot see it.
+NOT_SHOWN = {
+    'image_raw': 'the raw frame; every view shows the same frame as stream/compressed',
+    'image_debug': "the detector's own drawn frame; the browser draws over the camera's JPEG",
+    'classes_filter': "the allowlist; the Control Center shows it (helm_state, detector settings)",
+    'imu_rates': 'the body rates again at the board rate, for the filter; /mongla/imu is plotted',
+    'distance_control': 'a command to the flow distance bracket, not an observation',
+    'video_seek_frame': "a replay command from the display node",
+    'video_seek_rel': "a replay command from the display node",
+    'video_speed': "a replay command from the display node",
+}
 
 VIEWS = {f.__name__: f for f in (cockpit, vision, flow, localization, thrust, board_health,
                                  board_link, bins_downward, calibrate, weak_link)}

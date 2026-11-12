@@ -20,6 +20,7 @@ const SVG = "http://www.w3.org/2000/svg";
 
 const lockTopic = (c) => `/mongla/vision/${c}/lock`;
 const seeingTopic = (c) => `/mongla/vision/${c}/seeing`;
+const modelTopic = (c) => `/mongla/vision/${c}/vision_info`;
 const ageS = (t) => (t ? (Date.now() - t) / 1000 : Infinity);
 
 function svg(tag, attrs, ...kids) {
@@ -158,13 +159,16 @@ const INSTRUMENTS = {
 
   Vision: {
     title: "Vision",
-    topics: [...CAMERAS.flatMap((c) => [lockTopic(c), seeingTopic(c)]), "/mongla/vision/active_camera"],
+    topics: [...CAMERAS.flatMap((c) => [lockTopic(c), seeingTopic(c), modelTopic(c)]), "/mongla/vision/active_camera"],
     fold(s, topic, m) {
-      s.lock = s.lock || {}; s.lockAt = s.lockAt || {}; s.seeing = s.seeing || {};
+      s.lock = s.lock || {}; s.lockAt = s.lockAt || {}; s.seeing = s.seeing || {}; s.model = s.model || {};
       if (topic === "/mongla/vision/active_camera") { s.active = m.data; return; }
       for (const c of CAMERAS) {
         if (topic === lockTopic(c)) { s.lock[c] = m; s.lockAt[c] = Date.now(); }
         if (topic === seeingTopic(c)) s.seeing[c] = m.data;
+        // The detector's own word for which model runs (latched), with its epoch:
+        // a mission's model switch shows as the epoch moving.
+        if (topic === modelTopic(c)) s.model[c] = `${m.database_location || "--"}  epoch ${m.database_version}`;
       }
     },
     draw(s) {
@@ -183,7 +187,8 @@ const INSTRUMENTS = {
           return el("i", on ? { class: "on", style: `background:${RUNG_COLOUR[r]}` } : {}, r);
         })));
         out.push(el("div", { class: "bar" }, el("b", { style: `width:${stale || !fin(authority) ? 0 : 100 * Math.min(1, authority)}%;background:${RUNG_COLOUR[rung] || "var(--mb-sea)"}` })));
-        if ((s.seeing || {})[c]) out.push(el("div", { class: "note" }, `seeing: ${s.seeing[c]}`));
+        const notes = [(s.model || {})[c] && `model ${s.model[c]}`, (s.seeing || {})[c] && `seeing ${s.seeing[c]}`].filter(Boolean);
+        if (notes.length) out.push(el("div", { class: "note" }, notes.join("   ")));
       }
       return out;
     },

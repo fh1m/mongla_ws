@@ -20,6 +20,14 @@
         }
       }
     },
+    "Image!range_map": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/forward/vis_range_map"
+      }
+    },
+    "RawMessages!range": {
+      "topicPath": "/mongla/vision/forward/vis_range"
+    },
     "mongla.batighor.Vision!vision": {},
     "StateTransitions!ladder": {
       "paths": [
@@ -157,8 +165,18 @@
     "first": {
       "direction": "column",
       "first": "Image!forward",
-      "second": "Image!downward",
-      "splitPercentage": 50.0
+      "second": {
+        "direction": "column",
+        "first": "Image!downward",
+        "second": {
+          "direction": "row",
+          "first": "Image!range_map",
+          "second": "RawMessages!range",
+          "splitPercentage": 50.0
+        },
+        "splitPercentage": 60.0
+      },
+      "splitPercentage": 37.5
     },
     "second": {
       "direction": "column",
