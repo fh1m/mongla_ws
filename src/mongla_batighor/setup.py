@@ -13,6 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml', 'LICHTBLICK.json']),
         ('share/' + package_name + '/layouts', glob('layouts/*.json')),
         ('share/' + package_name + '/panels/helm', glob('panels/helm/*')),
+        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

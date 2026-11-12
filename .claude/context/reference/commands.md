@@ -70,11 +70,17 @@
 | `ros2 run mongla_vision calibrate_solve` | `mongla_vision.calibration.solver:main` |
 | `ros2 run mongla_vision depth_estimation_node` | `mongla_vision.depth.depth_estimation_node:main` |
 | `ros2 run mongla_vision flow_node` | `mongla_vision.flow.flow_node:main` |
-| `ros2 run mongla_vision mission_web` | `mongla_vision.web.mission_web_node:main` |
 
 ## 3. Launch arguments — `DeclareLaunchArgument`
 
 WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not declare. Check the name against the table for THAT file, or put it in `~/.mongla/bringup.yaml`, which refuses unknown names (example: `src/mongla_manager/config/bringup.example.yaml`).
+
+### `mongla_batighor/batighor.launch.py`
+
+| argument | default | what it does |
+|---|---|---|
+| `batighor_port` | `8000` | Batighor web port |
+| `foxglove_port` | `8765` | foxglove_bridge WebSocket port |
 
 ### `mongla_manager/bringup.launch.py`
 
@@ -156,37 +162,6 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `fwd_device_path` | `` | (passed to vision_pi.launch.py, which sets the default) |
 | `dwn_device_path` | `` | (passed to vision_pi.launch.py, which sets the default) |
 
-### `mongla_vision/mission_web.launch.py`
-
-| argument | default | what it does |
-|---|---|---|
-| `cameras` | `both` | rig: both (vision_dual) | forward | downward (single camera via vision.launch.py) |
-| `web_port` | `8090` | HTTP port for the mission console + SSE |
-| `video_port` | `8080` | web_video_server MJPEG port |
-| `no_browser` | `false` | true = do not auto-open the browser |
-| `paused` | `false` |  |
-| `debug_image_hz` | `15.0` |  |
-| `viewer` | `false` | also open the OpenCV HUD window (web console is primary) |
-| `fwd_device` | `0` |  |
-| `dwn_device` | `4` |  |
-| `fwd_device_path` | `` |  |
-| `dwn_device_path` | `` |  |
-| `fwd_model` | `gate_sharks` |  |
-| `fwd_models` | `` |  |
-| `fwd_classes` | `gate,shark,shaw_fish` |  |
-| `fwd_conf` | `0.35` |  |
-| `fwd_model_conf` | `` |  |
-| `dwn_model` | `bin_fire_blood` |  |
-| `dwn_models` | `` |  |
-| `dwn_classes` | `fire,blood` |  |
-| `dwn_conf` | `0.35` |  |
-| `dwn_model_conf` | `` |  |
-| `fwd_video` | `` |  |
-| `dwn_video` | `` |  |
-| `imgsz` | `640` |  |
-| `max_det` | `100` |  |
-| `tracking` | `true` |  |
-
 ### `mongla_vision/video.launch.py`
 
 | argument | default | what it does |
@@ -230,7 +205,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `imgsz` | `640` | Inference square size for a .pt. A .hef bakes its input size at compile time and ignores this. |
 | `max_det` | `100` | Post-NMS detection cap (runtime; lower toward ~10 if NMS is the FPS bottleneck on busy frames). |
 | `paused` | `false` | Start the detector paused (resume_detector(camera) per task) |
-| `debug_image_hz` | `10.0` | Annotated image_debug publish rate (raise toward inference FPS for a smoother web/mission_web stream) |
+| `debug_image_hz` | `10.0` | Annotated image_debug publish rate (raise toward inference FPS for a smoother vision_display picture) |
 | `viewer` | `true` | Open the OpenCV vision_display HUD (viewer:=false = headless) |
 | `tracking` | `true` | Start tracker_node (Roboflow OC-SORT/ByteTrack + Kalman) |
 | `tracker_type` | `ocsort` | Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack |
@@ -640,14 +615,6 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `debug_image_hz` | `10.0` |
 | `tick_hz` | `30.0` |
 | `alignment_deadband` | `0.05` |
-
-**`mongla_vision/web/mission_web_node.py`** — 3 parameters
-
-| parameter | default |
-|---|---|
-| `cameras` | `'` |
-| `web_port` | `8090` |
-| `video_port` | `8080` |
 
 ## 5. The wire — `fc/srot_protocol.py`
 

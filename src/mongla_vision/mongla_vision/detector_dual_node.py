@@ -39,14 +39,14 @@ inference goes idle, so the picture is the newest one that exists.
 comms (that is rclcpp), so composed Python nodes still traverse rmw. The gain
 comes from the direct Python reference, not from ROS composition.
 
-The image topic is still published, throttled, for the HUD, the console,
-`web_video_server` and recorders. Composition takes the topic out of the
+The image topic is still published, throttled, for the HUD, Batighor and
+recorders. Composition takes the topic out of the
 CONTROL path; it does not delete it.
 
 What is deliberately unchanged, part two
 ----------------------------------------
 The camera nodes keep their names (`mongla_camera_forward` / `_downward`) and
-their topics, so `vision_display`, `mission_web` and `preflight` see exactly
+their topics, so `vision_display`, Batighor and `preflight` see exactly
 what they saw before.
 
 What is deliberately unchanged

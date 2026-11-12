@@ -20,7 +20,6 @@ For the operator, on a pool or competition day: consoles, recorders, calibration
 | tool | what it does |
 |---|---|
 | `build_practice_bank.py` | Build a checkpoint bank BEFORE the run, from practice footage or stills. |
-| `console/` | Mongla console -- instrument panel, not a dashboard template. |
 | `depth_sign_check.py` | Prove the depth loop's SIGN on the bench, disarmed, with nothing spinning. |
 | `flow_console.py` | flow_console -- watch the bottom camera work as a DVL, live, in a browser. |
 | `fov_board_check.py` | Live board screening in a browser: aim, identify the grid, measure flatness. |
@@ -37,8 +36,6 @@ For the operator, on a pool or competition day: consoles, recorders, calibration
 | `record_session.sh` | record_session.sh -- capture a REPLAYABLE pipeline session on the vehicle. |
 | `replay_check.sh` | replay_check.sh -- run the REAL vision graph on a RECORDED session. |
 | `srot_axis_snapshot.py` | Snapshot the axis configuration — step 1 of the pre-dive gate sequence. |
-| `srot_console.py` | Mongla console: the whole srot + Pi + AI HAT stack, live, in one page. |
-| `srot_console_server.py` | Data plane for the Mongla console: everything the stack knows, once per tick. |
 | `srot_fix_gcs_id.py` | Set FS_GCS_SYSID/FS_GCS_COMPID to 255/191 and PROVE it reached flash. |
 | `srot_gate0.py` | GATE 0 from the mission host: identify each thruster, then learn its sign. |
 | `srot_replay.py` | Replay and analyse a recorded dive from its raw MAVLink log. |

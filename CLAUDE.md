@@ -189,7 +189,8 @@ surface**.
 [mission]    ─┼── /mongla/move (one action, 23 verbs) ──► auv_manager_node ──USB-C──► SROT board
 [run_plan]   ─┘                                              │                         (500 Hz)
                                                              └──► /mongla/state, /mongla/imu,
-                                                                  /mongla/esc_rpm, /mongla/demand
+                                                                  /mongla/esc_rpm, /mongla/demand,
+                                                                  /mongla/board_link
 [vision nodes] ──► detections · lock · velocity ──► [localization] ──► /mongla/odom
 ```
 

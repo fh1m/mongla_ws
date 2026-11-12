@@ -18,9 +18,6 @@ setup(
             glob('config/calibration/*.json')),
         ('share/' + package_name + '/launch',  glob('launch/*.launch.py')),
         ('share/' + package_name + '/models',  glob('models/*.yaml') + glob('models/*.pt') + glob('models/*.hef')),
-        # Web console static assets (served by the mission_web node from its source
-        # tree via __file__; this install keeps them alongside the installed pkg too).
-        ('share/' + package_name + '/web/static', glob('mongla_vision/web/static/*')),
     ],
     install_requires=['setuptools', 'numpy', 'supervision', 'filterpy', 'trackers'],
     zip_safe=True,
@@ -53,7 +50,6 @@ setup(
             'calibrate_solve     = mongla_vision.calibration.solver:main',
             'depth_estimation_node = mongla_vision.depth.depth_estimation_node:main',
             'flow_node = mongla_vision.flow.flow_node:main',
-            'mission_web         = mongla_vision.web.mission_web_node:main',
         ],
     },
 )

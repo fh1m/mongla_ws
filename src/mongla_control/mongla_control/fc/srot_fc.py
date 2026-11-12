@@ -58,6 +58,9 @@ from .srot_motion import SrotMotion
 
 
 _STATUSTEXT_RING = 64      # a boot burst is ~13 lines; this holds several
+# A NAMED_VALUE_FLOAT channel older than this reads absent: one that stopped
+# arriving must not keep its last value.
+NAMED_MAX_AGE_S = 3.0
 
 
 class SrotFC(SrotArming, SrotMotion, SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
@@ -186,7 +189,7 @@ class SrotFC(SrotArming, SrotMotion, SrotHealth, SrotTelemetry, SrotBench, SrotU
         self.master.messages.pop('COMMAND_ACK', None)
         self.master.messages.pop('STATUSTEXT', None)
 
-    def _named_value(self, name, max_age_s: float = 3.0):
+    def _named_value(self, name, max_age_s: float = NAMED_MAX_AGE_S):
         """Latest NAMED_VALUE_FLOAT for `name`, or None if it has not arrived recently.
 
         Why this is not a one-line cache read. SROT multiplexes MV_STATE / LEAK / WTEMP /
@@ -213,6 +216,20 @@ class SrotFC(SrotArming, SrotMotion, SrotHealth, SrotTelemetry, SrotBench, SrotU
             return None
         value, stamp = hit
         return value if (time.monotonic() - stamp) <= max_age_s else None
+
+    def named_values(self) -> dict:
+        """Every channel heard so far: name -> (value or None once stale, age in s).
+
+        The whole table, for the operator's view of the link; a control
+        decision reads its one channel through `_named_value`.
+        """
+        self._drain_named()
+        now = time.monotonic()
+        out = {}
+        for name, (value, stamp) in self._named_cache.copy().items():   # the reader writes it
+            age = now - stamp
+            out[name] = (value if age <= NAMED_MAX_AGE_S else None, age)
+        return out
 
     def flare_order(self, max_age_s: float = 3.0):
         """The run order the board latched, or None.

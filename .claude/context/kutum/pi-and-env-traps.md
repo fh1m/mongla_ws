@@ -91,9 +91,8 @@
   Not in the committed `.vscode/settings.json`: a hard-coded `DISPLAY` breaks a
   teammate's local VSCode.
 - **Better on the vehicle:** don't open a window at all. The annotated
-  `…/image_debug` topic is served by `web_video_server` and Foxglove
-  ([`foxglove-and-bags.md`](../platform/foxglove-and-bags.md)), viewable in a browser over
-  VSCode's port-forward.
+  cameras are in Batighor (`batighor:=true`, then `http://mongla.local:8000/`), in any
+  browser ([`foxglove-and-bags.md`](../platform/foxglove-and-bags.md)).
 
 ### E5. The SROT board has no `/dev/ttyUSB*` — `brltty` or a missing `ch341`
 The board's USB serial is a CH340 (`1a86:7523`), which needs the kernel's `ch341`
