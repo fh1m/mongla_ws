@@ -1,0 +1,30 @@
+src/mongla_batighor/layouts/bins_downward.json
+  h_f1b9066eb9899c 34-35
+src/mongla_batighor/layouts/board_health.json
+  h_f1b9066eb9899c 18-19,43-44
+src/mongla_batighor/layouts/board_link.json
+  h_f1b9066eb9899c 18-19,38-39
+src/mongla_batighor/layouts/flow.json
+  h_f1b9066eb9899c 40-41,56-57,69,99-100
+src/mongla_batighor/layouts/localization.json
+  h_f1b9066eb9899c 74,106-107,136-137,167-168,187-188
+src/mongla_batighor/layouts/thrust.json
+  h_f1b9066eb9899c 19-20,34-35,59-60
+src/mongla_batighor/layouts/vision.json
+  h_f1b9066eb9899c 68,85-86,115-116,140-141,162-163
+src/mongla_batighor/mongla_batighor/views.py
+  h_f1b9066eb9899c 43-49,53-55,57,62-64,66
+src/mongla_batighor/test/test_views.py
+  h_f1b9066eb9899c 114-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "b3bd1bee0975931b9e107a38cacac55afbab0349",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
