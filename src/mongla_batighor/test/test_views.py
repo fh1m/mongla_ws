@@ -111,3 +111,18 @@ def test_a_view_for_judging_boxes_shows_each_frame_with_its_own():
         cams = [m for m in _images(name).values() if m['imageTopic'].endswith('stream/compressed')]
         assert cams and all(m.get('synchronize') for m in cams), name
     assert not any(m.get('synchronize') for m in _images('cockpit').values())
+
+
+def test_every_plot_follows_the_last_minute_with_a_narrow_legend():
+    """Unset, a plot spans the whole connection and a panel opened later draws
+    in a sliver at the right; Lichtblick's 240 px legend took half a plot."""
+    plots = [c for name in views.VIEWS for k, c in views.build(name)['configById'].items()
+             if k.startswith('Plot!')]
+    assert plots
+    for c in plots:
+        assert c['followingViewWidth'] == views.PLOT_WINDOW_S and c['sidebarDimension'] <= 200
+    # A synced state panel pulled the plots beside it out of following.
+    for name in views.VIEWS:
+        for k, c in views.build(name)['configById'].items():
+            if k.startswith('StateTransitions!'):
+                assert c['isSynced'] is False, (name, k)
