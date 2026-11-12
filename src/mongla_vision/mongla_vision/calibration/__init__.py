@@ -8,14 +8,17 @@ That is a mission capability, so it ships with the package, is installed by
 `colcon`, is covered by the package's tests, and is reachable the way every
 other subsystem is:
 
-    ros2 run mongla_vision calibrate --device 3
+    ros2 launch mongla_batighor calibrate.launch.py device_path:=<camera>
 
-Two modules:
-  `solver` -- the maths. Detection, the two fitting arms, k-fold held-out
-              scoring, Max ERE and next-best-pose.
-  `guide`  -- the operator-facing browser page that drives a capture.
+  `solver`          the maths. Detection, the two fitting arms, k-fold
+                    held-out scoring, Max ERE and next-best-pose; also
+                    `ros2 run mongla_vision calibrate_solve <captures>`.
+  `guide_capture`   the pose script and the detect and assess threads.
+  `guide_files`     which camera is which, and where calibrations live.
+  `calibrate_node`  the node that runs a capture beside the camera node;
+                    Batighor's `calibrate` layout and panel are its page.
 
-Both exist because unguided calibration measurably does not work for a
+The capture is guided because unguided calibration measurably does not work for a
 non-expert: Richardson et al. (AprilCal, IROS 2013) measured novices at
 0.229 px mean / 1.651 px WORST with guidance against 0.728 / 38.646 without.
 The worst-case number is the one that breaks a bearing, and it differs by

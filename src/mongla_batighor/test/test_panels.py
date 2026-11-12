@@ -7,6 +7,8 @@ read from the pinned release's `main.<hash>.js`.
 import io
 import json
 import re
+import shutil
+import subprocess
 import threading
 import urllib.error
 import urllib.request
@@ -72,8 +74,8 @@ def test_a_release_that_moved_the_switch_is_refused_not_half_served(tmp_path):
 def test_the_workspace_lists_the_helm_and_hands_over_its_foxe(kutum):
     _, _, body = _get(kutum + '/api/workspaces/mongla/extensions')
     listed = json.loads(body)['data']
-    assert [e['id'] for e in listed] == ['mongla.batighor-helm']
-    e = listed[0]
+    assert [e['id'] for e in listed] == ['mongla.batighor-calibrate', 'mongla.batighor-helm']
+    e = listed[1]
     # Lichtblick caches an org extension under `${publisher}.${name}` and
     # compares that with the listed id: they must be the same string.
     assert e['extensionId'] == f"{e['publisher']}.{e['name']}" and e['scope'] == 'org'
@@ -131,3 +133,45 @@ def test_the_main_layout_carries_the_helm():
     layout = json.loads((PANELS.parent / 'layouts' / 'mongla_layout.json').read_text())
     assert 'mongla.batighor.Helm!helm' in layout['configById']
     assert 'mongla.batighor.Helm!helm' in json.dumps(layout['layout'])
+
+
+CALIBRATE_JS = (PANELS / 'calibrate' / 'extension.js').read_text()
+
+
+def test_the_calibrate_panel_says_the_calibration_nodes_own_words():
+    """Its buttons are the node's ops, sent through the helm's one op for them,
+    and it reads the topic the node publishes."""
+    from mongla_batighor import helm
+    from mongla_vision.calibration import calibrate_node
+    sent = set(re.findall(r'call\("(\w+)"', CALIBRATE_JS))
+    steps = re.search(r'const STEPS = \[([^\]]*)\]', CALIBRATE_JS).group(1)
+    sent |= set(re.findall(r'"(\w+)"', steps))
+    assert sent == set(calibrate_node.OPS)
+    assert 'op: "calibrate"' in CALIBRATE_JS and "op == 'calibrate'" in Path(helm.__file__).read_text()
+    assert f'"{calibrate_node.NS}/state"' in CALIBRATE_JS
+    assert re.search(r'NAME_KEY = "([^"]+)"', CALIBRATE_JS).group(1) == \
+        re.search(r'NAME_KEY = "([^"]+)"', HELM_JS).group(1)
+
+
+def test_the_calibrate_layout_draws_the_overlay_on_the_calibration_camera():
+    from mongla_vision.calibration import calibrate_node
+    layout = json.loads((PANELS.parent / 'layouts' / 'calibrate.json').read_text())
+    image = layout['configById']['Image!camera']['imageMode']
+    assert image['imageTopic'] == f'/mongla/vision/{calibrate_node.CAMERA}/stream/compressed'
+    assert f'{calibrate_node.NS}/annotations' in image['annotations']
+    assert 'mongla.batighor.Calibrate!calibrate' in json.dumps(layout['layout'])
+
+
+@pytest.mark.skipif(not shutil.which('node'), reason='node not installed (the Pi, CI)')
+@pytest.mark.parametrize('name', sorted(p.name for p in PANELS.iterdir()
+                                        if (p / 'extension.js').is_file()))
+def test_every_served_panel_parses(tmp_path, name):
+    """A syntax error anywhere makes the whole panel inert, and it looks like
+    a panel that stopped updating (camera-and-calibration.md §10). The code
+    is checked as served: preamble and all."""
+    ext = panels.extensions(PANELS)[f'{panels.PUBLISHER}.batighor-{name}']
+    code = zipfile.ZipFile(io.BytesIO(ext[1])).read('dist/extension.js')
+    f = tmp_path / 'extension.js'
+    f.write_bytes(code)
+    r = subprocess.run(['node', '--check', str(f)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr

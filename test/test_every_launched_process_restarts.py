@@ -16,11 +16,13 @@ from launch_ros.actions import Node
 
 SRC = Path(__file__).resolve().parents[1] / 'src'
 
-#: Bringup, and the vision launch files it includes (`vision_stack`).
+#: Bringup, the vision launch files it includes (`vision_stack`), Batighor,
+#: and the calibration launch that runs Batighor in its place.
 BRINGUP_STACKS = ('mongla_manager/launch/bringup.launch.py',
                   'mongla_vision/launch/vision_pi.launch.py',
                   'mongla_vision/launch/vision.launch.py',
-                  'mongla_batighor/launch/batighor.launch.py')
+                  'mongla_batighor/launch/batighor.launch.py',
+                  'mongla_batighor/launch/calibrate.launch.py')
 
 #: Executables deliberately not restarted, each with its reason.
 NOT_RESTARTED = {

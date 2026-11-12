@@ -2,8 +2,8 @@
 
 Camera discovery (`camera_identity`, `list_cameras`), the calibration
 directory and the per-medium capture directories, and the library of
-installed calibrations. `guide.py` serves these; nothing here opens a socket.
-Loaded by path like the other siblings, so it must not import the package.
+installed calibrations. `calibrate_node.py` reads these; nothing here opens a
+socket or imports ROS.
 """
 import glob
 import json
@@ -12,15 +12,7 @@ import re
 import subprocess
 import time
 
-try:
-    from . import solver                     # the installed package
-except ImportError:                          # loaded by path from guide.py (tools/)
-    import importlib.util
-    _spec = importlib.util.spec_from_file_location(
-        'mongla_calib_solver',
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'solver.py'))
-    solver = importlib.util.module_from_spec(_spec)
-    _spec.loader.exec_module(solver)
+from . import solver
 
 
 def camera_identity(dev):

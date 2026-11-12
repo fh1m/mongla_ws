@@ -54,7 +54,8 @@ TOKENS = re.compile(r'''
     | mongla\.can\( | mongla\.require\( | mongla\.backend\b
     | mongla_sim | sim_vehicle | \bsim/src\b | sim/COLCON_IGNORE
     | mission_web | dashboard_state | web_video_server | srot_console
-    | flow_console
+    | flow_console | fov_calibrate | fov_capture_guide | guide_page
+    | calibration\.guide\b | calibration/guide\.py
 ''', re.I | re.X)
 
 # Names on the firmware team's repositories. Stripped before matching.

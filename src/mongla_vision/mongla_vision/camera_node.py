@@ -112,7 +112,7 @@ class CameraNode(Node):
         # default, which left the node's own default able to do it again.
         self.declare_parameter('fps',             0)
         self.declare_parameter('frame_id',        '')
-        # Path to a calibration.json from tools/pool/fov_calibrate.py. Empty (the
+        # Path to a calibration.json from calibration/solver.py. Empty (the
         # default) keeps the historical behaviour EXACTLY: size-only CameraInfo
         # with K and D left zero. Nothing changes until a real calibration
         # exists for this camera.
@@ -340,7 +340,9 @@ class CameraNode(Node):
                           or str(self.get_parameter('name').value).strip()
                           or source,
         }
-        if source == 'webcam':
+        # `v4l2` is the mailbox with the camera's own JPEG, at any size; the
+        # calibration launch uses it at the size a calibration is taken at.
+        if source in ('webcam', 'v4l2'):
             if device_path:
                 dev = device_path   # by-path symlink (port-stable) wins
                 self.get_logger().info(f'[CAM  ] device_path (port-stable) → {device_path}')
@@ -648,7 +650,7 @@ class CameraNode(Node):
         return h
 
     def _load_calibration(self) -> dict | None:
-        """Load intrinsics measured by tools/pool/fov_calibrate.py, if any.
+        """Load intrinsics measured by calibration/solver.py, if any.
 
         Returns None when unset or unreadable -- a missing calibration must
         never stop the camera. It is published as a WARN, not an exception,

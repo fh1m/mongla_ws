@@ -20,7 +20,9 @@ src/mongla_vision/mongla_vision/
     xfeat_onnx.py         # XFeat on the vehicle: ONNX + numpy, no torch.
   calibration/
     binding.py            # Which calibration belongs to which camera -- resolved ONCE, from the data.
-    guide.py              # Step-by-step guided camera calibration in a browser.
+    calibrate_node.py     # Guided camera calibration as a node; Batighor is its page.
+    guide_capture.py      # The pose script and its detect and assess threads.
+    guide_files.py        # Where calibrations and captures live, and which camera is which.
     solver.py             # Camera calibration that PROVES its own answer instead of asserting it.
   cameras/
     camera.py             # Abstract Camera — every image source implements this.

@@ -77,7 +77,7 @@ NODES_KEY = 'nodes'
 LAUNCH_KEY = 'launch'
 # Launch files other than bringup that read a section of the file. A test
 # compares this with the launch files in the repository.
-SECTIONS = ('batighor', 'video', 'vision', 'vision_dual', 'vision_pi')
+SECTIONS = ('batighor', 'calibrate', 'video', 'vision', 'vision_dual', 'vision_pi')
 DEFAULT_PATH = Path.home() / '.mongla' / 'bringup.yaml'
 
 

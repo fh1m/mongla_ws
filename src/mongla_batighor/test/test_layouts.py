@@ -63,9 +63,15 @@ _HEADERLESS = ('Float32', 'Float64', 'UInt8', 'Int32', 'Bool', 'String',
 
 
 def _headerless(src, topic):
-    leaf = topic.rsplit('/', 1)[-1]
-    return re.search(rf"create_publisher\(\s*(?:{'|'.join(_HEADERLESS)})\s*,"
-                     rf"\s*f?'[^']*/{re.escape(leaf)}'", src) is not None
+    # On the last two segments, as above: the leaf alone let a calibration's
+    # `{NS}/state` (a String) pass for /mongla/state (stamped).
+    parent, leaf = topic.rsplit('/', 2)[-2:]
+    names = [rf"f?'[^']*/{re.escape(parent)}/{re.escape(leaf)}'"]
+    if parent in ('forward', 'downward'):
+        names.append(rf"f'[^']*{{ns}}/{re.escape(leaf)}'")
+    kinds = '|'.join(_HEADERLESS)
+    return any(re.search(rf"create_publisher\(\s*(?:{kinds})\s*,\s*{n}", src)
+               for n in names)
 
 
 @pytest.mark.parametrize('path', _LAYOUTS, ids=lambda p: p.name)
@@ -85,3 +91,4 @@ def test_the_headerless_check_sees_a_headerless_topic():
     src = _published()
     assert _headerless(src, '/mongla/vision/downward/flow_quality')
     assert not _headerless(src, '/mongla/vision/downward/velocity')
+    assert not _headerless(src, '/mongla/state')
