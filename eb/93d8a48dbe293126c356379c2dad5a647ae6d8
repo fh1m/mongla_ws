@@ -1,0 +1,16 @@
+src/mongla_batighor/mongla_batighor/serve.py
+  h_f1b9066eb9899c 24,47-59,124-125
+src/mongla_batighor/test/test_serve_and_fetch.py
+  h_f1b9066eb9899c 156-167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "eb93d8a48dbe293126c356379c2dad5a647ae6d8",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
