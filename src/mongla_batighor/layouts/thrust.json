@@ -1,0 +1,88 @@
+{
+  "configById": {
+    "mongla.batighor.Thrust!thrust": {},
+    "Plot!demand": {
+      "paths": [
+        {
+          "value": "/mongla/demand.vector.x",
+          "label": "demand surge",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/demand.vector.y",
+          "label": "demand sway",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!power": {
+      "paths": [
+        {
+          "value": "/mongla/state.battery_voltage",
+          "label": "PM1 V",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!rates": {
+      "paths": [
+        {
+          "value": "/mongla/imu.angular_velocity.x",
+          "label": "roll rate",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu.angular_velocity.y",
+          "label": "pitch rate",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu.angular_velocity.z",
+          "label": "yaw rate",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "RawMessages!esc": {
+      "topicPath": "/mongla/esc_rpm"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "mongla.batighor.Thrust!thrust",
+      "second": "Plot!demand",
+      "splitPercentage": 60.0
+    },
+    "second": {
+      "direction": "column",
+      "first": "Plot!power",
+      "second": {
+        "direction": "column",
+        "first": "Plot!rates",
+        "second": "RawMessages!esc",
+        "splitPercentage": 50.0
+      },
+      "splitPercentage": 33.3
+    },
+    "splitPercentage": 50.0
+  }
+}

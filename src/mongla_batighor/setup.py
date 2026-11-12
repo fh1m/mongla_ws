@@ -39,6 +39,7 @@ setup(
             'overlay = mongla_batighor.overlay:main',
             'helm = mongla_batighor.helm:main',
             'deck = mongla_batighor.deck:main',
+            'views = mongla_batighor.views:main',
         ],
     },
 )

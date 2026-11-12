@@ -27,11 +27,11 @@
       "paths": [
         {
           "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.class_id",
-          "label": "forward lock rung"
+          "label": "forward rung"
         },
         {
           "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.class_id",
-          "label": "downward lock rung"
+          "label": "downward rung"
         },
         {
           "value": "/mongla/vision/active_camera.data",
@@ -44,14 +44,15 @@
         },
         {
           "value": "/mongla/localization/aiding.data",
-          "label": "localization",
+          "label": "aided by",
           "timestampMethod": "receiveTime"
         }
       ],
       "isSynced": true
     },
-    "mongla.batighor.Mongla!mongla": {},
-    "mongla.batighor.Helm!helm": {}
+    "mongla.batighor.ControlCenter!control": {},
+    "mongla.batighor.Vehicle!vehicle": {},
+    "mongla.batighor.Vision!vision": {}
   },
   "globalVariables": {},
   "userNodes": {},
@@ -67,16 +68,21 @@
         "direction": "column",
         "first": "Image!downward",
         "second": "StateTransitions!ladder",
-        "splitPercentage": 68
+        "splitPercentage": 66.7
       },
-      "splitPercentage": 48
+      "splitPercentage": 50.0
     },
     "second": {
       "direction": "column",
-      "first": "mongla.batighor.Mongla!mongla",
-      "second": "mongla.batighor.Helm!helm",
-      "splitPercentage": 52
+      "first": "mongla.batighor.ControlCenter!control",
+      "second": {
+        "direction": "column",
+        "first": "mongla.batighor.Vehicle!vehicle",
+        "second": "mongla.batighor.Vision!vision",
+        "splitPercentage": 50.0
+      },
+      "splitPercentage": 52.4
     },
-    "splitPercentage": 64
+    "splitPercentage": 62.0
   }
 }

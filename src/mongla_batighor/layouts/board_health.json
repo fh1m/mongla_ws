@@ -4,50 +4,49 @@
       "paths": [
         {
           "value": "/mongla/state.depth_m",
-          "enabled": true,
-          "label": "depth m"
+          "label": "depth m",
+          "enabled": true
         },
         {
           "value": "/mongla/state.battery_voltage",
-          "enabled": true,
-          "label": "PM1 V"
+          "label": "PM1 V",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "Plot!gyro": {
       "paths": [
         {
           "value": "/mongla/imu.angular_velocity.x",
-          "enabled": true,
-          "label": "gx"
+          "label": "gx",
+          "enabled": true
         },
         {
           "value": "/mongla/imu.angular_velocity.y",
-          "enabled": true,
-          "label": "gy"
+          "label": "gy",
+          "enabled": true
         },
         {
           "value": "/mongla/imu.angular_velocity.z",
-          "enabled": true,
-          "label": "gz"
+          "label": "gz",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
-    },
-    "RawMessages!esc": {
-      "topicPath": "/mongla/esc_rpm"
+      "xAxisVal": "timestamp"
     },
     "RawMessages!order": {
       "topicPath": "/mongla/flare_order"
     },
-    "DiagnosticSummary!health": {
+    "mongla.batighor.Health!health": {},
+    "mongla.batighor.Kutum!kutum": {},
+    "DiagnosticSummary!graded": {
       "minLevel": 0,
       "pinnedIds": [],
       "hardwareIdFilter": "mongla",
@@ -55,30 +54,35 @@
       "sortByLevel": true
     }
   },
-  "layout": {
-    "direction": "row",
-    "first": {
-      "direction": "column",
-      "first": {
-        "direction": "row",
-        "first": "Plot!depthyaw",
-        "second": "Plot!gyro",
-        "splitPercentage": 50
-      },
-      "second": {
-        "direction": "row",
-        "first": "RawMessages!esc",
-        "second": "RawMessages!order",
-        "splitPercentage": 50
-      },
-      "splitPercentage": 60
-    },
-    "second": "DiagnosticSummary!health",
-    "splitPercentage": 62
-  },
   "globalVariables": {},
   "userNodes": {},
   "playbackConfig": {
     "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "Plot!depthyaw",
+      "second": {
+        "direction": "column",
+        "first": "Plot!gyro",
+        "second": "RawMessages!order",
+        "splitPercentage": 50.0
+      },
+      "splitPercentage": 33.3
+    },
+    "second": {
+      "direction": "column",
+      "first": "mongla.batighor.Health!health",
+      "second": {
+        "direction": "column",
+        "first": "mongla.batighor.Kutum!kutum",
+        "second": "DiagnosticSummary!graded",
+        "splitPercentage": 40.0
+      },
+      "splitPercentage": 37.5
+    },
+    "splitPercentage": 55.0
   }
 }

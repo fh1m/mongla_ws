@@ -98,8 +98,7 @@
 .mb dialog::backdrop{background:rgba(0,0,0,.65)}
 .mb dialog p{margin:0 0 10px;color:var(--mb-ink)}
 
-/* the Mongla panel: cards that flow into the panel's width */
-.mb.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));align-content:start}
+/* the instruments */
 .mb .ladder{display:flex;gap:3px}
 .mb .ladder i{flex:1;height:20px;border-radius:2px;background:var(--mb-d3);border:1px solid var(--mb-rule);
   font-style:normal;font-size:9px;letter-spacing:.06em;display:flex;align-items:center;justify-content:center;
