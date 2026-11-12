@@ -1,0 +1,16 @@
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 32
+src/mongla_manager/test/fake_srot_board.py
+  h_f1b9066eb9899c 59-61,126-132,137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "efaafb04dfa3d2ec7a39540ceb964971d8ca66d0",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
