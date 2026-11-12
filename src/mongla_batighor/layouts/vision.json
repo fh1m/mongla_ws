@@ -87,13 +87,23 @@
       "isSynced": true,
       "xAxisVal": "timestamp"
     },
-    "Plot!pose": {
+    "Plot!target_range": {
       "paths": [
         {
           "value": "/mongla/vision/forward/target_pose_fused.range_m",
           "label": "range m",
           "enabled": true
-        },
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!pose": {
+      "paths": [
         {
           "value": "/mongla/vision/forward/target_pose_fused.bearing_deg",
           "label": "bearing deg",
@@ -102,11 +112,6 @@
         {
           "value": "/mongla/vision/forward/target_pose_fused.yaw_deg",
           "label": "target yaw deg",
-          "enabled": true
-        },
-        {
-          "value": "/mongla/vision/forward/target_pose_fused.reproj_px",
-          "label": "reprojection px",
           "enabled": true
         }
       ],
@@ -155,6 +160,11 @@
           "label": "align err y px",
           "enabled": true,
           "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_fused.reproj_px",
+          "label": "reprojection px",
+          "enabled": true
         }
       ],
       "showLegend": true,
@@ -199,7 +209,12 @@
           "first": "Plot!authority",
           "second": {
             "direction": "column",
-            "first": "Plot!pose",
+            "first": {
+              "direction": "row",
+              "first": "Plot!target_range",
+              "second": "Plot!pose",
+              "splitPercentage": 50.0
+            },
             "second": {
               "direction": "column",
               "first": "Plot!anchor",

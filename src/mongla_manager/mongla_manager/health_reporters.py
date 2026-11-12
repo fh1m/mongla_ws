@@ -289,7 +289,9 @@ def thruster_power(kill) -> Health:
 
 def detector(rate_hz: Optional[float], min_hz: float = 5.0) -> Health:
     if rate_hz is None:
-        return unknown('detector', 'no detections topic')
+        # The rate is read from a vision verb's subscription, so before the
+        # first one runs it is unknown even while the detectors publish.
+        return unknown('detector', 'not watched until a vision verb runs')
     if rate_hz <= 0.0:
         return failed('detector', 'publishing nothing')
     return ok('detector', f'{rate_hz:.1f} Hz') if rate_hz >= min_hz else \

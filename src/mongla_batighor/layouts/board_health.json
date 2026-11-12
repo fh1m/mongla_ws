@@ -6,7 +6,17 @@
           "value": "/mongla/state.depth_m",
           "label": "depth m",
           "enabled": true
-        },
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!battery": {
+      "paths": [
         {
           "value": "/mongla/state.battery_voltage",
           "label": "PM1 V",
@@ -58,8 +68,13 @@
     "first": {
       "direction": "column",
       "first": "Plot!depthyaw",
-      "second": "Plot!gyro",
-      "splitPercentage": 50.0
+      "second": {
+        "direction": "column",
+        "first": "Plot!battery",
+        "second": "Plot!gyro",
+        "splitPercentage": 50.0
+      },
+      "splitPercentage": 33.3
     },
     "second": {
       "direction": "column",

@@ -83,6 +83,9 @@ function initPanel(context) {
     if (!st) {
       step.textContent = "no calibration running";
       now.textContent = "ros2 launch mongla_batighor calibrate.launch.py device_path:=<camera>";
+      // The cameras and the saved calibrations come from the node too: say so
+      // rather than leave two empty boxes that read as "none on this vehicle".
+      cameras.textContent = library.textContent = "listed once a calibration runs";
       return;
     }
     step.textContent = st.done

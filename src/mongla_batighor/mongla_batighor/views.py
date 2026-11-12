@@ -88,10 +88,11 @@ def camera(cam: str, *extra: str, stream: str = 'stream', synced: bool = False) 
                  *(f'{V}/{cam}/{e}' for e in extra), synced=synced)
 
 
-def align(x_label: str, y_label: str) -> tuple:
-    """A vision verb's pixel error, from the Move action's feedback."""
+def align(x_label: str, y_label: str, *more: dict) -> tuple:
+    """A vision verb's pixel error, from the Move action's feedback, and `more` in pixels."""
     fb = '/mongla/move/_action/feedback.feedback'
-    return plot(series(f'{fb}.err_x_px', x_label, True), series(f'{fb}.err_y_px', y_label, True))
+    return plot(series(f'{fb}.err_x_px', x_label, True), series(f'{fb}.err_y_px', y_label, True),
+                *more)
 
 
 def raw(topic: str) -> tuple:
@@ -202,14 +203,16 @@ def vision(v: View):
         (3, v('ladder', states(*_ladder_lines(True)))),
         (2, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', f'{c} authority')
                                   for c in CAMERAS)))),
-        (2, v('pose', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'),
-                           series(f'{fwd}/target_pose_fused.bearing_deg', 'bearing deg'),
-                           series(f'{fwd}/target_pose_fused.yaw_deg', 'target yaw deg'),
-                           series(f'{fwd}/target_pose_fused.reproj_px', 'reprojection px')))),
+        # One unit per plot (test_views): metres, degrees and pixels on one
+        # axis flattened all but the largest.
+        (2, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
+                v('pose', plot(series(f'{fwd}/target_pose_fused.bearing_deg', 'bearing deg'),
+                               series(f'{fwd}/target_pose_fused.yaw_deg', 'target yaw deg'))))),
         (2, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'anchor rotation'),
                              series(f'{dwn}/anchor_decomposition.vector.y', 'anchor scale'),
                              series(f'{dwn}/anchor_decomposition.vector.z', 'anchor range m')))),
-        (2, v('align', align('align err x px', 'align err y px'))))
+        (2, v('align', align('align err x px', 'align err y px',
+                             series(f'{fwd}/target_pose_fused.reproj_px', 'reprojection px')))))
     # A strip, not a third of the column: depth_estimation is off by default.
     return row((55, col(*cams, (1, depth))), (45, right))
 
@@ -227,10 +230,12 @@ def flow(v: View):
             v('distance', plot(series(f'{d}/distance_traveled.data', 'distance m', True))),
             v('calibration', states(series(f'{d}/flow_calibration.data', 'velocity scale from',
                                            True))),
+            # Quality and heights read 0 to a few; the track count reads to
+            # ~160, and on one axis it flattened them onto the floor.
             v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
-                              series(f'{d}/distance_debug.data[2]', 'tracks', True),
                               series(f'{d}/distance_debug.data[1]', 'height m', True),
-                              series(f'{d}/floor_height.range', 'floor height m'))))))
+                              series(f'{d}/floor_height.range', 'floor height m'))),
+            v('tracks', plot(series(f'{d}/distance_debug.data[2]', 'tracks', True))))))
 
 
 def localization(v: View):
@@ -278,8 +283,9 @@ def board_health(v: View):
     # One reading of /diagnostics per row: Health and Kutum split it, and a
     # DiagnosticSummary beside them showed every row a third time.
     return row(
-        (55, col(v('depthyaw', plot(series('/mongla/state.depth_m', 'depth m'),
-                                    series('/mongla/state.battery_voltage', 'PM1 V'))),
+        # Depth and volts on their own axes: on one, 12 V flattened the depth.
+        (55, col(v('depthyaw', plot(series('/mongla/state.depth_m', 'depth m'))),
+                 v('battery', plot(series('/mongla/state.battery_voltage', 'PM1 V'))),
                  v('gyro', plot(series('/mongla/imu.angular_velocity.x', 'gx'),
                                 series('/mongla/imu.angular_velocity.y', 'gy'),
                                 series('/mongla/imu.angular_velocity.z', 'gz'))))),
