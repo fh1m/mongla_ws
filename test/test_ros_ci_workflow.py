@@ -96,7 +96,10 @@ def test_an_unreachable_mirror_fails_the_refresh_so_the_retry_runs(tmp_path):
             '-o', f'Dir::State={tmp_path}/state',
             '-o', f'Dir::Cache={tmp_path}/cache',
             '-o', 'Debug::NoLocking=1']
-    lax = subprocess.run(base, capture_output=True, text=True)
+    # The default named, not assumed: on CI this runs after ci_ros.sh has
+    # written the strict mode into /etc/apt/apt.conf.d, which a bare run reads.
+    lax = subprocess.run(base + ['-o', 'APT::Update::Error-Mode=persistent'],
+                         capture_output=True, text=True)
     strict = subprocess.run(base + ['-o', 'APT::Update::Error-Mode=any'],
                             capture_output=True, text=True)
     assert 'Could not resolve' in lax.stderr + strict.stderr, lax.stderr
