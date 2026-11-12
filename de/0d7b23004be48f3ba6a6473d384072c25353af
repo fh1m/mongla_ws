@@ -1,0 +1,24 @@
+src/mongla_batighor/layouts/vision.json
+  h_f1b9066eb9899c 177,179
+src/mongla_batighor/mongla_batighor/serve.py
+  h_f1b9066eb9899c 129-131
+src/mongla_batighor/mongla_batighor/views.py
+  h_f1b9066eb9899c 188-189
+src/mongla_batighor/test/test_serve_and_fetch.py
+  h_f1b9066eb9899c 212
+test/test_batighor_desktop_holds_each_view_once.py
+  h_f1b9066eb9899c 1-66
+tools/pool/batighor_desktop.py
+  h_f1b9066eb9899c 17-28,89-94,97,107-109,111,126-133,135,143,157,162-163,170-176,178-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "de0d7b23004be48f3ba6a6473d384072c25353af",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
