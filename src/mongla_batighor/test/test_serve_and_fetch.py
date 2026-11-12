@@ -161,9 +161,10 @@ def test_a_path_that_leaves_the_web_root_is_refused_however_it_is_spelt(tmp_path
     (web / 'a' / 'x.js').write_text('x')
     (tmp_path / 'secret').write_text('s')
     (web / 'out').symlink_to(tmp_path / 'secret')
-    assert serve.inside(web, 'a/x.js') == (web / 'a' / 'x.js').resolve()
+    files = serve.index(web)
+    assert files == {'a/x.js': (web / 'a' / 'x.js').resolve()}
     for bad in ('', '.', '../secret', 'a/../../secret', str(tmp_path / 'secret'), 'out', '../web2/x'):
-        assert serve.inside(web, bad) is None, bad
+        assert bad not in files, bad
 
 
 def test_every_kind_of_file_lichtblick_ships_has_its_type():

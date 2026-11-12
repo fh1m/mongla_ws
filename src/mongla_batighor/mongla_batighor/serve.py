@@ -48,20 +48,20 @@ TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.json': 'application/j
          '.woff2': 'font/woff2', '.map': 'application/json'}
 
 
-def inside(base: Path, rel: str) -> Path | None:
-    """`base/rel` when it is a path under `base`, else None.
+def index(base: Path) -> dict[str, Path]:
+    """Every file under `base`, keyed by its path relative to it.
 
-    Resolved (`..` and symlinks), then compared as a string against the
-    root's own resolved path with its separator: a `..`, an absolute `rel`
-    and a symlink out all return None, and so does the root itself. One
-    normalisation and one prefix test, the form CodeQL follows
-    (py/path-injection).
+    A request is a lookup in this, so no path is ever built from a URL
+    (py/path-injection): `..`, an absolute path and a symlink out are simply
+    not keys. A file whose real path leaves `base` is left out here.
     """
     root = os.path.realpath(base) + os.sep
-    path = os.path.realpath(os.path.join(root, rel))
-    if not path.startswith(root):
-        return None
-    return Path(path)
+    out = {}
+    for p in Path(base).rglob('*') if Path(base).is_dir() else ():
+        real = os.path.realpath(p)
+        if p.is_file() and real.startswith(root):
+            out[p.relative_to(base).as_posix()] = Path(real)
+    return out
 
 
 def app_link(host: str, bridge_port: int, layout: str) -> str:
@@ -83,8 +83,8 @@ class Handler(BaseHTTPRequestHandler):
     server_version = 'batighor'
 
     def __init__(self, *a, web: Path, layouts: Path, bridge_port: int,
-                 default_layout: str, exts: dict, bundle, **kw):
-        self.web, self.layouts = web, layouts
+                 default_layout: str, exts: dict, bundle, files: dict, **kw):
+        self.web, self.layouts, self.files = web, layouts, files
         self.exts, self.bundle = exts, bundle      # see make_server
         self.bridge_port, self.default_layout = bridge_port, default_layout
         super().__init__(*a, **kw)
@@ -109,7 +109,8 @@ class Handler(BaseHTTPRequestHandler):
             name = url.path[len('/layouts/'):].removesuffix('.json')
             if not _NAME.match(name):
                 return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-            return self._file(self.layouts, f'{name}.json', cache=False)
+            # Read per request: a layout regenerated on Kutum is served at once.
+            return self._file(index(self.layouts), f'{name}.json', cache=False)
         if url.path.startswith('/api/'):
             return self._api(url.path[len('/api/'):])
         if url.path == '/app' or url.path.startswith('/app/'):
@@ -128,7 +129,9 @@ class Handler(BaseHTTPRequestHandler):
             if self.bundle and rel == self.bundle[1]:
                 return self._bytes(self.bundle[2], 'text/javascript', cache=True,
                                    gz=self.bundle[3])
-            return self._file(self.web, rel, cache=bool(_HASHED.search(rel.rsplit('/', 1)[-1])))
+            if not self.files:                  # fetched after this server started
+                self.files.update(index(self.web))
+            return self._file(self.files, rel, cache=bool(_HASHED.search(rel.rsplit('/', 1)[-1])))
         return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
 
     def _api(self, rel: str):
@@ -179,14 +182,13 @@ class Handler(BaseHTTPRequestHandler):
                            'timestamp': '1970-01-01T00:00:00Z'}).encode()
         return self._bytes(body, 'application/json', cache=False)
 
-    def _file(self, base: Path, rel: str, cache: bool):
-        """`base/rel`, typed from TYPES; both it and its `.gz` go through `inside(base, ...)`."""
-        path = inside(base, rel)
-        if path is None or not path.is_file():
+    def _file(self, files: dict, rel: str, cache: bool):
+        """`rel` if it is a key of `files` (see `index`), typed from TYPES."""
+        path = files.get(rel)
+        if path is None:
             return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-        gz = inside(base, rel + '.gz')                  # from the root, like the file itself
         return self._bytes(path, TYPES.get(path.suffix, 'application/octet-stream'), cache,
-                           gz=gz if gz is not None and gz.is_file() else None)
+                           gz=files.get(rel + '.gz'))
 
     def _bytes(self, body, ctype: str, cache: bool, gz=None):
         """Send `body`, or `gz` to a browser that takes gzip; each is bytes or a file."""
@@ -232,7 +234,7 @@ def make_server(port: int, web: Path, layouts: Path, bridge_port: int,
         bundle = (*bundle, gzip.compress(bundle[2], compresslevel=9))
     return ThreadingHTTPServer(('0.0.0.0', port), partial(
         Handler, web=web, layouts=layouts, bridge_port=bridge_port,
-        default_layout=default_layout, exts=exts, bundle=bundle))
+        default_layout=default_layout, exts=exts, bundle=bundle, files=index(web)))
 
 
 def main(argv=None) -> int:
