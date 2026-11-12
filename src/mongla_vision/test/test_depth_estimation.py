@@ -96,11 +96,6 @@ def test_bbox_area_fallback() -> None:
                 setattr(m, attr, _dummy_class)
             sys.modules.setdefault(msg_stub, m)
 
-        if 'cv_bridge' not in sys.modules:
-            cvb = types.ModuleType('cv_bridge')
-            cvb.CvBridge = _dummy_class  # type: ignore[attr-defined]
-            sys.modules['cv_bridge'] = cvb
-
         # cv2 must return sensible values — use the real one if present,
         # otherwise create a minimal stub.
         try:

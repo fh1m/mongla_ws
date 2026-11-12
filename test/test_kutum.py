@@ -172,3 +172,16 @@ def test_every_kutum_service_is_confined(tmp_path):
     for who in ('', 'User=root\n', 'User=fh1m\n'):
         rogue.write_text(f'[Service]\n{who}ExecStart=/bin/true\n')
         assert 'no own User=' in _unconfined(rogue), who
+
+
+def test_the_hailort_service_keeps_the_one_capability_it_needs():
+    """As its own user, the service can only tell a client is alive by
+    signalling it, which needs CAP_KILL; without it every client loses its
+    network at the first inference (measured-bars 83). It gets that and
+    nothing else."""
+    text = (KUTUM / 'system/systemd/hailort.service').read_text()
+    lines = {l.split('=', 1)[0]: l.split('=', 1)[1] for l in text.splitlines()
+             if '=' in l and not l.startswith('#')}
+    assert lines.get('User') == 'hailort'
+    assert lines.get('AmbientCapabilities') == 'CAP_KILL'
+    assert lines.get('CapabilityBoundingSet') == 'CAP_KILL'

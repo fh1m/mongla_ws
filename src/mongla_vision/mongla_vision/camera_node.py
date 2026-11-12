@@ -39,7 +39,7 @@ from sensor_msgs.msg import Image, CameraInfo
 from std_msgs.msg import Header
 from std_msgs.msg     import Float32, Int32
 from std_srvs.srv     import SetBool
-from cv_bridge        import CvBridge
+from mongla_vision import image_msg
 
 from mongla_vision import qos
 from mongla_vision import (
@@ -144,7 +144,6 @@ class CameraNode(Node):
         self._pub_info = self.create_publisher(
             CameraInfo, f'{ns}/camera_info', qos.CAMERA_INFO)
         self._calib = self._load_calibration()
-        self._bridge   = CvBridge()
 
         # publish_rate_hz <= 0 means "follow the camera", and that is now the
         # default. It used to default to 30 and vision.launch.py passed its own
@@ -542,9 +541,9 @@ class CameraNode(Node):
             self._last_pub = time.monotonic()
 
         try:
-            img_msg = self._bridge.cv2_to_imgmsg(frame, encoding='bgr8')
+            img_msg = image_msg.to_msg(frame, 'bgr8')
         except Exception as exc:
-            self.get_logger().warning(f"[CAM  ] cv_bridge encode failed: {exc!r}")
+            self.get_logger().warning(f"[CAM  ] image encode failed: {exc!r}")
             self._dropped += 1
             return
 
