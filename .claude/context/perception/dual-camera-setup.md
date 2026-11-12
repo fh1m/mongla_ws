@@ -56,12 +56,12 @@ it is playing — that is the mistake the role swap made expensive.
 
 ```bash
 ros2 launch mongla_manager bringup.launch.py vision:=true      # the vehicle: both cameras
-ros2 launch mongla_vision mission_web.launch.py                # both streams in a browser
+ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true   # and in a browser
 ```
 
-The mission console shows both `image_debug` streams side by side, with detections burned in
-server-side and a live table per camera. A launch with only one camera present degrades to a
-single panel instead of crashing.
+Batighor (`http://mongla.local:8000/`) shows each camera's own JPEG with the detections drawn
+by the browser, and its helm switches the live camera. On a bench with no board, run
+`ros2 launch mongla_batighor batighor.launch.py` beside `vision_dual.launch.py`.
 
 Related: [`camera-and-calibration.md`](camera-and-calibration.md) ·
 [`camera-latency.md`](camera-latency.md) ·

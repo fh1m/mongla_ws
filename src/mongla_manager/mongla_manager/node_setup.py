@@ -258,6 +258,8 @@ class SetupMixin:
         self._fast_mode   = ''
         self._fast_batt_v = math.nan
         self._start_recorder()          # BEFORE the reader -- it is the sink
+        from .link_meter import LinkMeter
+        self._link_meter = LinkMeter()  # BEFORE the reader -- it feeds it
         self.reader_thread = threading.Thread(
             target=self.reader_loop, daemon=True)
         self.reader_thread.start()
@@ -487,6 +489,9 @@ class SetupMixin:
         self._Int32MultiArray = Int32MultiArray
         self.esc_rpm_publisher = self.create_publisher(
             Int32MultiArray, '/mongla/esc_rpm', 10)
+        # The link itself, for the operator (link_meter.py).
+        from mongla_interfaces.msg import BoardLink
+        self.board_link_publisher = self.create_publisher(BoardLink, '/mongla/board_link', 10)
         # The flare order the operator sent over LoRa (fw comms/flare_order.h).
         # TRANSIENT_LOCAL so a mission that subscribes late still gets the last one;
         # the JSON carries latched_at, so a late reader can refuse an old order.
@@ -543,6 +548,7 @@ class SetupMixin:
     def _setup_telemetry_timers(self) -> None:
         """The 2 Hz telemetry tick, the 20 Hz state tick and the 50 Hz IMU tick."""
         self.create_timer(0.5,  self.telemetry_tick,   callback_group=self.timer_group)
+        self.create_timer(1.0,  self.board_link_tick,  callback_group=self.timer_group)
         # Fast tick: 20 Hz HUD compass + depth (ATTITUDE pinned to 50 Hz).
         # Separate callback group so it can fire between telemetry ticks.
         self.fast_group = MutuallyExclusiveCallbackGroup()

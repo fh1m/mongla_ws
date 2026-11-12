@@ -108,10 +108,9 @@ DEFERRED = {
         'hull, find the ballast that hovers), after which the measured value is '
         'what gets shipped and this stays a cross-check rather than a source.'),
     'mongla_control/mongla_control/nav_filter.py': (
-        'alpha-beta smoothing for the OPERATOR CONSOLE, not the vehicle: '
-        '`tools/pool/srot_console_server.py` and `tools/pool/srot_replay.py` import its '
-        'DepthFilter and HeadingFilter to steady the displayed readings and to '
-        're-tune them against a recorded dive. No node imports it, so it is not '
+        'alpha-beta smoothing for REPLAY, not the vehicle: '
+        '`tools/pool/srot_replay.py` imports its DepthFilter and HeadingFilter '
+        'to re-tune them against a recorded dive. No node imports it, so it is not '
         'WIRED. Vehicle fusion is the RIEKF in mongla_localization and heading '
         'is the board\'s own (`yaw_source.BoardYaw`); do not reach for this as an '
         'estimator.'),

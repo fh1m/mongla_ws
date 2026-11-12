@@ -174,6 +174,7 @@ class AUVManagerNode(ActionMixin, SetupMixin, HealthMixin, VisionLinkMixin, Tele
                 # SrotFC computes is measured from this, because pymavlink's own
                 # `_timestamp` is wall time and the Pi's wall clock steps.
                 msg._mono = time.monotonic()
+                self._link_meter.note(msg, msg._mono)
                 # Record BEFORE the demux, and before any type filter: the
                 # log's job is to hold what arrived, including messages nothing
                 # on this side consumes. ESC_STATUS (291) is the live example --

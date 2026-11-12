@@ -185,3 +185,28 @@ def test_a_move_while_disarmed_is_refused_by_the_host(rig):
     assert not board.armed
     r = _wait(_send(ac, 'move_forward', duration=1.0, gain=30.0))
     assert not r.result.success and 'disarmed' in r.result.message.lower()
+
+
+def test_the_link_is_measured_and_published(rig):
+    """/mongla/board_link carries what the fake board sends: its message types,
+    its named channels by name, and its own zero drop count."""
+    from rclpy.executors import SingleThreadedExecutor
+    from mongla_interfaces.msg import BoardLink
+    got = []
+    sub_node = rclpy.create_node('e2e_board_link')
+    sub_node.create_subscription(BoardLink, '/mongla/board_link', got.append, 10)
+    ex = SingleThreadedExecutor()
+    ex.add_node(sub_node)
+    t = time.monotonic()
+    while time.monotonic() - t < 8.0 and not (got and got[-1].named):
+        ex.spin_once(timeout_sec=0.1)
+    ex.shutdown()
+    sub_node.destroy_node()
+    assert got, 'nothing on /mongla/board_link'
+    m = got[-1]
+    assert 0.0 < m.bytes_per_s < m.capacity_bytes_per_s == 11520.0
+    rates = {r.type: r.hz for r in m.rates}
+    assert rates.get('ATTITUDE', 0.0) > 0.0 and rates.get('HEARTBEAT', 0.0) > 0.0
+    named = {n.name: n.value for n in m.named}
+    assert named.get('YAW_REF') == 2.0 and named.get('LEAK') == 0.0
+    assert m.board_drop_pct == 0.0 and m.board_errors == 0.0

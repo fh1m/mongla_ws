@@ -205,10 +205,11 @@ the network (a future deck service) runs as its own user, never root, with
 service cannot reach the operator's sudo. `test_kutum.py` refuses a unit that
 does not. The operator account keeps `NOPASSWD` (the owner's call, 2026-11-09).
 
-The mission web console (`ros2 launch mongla_vision mission_web.launch.py`)
-listens on every interface with no login, and its POST routes change detector
-parameters and the active camera. That is deliberate (the owner's call,
-2026-11-09, GitHub #66): at the pool everyone on the vehicle's network is the
-team, and any of them may need to change something from any device. It is off
-unless launched, and it never touches the board, which only `auv_manager_node`
-owns. Revisit this if the console is ever served beyond the team's network.
+Batighor (`batighor:=true`) listens on every interface with no login, and its
+helm drives the vehicle, tunes the detectors and switches the camera. That is
+deliberate (the owner's call, 2026-11-09, GitHub #66): at the pool everyone on
+the vehicle's network is the team, and any of them may need to act from any
+device. The helm's rules (one pilot, typed names, `mongla_batighor/seat.py`)
+keep operators from colliding; they do not keep anyone out. It is off unless
+launched, and only `auv_manager_node` touches the board. Revisit this if
+Batighor is ever served beyond the team's network.

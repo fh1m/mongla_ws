@@ -183,11 +183,19 @@ function initPanel(context) {
     el("button", { onclick: () => call("camera", { cmd: c }) }, c));
   const now = {};            // "camera.setting" -> the cell showing its value
   const setButtons = [];
+  const modelLists = {};     // camera -> the datalist of its registry keys
   const tuneGrid = el("div", { class: "bh-fields" });
   for (const cam of CAMERAS) {
     for (const [s, kind] of Object.entries(TUNABLE)) {
       const key = `${cam}.${s}`;
       const input = el("input", { size: "10", type: kind === "float" ? "number" : "text", step: "any" });
+      if (s === "active_model") {
+        // The detector's registry keys; typing "a,b" for two models still works.
+        const list = el("datalist", { id: `bh-models-${cam}` });
+        input.setAttribute("list", list.id);
+        modelLists[cam] = list;
+        tuneGrid.append(list);
+      }
       const set = el("button", {
         onclick: () => {
           if (input.value === "") return undefined;
@@ -249,6 +257,16 @@ function initPanel(context) {
       const [cam, s] = key.split(".");
       const v = (tuning[cam] || {})[s];
       cell.textContent = tuning[cam] ? (v === "" ? '""' : String(v)) : "--";
+    }
+    for (const [cam, list] of Object.entries(modelLists)) {
+      // `models` is "key=stem,key2=stem2" or bare stems; the key is what
+      // active_model takes (detector_params._parse_models_param).
+      const keys = String((tuning[cam] || {}).models || "").split(",")
+        .map((p) => p.split("=")[0].trim()).filter(Boolean);
+      if (list.dataset.keys !== keys.join(",")) {
+        list.dataset.keys = keys.join(",");
+        list.replaceChildren(...keys.map((k) => el("option", { value: k })));
+      }
     }
     for (const b of setButtons) b.disabled = !named || Boolean(helm.mission);
     tuneNote.textContent = helm.mission

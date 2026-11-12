@@ -65,22 +65,6 @@ from mongla_localization.launch_respawn import respawning
 # EMERGENCY_DISARM_S plus the brake, so a slow disarm confirmation is logged
 # rather than killed mid-poll (a test compares the two).
 
-# What a browser may do through foxglove_bridge. The bridge cannot tell one
-# browser from another, and its defaults let every one of them call any
-# service, set any node's parameters and publish on any topic -- which with
-# include_hidden reaches /mongla/move/_action/send_goal and
-# shield_max_depth_m, past the helm. So a browser calls the helm and nothing
-# else: it drives, tunes the detectors (not during a mission, owner
-# 2026-11-12) and switches the camera there, by the helm's rules
-# (mongla_batighor/seat.py), and it publishes nothing.
-# test_the_bridge_only_lets_a_browser_drive_through_the_helm.
-BRIDGE_LIMITS = {
-    'capabilities': ['services', 'connectionGraph', 'assets'],
-    'service_whitelist': ['^/mongla/batighor/helm$'],
-    'param_whitelist': ['^$'],
-    'client_topic_whitelist': ['^$'],
-}
-
 MANAGER_SIGTERM_TIMEOUT_S = 12
 
 # The vehicle vision stack's own arguments, the ones this file does not
@@ -482,61 +466,13 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('localization')),
     )
 
-    # Batighor (mongla_batighor): the bridge and the web app. Opt-in, off the
-    # mission path. The bridge exposes every topic over a WebSocket that
-    # Lichtblick, in the browser or on the desktop, renders (our
-    # detections/images/state are standard vision_msgs/sensor_msgs). use_compression
-    # cuts tether bandwidth; still confirm detection FPS is unperturbed with it up
-    # and images being viewed (Mongla is FPS-coupled). See foxglove-and-bags.md.
-    foxglove_node = partial(
-        Node,
-        package='foxglove_bridge',
-        executable='foxglove_bridge',
-        name='foxglove_bridge',
-        output='screen',
-        ros_arguments=['--log-level', 'warn', '--log-level', 'foxglove_bridge:=info'],
-        parameters=[{
-            'port':            LaunchConfiguration('foxglove_port'),
-            'address':         '0.0.0.0',
-            'use_compression': True,
-            # /mongla/move/_action/feedback + /status live under the _action
-            # namespace => ROS 2 HIDDEN topics. Without this the live err_x_px/
-            # err_y_px convergence plot is silently empty (default is false).
-            'include_hidden':  True,
-            **BRIDGE_LIMITS,
-        }],
-        condition=IfCondition(LaunchConfiguration('batighor')),
-    )
-    batighor_node = partial(
-        Node,
-        package='mongla_batighor',
-        executable='serve',
-        name='batighor',
-        output='screen',
-        arguments=['--port', LaunchConfiguration('batighor_port'),
-                   '--bridge-port', LaunchConfiguration('foxglove_port')],
-        condition=IfCondition(LaunchConfiguration('batighor')),
-    )
-
-    # The detector's boxes as annotations the browser draws over the camera's
-    # own JPEG (mongla_batighor/overlay.py). Publishes only while watched.
-    batighor_overlay = partial(
-        Node,
-        package='mongla_batighor',
-        executable='overlay',
-        name='batighor_overlay',
-        output='screen',
-        condition=IfCondition(LaunchConfiguration('batighor')),
-    )
-
-    # The browsers' helm: the pilot token and the command log
-    # (mongla_batighor/helm.py). The terminal does not need it.
-    batighor_helm = partial(
-        Node,
-        package='mongla_batighor',
-        executable='helm',
-        name='batighor_helm',
-        output='screen',
+    # Batighor, the operator center (mongla_batighor/launch/batighor.launch.py,
+    # which also runs alone beside a bench stack). Opt-in, off the mission path.
+    batighor_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(
+            get_package_share_directory('mongla_batighor'), 'launch', 'batighor.launch.py')),
+        launch_arguments={'batighor_port': LaunchConfiguration('batighor_port'),
+                          'foxglove_port': LaunchConfiguration('foxglove_port')}.items(),
         condition=IfCondition(LaunchConfiguration('batighor')),
     )
 
@@ -572,8 +508,5 @@ def generate_launch_description():
         # the colliding name a valid value instead of an inherited one.
         GroupAction([vision_pi_launch], scoped=True),
         GroupAction([vision_launch], scoped=True),
-        *respawning(foxglove_node, 'the Foxglove bridge'),
-        *respawning(batighor_node, 'the Batighor web app'),
-        *respawning(batighor_overlay, 'the Batighor overlay'),
-        *respawning(batighor_helm, 'the Batighor helm'),
+        GroupAction([batighor_launch], scoped=True),
     ])

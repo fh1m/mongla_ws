@@ -23,7 +23,7 @@ def _topics(layout):
     found = set()
     for cfg in layout['configById'].values():
         image = cfg.get('imageMode', {})
-        for v in [cfg.get('topicPath'), image.get('imageTopic')] \
+        for v in [cfg.get('topicPath'), cfg.get('topicToRender'), image.get('imageTopic')] \
                 + list(image.get('annotations', {})) \
                 + [p['value'] for p in cfg.get('paths', [])]:
             if v:

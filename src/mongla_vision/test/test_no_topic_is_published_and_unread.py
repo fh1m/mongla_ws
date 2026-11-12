@@ -45,6 +45,10 @@ PUBLISHED_UNREAD = {
         'a DIAGNOSTIC. The gate it describes is applied inside flow_node, which '
         'publishes NO velocity at quality 0, so the filter never needs it. Read '
         'by tools/bench/flow_launch_check.py and tools/bench/flow_derot_ab.py.',
+    '/mongla/board_link':
+        'operator telemetry: what the link carries and every named channel '
+        'with its age, for a human in Batighor\'s board_link layout. The '
+        'manager grades the link itself on /diagnostics; nothing acts on this.',
     '/diagnostics':
         'the ROS standard health topic, for a human. The health board on it '
         'is read in Foxglove\'s Diagnostics panel and by rqt_robot_monitor, '

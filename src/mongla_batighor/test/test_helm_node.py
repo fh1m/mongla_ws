@@ -57,7 +57,8 @@ class FakeDetector(Node):
         super().__init__(f'mongla_detector_{camera}')
         for name, value in (('conf', 0.35), ('nms_floor', 0.05), ('nms_iou', 0.0),
                             ('active_model', 'gate_sharks'), ('classes', ''),
-                            ('paused', camera != 'forward')):
+                            ('paused', camera != 'forward'),
+                            ('models', 'gate=gate_sharks,bins_v2')):
             self.declare_parameter(name, value)
 
 
@@ -206,6 +207,14 @@ def test_any_named_operator_tunes_a_detector_when_no_mission_runs(rig):
     # and the state every browser reads says so, within the 1 s poll
     assert _until(lambda: states and states[-1].get('tuning', {})
                   .get('forward', {}).get('conf') == 0.6)
+
+
+def test_the_state_carries_the_model_registry_the_panel_offers(rig):
+    """active_model picks from `models`; the panel lists its keys, so the
+    helm must pass the registry on, read only."""
+    _, _, _, states, _ = rig
+    assert _until(lambda: states and states[-1].get('tuning', {})
+                  .get('downward', {}).get('models') == 'gate=gate_sharks,bins_v2')
 
 
 def test_tuning_is_closed_while_a_mission_runs(rig):

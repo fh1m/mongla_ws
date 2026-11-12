@@ -19,7 +19,8 @@ SRC = Path(__file__).resolve().parents[1] / 'src'
 #: Bringup, and the vision launch files it includes (`vision_stack`).
 BRINGUP_STACKS = ('mongla_manager/launch/bringup.launch.py',
                   'mongla_vision/launch/vision_pi.launch.py',
-                  'mongla_vision/launch/vision.launch.py')
+                  'mongla_vision/launch/vision.launch.py',
+                  'mongla_batighor/launch/batighor.launch.py')
 
 #: Executables deliberately not restarted, each with its reason.
 NOT_RESTARTED = {
@@ -53,7 +54,8 @@ def test_every_process_has_a_restart_or_a_written_reason(name):
 @pytest.mark.parametrize('name', BRINGUP_STACKS)
 def test_the_guard_sees_the_processes_it_judges(name):
     # A render that finds no Node would pass the test above vacuously.
-    assert len(_nodes(_render(name))) >= 3
+    # Two: bringup itself starts the manager and localization; the rest it includes.
+    assert len(_nodes(_render(name))) >= 2
 
 
 def test_every_exemption_is_still_launched():

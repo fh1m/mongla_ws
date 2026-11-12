@@ -17,7 +17,16 @@ ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 #           http://mongla.local:8000/?layout=board_health
 ```
 
-`kutum/setup.sh` runs `fetch` for you.
+`kutum/setup.sh` runs `fetch` for you. On a bench with no board, the same center runs beside
+any vision launch, cameras or recorded video:
+
+```bash
+ros2 launch mongla_vision vision_dual.launch.py fwd_video:=/path/gate.mp4 dwn_video:=/path/bin.mp4
+ros2 launch mongla_batighor batighor.launch.py
+```
+
+`vision_dual` starts both detectors paused, as a mission expects: take the helm and choose a
+camera to resume one, or add `paused:=false` for both.
 
 ## How it is built
 
@@ -25,14 +34,14 @@ ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 |---|---|
 | `LICHTBLICK.json` | the one Lichtblick version we serve: release URL and SHA-256. `fetch` refuses any other bytes |
 | `fetch.py` | downloads (or takes `--from` a local tarball), checks the hash, leaves the source maps out (130 of 173 MB), and writes a gzip copy of every text asset |
-| `serve.py` | a static server. `/` answers with a link to the app carrying `ds=foxglove-websocket`, the bridge address *as the browser reached Kutum* (tether or Wi-Fi alike), `workspace=mongla` and the layout's name. Hashed assets are cached for good, `index.html` never. `/api/` answers the part of Lichtblick's workspace API the app reads, read only: our layouts as the organisation's, and our panels as its extensions. `/layouts/<name>.json` is the same layout as a file, for the desktop app. A browser shows Kutum's copy of a layout until its operator rearranges it; then it keeps theirs, marked with a dot, until they choose Revert in the layout's menu |
-| `panels.py`, `panels/` | our own Lichtblick panels, plain JavaScript with no build step, zipped into a `.foxe` as served. The release bundle names no API, so `panels.py` turns it on in the one line that does, and serve says `WARNING` and serves no panels if a new release moved that line. `panels/helm` is the helm: name, Request/Give/Release, STOP/SURFACE/DISARM, Arm behind two ticks, any verb with its own fields (the list comes from `commands.py`), missions, and the log |
+| `serve.py` | a static server. `/` answers with a link to the app carrying `ds=foxglove-websocket`, the bridge address *as the browser reached Kutum* (tether or Wi-Fi alike), `workspace=mongla` and the layout's name. Hashed assets are cached for good, `index.html` never. `/api/` answers the part of Lichtblick's workspace API the app reads, read only: our layouts as the organisation's, and our panels as its extensions. `/layouts/<name>.json` is the same layout as a file, for the desktop app. A browser shows Kutum's copy of a layout until its operator rearranges it; then it keeps theirs, marked with a dot, until they choose Revert in the layout's menu. A layout changed on Kutum shows on a browser's second load: the app fetches the new copy after it has opened the one it holds |
+| `panels.py`, `panels/` | our own Lichtblick panels, plain JavaScript with no build step, zipped into a `.foxe` as served. The release bundle names no API, so `panels.py` turns it on in the one line that does, and serve says `WARNING` and serves no panels if a new release moved that line. `panels/helm` is the helm: name, Request/Give/Release, STOP/SURFACE/DISARM, Arm behind two ticks, any verb with its own fields (the list comes from `commands.py`), missions, the camera, the detectors' settings with each detector's model registry offered for `active_model`, and the log |
 | `overlay.py` | what the vision stack sees, as `foxglove_msgs/ImageAnnotations` on `/mongla/vision/<cam>/annotations`: detector boxes with class and score, track ids, and the lock drawn thicker. The browser draws them over the camera's own JPEG |
-| `layouts/` | our Lichtblick layouts; `test_layouts.py` fails when one shows a topic nothing publishes. `weak_link` is the one for a slow connection |
+| `layouts/` | our Lichtblick layouts; `test_layouts.py` fails when one shows a topic nothing publishes. `weak_link` is the one for a slow connection. `board_health` carries the manager's health board (`/diagnostics`): every subsystem graded, with its evidence, worst first. `board_link` draws `/mongla/board_link`: the link's bytes/s against the line's capacity, the board's drops and errors, the rate of every message type and every named channel with its age |
 
-`batighor:=true` in `bringup.launch.py` starts `foxglove_bridge` (port 8765), the server
-(port 8000), the overlay and the helm, each respawned like every other process. The deck is
-started by hand, in a terminal.
+`launch/batighor.launch.py` starts `foxglove_bridge` (port 8765), the server (port 8000), the
+overlay and the helm, each respawned like every other process; `batighor:=true` in
+`bringup.launch.py` includes it. The deck is started by hand, in a terminal.
 
 ## Who drives: one pilot, everyone watches
 
@@ -66,7 +75,7 @@ log trusts it.
 - Every request and every change of pilot goes to `/mongla/batighor/log` and
   `~/.mongla/batighor/helm.log`; the deck adds its own commands, marked `term:<user>`.
 
-**What a browser may do at all** is set in `bringup.launch.py` (`BRIDGE_LIMITS`), because
+**What a browser may do at all** is set in `batighor.launch.py` (`BRIDGE_LIMITS`), because
 the bridge cannot tell one browser from another and by default lets each call any service,
 set any parameter and publish anything. With hidden topics on, that reached the action's
 own `send_goal` and the manager's `shield_max_depth_m`, past the helm. Now a browser calls one
@@ -99,7 +108,10 @@ our own panels; video switchable by link (the camera's JPEG passed through on th
 lighter stream on a weak link); one pilot token with everyone watching, and disarm, stop and
 surface from any operator; a mission planner with the pool map and the mission text side by
 side; a three.js scene with the hull CAD; the Mongla look; and the five older tools ported and
-then deleted. Each is a bead under it.
+then deleted. Each is a bead under it. The mission web console is the first deleted: its camera
+switch and detector settings are the helm's, its video is the browser's, and its per-detection
+table (with `vis_range`, when `depth_estimation` runs) is any Raw Messages panel on
+`/mongla/vision/<cam>/detections` or `vis_range`.
 
 ## Every module
 
