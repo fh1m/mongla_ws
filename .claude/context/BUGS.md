@@ -507,6 +507,26 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-113: a lapsed DHCP lease renumbered Kutum's Ethernet under a running stack `READ 2026-11-12` **FIXED 2026-11-12** (in the repo; on Kutum at the next `setup.sh --system`)
+
+**What.** With the stack and Batighor running, the bench router let eth0's
+lease lapse; networkd dropped 192.168.0.102 and took 192.168.0.105 33 s later.
+Every session to the old address went with it: the desktop app sat on
+"Waiting for image messages", and ssh to the stable-looking address said no
+route to host. The ROS graph on the Pi was untouched. An operator on
+`mongla.local` reconnects to the new address; a session typed by address, or
+a tether whose DHCP server restarts mid-run, does not.
+
+**Fix.** `critical: true` in `kutum/system/netplan/60-kutum-eth.yaml`, which
+netplan 1.1.2 writes as `KeepConfiguration=true`: networkd never drops an
+address a DHCP server gave, so a lapse adds a new address beside the old one
+instead of replacing it (checked with `netplan generate` on Kutum).
+`doctor.sh` reports the installed file differs until setup runs again.
+
+**How it survived.** Each earlier dropout was explained by the Wi-Fi hopping
+between access points, and eth0 was noted as the stable address. It was
+stable only while the router kept renewing.
+
 ### B-112: the detector treated a HEF's compiled score threshold as a floor nothing could lower `READ 2026-11-11` **FIXED 2026-11-11**
 
 **What.** B-58 found a model compiled at the stock 0.200 and concluded that
