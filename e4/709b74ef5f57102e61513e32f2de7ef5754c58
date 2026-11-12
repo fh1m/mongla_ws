@@ -1,0 +1,22 @@
+src/mongla_batighor/mongla_batighor/serve.py
+  h_f1b9066eb9899c 23,38-64,86-87,101-103,105,112-113,132-134,185-188,190-191,237
+src/mongla_batighor/test/test_serve_and_fetch.py
+  h_f1b9066eb9899c 78-94,156-176
+src/mongla_manager/test/test_the_bridge_only_lets_a_browser_drive_through_the_helm.py
+  h_f1b9066eb9899c 1-70
+test/test_ros_ci_workflow.py
+  h_f1b9066eb9899c 74-109
+tools/ci/ci_ros.sh
+  h_f1b9066eb9899c 25-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "e4709b74ef5f57102e61513e32f2de7ef5754c58",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
