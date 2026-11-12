@@ -153,3 +153,15 @@ def test_the_pin_is_a_release_asset_with_a_full_hash():
     p = pin(Path(__file__).resolve().parents[1])
     assert p['url'].endswith(f'/v{p["version"]}/lichtblick-web.tar.gz')
     assert len(p['sha256']) == 64 and int(p['sha256'], 16) >= 0
+
+
+def test_a_path_that_leaves_the_web_root_is_refused_however_it_is_spelt(tmp_path):
+    web = tmp_path / 'web'
+    (web / 'a').mkdir(parents=True)
+    (web / 'a' / 'x.js').write_text('x')
+    (tmp_path / 'secret').write_text('s')
+    (web / 'out').symlink_to(tmp_path / 'secret')
+    assert serve.inside(web, 'a/x.js') == (web / 'a' / 'x.js').resolve()
+    assert serve.inside(web, '') == web.resolve()
+    for bad in ('../secret', 'a/../../secret', str(tmp_path / 'secret'), 'out', '../web2/x'):
+        assert serve.inside(web, bad) is None, bad

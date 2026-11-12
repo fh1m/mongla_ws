@@ -21,6 +21,7 @@ import argparse
 import gzip
 import json
 import mimetypes
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -41,6 +42,19 @@ _HASHED = re.compile(r'\.[0-9a-f]{16,}\.')
 _HOST = re.compile(r'^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])'
                    r'(?::[0-9]{1,5})?$')
 mimetypes.add_type('application/wasm', '.wasm')
+
+
+def inside(base: Path, rel: str) -> Path | None:
+    """`base/rel` when it stays inside `base`, else None.
+
+    Normalised and compared as strings, so `..`, a symlink out or an absolute
+    `rel` all fail the same way.
+    """
+    root = os.path.realpath(base)
+    path = os.path.realpath(os.path.join(root, rel))
+    if path != root and not path.startswith(root + os.sep):
+        return None
+    return Path(path)
 
 
 def app_link(host: str, bridge_port: int, layout: str) -> str:
@@ -107,8 +121,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.bundle and rel == self.bundle[1]:
                 return self._bytes(self.bundle[2], 'text/javascript', cache=True,
                                    gz=self.bundle[3])
-            target = (self.web / rel).resolve()
-            if self.web.resolve() not in target.parents and target != self.web.resolve():
+            target = inside(self.web, rel)
+            if target is None:
                 return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
             return self._file(target, cache=bool(_HASHED.search(target.name)))
         return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
