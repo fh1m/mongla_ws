@@ -26,7 +26,7 @@ kutum/
     udev/51-hailo-udev.rules       /dev/hailo0 readable without root
     udev/make_srot_rule.sh         pin the SROT board to /dev/srot (once per board)
     systemd/cpu-performance.service + set-cpu-performance   CPU governor at boot
-    netplan/60-kutum-eth.yaml      Ethernet: DHCP plus a link-local fallback
+    netplan/60-kutum-eth.yaml      Ethernet: DHCP that keeps its address, plus a link-local fallback
 ```
 
 ## The network
