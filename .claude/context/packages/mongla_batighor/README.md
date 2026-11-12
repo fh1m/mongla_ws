@@ -103,6 +103,19 @@ tmux showed the same three lines and refused its own `stop` with "the manager is
 /mongla/move", since no manager ran. The browser panel that carries the heartbeat comes with our
 Lichtblick build: the release cannot load server panels (its `apiUrl` is unset).
 
+## Where things go on the screen
+
+`views.py` places every panel by these rules. A view that breaks one says why in its docstring.
+
+| rule | why | source |
+|---|---|---|
+| The picture is the largest thing, on the left; numbers and controls are on the right | the eye reads the scene first, and the hand goes to the controls beside it. QGroundControl's Fly View keeps the video large and puts its instrument panel at the right centre | [QGroundControl, Fly View](https://docs.qgroundcontrol.com/master/en/qgc-user-guide/fly_view/fly_view.html) |
+| One aspect per view, chosen from the layout menu; nothing is crammed into one panel | a glance answers one question. Workload and situational awareness are the factors a mission-control display is judged on | [DLR, UX/UI for Columbus operations (SpaceOps 2025)](https://elib.dlr.de/220842/1/SpaceOps2025-Paper-Investigating%20UX-UI%20design%20for%20Columbus%20Operations_FIN1.pdf) |
+| Show what moves, and quieten what does not: health worst first, absence as `--`, never a reassuring zero | mission-control displays are designed to cut the detail of what is unimportant and draw attention to dynamic data | [NASA/JPL, Mars Observer mission-control displays](https://ntrs.nasa.gov/api/citations/19940019415/downloads/19940019415.pdf) |
+| STOP, SURFACE and DISARM in the same place in every view that drives, one press for anyone | an operator under load must not search for the way out | the owner's rule (bead 102.25.3) |
+| Every operator gets the same panels, from one place | a team that published its Foxglove extensions so every member had the latest GUI | [Foxglove, Duke Robotics spotlight](https://foxglove.dev/blog/spotlight-duke-robotics-clubs-journey-to-underwater-autonomy) |
+| Every published topic is shown somewhere, or named with the reason it is not | an operator cannot reason about what they cannot see | `test_views.py` |
+
 ## Video, by link
 
 Kutum never encodes a frame for an operator. `camera_node` republishes the JPEG the camera
