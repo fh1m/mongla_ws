@@ -23,6 +23,7 @@ setup(
         'console_scripts': [
             'serve = mongla_batighor.serve:main',
             'fetch = mongla_batighor.fetch:main',
+            'overlay = mongla_batighor.overlay:main',
         ],
     },
 )

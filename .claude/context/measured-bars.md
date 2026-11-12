@@ -147,6 +147,7 @@ is how `recommend()` happened.
 - [78. CV_BRIDGE REPLACED — the same bytes, a frame read 75 times cheaper, and one copy fewer to send (2026-11-11)](#78-cv_bridge-replaced--the-same-bytes-a-frame-read-75-times-cheaper-and-one-copy-fewer-to-send-2026-11-11)
 - [80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11)](#80-the-hailort-service--two-processes-on-one-chip-at-no-cost-a-frame-built-measured-not-installed-2026-11-11)
 - [81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11)](#81-the-rtc-is-not-a-control-clock--one-second-steps-read-with-tens-of-milliseconds-of-jitter-2026-11-11)
+- [84. THE OPERATOR'S VIDEO IS THE CAMERA'S OWN JPEG — 0.062 ms a frame, boxes drawn by the browser (2026-11-12)](#84-the-operators-video-is-the-cameras-own-jpeg--0062-ms-a-frame-boxes-drawn-by-the-browser-2026-11-12)
 <!-- contents:end -->
 
 ---
@@ -7839,3 +7840,50 @@ offset and a wall clock that moves mid-session. Nothing in control reads it.
 Intervals on the host are timed on the monotonic counter, and a move is timed
 on the board, which is the system clock for when things happened. At the
 worst rate above, a 5 s move is mistimed by 0.09 ms; the board's tick is 2 ms.
+## 84. THE OPERATOR'S VIDEO IS THE CAMERA'S OWN JPEG — 0.062 ms a frame, boxes drawn by the browser (2026-11-12)
+
+Batighor shows the cameras in a browser. Every camera on the vehicle already
+compresses each frame (MJPG on the USB wire), and the mailbox holds those
+bytes before it decodes them, so the cheapest picture Kutum can send is the
+one it was given. `camera_node` republishes it unchanged on
+`<cam>/stream/compressed` (capped at `stream_rate_hz`, 30) and
+`<cam>/preview/compressed` (`preview_rate_hz`, 5); `mongla_batighor/overlay.py`
+sends what the vision stack sees as annotations the browser draws.
+
+**Bar, written before the run.** (a) The JPEG renders in Lichtblick's image
+panel in Chrome, with the annotations over it. (b) Publishing it costs under
+0.2 ms of the capture thread at the median. (c) Each topic holds its cap.
+Falsified by a blank or garbled panel, by (b) over its bar, or by a rate off
+its cap by more than one frame a second.
+
+**Measured on Kutum**, its USB camera (Fantech C30, MJPG 640x360; 15 fps in
+that room's light), `foxglove_bridge` and Chrome on the dev box over Ethernet,
+boxes from a scripted publisher (nothing in the room is a class a model knows):
+
+| quantity | value |
+|---|---|
+| renders in Chrome, overlay drawn | yes, both layouts (`mongla_layout`, `weak_link`) |
+| `stream/compressed` | 15.07 Hz (the camera's rate, under the cap), 41.06 KB a frame, 622 KB/s |
+| `preview/compressed` | 5.000 Hz, 41.40 KB a frame, 207 KB/s (1.7 Mbit/s) |
+| `annotations` | 15.000 Hz, one per detector frame |
+| one publish, 41 KB, one subscriber | **0.062 ms** median, 0.306 ms p99 (2 000 publishes) |
+
+All three bars hold. Against the alternative, an `image_raw` frame is 691 KB
+of pixels (640x360x3), sixteen times the bytes, and drawing and re-encoding
+boxes on Kutum is the `image_debug` path's cost; neither is on the operator's
+path now.
+
+**Found on the way.** (1) The rate cap first stamped each slot with the time
+it was filled; a frame only arrives some time after a slot opens, so every
+period ran one frame-wait long, and 30 Hz on a 210 Hz camera gave 27. The
+pinned `publish_rate_hz` gate had the same fault (40 Hz would give about 35).
+Both now keep a fixed schedule (`camera_node.advance_slot`), and
+`test_camera_video_is_the_cameras_jpeg.py` fails on the old stamping. (2) On
+the screen, the lock's label sat exactly on the detector's label for the same
+box; the lock's now goes inside the box and a test holds the labels apart.
+
+**Not settled.** The preview is a lower rate, not a smaller picture: at
+1.7 Mbit/s a camera it suits a weak Wi-Fi link, not a radio. A smaller frame
+means encoding one on Kutum (the Pi 5 has no hardware encoder), which is the
+H.264 path the design names and has not been measured. Reversal of the
+pass-through: a camera whose JPEG a browser cannot decode (none seen).

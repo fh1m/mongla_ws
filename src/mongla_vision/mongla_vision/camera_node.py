@@ -9,6 +9,8 @@ overrides. The node publishes:
   /mongla/vision/<cam>/camera_info   sensor_msgs/CameraInfo (size only; K/D
                                                               empty until we
                                                               ship a calib file)
+  /mongla/vision/<cam>/stream/compressed   sensor_msgs/CompressedImage  (the
+  /mongla/vision/<cam>/preview/compressed  camera's own JPEG, 30 and 5 Hz)
 
 Examples
 --------
@@ -35,7 +37,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.time import Time
 
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import CameraInfo, CompressedImage, Image
 from std_msgs.msg import Header
 from std_msgs.msg     import Float32, Int32
 from std_srvs.srv     import SetBool
@@ -50,6 +52,18 @@ from mongla_vision import (
 from mongla_vision.calibration.binding import calibration_for_profile
 from mongla_vision.cameras.discover import discover_cameras
 from mongla_vision.cameras.reopen import ABSENT, GAVE_UP, REOPEN, CameraWatch
+
+
+def advance_slot(last: float, period: float, now: float) -> float:
+    """The slot a publish at `now` fills, for a gate that is due at `last + period`.
+
+    Kept on a fixed schedule. Stamping the slot with the publish time instead
+    makes every period one frame-wait longer than asked, because a frame only
+    arrives some time after the slot opens: a 30 Hz cap on a 210 Hz camera
+    gave 27. A gate more than a period behind (the first frame, a stall)
+    restarts from now rather than bursting to catch up.
+    """
+    return now if now - last >= 2.0 * period else last + period
 
 
 class CameraNode(Node):
@@ -107,6 +121,13 @@ class CameraNode(Node):
         # 0 = follow the camera's own fps (see the timer below). A positive
         # value pins the publish rate regardless of what the camera delivers.
         self.declare_parameter('publish_rate_hz', 0)
+        # The operator's video: the camera's own JPEG, republished unchanged
+        # on two topics, one a link can carry at full motion and one any link
+        # can (Batighor's layouts pick by link). A browser cannot show more
+        # than its display rate, and the downward camera makes 210 frames a
+        # second, so both are capped. 0 turns that topic off.
+        self.declare_parameter('stream_rate_hz',  30.0)
+        self.declare_parameter('preview_rate_hz', 5.0)
         self.declare_parameter('path',            '')        # for source=video_file
         self.declare_parameter('loop',            True)      # for source=video_file
         self.declare_parameter('discover_on_start', False)   # log USB camera table
@@ -143,6 +164,14 @@ class CameraNode(Node):
                                                self._img_qos)
         self._pub_info = self.create_publisher(
             CameraInfo, f'{ns}/camera_info', qos.CAMERA_INFO)
+        self._jpeg_out = [
+            [self.create_publisher(CompressedImage, topic, qos.IMAGE),
+             1.0 / rate if rate > 0 else None, -1e9]
+            for topic, rate in (
+                (f'{ns}/stream/compressed',
+                 float(self.get_parameter('stream_rate_hz').value)),
+                (f'{ns}/preview/compressed',
+                 float(self.get_parameter('preview_rate_hz').value)))]
         self._calib = self._load_calibration()
 
         # publish_rate_hz <= 0 means "follow the camera", and that is now the
@@ -538,7 +567,8 @@ class CameraNode(Node):
         # Only the bookkeeping remains here, on the path that actually
         # publishes.
         if self._min_period > 0.0:
-            self._last_pub = time.monotonic()
+            self._last_pub = advance_slot(self._last_pub, self._min_period,
+                                          time.monotonic())
 
         try:
             img_msg = image_msg.to_msg(frame, 'bgr8')
@@ -571,6 +601,7 @@ class CameraNode(Node):
 
         self._pub_img.publish(img_msg)
         self._pub_info.publish(info)
+        self._publish_jpeg(meta, img_msg.header)
         # A composed consumer that wants intrinsics takes them by reference
         # too (the lock ladder, `submit_info`), rather than subscribing to a
         # topic this same process publishes at camera rate.
@@ -578,6 +609,30 @@ class CameraNode(Node):
         if submit_info is not None:
             submit_info(info)
         self._sent += 1
+
+    def _publish_jpeg(self, meta, header, now=None):
+        """The camera's JPEG, unchanged, to whichever video topic is due.
+
+        Nothing is encoded: the bytes are the ones the sensor sent, so the
+        cost is a message and a copy. A topic nobody subscribes to costs
+        nothing at all. Sources that hand over decoded pixels (a file, a ROS
+        topic, OpenCV's capture) leave `meta.jpeg` empty and publish no video.
+        """
+        if not meta.jpeg:
+            return
+        now = time.monotonic() if now is None else now
+        msg = None
+        for out in self._jpeg_out:
+            pub, period, last = out
+            if period is None or now - last < period:
+                continue
+            if pub.get_subscription_count() == 0:
+                continue
+            out[2] = advance_slot(last, period, now)
+            if msg is None:
+                msg = CompressedImage(header=header, format='jpeg',
+                                      data=meta.jpeg)
+            pub.publish(msg)
 
     def _make_header(self, meta):
         """The header for one captured frame, built in ONE place.

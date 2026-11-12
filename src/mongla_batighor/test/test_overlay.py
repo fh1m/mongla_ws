@@ -1,0 +1,64 @@
+"""The browser draws the boxes where the detector put them, each layer as itself.
+
+`overlay.annotate` is the whole of the overlay node's logic; these build the
+messages the vision stack publishes and read back what Lichtblick would draw.
+"""
+from builtin_interfaces.msg import Time
+from foxglove_msgs.msg import PointsAnnotation
+from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
+
+from mongla_batighor.overlay import LOCK, annotate
+
+
+def _det(cx, cy, w, h, label='gate', score=0.8, track=''):
+    d = Detection2D()
+    c = d.bbox.center
+    (c.position if hasattr(c, 'position') else c).x = float(cx)
+    (c.position if hasattr(c, 'position') else c).y = float(cy)
+    d.bbox.size_x, d.bbox.size_y = float(w), float(h)
+    hyp = ObjectHypothesisWithPose()
+    target = getattr(hyp, 'hypothesis', hyp)
+    target.class_id, target.score = label, score
+    d.results.append(hyp)
+    d.id = track
+    return d
+
+
+def _arr(*dets):
+    a = Detection2DArray()
+    a.detections.extend(dets)
+    return a
+
+
+STAMP = Time(sec=12, nanosec=5)
+
+
+def test_a_box_lands_on_the_detectors_pixels():
+    out = annotate(STAMP, _arr(_det(320, 180, 100, 60)))
+    (box,) = out.points
+    assert box.type == PointsAnnotation.LINE_LOOP
+    assert [(p.x, p.y) for p in box.points] == [(270, 150), (370, 150), (370, 210), (270, 210)]
+    assert out.timestamp == STAMP and box.timestamp == STAMP
+    assert out.texts[0].text == 'gate 0.80'
+
+
+def test_every_layer_is_drawn_and_the_lock_stands_out():
+    out = annotate(STAMP, _arr(_det(100, 100, 20, 20), _det(300, 100, 20, 20)),
+                   tracks=_arr(_det(100, 100, 20, 20, track='7')),
+                   lock=_arr(_det(300, 100, 20, 20, label='shark')))
+    assert len(out.points) == 4
+    lock = out.points[-1]
+    assert lock.thickness == LOCK[1] and lock.thickness > max(p.thickness for p in out.points[:-1])
+    texts = {t.text: t.position for t in out.texts}
+    assert '#7' in texts and 'LOCK shark' in texts
+    # The lock is drawn on a box the detector also labels: the two labels
+    # must not share a place, or one hides the other (seen on Kutum).
+    places = [(round(p.x), round(p.y)) for p in texts.values()]
+    assert len(places) == len(set(places)), places
+
+
+def test_a_missing_layer_is_simply_absent():
+    out = annotate(STAMP, _arr())
+    assert not out.points and not out.texts
+    out = annotate(STAMP, None, lock=_arr(_det(10, 10, 4, 4, label='')))
+    assert len(out.points) == 1 and out.texts[0].text == 'LOCK'

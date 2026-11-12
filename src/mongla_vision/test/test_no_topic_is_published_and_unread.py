@@ -49,6 +49,11 @@ PUBLISHED_UNREAD = {
         'the ROS standard health topic, for a human. The health board on it '
         'is read in Foxglove\'s Diagnostics panel and by rqt_robot_monitor, '
         'and recorded in the run bag; nothing in the loop acts on it.',
+    '/annotations':
+        'what the vision stack sees, for a human: mongla_batighor/overlay.py '
+        'publishes it and Lichtblick\'s image panel draws it over the '
+        'camera\'s JPEG (layouts/*.json name it; test_layouts.py holds that). '
+        'Built only while someone watches.',
     '/mongla/localization/aiding':
         'a DIAGNOSTIC of which aiding sources the filter accepted. Read in a '
         'bag after a run, never in the loop.',
