@@ -2,8 +2,8 @@
 """Measure a hand slide THROUGH THE LAUNCH. The operator's button is the gate.
 
 Why this exists. Every number in `measured-bars.md` §13 -- including the
-30 cm result -- came from `flow_console.py --calibration <path>`, a tool that
-passed the calibration by hand. The launch was never in that loop, and when
+30 cm result -- came from a bench console, since retired, that was handed
+the calibration by hand. The launch was never in that loop, and when
 it was finally looked at, it had the calibration wired to the WRONG CAMERA
 (§17). A verification that passes a path by hand does not verify the launch.
 
@@ -17,15 +17,22 @@ running and the node REFUSES without a depth (height multiplies every
 velocity it emits, so refusing is correct). `--height` is the tape measure
 from the lens to the floor.
 
+And it supplies a still gyro on `/mongla/imu_rates`, but only while nothing
+else publishes there: the node refuses an interval with no gyro sample, so
+with no board on the bench it refused every one and this tool could never
+measure. A slide rig does not rotate, so zero is the truth for it; with a
+board connected the board's own rates are used and this stays silent.
+
 The button is the design, not a convenience. Three separate captures last
 session read a correct sensor as short -- 19.6 cm for a 30.3 cm slide, and
 worse -- every one of them from an automatic start/stop heuristic treating
 "I could not measure" as "it did not move". No window short enough to be
 responsive can tell a slow hand from a still rig. Press, slide, press.
 
-Terminal A:
+Terminal A (one camera on the bench, used as the downward one):
     ros2 launch mongla_vision vision_pi.launch.py \
-        flow:=true medium:=air pool_depth_m:=<height_m> forward:=false
+        flow:=true medium:=air pool_depth_m:=<height_m> \
+        fwd_device_path:=/dev/mongla_cam_none dwn_device_path:=<the camera>
 Terminal B:
     python3 tools/bench/flow_launch_check.py --height <height_m> --truth-cm 30
 """
@@ -41,7 +48,7 @@ from rclpy.qos import (QoSDurabilityPolicy, QoSProfile,
                        QoSReliabilityPolicy)
 from std_msgs.msg import Float32, String, UInt8
 
-from geometry_msgs.msg import TwistWithCovarianceStamped
+from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 from rcl_interfaces.msg import Log
 
 from mongla_interfaces.msg import MonglaState
@@ -66,6 +73,9 @@ class Check(Node):
         self._ctrl = self.create_publisher(String, f'{ns}/distance_control',
                                            ctrl_qos)
         self._state = self.create_publisher(MonglaState, '/mongla/state', 10)
+        self._rates = self.create_publisher(Vector3Stamped, '/mongla/imu_rates', 50)
+        self.still_gyro = False
+        self.create_timer(0.02, self._gyro)
         self.create_subscription(Float32, f'{ns}/distance_traveled',
                                  self._on_dist, 10)
         self.create_subscription(UInt8, f'{ns}/flow_quality', self._on_q, 10)
@@ -117,6 +127,19 @@ class Check(Node):
         # message to say about a quantity it does not measure.
         m.yaw_deg = float('nan')
         self._state.publish(m)
+
+    def _gyro(self):
+        # Only ours on the topic: no board, so a still rig's zero rates.
+        alone = self.count_publishers('/mongla/imu_rates') <= 1
+        if alone != self.still_gyro:
+            self.still_gyro = alone
+            print('WARNING: no gyro on /mongla/imu_rates; supplying zero rates '
+                  '(a slide rig does not rotate)' if alone else
+                  'ok: a gyro is publishing; the still stand-in stops', flush=True)
+        if alone:
+            m = Vector3Stamped()
+            m.header.stamp = self.get_clock().now().to_msg()
+            self._rates.publish(m)
 
     def _on_vel(self, msg):
         t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9

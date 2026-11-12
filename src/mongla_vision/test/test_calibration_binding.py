@@ -143,8 +143,7 @@ def test_the_flow_node_is_actually_LAUNCHABLE():
 def test_every_tool_naming_a_calibration_names_one_that_EXISTS():
     """The launch is guarded above. Seven tools hardcode the path too.
 
-    `flow_console.py` is the instrument that produced the 30 cm result, and
-    the srot_* tools each carry their own copy of the filename -- some as
+    The srot_* tools each carry their own copy of the filename -- some as
     absolute paths. This round's rename was propagated to them by `sed`;
     nothing stops the next one from breaking them silently, and a tool that
     cannot find its calibration falls back to a single focal length and the

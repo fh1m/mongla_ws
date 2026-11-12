@@ -7,6 +7,29 @@ from geometry_msgs.msg import TwistWithCovarianceStamped
 from mongla_vision.flow.flow_timing import exposure_correction_s, interval_midpoint
 
 
+def tracks_msg(anchor_pts, nxt, status, t: float):
+    """A `FlowTracks` of the pairs `status` kept, stamped with the frame time.
+
+    None when nothing survived: an empty message would draw as a floor with
+    nothing on it, which is a different statement.
+    """
+    import numpy as np
+    from mongla_interfaces.msg import FlowTracks
+    if anchor_pts is None or nxt is None or status is None:
+        return None
+    keep = np.asarray(status).reshape(-1).astype(bool)
+    a = np.asarray(anchor_pts, dtype=np.float32).reshape(-1, 2)[keep]
+    b = np.asarray(nxt, dtype=np.float32).reshape(-1, 2)[keep]
+    if not len(a):
+        return None
+    m = FlowTracks()
+    m.header.stamp.sec = int(t)
+    m.header.stamp.nanosec = int(round((t - int(t)) * 1e9)) % 1_000_000_000
+    m.anchor_xy = a.reshape(-1).tolist()
+    m.now_xy = b.reshape(-1).tolist()
+    return m
+
+
 class FlowPublishMixin:
     """Methods of `FlowVelocityNode`; see `flow_node.py` for the node."""
 
@@ -67,6 +90,14 @@ class FlowPublishMixin:
         qm.data = int(quality)
         self._pub_quality.publish(qm)
         self._maybe_log(v, n_used, h)
+
+    def _publish_tracks(self, nxt, status, t: float) -> None:
+        """The surviving anchor -> now pairs of this interval, for a viewer."""
+        if self._pub_tracks.get_subscription_count() == 0:
+            return
+        msg = tracks_msg(self._anchor_pts, nxt, status, t)
+        if msg is not None:
+            self._pub_tracks.publish(msg)
 
     def _publish_distance(self, dist: float) -> None:
         m = Float32()
