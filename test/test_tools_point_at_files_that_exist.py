@@ -3,9 +3,9 @@
 Tools are not imported by the suite: most need a camera, a board or a sourced
 ROS environment, so a test cannot simply run them. That left them blind to
 renames. When `mongla_vision/distance/` became `mongla_vision/flow/`, four
-tools kept loading the old path -- among them `flow_console.py`, the instrument
-behind the 1.09 cm velocity result -- and each failed on start, for weeks,
-with every test green.
+tools kept loading the old path -- among them the bench console behind the
+1.09 cm velocity result (measured-bars §13) -- and each failed on start, for
+weeks, with every test green.
 
 So this reads each tool's source instead of running it, and checks the two
 ways a tool reaches our code: a repository path written as a string

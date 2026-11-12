@@ -298,6 +298,7 @@ class FlowFrameMixin:
         # Read the floor BEFORE the height is consumed, not after, or the
         # tile height is always one cycle stale against the frame that used it.
         self._read_the_floor(gray, t)
+        self._publish_tracks(nxt, status, t)
         self._anchor(gray, t)
         if dt > 0.0:
             self._evaluate(flow, disp, dt, t, n_used)

@@ -993,3 +993,43 @@ def test_an_unreadable_calibration_falls_back_to_the_whole_no_calibration_path(t
     finally:
         a.destroy_node()
         b.destroy_node()
+
+
+class TestTracksForAViewer:
+    """The pairs an operator sees are the pairs the velocity came from."""
+
+    def test_an_accepted_interval_publishes_its_pairs_on_the_frame_time(self):
+        n = _make(pool_depth_m=1.0, medium='air', allow_uncalibrated=True)
+        sent = []
+        try:
+            n._pub_tracks = mock.Mock()
+            n._pub_tracks.get_subscription_count.return_value = 1
+            n._pub_tracks.publish.side_effect = sent.append
+            _give_depth(n, -0.2)
+            rng = np.random.default_rng(3)
+            floor = cv2.GaussianBlur(
+                (rng.random((520, 700)) * 255).astype(np.uint8), (5, 5), 0)
+            a, b = floor[40:520, 40:680], floor[40:520, 28:668]   # 12 px right
+            n._process(a, 100.0, 1)
+            n._process(b, 100.1, 2)
+            assert sent, 'an accepted interval published no pairs'
+            m = sent[-1]
+            assert (m.header.stamp.sec, round(m.header.stamp.nanosec, -3)) == (100, 100_000_000)
+            ax = np.reshape(m.anchor_xy, (-1, 2))
+            bx = np.reshape(m.now_xy, (-1, 2))
+            assert len(ax) >= 20
+            assert np.median(bx[:, 0] - ax[:, 0]) == pytest.approx(12.0, abs=0.5)
+            assert np.median(bx[:, 1] - ax[:, 1]) == pytest.approx(0.0, abs=0.5)
+        finally:
+            n.destroy_node()
+
+    def test_nobody_watching_costs_nothing(self):
+        n = _make(pool_depth_m=1.0, medium='air', allow_uncalibrated=True)
+        try:
+            n._pub_tracks = mock.Mock()
+            n._pub_tracks.get_subscription_count.return_value = 0
+            n._anchor_pts = np.zeros((5, 1, 2), np.float32)
+            n._publish_tracks(np.zeros((5, 1, 2), np.float32), np.ones(5), 1.0)
+            n._pub_tracks.publish.assert_not_called()
+        finally:
+            n.destroy_node()

@@ -62,3 +62,27 @@ def test_a_missing_layer_is_simply_absent():
     assert not out.points and not out.texts
     out = annotate(STAMP, None, lock=_arr(_det(10, 10, 4, 4, label='')))
     assert len(out.points) == 1 and out.texts[0].text == 'LOCK'
+
+
+def test_flow_pairs_are_drawn_from_anchor_to_now_on_the_frame_they_were_found_in():
+    from mongla_interfaces.msg import FlowTracks
+
+    from mongla_batighor.overlay import flow_annotate
+    m = FlowTracks()
+    m.header.stamp = STAMP
+    m.anchor_xy = [10.0, 20.0, 30.0, 40.0]
+    m.now_xy = [12.0, 21.0, 33.0, 41.0]
+    out = flow_annotate(m)
+    segs, dots = out.points
+    assert segs.type == PointsAnnotation.LINE_LIST
+    assert [(p.x, p.y) for p in segs.points] == [(10, 20), (12, 21), (30, 40), (33, 41)]
+    assert [(p.x, p.y) for p in dots.points] == [(12, 21), (33, 41)]
+    assert out.timestamp == STAMP and segs.timestamp == STAMP
+    assert out.texts[0].text == '2 tracks'
+
+
+def test_no_pairs_draw_nothing():
+    from mongla_interfaces.msg import FlowTracks
+
+    from mongla_batighor.overlay import flow_annotate
+    assert not flow_annotate(FlowTracks()).points

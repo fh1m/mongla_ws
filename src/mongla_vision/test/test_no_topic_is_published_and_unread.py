@@ -58,6 +58,10 @@ PUBLISHED_UNREAD = {
         'publishes it and Lichtblick\'s image panel draws it over the '
         'camera\'s JPEG (layouts/*.json name it; test_layouts.py holds that). '
         'Built only while someone watches.',
+    '/flow_annotations':
+        'the flow node\'s tracked point pairs, for a human: overlay.py turns '
+        '`flow_tracks` into them and Batighor\'s `flow` layout draws them '
+        'over the downward camera. Built only while someone watches.',
     '/mongla/localization/aiding':
         'a DIAGNOSTIC of which aiding sources the filter accepted. Read in a '
         'bag after a run, never in the loop.',

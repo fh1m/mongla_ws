@@ -21,7 +21,6 @@ For the operator, on a pool or competition day: consoles, recorders, calibration
 |---|---|
 | `build_practice_bank.py` | Build a checkpoint bank BEFORE the run, from practice footage or stills. |
 | `depth_sign_check.py` | Prove the depth loop's SIGN on the bench, disarmed, with nothing spinning. |
-| `flow_console.py` | flow_console -- watch the bottom camera work as a DVL, live, in a browser. |
 | `fov_board_check.py` | Live board screening in a browser: aim, identify the grid, measure flatness. |
 | `fov_calibrate.py` | Measure a camera's intrinsics and FIELD OF VIEW from checkerboard images. |
 | `fov_calibrate_web.py` | Run the guided calibration capture page without a sourced ROS; a shim over `mongla_vision.calibration.guide`. |

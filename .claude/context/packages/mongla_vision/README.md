@@ -71,7 +71,7 @@ a confident zero.
 | `detector_node` | `detections`, `candidates`, `contours`, `image_debug` | inference, plus the always-on operator alignment line |
 | `tracker_node` | `tracks` | stable ids, and a predicted box across a short gap |
 | `lock_node` | `lock`, `correspondences` | the continuity ladder and the feature anchor |
-| `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled`, `flow_calibration` | everything the downward camera can tell us |
+| `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled`, `flow_calibration`, `flow_tracks` | everything the downward camera can tell us. `flow_tracks` is the point pairs each accepted interval measured, only while someone watches: Batighor's `flow` layout draws them over the downward picture beside velocity, distance and quality. A measured slide is `tools/bench/flow_launch_check.py` |
 | `depth_estimation_node` | `vis_range` | monocular proximity, off by default |
 
 `lock_node` is one class in seven files. `lock_node.py` holds the per-frame loop (detection
