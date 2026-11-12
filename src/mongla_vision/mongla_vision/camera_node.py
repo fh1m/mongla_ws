@@ -10,7 +10,8 @@ overrides. The node publishes:
                                                               empty until we
                                                               ship a calib file)
   /mongla/vision/<cam>/stream/compressed   sensor_msgs/CompressedImage  (the
-  /mongla/vision/<cam>/preview/compressed  camera's own JPEG, 30 and 5 Hz)
+  /mongla/vision/<cam>/preview/compressed  camera's own JPEG, 30 and 5 Hz;
+                                           encoded only for a source with none)
 
 Examples
 --------
@@ -52,6 +53,18 @@ from mongla_vision import (
 from mongla_vision.calibration.binding import calibration_for_profile
 from mongla_vision.cameras.discover import discover_cameras
 from mongla_vision.cameras.reopen import ABSENT, GAVE_UP, REOPEN, CameraWatch
+
+
+# The browser's quality for a frame we encode ourselves; a camera's own JPEG
+# is never re-encoded.
+STREAM_JPEG_QUALITY = 80
+
+
+def _encode_jpeg(frame) -> bytes:
+    """A decoded frame as JPEG for the video topics, or b'' if it will not encode."""
+    import cv2
+    ok, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY])
+    return buf.tobytes() if ok else b''
 
 
 def advance_slot(last: float, period: float, now: float) -> float:
@@ -602,7 +615,7 @@ class CameraNode(Node):
 
         self._pub_img.publish(img_msg)
         self._pub_info.publish(info)
-        self._publish_jpeg(meta, img_msg.header)
+        self._publish_jpeg(meta, img_msg.header, frame=frame)
         # A composed consumer that wants intrinsics takes them by reference
         # too (the lock ladder, `submit_info`), rather than subscribing to a
         # topic this same process publishes at camera rate.
@@ -611,15 +624,21 @@ class CameraNode(Node):
             submit_info(info)
         self._sent += 1
 
-    def _publish_jpeg(self, meta, header, now=None):
+    def _publish_jpeg(self, meta, header, now=None, frame=None):
         """The camera's JPEG, unchanged, to whichever video topic is due.
 
-        Nothing is encoded: the bytes are the ones the sensor sent, so the
-        cost is a message and a copy. A topic nobody subscribes to costs
-        nothing at all. Sources that hand over decoded pixels (a file, a ROS
-        topic, OpenCV's capture) leave `meta.jpeg` empty and publish no video.
+        Nothing is encoded when the camera sent a JPEG: the bytes are the ones
+        the sensor sent, so the cost is a message and a copy. A topic nobody
+        subscribes to costs nothing at all.
+
+        A source that hands over decoded pixels (a recorded video, a ROS
+        topic, OpenCV's fallback capture) has no JPEG, and once published
+        nothing: Batighor showed a bench's footage as an empty panel, and a
+        vehicle camera fallen back to OpenCV would have shown the operator
+        the same. Its frame is encoded here, once, and only when a topic is
+        due and watched.
         """
-        if not meta.jpeg:
+        if not meta.jpeg and frame is None:
             return
         now = time.monotonic() if now is None else now
         msg = None
@@ -631,8 +650,10 @@ class CameraNode(Node):
                 continue
             out[2] = advance_slot(last, period, now)
             if msg is None:
-                msg = CompressedImage(header=header, format='jpeg',
-                                      data=meta.jpeg)
+                data = meta.jpeg or _encode_jpeg(frame)
+                if not data:
+                    return
+                msg = CompressedImage(header=header, format='jpeg', data=data)
             pub.publish(msg)
 
     def _make_header(self, meta):
