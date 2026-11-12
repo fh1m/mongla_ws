@@ -1,0 +1,24 @@
+kutum/README.md
+  h_f1b9066eb9899c 49-70
+kutum/doctor.sh
+  h_f1b9066eb9899c 178-180,194-204
+kutum/setup.sh
+  h_f1b9066eb9899c 207-218,220-226
+kutum/system/motd/01-kutum
+  h_f1b9066eb9899c 1-31
+kutum/system/networkd-dispatcher/50-kutum-source-routes
+  h_f1b9066eb9899c 1-27
+kutum/system/sysctl/60-kutum-multihome.conf
+  h_f1b9066eb9899c 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "792e71438e41a7f87fe5d5a77d79ef16c1f556f1",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
