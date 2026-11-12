@@ -75,6 +75,23 @@ def test_the_link_names_the_host_the_browser_used():
     assert 'ws%3A%2F%2F192.168.0.103%3A8765' in serve.app_link('192.168.0.103', 8765, 'x')
 
 
+def test_a_forged_host_is_refused_not_turned_into_a_bridge_address(site):
+    """The Host header names the bridge the app connects to (CodeQL, #168)."""
+    import http.client
+    base, _ = site
+    port = int(base.rsplit(':', 1)[1])
+    for host in ('a b', 'x/y', 'x@y', 'h:80/\x00', 'x:8000:9'):
+        c = http.client.HTTPConnection('127.0.0.1', port)
+        c.putrequest('GET', '/', skip_host=True)
+        c._output(f'Host: {host}'.encode())  # bypasses http.client's own check
+        c.endheaders()
+        r = c.getresponse()
+        assert r.status == 400 and r.getheader('Location') is None, host
+        c.close()
+    for ok in ('mongla.local:8000', '192.168.0.103', '[::1]:8000'):
+        assert serve._HOST.match(ok), ok
+
+
 def test_an_unknown_layout_is_refused_not_served_empty(site):
     base, _ = site
     assert _get(base + '/?layout=nope')[0] == 404
