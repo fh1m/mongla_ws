@@ -12,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml', 'LICHTBLICK.json']),
         ('share/' + package_name + '/layouts', glob('layouts/*.json')),
+        ('share/' + package_name + '/panels/helm', glob('panels/helm/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,6 +25,8 @@ setup(
             'serve = mongla_batighor.serve:main',
             'fetch = mongla_batighor.fetch:main',
             'overlay = mongla_batighor.overlay:main',
+            'helm = mongla_batighor.helm:main',
+            'deck = mongla_batighor.deck:main',
         ],
     },
 )

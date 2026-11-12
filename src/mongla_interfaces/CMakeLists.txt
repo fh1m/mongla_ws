@@ -13,6 +13,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TargetPose.msg"
   "msg/TargetCorrespondences.msg"
   "msg/TargetContours.msg"
+  "srv/Helm.srv"
   DEPENDENCIES action_msgs std_msgs
 )
 

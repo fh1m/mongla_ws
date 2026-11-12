@@ -29,7 +29,8 @@
       "showLegend": true,
       "isSynced": true,
       "xAxisVal": "timestamp"
-    }
+    },
+    "mongla.batighor.Helm!helm": {}
   },
   "globalVariables": {},
   "userNodes": {},
@@ -41,9 +42,14 @@
     "first": "Image!forward",
     "second": {
       "direction": "column",
-      "first": "RawMessages!state",
-      "second": "Plot!align",
-      "splitPercentage": 45
+      "first": "mongla.batighor.Helm!helm",
+      "second": {
+        "direction": "column",
+        "first": "RawMessages!state",
+        "second": "Plot!align",
+        "splitPercentage": 45
+      },
+      "splitPercentage": 55
     },
     "splitPercentage": 60
   }
