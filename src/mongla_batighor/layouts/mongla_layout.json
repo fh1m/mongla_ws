@@ -43,6 +43,11 @@
           "label": "mode"
         },
         {
+          "value": "/mongla/mission_alive.data",
+          "label": "mission",
+          "timestampMethod": "receiveTime"
+        },
+        {
           "value": "/mongla/localization/aiding.data",
           "label": "aided by",
           "timestampMethod": "receiveTime"

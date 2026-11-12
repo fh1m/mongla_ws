@@ -54,6 +54,16 @@
       "isSynced": true,
       "xAxisVal": "timestamp"
     },
+    "StateTransitions!calibration": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/flow_calibration.data",
+          "label": "velocity scale from",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": true
+    },
     "Plot!quality": {
       "paths": [
         {
@@ -100,10 +110,15 @@
       "second": {
         "direction": "column",
         "first": "Plot!distance",
-        "second": "Plot!quality",
-        "splitPercentage": 50.0
+        "second": {
+          "direction": "column",
+          "first": "StateTransitions!calibration",
+          "second": "Plot!quality",
+          "splitPercentage": 50.0
+        },
+        "splitPercentage": 33.3
       },
-      "splitPercentage": 33.3
+      "splitPercentage": 25.0
     },
     "splitPercentage": 58.0
   }
