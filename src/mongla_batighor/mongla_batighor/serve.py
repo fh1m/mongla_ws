@@ -186,9 +186,9 @@ class Handler(BaseHTTPRequestHandler):
         """A file `inside()` returned (None is not found), typed from TYPES."""
         if path is None or not path.is_file():
             return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-        gz = Path(str(path) + '.gz')
+        gz = inside(path.parent, path.name + '.gz')     # checked like the file itself
         return self._bytes(path, TYPES.get(path.suffix, 'application/octet-stream'), cache,
-                           gz=gz if gz.is_file() else None)
+                           gz=gz if gz is not None and gz.is_file() else None)
 
     def _bytes(self, body, ctype: str, cache: bool, gz=None):
         """Send `body`, or `gz` to a browser that takes gzip; each is bytes or a file."""
