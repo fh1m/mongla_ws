@@ -1,0 +1,20 @@
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 133-139
+src/mongla_vision/mongla_vision/camera_node.py
+  h_f1b9066eb9899c 13-14,58-69,618,627,630-639,641,653-656
+src/mongla_vision/test/test_camera_video_is_the_cameras_jpeg.py
+  h_f1b9066eb9899c 3-4,100,104-116,118-126
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  h_f1b9066eb9899c 65-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "e0aee3e2b438b1afb1b7966a943860cb4a7cda4e",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
