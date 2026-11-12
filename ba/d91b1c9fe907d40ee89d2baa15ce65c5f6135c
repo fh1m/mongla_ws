@@ -1,0 +1,32 @@
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 31-41,57,61
+src/mongla_batighor/layouts/board_health.json
+  h_f1b9066eb9899c 45,57-58,63-64
+src/mongla_batighor/layouts/board_link.json
+  h_f1b9066eb9899c 39,50-52,54-55
+src/mongla_batighor/layouts/thrust.json
+  h_f1b9066eb9899c 75-76
+src/mongla_batighor/mongla_batighor/views.py
+  h_f1b9066eb9899c 239,247,251-253,259,261,266-267,269-274
+src/mongla_batighor/panels/control/extension.js
+  h_f1b9066eb9899c 181-184
+src/mongla_batighor/panels/instruments/extension.js
+  h_f1b9066eb9899c 111,113-114,137,140,158-160,279-283,292-294
+src/mongla_batighor/test/test_panels.py
+  h_f1b9066eb9899c 141-150
+src/mongla_batighor/theme/batighor.css
+  h_f1b9066eb9899c 41-43,47-48,54-55,115
+src/mongla_manager/test/fake_srot_board.py
+  h_f1b9066eb9899c 56-57,59-62,125-152,154-158,170-172,273-274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "bad91b1c9fe907d40ee89d2baa15ce65c5f6135c",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
