@@ -112,12 +112,17 @@ if [ "${1:-}" = "--system" ]; then
         /lib/firmware/hailo/hailo8_fw.bin
     modprobe hailo_pci
   else echo "  driver hailo_pci $HAILORT_V present for $(uname -r)"; fi
-  if [ "$(hailortcli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" != "$HAILORT_V" ]; then
+  # Built WITH the service (measured-bars 80): the packaged library leaves
+  # its client out, and then `multi_process_service` raises in every process.
+  # A library built before this line has no `hailort_service` beside it, so
+  # the check below rebuilds it.
+  if [ "$(hailortcli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" != "$HAILORT_V" ] \
+     || [ ! -x /usr/local/bin/hailort_service ]; then
     [ -d "$OWNER_HOME/hailort_src" ] || as_owner git clone --depth 1 -b "v$HAILORT_V" \
         https://github.com/hailo-ai/hailort.git "$OWNER_HOME/hailort_src"
     # -j2: a 4 GB Pi runs out of memory at -j4.
     as_owner cmake -S "$OWNER_HOME/hailort_src" -B "$OWNER_HOME/hailort_src/build" \
-        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_BUILD_TYPE=Release -DHAILO_BUILD_SERVICE=1
     as_owner cmake --build "$OWNER_HOME/hailort_src/build" -j2
     cmake --install "$OWNER_HOME/hailort_src/build"
     ldconfig
@@ -128,10 +133,22 @@ if [ "${1:-}" = "--system" ]; then
   install -m 0644 "$KUTUM/system/udev/51-hailo-udev.rules"     /etc/udev/rules.d/
   install -m 0755 "$KUTUM/system/systemd/set-cpu-performance"  /usr/local/sbin/
   install -m 0644 "$KUTUM/system/systemd/cpu-performance.service" /etc/systemd/system/
+  # The manager asks for a realtime priority (measured-bars 76); this permits it.
+  install -m 0644 "$KUTUM/system/limits/99-mongla-realtime.conf" /etc/security/limits.d/
   udevadm control --reload-rules
   udevadm trigger --subsystem-match=video4linux --subsystem-match=hailo_chardev
   systemctl daemon-reload
   systemctl enable --now cpu-performance.service
+  # HailoRT's own install drops a unit that points at /usr/bin; ours replaces it.
+  rm -f /usr/local/lib/systemd/system/hailort.service /lib/systemd/system/hailort.service
+  # It runs as its own user (#67); the operator joins its group to reach the
+  # socket, which takes effect at the next login.
+  id -u hailort >/dev/null 2>&1 \
+    || useradd --system --user-group --no-create-home --shell /usr/sbin/nologin hailort
+  id -nG "$OWNER" | grep -qw hailort || usermod -aG hailort "$OWNER"
+  install -m 0644 "$KUTUM/system/systemd/hailort.service" /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now hailort.service
 
   say "5/8  units that start a program that no longer exists"
   # hailo-web.service (a model switcher from before this repo) pointed into
@@ -224,8 +241,8 @@ fi
 # =========================================================================== #
 [ "$(id -u)" -ne 0 ] || { echo "the user half runs as the vehicle user, not root" >&2; exit 2; }
 
-say "1/5  Python: undo the two traps that break cv_bridge (E1, E2)"
-# Noble ships numpy 1.26.4 and cv2 4.6.0, and ROS Jazzy's cv_bridge is built
+say "1/5  Python: undo the two traps that break the system cv2 (E1, E2)"
+# Noble ships numpy 1.26.4 and a cv2 4.6.0 that is built
 # against numpy 1. A pip numpy>=2 or a pip opencv-python in ~/.local shadows
 # them and every vision node dies with "_ARRAY_API not found".
 python3 -m pip uninstall -y -q --break-system-packages numpy opencv-python \

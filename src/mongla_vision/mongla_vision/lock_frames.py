@@ -7,6 +7,7 @@ detector's answer and pairs it with the frame it was computed on.
 import cv2
 
 from mongla_vision.stamps import capture_monotonic
+from mongla_vision import image_msg
 
 
 def _stamp_key(header):
@@ -36,7 +37,7 @@ class LockFramesMixin:
 
     def _on_img(self, msg):
         try:
-            g = cv2.cvtColor(self._bridge.imgmsg_to_cv2(msg, 'bgr8'),
+            g = cv2.cvtColor(image_msg.to_array(msg, 'bgr8'),
                              cv2.COLOR_BGR2GRAY)
         except Exception as exc:                          # noqa: BLE001
             # Counted and said, never swallowed: a camera publishing an
