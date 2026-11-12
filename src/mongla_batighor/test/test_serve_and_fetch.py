@@ -165,3 +165,12 @@ def test_a_path_that_leaves_the_web_root_is_refused_however_it_is_spelt(tmp_path
     assert serve.inside(web, '') == web.resolve()
     for bad in ('../secret', 'a/../../secret', str(tmp_path / 'secret'), 'out', '../web2/x'):
         assert serve.inside(web, bad) is None, bad
+
+
+def test_every_kind_of_file_lichtblick_ships_has_its_type():
+    """The types come from a fixed table now. Lichtblick 1.30.0 ships these
+    kinds (seen on Kutum); WebAssembly must be application/wasm or the
+    browser refuses to stream-compile it."""
+    for ext in ('.html', '.js', '.png', '.wasm', '.ttf', '.ico', '.json'):
+        assert ext in serve.TYPES, ext
+    assert serve.TYPES['.wasm'] == 'application/wasm'

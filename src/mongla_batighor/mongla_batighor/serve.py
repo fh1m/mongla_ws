@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
-import mimetypes
 import os
 import re
 import sys
@@ -41,20 +40,28 @@ _HASHED = re.compile(r'\.[0-9a-f]{16,}\.')
 # point a browser's helm at another machine's bridge.
 _HOST = re.compile(r'^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])'
                    r'(?::[0-9]{1,5})?$')
-mimetypes.add_type('application/wasm', '.wasm')
+# The types Kutum serves, from a fixed table: a type guessed from the asked-for
+# name would carry that name into a header (CodeQL py/http-response-splitting).
+TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json',
+         '.css': 'text/css', '.wasm': 'application/wasm', '.png': 'image/png',
+         '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.ttf': 'font/ttf',
+         '.woff2': 'font/woff2', '.map': 'application/json'}
 
 
 def inside(base: Path, rel: str) -> Path | None:
     """`base/rel` when it stays inside `base`, else None.
 
-    Normalised and compared as strings, so `..`, a symlink out or an absolute
-    `rel` all fail the same way.
+    Normalised, then compared as strings, before and after symlinks resolve:
+    a `..`, an absolute `rel` and a symlink out all return None.
     """
     root = os.path.realpath(base)
-    path = os.path.realpath(os.path.join(root, rel))
+    path = os.path.normpath(os.path.join(root, rel))
     if path != root and not path.startswith(root + os.sep):
         return None
-    return Path(path)
+    real = os.path.realpath(path)
+    if real != root and not real.startswith(root + os.sep):
+        return None
+    return Path(real)
 
 
 def app_link(host: str, bridge_port: int, layout: str) -> str:
@@ -102,7 +109,7 @@ class Handler(BaseHTTPRequestHandler):
             name = url.path[len('/layouts/'):].removesuffix('.json')
             if not _NAME.match(name):
                 return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-            return self._file(self.layouts / f'{name}.json', cache=False)
+            return self._file(inside(self.layouts, f'{name}.json'), cache=False)
         if url.path.startswith('/api/'):
             return self._api(url.path[len('/api/'):])
         if url.path == '/app' or url.path.startswith('/app/'):
@@ -175,12 +182,12 @@ class Handler(BaseHTTPRequestHandler):
                            'timestamp': '1970-01-01T00:00:00Z'}).encode()
         return self._bytes(body, 'application/json', cache=False)
 
-    def _file(self, path: Path, cache: bool):
-        if not path.is_file():
+    def _file(self, path: Path | None, cache: bool):
+        """A file `inside()` returned (None is not found), typed from TYPES."""
+        if path is None or not path.is_file():
             return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
         gz = Path(str(path) + '.gz')
-        return self._bytes(path, mimetypes.guess_type(path.name)[0]
-                           or 'application/octet-stream', cache,
+        return self._bytes(path, TYPES.get(path.suffix, 'application/octet-stream'), cache,
                            gz=gz if gz.is_file() else None)
 
     def _bytes(self, body, ctype: str, cache: bool, gz=None):
