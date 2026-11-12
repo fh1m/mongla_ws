@@ -259,11 +259,18 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     return out
 
 
-# Top left: the camera's stats lines (`annotate` hud) are at the bottom.
-FLOW_LINE_Y = LABEL_PX + 6
+# The flow count sits just above the camera's stats lines (`hud`, two of
+# them, at the bottom). At the top left it covered the label of any box that
+# touched the frame's top edge, which is pinned there.
+HUD_LINES = 2
+FLOW_LINE_Y = LABEL_PX + 6                 # until the camera has said its size
 
 
-def flow_annotate(tracks) -> ImageAnnotations:
+def flow_line_y(size) -> float:
+    return size[1] - 8 - HUD_LINES * (LABEL_PX + 6) if size else FLOW_LINE_Y
+
+
+def flow_annotate(tracks, size=None) -> ImageAnnotations:
     """One flow interval's pairs: a segment anchor -> now, and a dot at now."""
     stamp = tracks.header.stamp
     a, b = list(tracks.anchor_xy), list(tracks.now_xy)
@@ -285,7 +292,7 @@ def flow_annotate(tracks) -> ImageAnnotations:
         timestamp=stamp, type=PointsAnnotation.POINTS, points=dots,
         outline_color=_color(rgba), thickness=4.0))
     out.texts.append(TextAnnotation(
-        timestamp=stamp, position=Point2(x=8.0, y=FLOW_LINE_Y), text=f'flow {n} points',
+        timestamp=stamp, position=Point2(x=8.0, y=flow_line_y(size)), text=f'flow {n} points',
         font_size=LABEL_PX, text_color=_color(rgba), background_color=_TEXT_BG))
     return out
 
@@ -353,21 +360,24 @@ class Watched:
 
 
 # Every stage a camera's picture goes through, the topic it publishes (under
-# /mongla/vision/<cam>/; a name with a suffix counts), and the launch switch
-# that turns it on. Published as `/mongla/batighor/stages` for the Vision
-# panel: on means a node publishes the topic now, which the browser cannot
-# tell, because the graph also lists a topic that only has subscribers.
+# /mongla/vision/<cam>/; a name with a suffix counts), the bringup argument
+# that turns it on, and the cameras it runs on (None: both). Published as
+# `/mongla/batighor/stages` for the Vision panel: on means a node publishes
+# the topic now, which the browser cannot tell, because the graph also lists
+# a topic that only has subscribers.
 STAGES = (
-    ('camera', 'stream/compressed', 'vision:=true'),
-    ('detector', 'detections', 'vision:=true'),
-    ('below floor', 'candidates', 'vision:=true'),
-    ('tracker', 'tracks', 'tracking:=true'),
-    ('lock ladder', 'lock', 'lock:=true'),
-    ('anchor (XFeat)', 'correspondences', 'lock:=true, once a view is learned'),
-    ('contours', 'contours', 'vision:=true'),
-    ('pose (PnP)', 'target_pose', 'vision_stack'),
-    ('flow', 'velocity', 'flow:=true'),
-    ('overlay', 'annotations', 'batighor:=true'),
+    ('camera', 'stream/compressed', 'vision:=true', None),
+    ('detector', 'detections', 'vision:=true', None),
+    ('below floor', 'candidates', 'vision:=true', None),
+    ('tracker', 'tracks', 'tracking:=true', None),
+    ('lock ladder', 'lock', 'lock:=true', None),
+    # XFeat publishes once the lock has learned a view of the target.
+    ('anchor (XFeat)', 'correspondences', 'lock:=true', None),
+    ('contours', 'contours', 'vision:=true', None),
+    # pnp_node is gated on `lock` (vision_pi.launch.py: solver()).
+    ('pose (PnP)', 'target_pose', 'lock:=true', None),
+    ('flow', 'velocity', 'flow:=true', ('downward',)),
+    ('overlay', 'annotations', 'batighor:=true', None),
 )
 STAGES_PERIOD_S = 1.0
 
@@ -379,7 +389,9 @@ def stages(cam, names, publishers) -> list:
     nodes publish it."""
     ns = f'/mongla/vision/{cam}/'
     out = []
-    for label, rel, switch in STAGES:
+    for label, rel, switch, cams in STAGES:
+        if cams and cam not in cams:
+            continue
         topics = [n for n in names if n == ns + rel or n.startswith(ns + rel + '_')]
         on = [t for t in topics if publishers(t) > 0]
         out.append({'stage': label, 'on': bool(on), 'topic': on[0] if on else ns + rel,
@@ -490,7 +502,8 @@ def main(args=None):
                     ImageAnnotations, f'{ns}/flow_annotations', 5)
                 self.watched.append(Watched(self, flow_pub, [
                     (FlowTracks, f'{ns}/flow_tracks',
-                     lambda msg, p=flow_pub: p.publish(flow_annotate(msg)), 5)]))
+                     lambda msg, p=flow_pub, latest=latest:
+                     p.publish(flow_annotate(msg, latest['size'])), 5)]))
 
             # A calibration, when one runs (`calibrate.launch.py`): its state
             # is latched, so a new viewer gets the current one at once.

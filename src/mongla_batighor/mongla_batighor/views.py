@@ -195,8 +195,10 @@ def vision(v: View):
     fwd, dwn = f'{V}/forward', f'{V}/downward'
     # How far each detection is, when depth_estimation runs (off by default).
     depth = row(v('range_map', image(f'{fwd}/vis_range_map')), v('range', raw(f'{fwd}/vis_range')))
+    # Both cameras' rungs and stages, side by side: at a sixth of the column
+    # the instrument scrolled and hid the downward camera.
     right = col(
-        (3, v('vision', instrument('Vision'))),
+        (6, v('vision', instrument('Vision'))),
         (3, v('ladder', states(*_ladder_lines(True)))),
         (2, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', f'{c} authority')
                                   for c in CAMERAS)))),

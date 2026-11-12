@@ -363,7 +363,7 @@ def test_every_perception_stage_is_a_topic_a_node_publishes():
     src = pathlib.Path(__file__).resolve().parents[2]
     code = ''.join(p.read_text() for pkg in ('mongla_vision', 'mongla_batighor')
                    for p in (src / pkg / pkg).rglob('*.py'))
-    for _, rel, _ in STAGES:
+    for _, rel, _, _ in STAGES:
         assert re.search(r"\}/" + re.escape(rel) + r"[_'\"{]", code), rel
 
 
@@ -376,7 +376,21 @@ def test_a_stage_is_on_only_while_a_node_publishes_it():
     st = {x['stage']: x for x in stages('forward', names, lambda t: pubs.get(t, 0))}
     assert st['detector']['on'] and st['pose (PnP)']['on']
     assert not st['lock ladder']['on'] and st['lock ladder']['switch'] == 'lock:=true'
-    assert not st['flow']['on']
+    assert 'flow' not in st, 'flow runs on the downward camera only'
+    dwn = {x['stage'] for x in stages('downward', [], lambda t: 0)}
+    assert 'flow' in dwn
+
+
+def test_every_stage_names_a_switch_bringup_takes():
+    """An operator types the switch the panel shows; one bringup does not take
+    is a dead end at the pool (`vision_stack` once stood for pose)."""
+    import pathlib
+    from mongla_batighor.overlay import STAGES
+    bringup = (pathlib.Path(__file__).resolve().parents[2] / 'mongla_manager' / 'launch'
+               / 'bringup.launch.py').read_text()
+    for stage, _, switch, _ in STAGES:
+        name, _, value = switch.partition(':=')
+        assert value == 'true' and f"'{name}'" in bringup, (stage, switch)
 
 
 def test_the_vehicle_panel_calls_a_mission_running_as_the_helm_does():
