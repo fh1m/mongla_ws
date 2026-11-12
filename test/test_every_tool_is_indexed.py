@@ -22,12 +22,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # A test outside the collected tree needs a reason here and the issue that
 # brings it in. No reason, no exemption.
-NOT_COLLECTED = {
-    'tools/bench/control_bench/': (
-        'compiles the board firmware for the host and needs a checkout of '
-        'srot-control-board; 94 tests, passing locally. Bringing them into CI '
-        'means fetching and building the firmware at a pinned commit (#132).'),
-}
+NOT_COLLECTED = {}
+
+# Collected outside src/*/test and test/: the control bench, which CI builds
+# from the firmware commit in its FIRMWARE_PIN and runs in the ROS job (#132).
+ALSO_COLLECTED = ('tools/bench/control_bench/',)
 
 
 def _tracked():
@@ -61,10 +60,22 @@ def test_no_test_file_hides_outside_the_collected_tree():
              if Path(f).name.startswith('test_') and f.endswith('.py')
              and not f.startswith('test/')
              and not (f.startswith('src/') and '/test/' in f)
-             and not any(f.startswith(p) for p in NOT_COLLECTED)]
+             and not any(f.startswith(p) for p in NOT_COLLECTED)
+             and not any(f.startswith(p) for p in ALSO_COLLECTED)]
     assert not stray, (
-        'test files CI never runs (it collects src/*/test and test/): '
+        'test files CI never runs (it collects src/*/test, test/ and '
+        f'{ALSO_COLLECTED}): '
         + ', '.join(stray))
+
+
+def test_what_is_also_collected_is_on_the_ci_pytest_line():
+    """A folder named here and missing from the one pytest line in ci_ros.sh
+    would be a test nobody runs, with this file saying somebody does."""
+    script = (ROOT / 'tools/ci/ci_ros.sh').read_text()
+    line = next(l for l in script.splitlines()
+                if '-m pytest' in l and not l.lstrip().startswith('#'))
+    for prefix in ALSO_COLLECTED:
+        assert prefix.rstrip('/') in line, f'{prefix} is not on: {line}'
 
 
 def test_every_exemption_still_holds_a_test():

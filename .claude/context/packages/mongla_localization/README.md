@@ -143,6 +143,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `pose_cluster.py` | Fuse a stream of single-frame poses into one answer, with its support. |
 | `pose_fuse_node.py` | Subscribe single-frame poses, publish the one the support agrees on. |
 | `prop_placement.py` | Where a prop is, from several sightings of it taken from where we think we are. |
+| `realtime.py` | Give a process that streams commands a realtime priority and a short lock. |
 | `resection.py` | Absolute position from bearings to props whose positions we know. |
 | `retro.py` | Apply every filter event at the instant it describes, not the instant it arrived. |
 | `spin.py` | One place that decides which rclpy executor a Mongla node spins on. |

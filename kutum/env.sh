@@ -21,3 +21,7 @@ export MONGLA_HEF_DIR=~/hailo_models
 # HailoRT writes hailort.log into whatever directory a process starts in, which
 # left copies in $HOME and in the workspace. One place instead.
 export HAILORT_LOGGER_PATH=~/.hailo/hailort
+
+# Where the HailoRT service listens (kutum/system/systemd/hailort.service). The
+# library reads it once, when it loads.
+export HAILORT_SERVICE_ADDRESS=unix:///run/hailo/hailort_uds.sock
