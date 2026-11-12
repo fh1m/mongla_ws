@@ -10,26 +10,47 @@
         }
       }
     },
-    "RawMessages!state": {
-      "topicPath": "/mongla/state"
+    "Image!downward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          },
+          "/mongla/vision/downward/flow_annotations": {
+            "visible": true
+          }
+        }
+      }
     },
-    "Plot!align": {
+    "StateTransitions!ladder": {
       "paths": [
         {
-          "value": "/mongla/move/_action/feedback.feedback.err_x_px",
-          "enabled": true,
-          "label": "err_x_px"
+          "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.class_id",
+          "label": "forward lock rung"
         },
         {
-          "value": "/mongla/move/_action/feedback.feedback.err_y_px",
-          "enabled": true,
-          "label": "err_y_px"
+          "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.class_id",
+          "label": "downward lock rung"
+        },
+        {
+          "value": "/mongla/vision/active_camera.data",
+          "label": "live camera",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/state.mode",
+          "label": "mode"
+        },
+        {
+          "value": "/mongla/localization/aiding.data",
+          "label": "localization",
+          "timestampMethod": "receiveTime"
         }
       ],
-      "showLegend": true,
-      "isSynced": true,
-      "xAxisVal": "timestamp"
+      "isSynced": true
     },
+    "mongla.batighor.Mongla!mongla": {},
     "mongla.batighor.Helm!helm": {}
   },
   "globalVariables": {},
@@ -39,18 +60,23 @@
   },
   "layout": {
     "direction": "row",
-    "first": "Image!forward",
-    "second": {
+    "first": {
       "direction": "column",
-      "first": "mongla.batighor.Helm!helm",
+      "first": "Image!forward",
       "second": {
         "direction": "column",
-        "first": "RawMessages!state",
-        "second": "Plot!align",
-        "splitPercentage": 45
+        "first": "Image!downward",
+        "second": "StateTransitions!ladder",
+        "splitPercentage": 68
       },
-      "splitPercentage": 55
+      "splitPercentage": 48
     },
-    "splitPercentage": 60
+    "second": {
+      "direction": "column",
+      "first": "mongla.batighor.Mongla!mongla",
+      "second": "mongla.batighor.Helm!helm",
+      "splitPercentage": 52
+    },
+    "splitPercentage": 64
   }
 }

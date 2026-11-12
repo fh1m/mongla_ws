@@ -1,0 +1,111 @@
+/* Batighor's look: the site's (docs/assets/site.css), on the operator's screen.
+
+   One stylesheet for Lichtblick's own chrome and for every Batighor panel.
+   serve.py links it into the app page, so a panel carries no CSS of its own.
+   The tokens are the site's values; red marks something measured and live,
+   ocean what the machine perceives, amber caution, and the rest is the dark
+   the machine works in. The fonts are the site's Iosevka builds (SIL OFL),
+   served by Kutum itself, because the deck has no internet at the pool. */
+
+@font-face{font-family:"Zed Mono";src:url("/theme/fonts/zed-mono-extended.woff2") format("woff2");
+  font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"Zed Mono";src:url("/theme/fonts/zed-mono-extendedbold.woff2") format("woff2");
+  font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"Zed Sans";src:url("/theme/fonts/zed-sans-extended.woff2") format("woff2");
+  font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"Zed Sans";src:url("/theme/fonts/zed-sans-extendedbold.woff2") format("woff2");
+  font-weight:700;font-style:normal;font-display:swap}
+
+:root{
+  --mb-d0:#000000; --mb-d1:#05070c; --mb-d2:#0a0e16; --mb-d3:#111726;
+  --mb-sunk:#04060b; --mb-key:#111725;
+  --mb-rule:#1a2030; --mb-rule-lit:#2b3448;
+  --mb-ink:#e4e8ef; --mb-ink-2:#98a2b4; --mb-ink-3:#7b8598;
+  --mb-red:#ff2a14; --mb-sea:#5a8dff; --mb-amber:#f88701; --mb-glass:#c4e2f3;
+  --mb-violet:#9a7bff; --mb-teal:#22d3c5;
+  --mb-mono:"Zed Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --mb-sans:"Zed Sans",ui-sans-serif,system-ui,sans-serif;
+  --mb-fast:150ms;
+}
+
+/* Lichtblick's chrome in the site's faces. Its components set their own
+   font-family, so this must be !important; `:where` keeps it at no
+   specificity, so the panels' mono below and the code editor's own font win. */
+:where(body, body *:not(.monaco-editor, .monaco-editor *)){font-family:var(--mb-sans)!important}
+:where(code, pre, kbd, samp, [class*="monospace" i]){font-family:var(--mb-mono)!important}
+
+/* -- every panel ---------------------------------------------------------- */
+.mb, .mb *{font-family:var(--mb-mono)!important;box-sizing:border-box}
+.mb{font-size:12px;line-height:1.45;color:var(--mb-ink);background:var(--mb-d1);height:100%;
+  overflow:auto;padding:10px;display:flex;flex-direction:column;gap:10px;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.mb section{background:var(--mb-d2);border:1px solid var(--mb-rule);border-radius:4px;
+  padding:10px 12px;display:flex;flex-direction:column;gap:8px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.mb h3{margin:0;font-size:10px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--mb-ink-3);display:flex;justify-content:space-between;gap:8px}
+.mb .row{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap}
+.mb .kv{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;align-items:center}
+.mb .kv > :nth-child(odd){color:var(--mb-ink-3)}
+.mb .big{font-size:24px;line-height:1.05}
+.mb .unit{font-size:10px;color:var(--mb-ink-3);margin-left:3px;letter-spacing:.06em}
+.mb .note{color:var(--mb-ink-3);font-size:11px}
+.mb .wide{grid-column:1/-1}
+
+/* states: words first, colour second */
+.mb .ok{color:var(--mb-ink-2)}
+.mb .live{color:var(--mb-sea)}
+.mb .warn{color:var(--mb-amber)}
+.mb .err, .mb .bad{color:var(--mb-red)}
+.mb .stale{color:var(--mb-ink-3)}
+.mb .armed{color:var(--mb-red);font-weight:700;letter-spacing:.1em}
+.mb .good{color:var(--mb-teal)}
+
+/* controls: keys, not links */
+.mb button{font-size:11px;letter-spacing:.08em;text-transform:uppercase;line-height:1;
+  padding:7px 11px;border-radius:3px;border:1px solid var(--mb-rule-lit);
+  background:var(--mb-key);color:var(--mb-ink);cursor:pointer;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.055),0 1px 0 rgba(0,0,0,.55);
+  transition:border-color var(--mb-fast),background var(--mb-fast),color var(--mb-fast)}
+.mb button:hover:not(:disabled){border-color:var(--mb-ink-3)}
+.mb button:active:not(:disabled){transform:translateY(1px);box-shadow:none}
+.mb button:disabled{opacity:.32;cursor:default}
+.mb button.on{border-color:var(--mb-sea);color:var(--mb-sea)}
+.mb button.go{border-color:var(--mb-sea);background:#0d1a33}
+.mb button.danger{background:var(--mb-red);border-color:var(--mb-red);color:var(--mb-d0);
+  font-weight:700;font-size:13px;letter-spacing:.14em;padding:12px 10px}
+.mb button.danger:hover:not(:disabled){background:#ff4a38}
+.mb .keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px}
+.mb input, .mb select{font-size:12px;color:var(--mb-ink);background:var(--mb-sunk);
+  border:1px solid var(--mb-rule-lit);border-radius:3px;padding:5px 7px;min-width:0}
+.mb input[type=checkbox]{accent-color:var(--mb-red);width:14px;height:14px;padding:0}
+.mb input:focus, .mb select:focus, .mb button:focus-visible{outline:1px solid var(--mb-sea);outline-offset:1px}
+.mb ::placeholder{color:var(--mb-ink-3)}
+.mb label{color:var(--mb-ink-2)}
+
+.mb .msg{min-height:1.45em;color:var(--mb-ink-2)}
+.mb .msg.bad{color:var(--mb-red)}
+.mb .log, .mb pre{font-size:11px;line-height:1.4;white-space:pre;overflow:auto;margin:0;
+  background:var(--mb-sunk);border:1px solid var(--mb-rule);border-radius:3px;padding:6px 8px;
+  color:var(--mb-ink-2)}
+.mb .log{flex:1;min-height:8em}
+.mb pre{white-space:pre-wrap;max-height:12em}
+.mb table{border-collapse:collapse;width:100%;font-size:11px}
+.mb th{font-weight:400;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mb-ink-3);text-align:left}
+.mb td, .mb th{padding:4px 8px 4px 0;border-bottom:1px solid var(--mb-rule)}
+.mb dialog{color:var(--mb-ink);background:var(--mb-d2);border:1px solid var(--mb-rule-lit);
+  border-radius:4px;padding:14px 16px;min-width:260px}
+.mb dialog::backdrop{background:rgba(0,0,0,.65)}
+.mb dialog p{margin:0 0 10px;color:var(--mb-ink)}
+
+/* the Mongla panel: cards that flow into the panel's width */
+.mb.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));align-content:start}
+.mb .ladder{display:flex;gap:3px}
+.mb .ladder i{flex:1;height:20px;border-radius:2px;background:var(--mb-d3);border:1px solid var(--mb-rule);
+  font-style:normal;font-size:9px;letter-spacing:.06em;display:flex;align-items:center;justify-content:center;
+  color:var(--mb-ink-3)}
+.mb .ladder i.on{color:var(--mb-d0);font-weight:700;border-color:transparent}
+.mb .bar{height:4px;background:var(--mb-d3);border-radius:2px;overflow:hidden}
+.mb .bar b{display:block;height:100%;background:var(--mb-sea)}
+.mb .health{display:grid;grid-template-columns:max-content 1fr;gap:2px 12px}
+.mb .health span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

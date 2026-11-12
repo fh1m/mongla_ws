@@ -35,6 +35,22 @@ from mongla_batighor.pin import pin, share, web_dir
 
 _NAME = re.compile(r'^[A-Za-z0-9_-]+$')
 _HASHED = re.compile(r'\.[0-9a-f]{16,}\.')
+_THEME_FILE = re.compile(r'^(?:fonts/)?[a-z0-9-]+\.(?:css|woff2)$')
+
+# The site's look over Lichtblick's (theme/batighor.css), and its dark scheme
+# until the operator picks another in Lichtblick's settings: the key is
+# lichtblick 1.30.0's LocalStorageAppConfiguration, values JSON-encoded.
+THEME_HEAD = (b'<link rel="stylesheet" href="/theme/batighor.css">'
+              b'<script>try{var k="studio.app-configuration.colorScheme";'
+              b'if(localStorage.getItem(k)===null)localStorage.setItem(k,\'"dark"\')}'
+              b'catch(e){}</script>')
+
+
+def themed(html: bytes) -> bytes:
+    """The app page with Batighor's theme linked in, before the app's own head ends."""
+    return html.replace(b'</head>', THEME_HEAD + b'</head>', 1)
+
+
 mimetypes.add_type('application/wasm', '.wasm')
 
 
@@ -59,6 +75,7 @@ class Handler(BaseHTTPRequestHandler):
     def __init__(self, *a, web: Path, layouts: Path, bridge_port: int,
                  default_layout: str, exts: dict, bundle, **kw):
         self.web, self.layouts = web, layouts
+        self.theme = layouts.parent / 'theme'
         self.exts, self.bundle = exts, bundle      # see make_server
         self.bridge_port, self.default_layout = bridge_port, default_layout
         super().__init__(*a, **kw)
@@ -82,6 +99,12 @@ class Handler(BaseHTTPRequestHandler):
             if not _NAME.match(name):
                 return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
             return self._file(self.layouts / f'{name}.json', cache=False)
+        if url.path.startswith('/theme/'):
+            rel = url.path[len('/theme/'):]
+            if not _THEME_FILE.match(rel):
+                return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
+            # Fonts are immutable; the stylesheet changes with a deploy.
+            return self._file(self.theme / rel, cache=rel.startswith('fonts/'))
         if url.path.startswith('/api/'):
             return self._api(url.path[len('/api/'):])
         if url.path == '/app' or url.path.startswith('/app/'):
@@ -93,10 +116,11 @@ class Handler(BaseHTTPRequestHandler):
                                   'Run: ros2 run mongla_batighor fetch'
                                   '\n')
             rel = url.path[len('/app/'):] or 'index.html'
-            if self.bundle and rel == 'index.html':
+            if rel == 'index.html':
                 html = (self.web / 'index.html').read_bytes()
-                return self._bytes(html.replace(self.bundle[0].encode(), self.bundle[1].encode()),
-                                   'text/html', cache=False)
+                if self.bundle:
+                    html = html.replace(self.bundle[0].encode(), self.bundle[1].encode())
+                return self._bytes(themed(html), 'text/html', cache=False)
             if self.bundle and rel == self.bundle[1]:
                 return self._bytes(self.bundle[2], 'text/javascript', cache=True,
                                    gz=self.bundle[3])

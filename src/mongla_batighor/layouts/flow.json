@@ -27,7 +27,8 @@
       ],
       "showLegend": true,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
     },
     "Plot!distance": {
       "paths": [
@@ -40,7 +41,8 @@
       ],
       "showLegend": true,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
     },
     "Plot!quality": {
       "paths": [
@@ -65,7 +67,8 @@
       ],
       "showLegend": true,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "legendDisplay": "top"
     }
   },
   "layout": {

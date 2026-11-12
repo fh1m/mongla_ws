@@ -2,15 +2,26 @@
 
     ros2 run mongla_batighor overlay          # bringup starts it with batighor:=true
 
-For each camera this turns the detector's boxes, the tracker's ids and the
-lock's one chosen target into `foxglove_msgs/ImageAnnotations` on
-`/mongla/vision/<cam>/annotations`, and the flow node's tracked point pairs
-into `<cam>/flow_annotations`: a segment from where each point was on the
-anchor to where it is now, the floor being followed. A running calibration's
-state becomes `/mongla/vision/calibration/annotations`: the corners found, the
-cell the next pose belongs in, the point the fit is least sure of. Lichtblick's image panel draws those over
-`<cam>/stream/compressed`, the JPEG the camera sent, so Kutum never draws on
-or encodes a frame for an operator (`image_debug` does both, for a recorder).
+For each camera this turns into `foxglove_msgs/ImageAnnotations` on
+`/mongla/vision/<cam>/annotations`:
+
+  * the detector's boxes with class and score, and the candidates below its
+    floor, faint;
+  * the tracker's ids;
+  * the lock, coloured by the rung of the ladder holding it, labelled with
+    what it holds and its authority;
+  * the targets' contours;
+  * the anchor's matched features (its learned points), while it runs.
+
+The flow node's tracked pairs go to `<cam>/flow_annotations` (a segment from
+where each point was on the anchor frame to where it is now), and a running
+calibration's state to `/mongla/vision/calibration/annotations` (the corners,
+the cell the next pose belongs in, the point the fit is least sure of).
+Lichtblick's image panel draws them over `<cam>/stream/compressed`, the JPEG
+the camera sent, so Kutum never draws on or encodes a frame for an operator.
+
+Nothing here runs unwatched: each group subscribes only while a browser
+subscribes to what it publishes (`Watched`).
 
 Kept out of `mongla_vision` so the vision stack does not depend on a viewer's
 message package: this is the one node that knows both.
@@ -22,15 +33,40 @@ import json
 from foxglove_msgs.msg import (Color, ImageAnnotations, Point2,
                                PointsAnnotation, TextAnnotation)
 
-# The three layers, and how each is drawn. The lock is the one the vehicle
-# steers by, so it is the one an operator should see first.
-DETECTION = ((0.35, 0.85, 1.0, 0.9), 1.5)
-TRACK = ((1.0, 0.8, 0.2, 0.9), 1.5)
-LOCK = ((1.0, 0.42, 0.1, 1.0), 3.5)
-FLOW = ((0.45, 1.0, 0.55, 0.9), 1.5)
-TARGET = ((1.0, 0.42, 0.1, 1.0), 3.0)
-WORST = ((1.0, 0.25, 0.25, 1.0), 3.0)
-_TEXT_BG = Color(r=0.0, g=0.0, b=0.0, a=0.6)
+# The Mongla palette (docs/assets/site.css): RED marks something measured,
+# OCEAN what the machine perceives, and the rest is the dark it works in. The
+# lock is the one the vehicle steers by, so it is the one an operator should
+# see first, and its colour says which rung of the ladder is holding it.
+
+
+def _hex(h, a=1.0):
+    return (int(h[1:3], 16) / 255, int(h[3:5], 16) / 255, int(h[5:7], 16) / 255, a)
+
+
+SEA = _hex('#5a8dff')           # --sea-lit: what the machine perceives
+RED = _hex('#ff2a14')           # --red-lit: measured, live
+AMBER = _hex('#f88701')         # --cad-amber: caution, carried
+GLASS = _hex('#c4e2f3')         # --cad-glass
+VIOLET = _hex('#9a7bff')        # --state-soft: learned features
+TEAL = _hex('#22d3c5')          # --state-water
+INK_2 = _hex('#98a2b4')
+INK_3 = _hex('#7b8598', 0.7)
+
+DETECTION = (SEA, 1.5)
+CANDIDATE = (INK_3, 1.0)
+TRACK = (INK_2, 1.5)
+LOCK = (RED, 3.5)
+FLOW = (TEAL, 1.5)
+CONTOUR = (_hex('#5a8dff', 0.8), 1.5)
+FEATURE = (VIOLET, 4.0)
+TARGET = (AMBER, 3.0)
+WORST = (RED, 3.0)
+# Each rung of the lock ladder (`tracking/lock_state.Rung`), by how much of it
+# was measured this frame: a detection is a measurement, a held box a weak
+# one kept, the follower an image tracker carrying it, the anchor learned
+# features matched against a stored view.
+RUNG = {'detection': RED, 'held': AMBER, 'follow': GLASS, 'anchor': VIOLET}
+_TEXT_BG = Color(r=0.02, g=0.027, b=0.047, a=0.75)
 
 
 def _color(rgba) -> Color:
@@ -51,14 +87,68 @@ def _box(det):
     return cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, label, score
 
 
-def annotate(stamp, detections=None, tracks=None, lock=None) -> ImageAnnotations:
+# The anchor publishes its matches only while it runs, so the last set would
+# stay on the picture after it stopped. Older than this against the frame
+# being drawn, it is left off.
+FEATURES_MAX_AGE_S = 0.5
+
+
+def fresh(msg, stamp, max_age_s) -> bool:
+    """Whether `msg` (anything with a header) is within `max_age_s` of `stamp`."""
+    if msg is None:
+        return False
+    s = msg.header.stamp
+    return abs((s.sec - stamp.sec) + (s.nanosec - stamp.nanosec) * 1e-9) <= max_age_s
+
+
+def _loop(stamp, xy, rgba, thickness):
+    return PointsAnnotation(
+        timestamp=stamp, type=PointsAnnotation.LINE_LOOP,
+        points=[Point2(x=float(x), y=float(y)) for x, y in xy],
+        outline_color=_color(rgba), thickness=thickness)
+
+
+def _text(stamp, x, y, words, rgba, size=13.0):
+    return TextAnnotation(
+        timestamp=stamp, position=Point2(x=float(x), y=max(float(y), 13.0)),
+        text=words, font_size=size, text_color=_color(rgba), background_color=_TEXT_BG)
+
+
+def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
+             contours=None, features=None, size=None) -> ImageAnnotations:
     """One frame's annotations from the newest message of each layer.
 
     Any layer may be None (its node is not running). Boxes are in the image's
     own pixels, which is what the detector publishes, so they land on the
-    picture with no scaling.
+    picture with no scaling. `features` (the anchor's matched points) are in
+    the matcher's pixels and are scaled by `size`, the camera's (width, height).
     """
     out = ImageAnnotations(timestamp=stamp)
+    if candidates is not None:
+        # Below the detector's floor: what the model almost saw, faint.
+        rgba, th = CANDIDATE
+        for det in candidates.detections:
+            x1, y1, x2, y2, _, _ = _box(det)
+            out.points.append(_loop(stamp, ((x1, y1), (x2, y1), (x2, y2), (x1, y2)), rgba, th))
+    if contours is not None:
+        rgba, th = CONTOUR
+        offs, pts = list(contours.offset), list(contours.points)
+        for i in range(len(offs)):
+            a, b = offs[i], offs[i + 1] if i + 1 < len(offs) else len(pts) // 2
+            ring = [(pts[2 * k], pts[2 * k + 1]) for k in range(a, b)]
+            if len(ring) >= 3:
+                out.points.append(_loop(stamp, ring, rgba, th))
+    if features is not None and features.image_points:
+        sx = sy = 1.0
+        if size and features.image_width and features.image_height:
+            sx = size[0] / features.image_width
+            sy = size[1] / features.image_height
+        p = list(features.image_points)
+        rgba, th = FEATURE
+        out.points.append(PointsAnnotation(
+            timestamp=stamp, type=PointsAnnotation.POINTS,
+            points=[Point2(x=p[2 * i] * sx, y=p[2 * i + 1] * sy) for i in range(len(p) // 2)],
+            outline_color=_color(rgba), thickness=th))
     for layer, style, text in ((detections, DETECTION, 'score'),
                                (tracks, TRACK, 'id'),
                                (lock, LOCK, 'lock')):
@@ -67,17 +157,18 @@ def annotate(stamp, detections=None, tracks=None, lock=None) -> ImageAnnotations
         rgba, thickness = style
         for det in layer.detections:
             x1, y1, x2, y2, label, score = _box(det)
-            out.points.append(PointsAnnotation(
-                timestamp=stamp, type=PointsAnnotation.LINE_LOOP,
-                points=[Point2(x=x1, y=y1), Point2(x=x2, y=y1),
-                        Point2(x=x2, y=y2), Point2(x=x1, y=y2)],
-                outline_color=_color(rgba), thickness=thickness))
+            if text == 'lock':
+                rgba = RUNG.get(label, LOCK[0])
+            out.points.append(_loop(stamp, ((x1, y1), (x2, y1), (x2, y2), (x1, y2)),
+                                    rgba, thickness))
             if text == 'score':
                 words = f'{label} {score:.2f}' if score is not None else label
             elif text == 'id':
                 words = f'#{det.id}' if det.id else ''
             else:
-                words = f'LOCK {label}'.strip()
+                # What it holds, which rung holds it, and its authority.
+                auth = f'{score:.2f}' if score is not None and det.id else ''
+                words = ' '.join(filter(None, ('LOCK', det.id, label, auth)))
             if not words:
                 continue
             # A text's position is its lower left corner. The detector's label
@@ -89,10 +180,7 @@ def annotate(stamp, detections=None, tracks=None, lock=None) -> ImageAnnotations
                 x, y = x1, y2 + 15
             elif text == 'lock':
                 x, y = x1 + 3, y1 + 16
-            out.texts.append(TextAnnotation(
-                timestamp=stamp, position=Point2(x=x, y=max(y, 13.0)),
-                text=words, font_size=13.0, text_color=_color(rgba),
-                background_color=_TEXT_BG))
+            out.texts.append(_text(stamp, x, y, words, rgba))
     return out
 
 
@@ -157,60 +245,101 @@ def calibrate_annotate(state: dict, stamp) -> ImageAnnotations:
     return out
 
 
+class Watched:
+    """Subscriptions that exist only while someone watches what they feed.
+
+    The overlay serves browsers, and with none open it must cost the vehicle
+    nothing: no deliveries into this process, and no subscriber that keeps a
+    publisher working for nobody. `flow_node` builds its track pairs only while
+    `flow_tracks` has a subscriber, so an overlay subscribed for good kept the
+    flow node doing that work all session. `poll` subscribes when `pub` gains
+    a subscriber and unsubscribes when it has none; `on_drop` forgets what the
+    layers held, so the next viewer never sees a lock from minutes ago.
+    """
+
+    def __init__(self, node, pub, specs, on_drop=None):
+        self.node, self.pub, self.specs, self.on_drop = node, pub, specs, on_drop
+        self.subs = []
+
+    def poll(self):
+        watched = self.pub.get_subscription_count() > 0
+        if watched and not self.subs:
+            self.subs = [self.node.create_subscription(*s) for s in self.specs]
+        elif not watched and self.subs:
+            for s in self.subs:
+                self.node.destroy_subscription(s)
+            self.subs = []
+            if self.on_drop:
+                self.on_drop()
+
+
+# How soon a new viewer's annotations start, and the cost of asking: one
+# subscriber count per published layer, twice a second.
+WATCH_PERIOD_S = 0.5
+
+
 def main(args=None):
     import rclpy
     from rclpy.node import Node
+    from rclpy.qos import DurabilityPolicy, QoSProfile
+    from sensor_msgs.msg import CameraInfo
+    from std_msgs.msg import String
     from vision_msgs.msg import Detection2DArray
 
-    from rclpy.qos import DurabilityPolicy, QoSProfile
-    from std_msgs.msg import String
-
-    from mongla_interfaces.msg import FlowTracks
+    from mongla_interfaces.msg import FlowTracks, TargetContours, TargetCorrespondences
     from mongla_vision import qos
 
     LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+    LAYERS = ('tracks', 'lock', 'candidates', 'contours', 'features', 'size')
 
     class Overlay(Node):
         def __init__(self):
             super().__init__('batighor_overlay')
             cams = list(self.declare_parameter(
                 'cameras', ['forward', 'downward']).value or [])
+            self.watched = []
             for cam in cams:
                 ns = f'/mongla/vision/{cam}'
-                latest = {'tracks': None, 'lock': None}
+                latest = dict.fromkeys(LAYERS)
                 pub = self.create_publisher(ImageAnnotations, f'{ns}/annotations', 5)
 
                 def on_detections(msg, latest=latest, pub=pub):
-                    if pub.get_subscription_count() == 0:
-                        return
-                    pub.publish(annotate(msg.header.stamp, msg,
-                                         latest['tracks'], latest['lock']))
+                    feats = latest['features']
+                    pub.publish(annotate(
+                        msg.header.stamp, msg, latest['tracks'], latest['lock'],
+                        latest['candidates'], latest['contours'],
+                        feats if fresh(feats, msg.header.stamp, FEATURES_MAX_AGE_S) else None,
+                        latest['size']))
+
+                def on_info(msg, latest=latest):
+                    latest['size'] = (msg.width, msg.height) if msg.width else None
 
                 def keep(key, latest=latest):
                     return lambda msg: latest.__setitem__(key, msg)
 
                 # The detector paces the overlay: one set of boxes per frame
-                # it saw. The tracker and the lock arrive on their own clocks
-                # and are drawn as they last were.
-                self.create_subscription(Detection2DArray, f'{ns}/detections',
-                                         on_detections, qos.DETECTIONS)
-                self.create_subscription(Detection2DArray, f'{ns}/tracks',
-                                         keep('tracks'), qos.DETECTIONS)
-                self.create_subscription(Detection2DArray, f'{ns}/lock',
-                                         keep('lock'), qos.DETECTIONS)
+                # it saw. The other layers arrive on their own clocks and are
+                # drawn as they last were. The anchor's matched features are
+                # in the matcher's pixels; the camera's size scales them.
+                self.watched.append(Watched(self, pub, [
+                    (Detection2DArray, f'{ns}/detections', on_detections, qos.DETECTIONS),
+                    (Detection2DArray, f'{ns}/tracks', keep('tracks'), qos.DETECTIONS),
+                    (Detection2DArray, f'{ns}/lock', keep('lock'), qos.DETECTIONS),
+                    (Detection2DArray, f'{ns}/candidates', keep('candidates'), qos.DETECTIONS),
+                    (TargetContours, f'{ns}/contours', keep('contours'), qos.DETECTIONS),
+                    (TargetCorrespondences, f'{ns}/correspondences', keep('features'),
+                     qos.DETECTIONS),
+                    (CameraInfo, f'{ns}/camera_info', on_info, qos.CAMERA_INFO),
+                ], on_drop=lambda latest=latest: latest.update(dict.fromkeys(LAYERS))))
 
                 flow_pub = self.create_publisher(
                     ImageAnnotations, f'{ns}/flow_annotations', 5)
+                self.watched.append(Watched(self, flow_pub, [
+                    (FlowTracks, f'{ns}/flow_tracks',
+                     lambda msg, p=flow_pub: p.publish(flow_annotate(msg)), 5)]))
 
-                def on_tracks(msg, pub=flow_pub):
-                    if pub.get_subscription_count():
-                        pub.publish(flow_annotate(msg))
-
-                self.create_subscription(FlowTracks, f'{ns}/flow_tracks',
-                                         on_tracks, 5)
-
-            # A calibration, when one runs (`calibrate.launch.py`): its
-            # state is latched JSON, redrawn whenever it changes.
+            # A calibration, when one runs (`calibrate.launch.py`): its state
+            # is latched, so a new viewer gets the current one at once.
             cal = '/mongla/vision/calibration'
             cal_pub = self.create_publisher(ImageAnnotations, f'{cal}/annotations', 5)
 
@@ -218,7 +347,13 @@ def main(args=None):
                 cal_pub.publish(calibrate_annotate(
                     json.loads(msg.data), self.get_clock().now().to_msg()))
 
-            self.create_subscription(String, f'{cal}/state', on_calibration, LATCHED)
+            self.watched.append(Watched(self, cal_pub, [
+                (String, f'{cal}/state', on_calibration, LATCHED)]))
+            self.create_timer(WATCH_PERIOD_S, self._poll)
+
+        def _poll(self):
+            for w in self.watched:
+                w.poll()
 
     from mongla_localization.params_file import refuse_unknown
     from mongla_localization.spin import spin

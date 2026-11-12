@@ -74,7 +74,8 @@ def test_a_release_that_moved_the_switch_is_refused_not_half_served(tmp_path):
 def test_the_workspace_lists_the_helm_and_hands_over_its_foxe(kutum):
     _, _, body = _get(kutum + '/api/workspaces/mongla/extensions')
     listed = json.loads(body)['data']
-    assert [e['id'] for e in listed] == ['mongla.batighor-calibrate', 'mongla.batighor-helm']
+    assert [e['id'] for e in listed] == ['mongla.batighor-calibrate', 'mongla.batighor-helm',
+                                         'mongla.batighor-mongla']
     e = listed[1]
     # Lichtblick caches an org extension under `${publisher}.${name}` and
     # compares that with the listed id: they must be the same string.
@@ -147,10 +148,10 @@ def test_the_calibrate_panel_says_the_calibration_nodes_own_words():
     steps = re.search(r'const STEPS = \[([^\]]*)\]', CALIBRATE_JS).group(1)
     sent |= set(re.findall(r'"(\w+)"', steps))
     assert sent == set(calibrate_node.OPS)
-    assert 'op: "calibrate"' in CALIBRATE_JS and "op == 'calibrate'" in Path(helm.__file__).read_text()
+    assert 'op: "calibrate"' in CALIBRATE_JS
+    assert "op == 'calibrate'" in Path(helm.__file__).read_text()
     assert f'"{calibrate_node.NS}/state"' in CALIBRATE_JS
-    assert re.search(r'NAME_KEY = "([^"]+)"', CALIBRATE_JS).group(1) == \
-        re.search(r'NAME_KEY = "([^"]+)"', HELM_JS).group(1)
+    assert 'readName()' in CALIBRATE_JS and 'readName()' in HELM_JS   # one name per browser
 
 
 def test_the_calibrate_layout_draws_the_overlay_on_the_calibration_camera():
@@ -175,3 +176,117 @@ def test_every_served_panel_parses(tmp_path, name):
     f.write_bytes(code)
     r = subprocess.run(['node', '--check', str(f)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+MONGLA_JS = (PANELS / 'mongla' / 'extension.js').read_text()
+
+
+def test_the_mongla_panel_reads_only_topics_that_exist_and_small_ones():
+    """Every topic it names is published by a node here, and none is an
+    image or a detection stream: opening it must cost the vehicle almost
+    nothing (the owner's rule: observation must not slow the vehicle)."""
+    src = '\n'.join(p.read_text(errors='ignore') for p in PANELS.parents[1].rglob('*.py')
+                    if '/test/' not in str(p))
+    named = set(re.findall(r'"(/(?:mongla|diagnostics)[\w/]*)"', MONGLA_JS))
+    for leaf in ('lock', 'seeing'):
+        assert f'/mongla/vision/${{c}}/{leaf}' in MONGLA_JS
+    for topic in named:
+        assert f"'{topic}'" in src or topic == '/diagnostics', topic
+    subscribed = named | set(re.findall(r'`(/mongla/vision/\$\{c\}/\w+)`', MONGLA_JS))
+    assert len(subscribed) >= 10, subscribed
+    for topic in subscribed:
+        for heavy in ('image', 'compressed', 'detections', 'candidates', 'flow_tracks'):
+            assert heavy not in topic, topic
+
+
+def test_the_mongla_panel_names_the_ladder_as_the_lock_does():
+    from mongla_vision.tracking.lock_state import Rung
+    rungs = re.search(r'const RUNGS = \[([^\]]*)\]', MONGLA_JS).group(1)
+    assert re.findall(r'"(\w+)"', rungs) == [r.value for r in Rung]
+
+
+# -- the look -----------------------------------------------------------
+
+THEME = PANELS.parent / 'theme' / 'batighor.css'
+FONTS = PANELS.parents[2] / 'docs' / 'assets' / 'fonts'
+
+
+@pytest.mark.parametrize('name', sorted(p.name for p in PANELS.iterdir()
+                                        if (p / 'extension.js').is_file()))
+def test_a_panel_carries_no_look_and_no_helper_of_its_own(name):
+    """One stylesheet and one helper file: three panels each with their own
+    CSS and their own `el` drifted apart in looks and in behaviour."""
+    js = (PANELS / name / 'extension.js').read_text()
+    for own in ('<style', 'el("style"', 'const CSS', 'function el(', 'NAME_KEY =',
+                'const num =', 'const fin ='):
+        assert own not in js, f'{name} defines {own!r}; it belongs in common.js or the theme'
+    assert 'mount(context' in js
+    served = panels.extensions(PANELS)[f'{panels.PUBLISHER}.batighor-{name}'][1]
+    assert b'function el(' in zipfile.ZipFile(io.BytesIO(served)).read('dist/extension.js')
+
+
+def test_the_theme_is_the_sites_palette_and_fonts():
+    """The tokens are the site's own values, and every font it asks for is a
+    file the site ships and setup.py installs."""
+    site = (FONTS.parent / 'site.css').read_text()
+    css = THEME.read_text()
+    for token in ('d0', 'd1', 'd2', 'd3', 'rule', 'rule-lit', 'ink', 'ink-2', 'ink-3'):
+        want = re.search(rf'--{token}:(#[0-9a-f]+)', site).group(1)
+        assert f'--mb-{token}:{want};' in css, token
+    assert re.search(r'--red-lit:(#[0-9a-f]+)', site).group(1) in css
+    assert re.search(r'--sea-lit:(#[0-9a-f]+)', site).group(1) in css
+    asked = set(re.findall(r'/theme/fonts/([\w-]+)\.woff2', css))
+    setup = (PANELS.parent / 'setup.py').read_text()
+    fonts = re.search(r'THEME_FONTS = \(([^)]*)\)', setup).group(1)
+    installed = set(re.findall(r"'([\w-]+)'", fonts))
+    assert asked == installed and asked
+    for f in asked:
+        assert (FONTS / f'{f}.woff2').is_file(), f
+
+
+def test_the_app_page_links_the_theme_and_kutum_serves_it(tmp_path):
+    theme = tmp_path / 'theme'
+    (theme / 'fonts').mkdir(parents=True)
+    (theme / 'batighor.css').write_text(THEME.read_text())
+    (theme / 'fonts' / 'zed-mono-extended.woff2').write_bytes(b'wOF2')
+    (tmp_path / 'secret.css').write_text('x')
+    layouts = tmp_path / 'layouts'
+    layouts.mkdir()
+    web = _web(tmp_path)
+    (web / 'index.html').write_text('<html><head><title>x</title></head>'
+                                    '<script src="main.0123456789abcdef01.js"></script></html>')
+    srv = serve.make_server(0, web, layouts, 8765, panels_dir=PANELS)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f'http://127.0.0.1:{srv.server_address[1]}'
+    try:
+        _, _, html = _get(base + '/app/')
+        assert html.count(b'/theme/batighor.css') == 1
+        assert html.index(b'/theme/batighor.css') < html.index(b'</head>')
+        status, headers, css = _get(base + '/theme/batighor.css')
+        assert status == 200 and b'--mb-ink' in css and headers['Cache-Control'] == 'no-cache'
+        status, headers, _ = _get(base + '/theme/fonts/zed-mono-extended.woff2')
+        assert status == 200 and 'immutable' in headers['Cache-Control']
+        for bad in ('/theme/../secret.css', '/theme/%2e%2e/secret.css',
+                    '/theme/x/../../secret.css'):
+            assert _get(base + bad)[0] == 404, bad
+    finally:
+        srv.shutdown()
+
+
+def test_the_installed_share_carries_everything_serve_reads():
+    """The tests above read the source tree; Kutum serves the installed one.
+    A file setup.py forgot (panels/common.js, 2026-11-12) killed the server at
+    start on Kutum while every test here passed."""
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        share = Path(get_package_share_directory('mongla_batighor'))
+    except Exception:                                   # noqa: BLE001
+        pytest.skip('mongla_batighor is not installed')
+    for src in [*PANELS.glob('*.js'), *PANELS.glob('*/extension.js'), THEME,
+                *(PANELS.parent / 'layouts').glob('*.json')]:
+        rel = src.relative_to(PANELS.parent)
+        assert (share / rel).is_file(), f'{rel} is not installed: add it to setup.py'
+    css = THEME.read_text()
+    for f in re.findall(r'/theme/(fonts/[\w-]+\.woff2)', css):
+        assert (share / 'theme' / f).is_file(), f
+    panels.extensions(share / 'panels')               # what serve.py does at start
