@@ -61,6 +61,11 @@ if   [ -z "$arm" ]; then warn "vcgencmd missing -- the ARM clock cannot be read"
 elif [ "$arm" = 2800 ]; then ok "ARM clock: 2800 MHz"
 else warn "ARM clock: $arm MHz, not the 2800 setup.sh --system writes -- about 15 % less CPU and Hailo rate under full load"; fi
 
+# Batighor's web app (src/mongla_batighor): the pinned Lichtblick build.
+lbv="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$(dirname "${BASH_SOURCE[0]}")/../src/mongla_batighor/LICHTBLICK.json" 2>/dev/null)"
+if [ -f "$HOME/.mongla/batighor/web/$lbv/index.html" ]; then ok "Batighor: Lichtblick $lbv installed"
+else warn "Batighor: Lichtblick ${lbv:-?} not installed -- the operator center answers 503 (ros2 run mongla_batighor fetch)"; fi
+
 # The Hailo-8 is shared through HailoRT's service (measured-bars 80). Without
 # it each vision process opens the chip itself, and only one can.
 if systemctl is-active --quiet hailort.service 2>/dev/null && ! id -nG | grep -qw hailort; then

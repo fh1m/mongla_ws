@@ -154,10 +154,13 @@
 #   Open vision_display (OpenCV viewer) alongside vision pipeline
 # viewer: false
 
-#   Start foxglove_bridge (WebSocket telemetry on foxglove_port). Off the
-#   mission path -- pure viz. Needs ros-humble-foxglove-bridge installed.
-#   Connect the Foxglove desktop app to ws://<pi>:<foxglove_port>.
-# foxglove: false
+#   Batighor, the operator center: foxglove_bridge on foxglove_port and the
+#   Lichtblick app on batighor_port (open http://<pi>:<batighor_port>/). Off
+#   the mission path; any number of browsers.
+# batighor: false
+
+#   Batighor web port
+# batighor_port: 8000
 
 #   foxglove_bridge WebSocket port
 # foxglove_port: 8765

@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd"
+            schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mongla_batighor</name>
+  <version>0.1.0</version>
+  <description>
+    Batighor, the lighthouse: Kutum's observation and control center. Serves
+    the Lichtblick web app to every operator, already connected to the
+    vehicle's foxglove_bridge and opened on our layouts.
+  </description>
+  <maintainer email="fh1m.dev@gmail.com">Muhammad Fahim Faisal</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>foxglove_bridge</exec_depend>
+
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>ament_flake8</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

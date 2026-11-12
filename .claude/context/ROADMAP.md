@@ -187,7 +187,7 @@ re-ask.
 |---|---|---|
 | D2 | **The project became Mongla (2026-09-20)** | **DONE** | the author left BRAC University on principle and continues independently; 868 paths and 805 files renamed by an explicit token map (13 ROS packages, `/mongla/*`, `class Mongla`, the `mongla` CLI, `MONGLA_*`, `~/.mongla`); one authorship identity across every package and the licence; `AUTHORS.md` added; the university named only in the past tense; the public site rebuilt. Guards in `test_docs_contract.py` hold both halves. **Owner action:** rename the GitHub repo to `mongla_ws` — the tree already points there |
 | D1 | **Documentation pass (2026-09-19)** | **DONE** | `docs/the-shift.md` (the platform change from first principles) and `docs/capability-map.md` (every capability with evidence and a verification state) published; six diagrams drawn; a page per package under `.claude/context/packages/` plus a stub in each `src/<pkg>/`; command and DSL references rewritten srot-first; README, CLAUDE.md and the Pages site rebuilt; 23 documents about the earlier platform retired (the whole earlier stack now lives at the tag `last-with-pixhawk-and-sim`); `test_docs_contract.py` guards links, package pages and the entry points (4 injections bite) |
-| O1 | Per-task Foxglove/Lichtblick layouts | **DONE 2026-09-17** -- `foxglove/{bins_downward,localization,board_health}.json`; `test_foxglove_layouts.py` fails when a layout plots a topic nothing publishes |
+| O1 | Per-task Foxglove/Lichtblick layouts | **DONE 2026-09-17** -- now `mongla_batighor/layouts/{bins_downward,localization,board_health}.json`; `test_layouts.py` fails when a layout plots a topic nothing publishes |
 | O2 | `ImageAnnotations` from perception | **DEFERRED** -- `foxglove_msgs` not installed; burned-in `image_debug` covers it |
 | O3 | Warmup | **DONE 2026-09-17** -- warmup already existed; now TIMED: Hailo logs first vs second infer ms, YOLO first vs last pass (`warmup_ms`) |
 | O4 | Tiled sim floor texture | **DROPPED** -- sim deprioritised by the operator |
@@ -303,7 +303,7 @@ declared but not forwarded (a knob wired to nothing).
 | `lane_lines` | `false` | lane-line heading (mod 180) yaw bound | flow |
 | `tile_m` | `0.0` | tile grating height + yaw bound (0 = off; the venue's tile size = on) | flow |
 | `baro_calibration` | `true` | re-zero the Bar30 in `mission_reset` | manager |
-| `foxglove` | `false` | telemetry bridge | include |
+| `batighor` | `false` | the operator center: foxglove_bridge and Lichtblick on :8000 | include |
 | `viewer` | `false` | on-vehicle HUD | vision |
 | `allow_fw_behaviour_mismatch` | `false` | arm below firmware rev 2 (safety override) | manager |
 
