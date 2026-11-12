@@ -39,7 +39,8 @@ def _source_tree():
 def test_every_launch_file_is_covered():
     names = {p.name for p in LAUNCH}
     assert {'bringup.launch.py', 'vision.launch.py', 'vision_dual.launch.py',
-            'vision_pi.launch.py', 'video.launch.py', 'batighor.launch.py'} <= names, names
+            'vision_pi.launch.py', 'video.launch.py', 'batighor.launch.py',
+            'calibrate.launch.py'} <= names, names
 
 
 @pytest.mark.parametrize('launch, args', CASES,

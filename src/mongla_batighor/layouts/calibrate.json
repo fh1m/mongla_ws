@@ -1,0 +1,36 @@
+{
+  "configById": {
+    "Image!camera": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/calibration/stream/compressed",
+        "annotations": {
+          "/mongla/vision/calibration/annotations": {
+            "visible": true
+          }
+        }
+      }
+    },
+    "Image!undistorted": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/calibration/undistorted/compressed"
+      }
+    },
+    "mongla.batighor.Calibrate!calibrate": {}
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "Image!camera",
+      "second": "Image!undistorted",
+      "splitPercentage": 65
+    },
+    "second": "mongla.batighor.Calibrate!calibrate",
+    "splitPercentage": 62
+  }
+}

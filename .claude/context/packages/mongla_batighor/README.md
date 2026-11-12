@@ -28,6 +28,14 @@ ros2 launch mongla_batighor batighor.launch.py
 `vision_dual` starts both detectors paused, as a mission expects: take the helm and choose a
 camera to resume one, or add `paused:=false` for both.
 
+To measure a camera, in air or in water, with the vision stack stopped (the calibration opens
+the camera itself, at 1280x720):
+
+```bash
+ros2 launch mongla_batighor calibrate.launch.py device_path:=/dev/mongla_cam_downward applies_to:=pi_downward
+# then open http://mongla.local:8000/?layout=calibrate
+```
+
 ## How it is built
 
 | piece | what it does |
@@ -35,9 +43,9 @@ camera to resume one, or add `paused:=false` for both.
 | `LICHTBLICK.json` | the one Lichtblick version we serve: release URL and SHA-256. `fetch` refuses any other bytes |
 | `fetch.py` | downloads (or takes `--from` a local tarball), checks the hash, leaves the source maps out (130 of 173 MB), and writes a gzip copy of every text asset |
 | `serve.py` | a static server. `/` answers with a link to the app carrying `ds=foxglove-websocket`, the bridge address *as the browser reached Kutum* (tether or Wi-Fi alike), `workspace=mongla` and the layout's name. Hashed assets are cached for good, `index.html` never. `/api/` answers the part of Lichtblick's workspace API the app reads, read only: our layouts as the organisation's, and our panels as its extensions. `/layouts/<name>.json` is the same layout as a file, for the desktop app. A browser shows Kutum's copy of a layout until its operator rearranges it; then it keeps theirs, marked with a dot, until they choose Revert in the layout's menu. A layout changed on Kutum shows on a browser's second load: the app fetches the new copy after it has opened the one it holds |
-| `panels.py`, `panels/` | our own Lichtblick panels, plain JavaScript with no build step, zipped into a `.foxe` as served. The release bundle names no API, so `panels.py` turns it on in the one line that does, and serve says `WARNING` and serves no panels if a new release moved that line. `panels/helm` is the helm: name, Request/Give/Release, STOP/SURFACE/DISARM, Arm behind two ticks, any verb with its own fields (the list comes from `commands.py`), missions, the camera, the detectors' settings with each detector's model registry offered for `active_model`, and the log |
-| `overlay.py` | what the vision stack sees, as `foxglove_msgs/ImageAnnotations` on `/mongla/vision/<cam>/annotations`: detector boxes with class and score, track ids, and the lock drawn thicker; and on `<cam>/flow_annotations` the flow node's tracked pairs, a segment from anchor to now. The browser draws them over the camera's own JPEG |
-| `layouts/` | our Lichtblick layouts; `test_layouts.py` fails when one shows a topic nothing publishes, or plots a topic with no header (`std_msgs`) without `timestampMethod: receiveTime`: Lichtblick plots by header stamp otherwise, and the plot stays empty while the topic publishes. `weak_link` is the one for a slow connection. `board_health` carries the manager's health board (`/diagnostics`): every subsystem graded, with its evidence, worst first. `board_link` draws `/mongla/board_link`: the link's bytes/s against the line's capacity, the board's drops and errors, the rate of every message type and every named channel with its age. `flow` is the downward camera as a velocity sensor: the floor with the point pairs the flow node tracked (`<cam>/flow_annotations`, from `flow_tracks`), velocity, distance travelled, quality, tracks and height |
+| `panels.py`, `panels/` | our own Lichtblick panels, plain JavaScript with no build step, zipped into a `.foxe` as served. The release bundle names no API, so `panels.py` turns it on in the one line that does, and serve says `WARNING` and serves no panels if a new release moved that line. `panels/helm` is the helm: name, Request/Give/Release, STOP/SURFACE/DISARM, Arm behind two ticks, any verb with its own fields (the list comes from `commands.py`), missions, the camera, the detectors' settings with each detector's model registry offered for `active_model`, and the log. `panels/calibrate` is a running calibration: the pose wanted and the one seen, blur, Max ERE against its bar, fx and the field of view, the solver's output, and the vehicle's saved calibrations with an apply button each. `test_panels.py` runs `node --check` on each panel as served |
+| `overlay.py` | what the vision stack sees, as `foxglove_msgs/ImageAnnotations` on `/mongla/vision/<cam>/annotations`: detector boxes with class and score, track ids, and the lock drawn thicker; and on `<cam>/flow_annotations` the flow node's tracked pairs, a segment from anchor to now; and on `/mongla/vision/calibration/annotations` a calibration's board corners, the cell its next pose belongs in and the point its fit is least sure of. The browser draws them over the camera's own JPEG |
+| `layouts/` | our Lichtblick layouts; `test_layouts.py` fails when one shows a topic nothing publishes, or plots a topic with no header (`std_msgs`) without `timestampMethod: receiveTime`: Lichtblick plots by header stamp otherwise, and the plot stays empty while the topic publishes. `weak_link` is the one for a slow connection. `board_health` carries the manager's health board (`/diagnostics`): every subsystem graded, with its evidence, worst first. `board_link` draws `/mongla/board_link`: the link's bytes/s against the line's capacity, the board's drops and errors, the rate of every message type and every named channel with its age. `flow` is the downward camera as a velocity sensor: the floor with the point pairs the flow node tracked (`<cam>/flow_annotations`, from `flow_tracks`), velocity, distance travelled, quality, tracks and height. `calibrate` is a calibration: the camera with those annotations, its undistorted preview, and the Calibrate panel |
 
 `launch/batighor.launch.py` starts `foxglove_bridge` (port 8765), the server (port 8000), the
 overlay and the helm, each respawned like every other process; `batighor:=true` in
@@ -72,6 +80,8 @@ log trusts it.
   retuned under the pilot. The helm reads each value once a second and shows it.
 - The camera is the pilot's: choosing one publishes `/mongla/vision/active_camera`, pauses the
   other detector and resumes the chosen one, the way the DSL's `use_camera` does.
+- A running calibration (`calibrate.launch.py`) takes its ops (skip, undo, reset, solve,
+  apply, configure) by the same rule as the settings: anyone named, never during a mission.
 - Every request and every change of pilot goes to `/mongla/batighor/log` and
   `~/.mongla/batighor/helm.log`; the deck adds its own commands, marked `term:<user>`.
 
@@ -108,7 +118,8 @@ our own panels; video switchable by link (the camera's JPEG passed through on th
 lighter stream on a weak link); one pilot token with everyone watching, and disarm, stop and
 surface from any operator; a mission planner with the pool map and the mission text side by
 side; a three.js scene with the hull CAD; the Mongla look; and the five older tools ported and
-then deleted. Each is a bead under it. The mission web console is the first deleted: its camera
+then deleted. Each is a bead under it. The guided calibration page is one of them: it is
+`calibrate.launch.py`, the `calibrate` layout and panel, and the helm's `calibrate` op. The mission web console is the first deleted: its camera
 switch and detector settings are the helm's, its video is the browser's, and its per-detection
 table (with `vis_range`, when `depth_estimation` runs) is any Raw Messages panel on
 `/mongla/vision/<cam>/detections` or `vis_range`.

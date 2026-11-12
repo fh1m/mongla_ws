@@ -103,7 +103,7 @@ are marked; moving one of those is a code change.
 ~/mongla_runs/        one folder per run: bags, logs, scorecards        (MONGLA_RUN_DIR default)
 ~/hailo_models/       compiled artifacts kept outside the workspace,
                       so a clean build cannot delete them               (MONGLA_HEF_DIR)
-~/calib_<camera>[_water]/  calibration captures; the guide resumes here (calibration/guide.py)
+~/calib_<camera>[_water]/  calibration captures; a capture resumes here (calibration/calibrate_node.py)
 ~/.mongla/            the deck's own config: bringup.yaml, courses      (created when needed)
 ~/.hailo/hailort/     HailoRT's log, in one place                       (HAILORT_LOGGER_PATH)
 ~/hailort_src/        HailoRT v4.24.0, the source the runtime and the

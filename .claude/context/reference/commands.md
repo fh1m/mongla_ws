@@ -66,7 +66,7 @@
 | `ros2 run mongla_vision tracker_check` | `mongla_vision.utils.check_tracker:main` |
 | `ros2 run mongla_vision vision_display` | `mongla_vision.utils.display_node:main` |
 | `ros2 run mongla_vision switch_camera` | `mongla_vision.utils.switch_camera:main` |
-| `ros2 run mongla_vision calibrate` | `mongla_vision.calibration.guide:main` |
+| `ros2 run mongla_vision calibrate` | `mongla_vision.calibration.calibrate_node:main` |
 | `ros2 run mongla_vision calibrate_solve` | `mongla_vision.calibration.solver:main` |
 | `ros2 run mongla_vision depth_estimation_node` | `mongla_vision.depth.depth_estimation_node:main` |
 | `ros2 run mongla_vision flow_node` | `mongla_vision.flow.flow_node:main` |
@@ -81,6 +81,19 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 |---|---|---|
 | `batighor_port` | `8000` | Batighor web port |
 | `foxglove_port` | `8765` | foxglove_bridge WebSocket port |
+
+### `mongla_batighor/calibrate.launch.py`
+
+| argument | default | what it does |
+|---|---|---|
+| `device_path` | `/dev/mongla_cam_downward` | the camera to calibrate |
+| `applies_to` | `pi_downward` | the camera profile the result is for |
+| `medium` | `air` | air | water: what the board is seen through |
+| `grid` | `8x6` | the board's INNER corners |
+| `square` | `0.025` | the board's square, metres |
+| `width` | `1280` |  |
+| `height` | `720` |  |
+| `batighor` | `true` | start Batighor too |
 
 ### `mongla_manager/bringup.launch.py`
 
