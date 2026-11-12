@@ -333,7 +333,7 @@ def render() -> str:
 
 
 PKGS = ('mongla_control', 'mongla_manager', 'mongla_vision', 'mongla_localization',
-        'mongla_planner')
+        'mongla_planner', 'mongla_batighor')
 MAP_BEGIN, MAP_END = '<!-- modules:begin -->', '<!-- modules:end -->'
 
 

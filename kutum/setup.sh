@@ -241,14 +241,14 @@ fi
 # =========================================================================== #
 [ "$(id -u)" -ne 0 ] || { echo "the user half runs as the vehicle user, not root" >&2; exit 2; }
 
-say "1/4  Python: undo the two traps that break the system cv2 (E1, E2)"
+say "1/5  Python: undo the two traps that break the system cv2 (E1, E2)"
 # Noble ships numpy 1.26.4 and a cv2 4.6.0 that is built
 # against numpy 1. A pip numpy>=2 or a pip opencv-python in ~/.local shadows
 # them and every vision node dies with "_ARRAY_API not found".
 python3 -m pip uninstall -y -q --break-system-packages numpy opencv-python \
         opencv-python-headless 2>/dev/null || true
 
-say "2/4  Python: the vision dependencies, pinned (kutum/requirements.txt)"
+say "2/5  Python: the vision dependencies, pinned (kutum/requirements.txt)"
 # --no-deps on the two that hard-require opencv-python, which would re-shadow
 # the system cv2. supervision 0.30 needs numpy 2; trackers 2.5.0 on PyPI ships
 # no code (E3).
@@ -257,7 +257,7 @@ python3 -m pip install -q --user --break-system-packages \
 python3 -m pip install -q --user --break-system-packages --no-deps \
         'supervision==0.26.1' 'trackers==2.4.0'
 
-say "3/4  HailoRT Python bindings (not on PyPI: built from source)"
+say "3/5  HailoRT Python bindings (not on PyPI: built from source)"
 if [ "$(python3 -c 'import hailo_platform; print(hailo_platform.__version__)' 2>/dev/null)" != "$HAILORT_V" ]; then
   # The wheel is behind a Hailo Developer Zone login, so build it from the
   # same tree the runtime came from (--system step 2). -DHAILO_BUILD_PYBIND
@@ -269,7 +269,7 @@ if [ "$(python3 -c 'import hailo_platform; print(hailo_platform.__version__)' 2>
       && python3 -m pip install --user --break-system-packages --no-build-isolation .)
 fi
 
-say "4/4  Every shell sources kutum/env.sh"
+say "4/5  Every shell sources kutum/env.sh"
 # The login shell is zsh, and ROS ships a setup file per shell; ~/.zshrc used to
 # source nothing, so every ssh terminal started without ROS. Lines that source
 # a retired workspace or ~/pi_env.sh are commented out, not deleted.
@@ -280,6 +280,14 @@ for rc in ~/.zshrc ~/.bashrc; do
   grep -qF 'mongla_ws/kutum/env.sh' "$rc" || printf '\n%s\n' "$line" >> "$rc"
 done
 mkdir -p ~/.hailo/hailort
+
+say "5/5  Batighor: the Lichtblick web build the operators' browsers load"
+# The pinned release, checked against its hash (src/mongla_batighor/LICHTBLICK.json),
+# into ~/.mongla/batighor/web/. Run from the source tree: this half can come
+# before the workspace is built.
+PYTHONPATH="$KUTUM/../src/mongla_batighor${PYTHONPATH:+:$PYTHONPATH}" \
+  python3 -m mongla_batighor.fetch \
+  || echo "  WARNING: Lichtblick not installed; batighor:=true will say so. Retry with network."
 
 echo
 echo "User half done. On a fresh machine the machine half comes first:"

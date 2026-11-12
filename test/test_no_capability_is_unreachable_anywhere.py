@@ -54,8 +54,8 @@ _ROOT = pathlib.Path(__file__).resolve().parents[1]
 _SRC = _ROOT / 'src'
 
 # This file's scope. mongla_vision is deliberately excluded -- see the docstring.
-_OWNED = ('mongla_control', 'mongla_localization', 'mongla_manager',
-          'mongla_planner')
+_OWNED = ('mongla_batighor', 'mongla_control', 'mongla_localization',
+          'mongla_manager', 'mongla_planner')
 _VISION_GUARD = _SRC / 'mongla_vision' / 'test' / \
     'test_no_capability_is_built_and_unreachable.py'
 
@@ -176,7 +176,7 @@ def _imported_by(rel: str) -> list:
 
 
 def test_the_vision_guard_still_exists():
-    """This file owns six packages and delegates mongla_vision. If that file is
+    """This file owns the packages in _OWNED and delegates mongla_vision. If that file is
     moved or renamed, the split becomes a hole and nothing else would notice."""
     assert _VISION_GUARD.is_file(), (
         f'{_VISION_GUARD.relative_to(_ROOT)} is gone. mongla_vision is then '
