@@ -1,0 +1,14 @@
+tools/pool/batighor_desktop.py
+  h_f1b9066eb9899c 12-14,17-20,44,82-100,143-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "85670a0a8d1c6788050a6a91e841b91de691c31c",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
