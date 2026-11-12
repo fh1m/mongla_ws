@@ -1,0 +1,27 @@
+#!/bin/sh
+# Kutum: a reply leaves by the interface its address belongs to.
+#
+# Kutum often has an address on two interfaces of one network: Ethernet and
+# Wi-Fi on the same router. The main table sends everything for that network
+# out of eth0 (metric 100), so a reply to a packet that came in on wlan0
+# leaves by eth0 and is lost: the vehicle answers ARP and nothing else, and
+# `ssh mongla.local` times out while the Pi is up (2026-11-12, recurring).
+#
+# So each interface gets its own table, holding its network and its gateway,
+# and a rule: traffic FROM an interface's address uses that interface's
+# table. Run by networkd-dispatcher whenever an interface becomes routable,
+# so a new DHCP address is followed; safe to run again.
+set -eu
+IF="${IFACE:-${1:-}}"
+case "$IF" in eth*|wlan*|en*|wl*) ;; *) exit 0 ;; esac
+table=$((100 + $(cat "/sys/class/net/$IF/ifindex")))
+addr=$(ip -4 -o addr show dev "$IF" scope global | awk '{print $4; exit}')
+[ -n "$addr" ] || exit 0
+src=${addr%/*}
+net=$(ip -4 route show dev "$IF" proto kernel scope link | awk '{print $1; exit}')
+gw=$(ip -4 route show default dev "$IF" | awk '{print $3; exit}')
+ip route flush table "$table" 2>/dev/null || true
+[ -n "$net" ] && ip route add "$net" dev "$IF" src "$src" table "$table"
+[ -n "$gw" ] && ip route add default via "$gw" dev "$IF" table "$table"
+while ip rule del priority "$table" 2>/dev/null; do :; done
+ip rule add from "$src" lookup "$table" priority "$table"
