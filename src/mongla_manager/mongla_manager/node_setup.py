@@ -507,6 +507,9 @@ class SetupMixin:
         self._register_health()
         self._publish_static_frames()
         self._health_last = None
+        from diagnostic_msgs.msg import DiagnosticArray
+        self._diagnostics_pub = self.create_publisher(DiagnosticArray,
+                                                      '/diagnostics', 10)
         self.create_timer(1.0, self._health_tick, callback_group=self.timer_group)
         # Issue #13: executor liveness (gates the heartbeat) and the mission
         # keep-alive watchdog. Each in its OWN group, so neither the blocking

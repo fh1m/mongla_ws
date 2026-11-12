@@ -34,6 +34,7 @@ GUARDS = (
     'test/test_tools_point_at_files_that_exist.py',
     'test/test_workspace_stays_clean.py',
     'test/test_every_tool_is_indexed.py',
+    'test/test_every_camera_matrix_reader_removes_the_lens.py',
     'test/test_published_test_counts_are_the_last_run.py',
     'test/test_dependabot_respects_numpy_one.py',
     'src/mongla_control/test/test_doc_drift.py',

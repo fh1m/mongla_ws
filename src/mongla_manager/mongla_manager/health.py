@@ -156,6 +156,18 @@ class HealthBoard:
                       key=lambda h: (-h.state.value, h.name))
         return [str(h) for h in rows]
 
+    def rows(self) -> List[Health]:
+        """Every subsystem, aged, by name: what `/diagnostics` publishes."""
+        return sorted((self._aged(h) for h in self._last.values()),
+                      key=lambda h: h.name)
+
     def not_ok(self) -> List[Health]:
         return [h for h in (self._aged(x) for x in self._last.values())
                 if h.state is not State.OK]
+
+
+# `diagnostic_msgs/DiagnosticStatus.level`, by state. UNKNOWN is STALE (3),
+# never OK: a viewer that folds "not reporting" into green is the failure this
+# file exists to stop.
+DIAGNOSTIC_LEVEL = {State.OK: 0, State.DEGRADED: 1, State.FAILED: 2,
+                    State.UNKNOWN: 3}

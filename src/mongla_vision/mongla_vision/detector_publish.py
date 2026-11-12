@@ -3,6 +3,7 @@
 import time
 import rclpy
 from mongla_vision import draw
+from mongla_vision import image_msg
 
 
 # Throttle for the always-on operator alignment line (seconds). Matches the
@@ -74,7 +75,7 @@ class DetectorPublishMixin:
                     frame, detections,
                     source=self._cam_name, fps=fps,
                     healthy=True, deadband=self._deadband, primary=primary)
-                dbg = self._bridge.cv2_to_imgmsg(overlay, encoding='bgr8')
+                dbg = image_msg.to_msg(overlay, 'bgr8')
                 dbg.header = header
                 self._pub_dbg.publish(dbg)
                 self._last_dbg = time.monotonic()

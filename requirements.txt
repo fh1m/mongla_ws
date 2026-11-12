@@ -1,7 +1,7 @@
 # Mongla -- third-party Python packages (pip)
 # ----------------------------------------------------------------------
 # What the code imports that ROS does not provide. ROS packages (rclpy,
-# cv_bridge, sensor_msgs, ...) come from apt: ROS 2 Jazzy on the vehicle
+# sensor_msgs, vision_msgs, ...) come from apt: ROS 2 Jazzy on the vehicle
 # (Raspberry Pi 5, Ubuntu 24.04), Humble on dev boxes.
 #
 #     pip install -r requirements.txt            # dev box
@@ -11,7 +11,7 @@
 # silent failure if broken (.claude/context/kutum/pi-and-env-traps.md):
 #   * OpenCV is the SYSTEM cv2 (apt python3-opencv). A pip opencv shadows it,
 #     has no window backend, and drags numpy 2 in.
-#   * numpy stays 1.x: cv_bridge and the system cv2 are built against the 1.x
+#   * numpy stays 1.x: the system cv2 is built against the 1.x
 #     ABI and fail with `_ARRAY_API not found` under 2.x.
 #   * hailo_platform is not on PyPI: kutum/setup.sh builds it from source
 #     against the installed libhailort, at the same version.
