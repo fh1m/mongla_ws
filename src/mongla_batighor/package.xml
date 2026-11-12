@@ -7,13 +7,19 @@
   <description>
     Batighor, the lighthouse: Kutum's observation and control center. Serves
     the Lichtblick web app to every operator, already connected to the
-    vehicle's foxglove_bridge and opened on our layouts.
+    vehicle's foxglove_bridge and opened on our layouts, and draws what the
+    vision stack sees over the cameras' own pictures.
   </description>
   <maintainer email="fh1m.dev@gmail.com">Muhammad Fahim Faisal</maintainer>
   <license>MIT</license>
 
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>foxglove_bridge</exec_depend>
+  <exec_depend>foxglove_msgs</exec_depend>
+  <exec_depend>mongla_localization</exec_depend>
+  <exec_depend>mongla_vision</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>vision_msgs</exec_depend>
 
   <test_depend>ament_pep257</test_depend>
   <test_depend>ament_flake8</test_depend>

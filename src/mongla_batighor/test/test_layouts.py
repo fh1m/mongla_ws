@@ -22,7 +22,9 @@ def _published():
 def _topics(layout):
     found = set()
     for cfg in layout['configById'].values():
-        for v in [cfg.get('topicPath'), cfg.get('imageMode', {}).get('imageTopic')] \
+        image = cfg.get('imageMode', {})
+        for v in [cfg.get('topicPath'), image.get('imageTopic')] \
+                + list(image.get('annotations', {})) \
                 + [p['value'] for p in cfg.get('paths', [])]:
             if v:
                 found.add(v.split('.', 1)[0])
@@ -36,12 +38,17 @@ def test_every_layout_topic_is_published_somewhere(path):
     for topic in _topics(layout):
         if topic.startswith('/mongla/move/_action'):
             continue                                    # the action server's own
-        tail = topic.rsplit('/', 1)[-1]
+        # Matched on the last two segments, since 'compressed' alone names
+        # every image topic. A camera's own topics are built from `{ns}`.
+        cam, leaf = topic.rsplit('/', 2)[-2:]
         literal = topic in src
-        templated = re.search(rf"f'[^']*/{re.escape(tail)}'", src) is not None
+        alts = [rf"f'[^']*/{re.escape(cam)}/{re.escape(leaf)}'"]
+        if cam in ('forward', 'downward'):
+            alts.append(rf"f'[^']*{{ns}}/{re.escape(leaf)}'")
+        templated = any(re.search(a, src) for a in alts)
         assert literal or templated, f'{path.name}: nothing publishes {topic}'
 
 
 def test_the_layouts_are_found():
     # A moved folder parametrizes the test above over nothing, and passes.
-    assert len(_LAYOUTS) >= 4, _LAYOUTS
+    assert len(_LAYOUTS) >= 5, _LAYOUTS

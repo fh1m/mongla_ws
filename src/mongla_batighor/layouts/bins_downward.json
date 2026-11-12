@@ -2,7 +2,12 @@
   "configById": {
     "Image!down": {
       "imageMode": {
-        "imageTopic": "/mongla/vision/downward/image_debug"
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          }
+        }
       }
     },
     "RawMessages!dets": {

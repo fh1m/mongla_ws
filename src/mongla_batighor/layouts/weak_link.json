@@ -1,0 +1,43 @@
+{
+  "configById": {
+    "Image!forward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/forward/preview/compressed",
+        "annotations": {
+          "/mongla/vision/forward/annotations": {
+            "visible": true
+          }
+        }
+      }
+    },
+    "Image!downward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/preview/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          }
+        }
+      }
+    },
+    "RawMessages!state": {
+      "topicPath": "/mongla/state"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "Image!forward",
+      "second": "Image!downward",
+      "splitPercentage": 50
+    },
+    "second": "RawMessages!state",
+    "splitPercentage": 70
+  }
+}

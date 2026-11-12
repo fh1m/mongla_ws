@@ -600,6 +600,8 @@ class V4L2MailboxCamera(Camera):
         # in the single age number, and cost two wrong hypotheses before it
         # existed.
         meta.stamp_store = store_t
+        if self._fourcc == 'MJPG':
+            meta.jpeg = payload
         return frame, meta
 
     def _decode_mjpeg(self, payload: bytes):

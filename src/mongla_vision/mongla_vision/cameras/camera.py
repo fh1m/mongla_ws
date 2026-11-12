@@ -57,6 +57,10 @@ class FrameMeta:
     # and telling them apart is the difference between adding buffers and
     # moving work off a thread.
     stamp_store:     float = 0.0
+    # The frame exactly as the camera compressed it (MJPG through the v4l2
+    # mailbox; empty elsewhere). The operator's video is these bytes, so a
+    # browser decodes what the sensor sent and Kutum never encodes a frame.
+    jpeg:            bytes = b''
 
 
 class Camera:
