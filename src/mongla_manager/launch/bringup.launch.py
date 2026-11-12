@@ -64,6 +64,23 @@ from mongla_localization.launch_respawn import respawning
 # Grace between SIGINT and SIGTERM for the manager. Above the manager's
 # EMERGENCY_DISARM_S plus the brake, so a slow disarm confirmation is logged
 # rather than killed mid-poll (a test compares the two).
+
+# What a browser may do through foxglove_bridge. The bridge cannot tell one
+# browser from another, and its defaults let every one of them call any
+# service, set any node's parameters and publish on any topic -- which with
+# include_hidden reaches /mongla/move/_action/send_goal and
+# shield_max_depth_m, past the helm. So a browser calls the helm and nothing
+# else: it drives, tunes the detectors (not during a mission, owner
+# 2026-11-12) and switches the camera there, by the helm's rules
+# (mongla_batighor/seat.py), and it publishes nothing.
+# test_the_bridge_only_lets_a_browser_drive_through_the_helm.
+BRIDGE_LIMITS = {
+    'capabilities': ['services', 'connectionGraph', 'assets'],
+    'service_whitelist': ['^/mongla/batighor/helm$'],
+    'param_whitelist': ['^$'],
+    'client_topic_whitelist': ['^$'],
+}
+
 MANAGER_SIGTERM_TIMEOUT_S = 12
 
 # The vehicle vision stack's own arguments, the ones this file does not
@@ -486,6 +503,7 @@ def generate_launch_description():
             # namespace => ROS 2 HIDDEN topics. Without this the live err_x_px/
             # err_y_px convergence plot is silently empty (default is false).
             'include_hidden':  True,
+            **BRIDGE_LIMITS,
         }],
         condition=IfCondition(LaunchConfiguration('batighor')),
     )
@@ -507,6 +525,17 @@ def generate_launch_description():
         package='mongla_batighor',
         executable='overlay',
         name='batighor_overlay',
+        output='screen',
+        condition=IfCondition(LaunchConfiguration('batighor')),
+    )
+
+    # The browsers' helm: the pilot token and the command log
+    # (mongla_batighor/helm.py). The terminal does not need it.
+    batighor_helm = partial(
+        Node,
+        package='mongla_batighor',
+        executable='helm',
+        name='batighor_helm',
         output='screen',
         condition=IfCondition(LaunchConfiguration('batighor')),
     )
@@ -546,4 +575,5 @@ def generate_launch_description():
         *respawning(foxglove_node, 'the Foxglove bridge'),
         *respawning(batighor_node, 'the Batighor web app'),
         *respawning(batighor_overlay, 'the Batighor overlay'),
+        *respawning(batighor_helm, 'the Batighor helm'),
     ])
