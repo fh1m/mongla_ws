@@ -1,0 +1,54 @@
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 46,49,65,144
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 46
+src/mongla_batighor/layouts/bins_downward.json
+  h_f1b9066eb9899c 20,22,26,28,32,34,37-41,49,51
+src/mongla_batighor/layouts/board_health.json
+  h_f1b9066eb9899c 7-8,12-13,17,19,25-26,30-31,35-36,40,42,47-49,57-61,66,68-69,71,73,75-86
+src/mongla_batighor/layouts/board_link.json
+  h_f1b9066eb9899c 3-4,8-9,13-14,18,20,26-27,31-32,36,38,56-63,69,71
+src/mongla_batighor/layouts/calibrate.json
+  h_f1b9066eb9899c 31,34
+src/mongla_batighor/layouts/flow.json
+  h_f1b9066eb9899c 17,23,26-35,39,41,48,53,55,62,68,74,76-80,84,86,89-93,104,106,108
+src/mongla_batighor/layouts/localization.json
+  h_f1b9066eb9899c 15,39-40,44-45,49-50,54-55,59-60,64,66,72-73,77-78,82-83,87-88,92,94,100-101,105,111-112,116-117,121,123,129-130,134-135,139,141,151-156,169-170,172,174,176,178
+src/mongla_batighor/layouts/mongla_layout.json
+  h_f1b9066eb9899c 30,34,47,53-55,71,73,77-84,86
+src/mongla_batighor/layouts/thrust.json
+  h_f1b9066eb9899c 1-88
+src/mongla_batighor/layouts/vision.json
+  h_f1b9066eb9899c 23,64-65,69-70,74,76,82-83,87-88,92-93,97-98,102,104,110-111,115-116,120-121,125,127,134,140,145,147,161,165,168,171,174-181,183,185,187,189
+src/mongla_batighor/layouts/weak_link.json
+  h_f1b9066eb9899c 23-24,37,39-45
+src/mongla_batighor/mongla_batighor/views.py
+  h_f1b9066eb9899c 1-326
+src/mongla_batighor/panels/calibrate/extension.js
+  h_f1b9066eb9899c 3
+src/mongla_batighor/panels/common.js
+  h_f1b9066eb9899c 31
+src/mongla_batighor/panels/control/extension.js
+  h_f1b9066eb9899c 1,22,297
+src/mongla_batighor/panels/instruments/extension.js
+  h_f1b9066eb9899c 1,3-8,10-12,17-19,21-30,41,43-58,60-70,72-79,81-104,106-108,110-118,120-125,127-129,131-167,169-315,321-323,326
+src/mongla_batighor/setup.py
+  h_f1b9066eb9899c 42
+src/mongla_batighor/test/test_panels.py
+  h_f1b9066eb9899c 23,77-78,133,135-138,183,186-202,205-228,230
+src/mongla_batighor/test/test_views.py
+  h_f1b9066eb9899c 1-48
+src/mongla_batighor/theme/batighor.css
+  h_f1b9066eb9899c 101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "757b6661f1e77c547b67c020aec9b8a5b8259d21",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
