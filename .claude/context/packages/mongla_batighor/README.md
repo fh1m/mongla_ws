@@ -29,7 +29,7 @@ ros2 launch mongla_batighor batighor.launch.py
 camera to resume one, or add `paused:=false` for both.
 
 To see every view filled with no board, run the whole stack against the test suite's fake
-board with `bench_motion=True`: a hull rocking a few degrees, a healthy IMU at the board's
+board with `bench_motion=True`: a bench tremor under the ZUPT's stillness bar, a healthy IMU at the board's
 rate and both battery packs, so the rate, gyro and battery plots move. The tests use it at
 rest, with none of that.
 

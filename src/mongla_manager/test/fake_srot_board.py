@@ -56,9 +56,9 @@ class FakeSrotBoard:
                  params: dict | None = None, boot_lines: list | None = None,
                  bench_motion: bool = False):
         self.port = port
-        # A hull rocking gently, with SCALED_IMU2 and both BATTERY_STATUS
-        # instances, so a bench shows every Batighor plot moving. Off for the
-        # tests, which assert on a board at rest.
+        # A board on a bench: a slight tremor, a healthy IMU sending
+        # SCALED_IMU2, and both BATTERY_STATUS instances, so every Batighor
+        # plot moves. Off for the tests, which assert on a board at rest.
         self.bench_motion = bench_motion
         # The boot burst, if this board REPEATS it on REQUEST_MESSAGE(STATUSTEXT).
         # None = today's firmware, which accepts that request and sends nothing.
@@ -123,12 +123,18 @@ class FakeSrotBoard:
             ML.MAV_STATE_ACTIVE if self.armed else ML.MAV_STATE_STANDBY)
 
     def _rock(self):
-        """(roll, pitch, roll rate, pitch rate): a slow swell, or the board at rest."""
+        """(roll, pitch, roll rate, pitch rate): a bench tremor, or the board at rest.
+
+        Peak rate 0.011 rad/s, under localization's STILL_GYRO_RAD_S (0.02),
+        so the hull still reads as still and the ZUPT holds velocity. With no
+        flow and no ZUPT, depth is refused (B-56) and z integrates open loop:
+        a 3 deg swell ran the bench's z to 646 m in a few minutes.
+        """
         if not self.bench_motion:
             return 0.0, 0.0, 0.0, 0.0
         t = time.monotonic() - self._t0
         wr, wp = 2 * math.pi * 0.2, 2 * math.pi * 0.13
-        ar, ap = math.radians(3.0), math.radians(2.0)
+        ar, ap = math.radians(0.5), math.radians(0.4)
         return (ar * math.sin(wr * t), ap * math.sin(wp * t),
                 ar * wr * math.cos(wr * t), ap * wp * math.cos(wp * t))
 
