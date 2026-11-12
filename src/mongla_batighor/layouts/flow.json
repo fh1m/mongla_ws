@@ -14,62 +14,82 @@
       "paths": [
         {
           "value": "/mongla/vision/downward/velocity.twist.twist.linear.x",
+          "label": "flow vx m/s",
           "enabled": true,
-          "label": "vx m/s",
           "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/vision/downward/velocity.twist.twist.linear.y",
+          "label": "flow vy m/s",
           "enabled": true,
-          "label": "vy m/s",
           "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/odom.twist.twist.linear.x",
+          "label": "filter vx m/s",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/odom.twist.twist.linear.y",
+          "label": "filter vy m/s",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "Plot!distance": {
       "paths": [
         {
           "value": "/mongla/vision/downward/distance_traveled.data",
-          "enabled": true,
           "label": "distance m",
+          "enabled": true,
           "timestampMethod": "receiveTime"
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "Plot!quality": {
       "paths": [
         {
           "value": "/mongla/vision/downward/flow_quality.data",
-          "enabled": true,
           "label": "quality",
+          "enabled": true,
           "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/vision/downward/distance_debug.data[2]",
-          "enabled": true,
           "label": "tracks",
+          "enabled": true,
           "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/vision/downward/distance_debug.data[1]",
-          "enabled": true,
           "label": "height m",
+          "enabled": true,
           "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/floor_height.range",
+          "label": "floor height m",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
   },
   "layout": {
     "direction": "row",
@@ -81,15 +101,10 @@
         "direction": "column",
         "first": "Plot!distance",
         "second": "Plot!quality",
-        "splitPercentage": 50
+        "splitPercentage": 50.0
       },
-      "splitPercentage": 34
+      "splitPercentage": 33.3
     },
-    "splitPercentage": 60
-  },
-  "globalVariables": {},
-  "userNodes": {},
-  "playbackConfig": {
-    "speed": 1
+    "splitPercentage": 58.0
   }
 }

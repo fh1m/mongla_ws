@@ -20,7 +20,7 @@ import pytest
 from mongla_batighor import panels, seat, serve
 
 PANELS = Path(__file__).resolve().parents[1] / 'panels'
-HELM_JS = (PANELS / 'helm' / 'extension.js').read_text()
+HELM_JS = (PANELS / 'control' / 'extension.js').read_text()   # the Control Center
 SWITCH = b'const r={apiUrl:void 0,version:"1.30.0",devWorkspace:""};'
 
 
@@ -74,8 +74,8 @@ def test_a_release_that_moved_the_switch_is_refused_not_half_served(tmp_path):
 def test_the_workspace_lists_the_helm_and_hands_over_its_foxe(kutum):
     _, _, body = _get(kutum + '/api/workspaces/mongla/extensions')
     listed = json.loads(body)['data']
-    assert [e['id'] for e in listed] == ['mongla.batighor-calibrate', 'mongla.batighor-helm',
-                                         'mongla.batighor-mongla']
+    assert [e['id'] for e in listed] == ['mongla.batighor-calibrate', 'mongla.batighor-control',
+                                         'mongla.batighor-instruments']
     e = listed[1]
     # Lichtblick caches an org extension under `${publisher}.${name}` and
     # compares that with the listed id: they must be the same string.
@@ -130,10 +130,12 @@ def test_the_panel_says_the_helms_own_words():
         assert f"'{topic}'" in helm_src or topic == '/mongla/state', topic
 
 
-def test_the_main_layout_carries_the_helm():
+def test_the_main_layout_carries_the_control_center():
     layout = json.loads((PANELS.parent / 'layouts' / 'mongla_layout.json').read_text())
-    assert 'mongla.batighor.Helm!helm' in layout['configById']
-    assert 'mongla.batighor.Helm!helm' in json.dumps(layout['layout'])
+    assert 'mongla.batighor.ControlCenter!control' in layout['configById']
+    assert 'mongla.batighor.ControlCenter!control' in json.dumps(layout['layout'])
+    assert 'registerPanel({ name: "ControlCenter"' in HELM_JS
+    assert 'setDefaultPanelTitle("Control Center")' in HELM_JS
 
 
 CALIBRATE_JS = (PANELS / 'calibrate' / 'extension.js').read_text()
@@ -178,30 +180,54 @@ def test_every_served_panel_parses(tmp_path, name):
     assert r.returncode == 0, r.stderr
 
 
-MONGLA_JS = (PANELS / 'mongla' / 'extension.js').read_text()
+INSTRUMENTS_JS = (PANELS / 'instruments' / 'extension.js').read_text()
 
 
-def test_the_mongla_panel_reads_only_topics_that_exist_and_small_ones():
-    """Every topic it names is published by a node here, and none is an
-    image or a detection stream: opening it must cost the vehicle almost
-    nothing (the owner's rule: observation must not slow the vehicle)."""
+def _instruments():
+    """name -> its topics, as the table declares them (CAMERAS expanded)."""
+    from mongla_batighor.seat import CAMERAS
+    out = {}
+    for name, body in re.findall(r'^  (\w+): \{\n(.*?)^  \},$', INSTRUMENTS_JS, re.M | re.S):
+        topics = re.search(r'topics: \[(.*?)\],\n', body, re.S).group(1)
+        names = set(re.findall(r'"(/[\w/]+)"', topics))
+        for tmpl in re.findall(r'(lockTopic|seeingTopic)\(c\)', topics):
+            names |= {f'/mongla/vision/{c}/{tmpl[:-5]}' for c in CAMERAS}
+        out[name] = names
+    return out
+
+
+def test_every_instrument_reads_only_topics_that_exist_and_small_ones():
+    """Every topic an instrument names is published by a node here, and none
+    is an image or a detection stream: opening one must cost the vehicle
+    almost nothing (the owner's rule: observation must not slow the vehicle)."""
     src = '\n'.join(p.read_text(errors='ignore') for p in PANELS.parents[1].rglob('*.py')
                     if '/test/' not in str(p))
-    named = set(re.findall(r'"(/(?:mongla|diagnostics)[\w/]*)"', MONGLA_JS))
-    for leaf in ('lock', 'seeing'):
-        assert f'/mongla/vision/${{c}}/{leaf}' in MONGLA_JS
-    for topic in named:
-        assert f"'{topic}'" in src or topic == '/diagnostics', topic
-    subscribed = named | set(re.findall(r'`(/mongla/vision/\$\{c\}/\w+)`', MONGLA_JS))
-    assert len(subscribed) >= 10, subscribed
-    for topic in subscribed:
-        for heavy in ('image', 'compressed', 'detections', 'candidates', 'flow_tracks'):
-            assert heavy not in topic, topic
+    table = _instruments()
+    assert set(table) >= {'Vehicle', 'Vision', 'Navigation', 'Thrust', 'Link', 'Health', 'Kutum'}
+    for name, topics in table.items():
+        assert topics, name
+        for topic in topics:
+            leaf = topic.rsplit('/', 1)[-1]
+            assert (f"'{topic}'" in src or topic == '/diagnostics'
+                    or re.search(rf"f'[^']*{{ns(?:_out)?}}/{leaf}'", src)), (name, topic)
+            for heavy in ('image', 'compressed', 'detections', 'candidates', 'flow_tracks'):
+                assert heavy not in topic, (name, topic)
 
 
-def test_the_mongla_panel_names_the_ladder_as_the_lock_does():
+def test_every_instrument_the_views_place_exists():
+    """views.py names an instrument by its registered name; a typo there is a
+    panel Lichtblick cannot find, drawn as an empty box."""
+    from mongla_batighor import views
+    ours = set(_instruments()) | {'ControlCenter', 'Calibrate'}
+    for name in views.VIEWS:
+        for pid in views.build(name)['configById']:
+            if pid.startswith(views.PANEL):
+                assert pid[len(views.PANEL):].split('!')[0] in ours, (name, pid)
+
+
+def test_the_vision_instrument_names_the_ladder_as_the_lock_does():
     from mongla_vision.tracking.lock_state import Rung
-    rungs = re.search(r'const RUNGS = \[([^\]]*)\]', MONGLA_JS).group(1)
+    rungs = re.search(r'const RUNGS = \[([^\]]*)\]', INSTRUMENTS_JS).group(1)
     assert re.findall(r'"(\w+)"', rungs) == [r.value for r in Rung]
 
 

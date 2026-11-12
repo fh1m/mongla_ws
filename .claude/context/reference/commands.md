@@ -43,6 +43,7 @@
 | `ros2 run mongla_batighor overlay` | `mongla_batighor.overlay:main` |
 | `ros2 run mongla_batighor helm` | `mongla_batighor.helm:main` |
 | `ros2 run mongla_batighor deck` | `mongla_batighor.deck:main` |
+| `ros2 run mongla_batighor views` | `mongla_batighor.views:main` |
 | `ros2 run mongla_localization localization_node` | `mongla_localization.localization_node:main` |
 | `ros2 run mongla_localization pnp_node` | `mongla_localization.pnp_node:main` |
 | `ros2 run mongla_localization pose_fuse_node` | `mongla_localization.pose_fuse_node:main` |

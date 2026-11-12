@@ -28,7 +28,7 @@ function keepName(n) {
 const fin = (x) => typeof x === "number" && Number.isFinite(x);
 const num = (x, d, unit) => (fin(x) ? x.toFixed(d) + (unit || "") : "--");
 
-// The panel's root, themed. `kind` adds a layout class (`cards`).
+// The panel's root, themed. `kind` adds a layout class.
 function mount(context, kind) {
   const box = el("div", { class: kind ? `mb ${kind}` : "mb" });
   context.panelElement.append(box);

@@ -28,9 +28,9 @@
       "direction": "column",
       "first": "Image!camera",
       "second": "Image!undistorted",
-      "splitPercentage": 65
+      "splitPercentage": 65.0
     },
     "second": "mongla.batighor.Calibrate!calibrate",
-    "splitPercentage": 62
+    "splitPercentage": 62.0
   }
 }

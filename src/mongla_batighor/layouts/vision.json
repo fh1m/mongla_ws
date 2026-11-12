@@ -16,13 +16,11 @@
         "annotations": {
           "/mongla/vision/downward/annotations": {
             "visible": true
-          },
-          "/mongla/vision/downward/flow_annotations": {
-            "visible": true
           }
         }
       }
     },
+    "mongla.batighor.Vision!vision": {},
     "StateTransitions!ladder": {
       "paths": [
         {
@@ -63,90 +61,90 @@
       "paths": [
         {
           "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.score",
-          "enabled": true,
-          "label": "forward authority"
+          "label": "forward authority",
+          "enabled": true
         },
         {
           "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.score",
-          "enabled": true,
-          "label": "downward authority"
+          "label": "downward authority",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "Plot!pose": {
       "paths": [
         {
           "value": "/mongla/vision/forward/target_pose_fused.range_m",
-          "enabled": true,
-          "label": "range m"
+          "label": "range m",
+          "enabled": true
         },
         {
           "value": "/mongla/vision/forward/target_pose_fused.bearing_deg",
-          "enabled": true,
-          "label": "bearing deg"
+          "label": "bearing deg",
+          "enabled": true
         },
         {
           "value": "/mongla/vision/forward/target_pose_fused.yaw_deg",
-          "enabled": true,
-          "label": "target yaw deg"
+          "label": "target yaw deg",
+          "enabled": true
         },
         {
           "value": "/mongla/vision/forward/target_pose_fused.reproj_px",
-          "enabled": true,
-          "label": "reprojection px"
+          "label": "reprojection px",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "Plot!anchor": {
       "paths": [
         {
           "value": "/mongla/vision/downward/anchor_decomposition.vector.x",
-          "enabled": true,
-          "label": "anchor rotation"
+          "label": "anchor rotation",
+          "enabled": true
         },
         {
           "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
-          "enabled": true,
-          "label": "anchor scale"
+          "label": "anchor scale",
+          "enabled": true
         },
         {
           "value": "/mongla/vision/downward/anchor_decomposition.vector.z",
-          "enabled": true,
-          "label": "anchor range m"
+          "label": "anchor range m",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "Plot!align": {
       "paths": [
         {
           "value": "/mongla/move/_action/feedback.feedback.err_x_px",
-          "enabled": true,
           "label": "align err x px",
+          "enabled": true,
           "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/move/_action/feedback.feedback.err_y_px",
-          "enabled": true,
           "label": "align err y px",
+          "enabled": true,
           "timestampMethod": "receiveTime"
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     }
   },
   "globalVariables": {},
@@ -160,29 +158,34 @@
       "direction": "column",
       "first": "Image!forward",
       "second": "Image!downward",
-      "splitPercentage": 50
+      "splitPercentage": 50.0
     },
     "second": {
       "direction": "column",
-      "first": "StateTransitions!ladder",
+      "first": "mongla.batighor.Vision!vision",
       "second": {
         "direction": "column",
-        "first": "Plot!authority",
+        "first": "StateTransitions!ladder",
         "second": {
           "direction": "column",
-          "first": "Plot!pose",
+          "first": "Plot!authority",
           "second": {
             "direction": "column",
-            "first": "Plot!anchor",
-            "second": "Plot!align",
-            "splitPercentage": 50
+            "first": "Plot!pose",
+            "second": {
+              "direction": "column",
+              "first": "Plot!anchor",
+              "second": "Plot!align",
+              "splitPercentage": 50.0
+            },
+            "splitPercentage": 33.3
           },
-          "splitPercentage": 34
+          "splitPercentage": 25.0
         },
-        "splitPercentage": 26
+        "splitPercentage": 27.3
       },
-      "splitPercentage": 28
+      "splitPercentage": 21.4
     },
-    "splitPercentage": 55
+    "splitPercentage": 55.0
   }
 }

@@ -1,6 +1,6 @@
 // The calibrate panel: a running calibration's words and buttons (calibrate_node.py).
 //
-// Plain DOM, no build, zipped by serve.py like the helm panel. The picture
+// Plain DOM, no build, zipped by serve.py like the Control Center. The picture
 // and what is drawn over it (corners, the cell to fill, the worst point) are
 // Lichtblick's Image panel, from the camera's own stream and the overlay; this
 // panel is the rest: where the capture is, how good the fit is, and the

@@ -12,6 +12,7 @@
         "backgroundColor": "#05070c"
       }
     },
+    "mongla.batighor.Navigation!navigation": {},
     "StateTransitions!aiding": {
       "paths": [
         {
@@ -35,132 +36,109 @@
       "paths": [
         {
           "value": "/mongla/odom.pose.pose.position.x",
-          "enabled": true,
-          "label": "x"
+          "label": "x m",
+          "enabled": true
         },
         {
           "value": "/mongla/odom.pose.pose.position.y",
-          "enabled": true,
-          "label": "y"
+          "label": "y m",
+          "enabled": true
         },
         {
           "value": "/mongla/odom.pose.pose.position.z",
-          "enabled": true,
-          "label": "z (+depth)"
+          "label": "z m (down)",
+          "enabled": true
         },
         {
           "value": "/mongla/localization/fix.point.x",
-          "enabled": true,
-          "label": "prop fix x"
+          "label": "prop fix x",
+          "enabled": true
         },
         {
           "value": "/mongla/localization/fix.point.y",
-          "enabled": true,
-          "label": "prop fix y"
+          "label": "prop fix y",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "Plot!vel": {
       "paths": [
         {
           "value": "/mongla/odom.twist.twist.linear.x",
-          "enabled": true,
-          "label": "odom vx body"
+          "label": "filter vx",
+          "enabled": true
         },
         {
           "value": "/mongla/vision/downward/velocity.twist.twist.linear.x",
-          "enabled": true,
-          "label": "flow vx"
+          "label": "flow vx",
+          "enabled": true
         },
         {
           "value": "/mongla/odom.twist.twist.linear.y",
-          "enabled": true,
-          "label": "odom vy body"
+          "label": "filter vy",
+          "enabled": true
         },
         {
           "value": "/mongla/vision/downward/velocity.twist.twist.linear.y",
-          "enabled": true,
-          "label": "flow vy"
+          "label": "flow vy",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "Plot!heading": {
       "paths": [
         {
           "value": "/mongla/state.yaw_deg",
-          "enabled": true,
-          "label": "board heading"
+          "label": "board heading",
+          "enabled": true
         },
         {
           "value": "/mongla/localization/heading.data",
+          "label": "given heading",
           "enabled": true,
-          "label": "filter heading",
           "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/vision/downward/floor_grid_deg.heading_deg",
-          "enabled": true,
-          "label": "floor grid"
+          "label": "floor grid",
+          "enabled": true
         },
         {
           "value": "/mongla/vision/downward/lane_heading_deg.heading_deg",
-          "enabled": true,
-          "label": "lane line"
+          "label": "lane line",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "Plot!floor": {
       "paths": [
         {
           "value": "/mongla/vision/downward/floor_height.range",
-          "enabled": true,
-          "label": "floor height m"
+          "label": "floor height m",
+          "enabled": true
         },
         {
           "value": "/mongla/state.depth_m",
-          "enabled": true,
-          "label": "depth m (negative down)"
+          "label": "depth m (negative down)",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
-    },
-    "Plot!demand": {
-      "paths": [
-        {
-          "value": "/mongla/demand.vector.x",
-          "enabled": true,
-          "label": "demand surge"
-        },
-        {
-          "value": "/mongla/demand.vector.y",
-          "enabled": true,
-          "label": "demand sway"
-        },
-        {
-          "value": "/mongla/demand.vector.z",
-          "enabled": true,
-          "label": "demand heave"
-        }
-      ],
-      "showLegend": true,
-      "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     }
   },
   "globalVariables": {},
@@ -170,7 +148,12 @@
   },
   "layout": {
     "direction": "row",
-    "first": "3D!nav",
+    "first": {
+      "direction": "column",
+      "first": "3D!nav",
+      "second": "mongla.batighor.Navigation!navigation",
+      "splitPercentage": 60.0
+    },
     "second": {
       "direction": "column",
       "first": "StateTransitions!aiding",
@@ -183,20 +166,15 @@
           "second": {
             "direction": "column",
             "first": "Plot!heading",
-            "second": {
-              "direction": "column",
-              "first": "Plot!floor",
-              "second": "Plot!demand",
-              "splitPercentage": 50
-            },
-            "splitPercentage": 34
+            "second": "Plot!floor",
+            "splitPercentage": 50.0
           },
-          "splitPercentage": 26
+          "splitPercentage": 33.3
         },
-        "splitPercentage": 21
+        "splitPercentage": 25.0
       },
-      "splitPercentage": 16
+      "splitPercentage": 14.3
     },
-    "splitPercentage": 50
+    "splitPercentage": 50.0
   }
 }

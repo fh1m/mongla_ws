@@ -1,40 +1,41 @@
 {
   "configById": {
-    "Plot!link": {
+    "mongla.batighor.Link!link": {},
+    "Plot!bytes": {
       "paths": [
         {
           "value": "/mongla/board_link.bytes_per_s",
-          "enabled": true,
-          "label": "bytes/s"
+          "label": "bytes/s",
+          "enabled": true
         },
         {
           "value": "/mongla/board_link.capacity_bytes_per_s",
-          "enabled": true,
-          "label": "the line, 115200 8N1"
+          "label": "the line, 115200 8N1",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "Plot!drops": {
       "paths": [
         {
           "value": "/mongla/board_link.board_drop_pct",
-          "enabled": true,
-          "label": "board drop %"
+          "label": "board drop %",
+          "enabled": true
         },
         {
           "value": "/mongla/board_link.board_errors",
-          "enabled": true,
-          "label": "board errors"
+          "label": "board errors",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
       "isSynced": true,
-      "xAxisVal": "timestamp",
-      "legendDisplay": "top"
+      "xAxisVal": "timestamp"
     },
     "RawMessages!named": {
       "topicPath": "/mongla/board_link.named"
@@ -52,16 +53,21 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "Plot!link",
-      "second": "Plot!drops",
-      "splitPercentage": 60
+      "first": "mongla.batighor.Link!link",
+      "second": {
+        "direction": "column",
+        "first": "Plot!bytes",
+        "second": "Plot!drops",
+        "splitPercentage": 50.0
+      },
+      "splitPercentage": 33.3
     },
     "second": {
       "direction": "row",
       "first": "RawMessages!named",
       "second": "RawMessages!rates",
-      "splitPercentage": 55
+      "splitPercentage": 55.0
     },
-    "splitPercentage": 45
+    "splitPercentage": 45.0
   }
 }

@@ -1,4 +1,4 @@
-// The helm panel: a browser's one way to drive the vehicle (helm.py serves it).
+// The Control Center: a browser's one way to drive the vehicle (helm.py serves it).
 //
 // Plain DOM, no build: serve.py zips this file into a .foxe and puts
 // `const VERBS = {...}` above it, read from mongla_control/commands.py and
@@ -19,6 +19,7 @@ const VEHICLE = "/mongla/state";
 const ANYONE = ["stop", "surface", "disarm"];
 
 function initPanel(context) {
+  if (typeof context.setDefaultPanelTitle === "function") context.setDefaultPanelTitle("Control Center");
   const box = mount(context);
 
   let helm = {};
@@ -293,6 +294,6 @@ function initPanel(context) {
 
 module.exports = {
   activate(extensionContext) {
-    extensionContext.registerPanel({ name: "Helm", initPanel });
+    extensionContext.registerPanel({ name: "ControlCenter", initPanel });
   },
 };
