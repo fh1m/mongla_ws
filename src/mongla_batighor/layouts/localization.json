@@ -71,7 +71,7 @@
           "label": "mode"
         }
       ],
-      "isSynced": true
+      "isSynced": false
     },
     "Plot!pos": {
       "paths": [
@@ -103,6 +103,8 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp"
     },
@@ -131,6 +133,8 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp"
     },
@@ -160,6 +164,8 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp"
     },
@@ -178,6 +184,8 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp"
     }

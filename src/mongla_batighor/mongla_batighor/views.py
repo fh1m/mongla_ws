@@ -40,16 +40,30 @@ def series(path: str, label: str, receive: bool = False) -> dict:
     return s
 
 
+LEGEND_PX = 190
+# The last minute, following the newest sample. Unset, the axis spans the whole
+# connection, and a panel opened later drew its data in the right-hand sliver
+# (desktop app, 2026-11-12).
+PLOT_WINDOW_S = 60
+
+
 def plot(*lines: dict) -> tuple:
     # Legend at the left: 'top' stacks one line per series above the plot and
     # squashed small plots flat (seen on Kutum); 'floating' covered the data.
+    # Lichtblick's default legend is 240 px, half a plot in a narrow column
+    # (desktop app, 2026-11-12); LEGEND_PX holds a label such as
+    # "board heading" whole (160 cut it).
     return 'Plot', {'paths': list(lines), 'showLegend': True, 'legendDisplay': 'left',
+                    'sidebarDimension': LEGEND_PX, 'followingViewWidth': PLOT_WINDOW_S,
                     'isSynced': True, 'xAxisVal': 'timestamp'}
 
 
 def states(*lines: dict) -> tuple:
+    # Not synced: a synced state panel spans the whole connection and pulled
+    # every plot in its view out of the last minute (`Reset view`, desktop
+    # app 2026-11-12). The plots line up by each following the last minute.
     return 'StateTransitions', {'paths': [{k: v for k, v in s.items() if k != 'enabled'}
-                                          for s in lines], 'isSynced': True}
+                                          for s in lines], 'isSynced': False}
 
 
 def image(topic: str, *layers: str, synced: bool = False) -> tuple:
