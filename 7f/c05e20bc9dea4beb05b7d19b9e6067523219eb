@@ -1,0 +1,36 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 510-529
+kutum/README.md
+  h_f1b9066eb9899c 29,49-70
+kutum/doctor.sh
+  h_f1b9066eb9899c 178-180,194-204
+kutum/setup.sh
+  h_f1b9066eb9899c 180-181,207-218,220-226
+kutum/system/motd/01-kutum
+  h_f1b9066eb9899c 1-31
+kutum/system/netplan/60-kutum-eth.yaml
+  h_f1b9066eb9899c 2,6-9,16
+kutum/system/networkd-dispatcher/50-kutum-source-routes
+  h_f1b9066eb9899c 1-27
+kutum/system/sysctl/60-kutum-multihome.conf
+  h_f1b9066eb9899c 1-6
+src/mongla_batighor/mongla_batighor/serve.py
+  h_f1b9066eb9899c 23,63-84,121-122,137-139,141,148-150,152-153,164,192-194,258-261,263-264,319
+src/mongla_batighor/test/test_serve_and_fetch.py
+  h_f1b9066eb9899c 78-94,244-264
+test/test_ros_ci_workflow.py
+  h_f1b9066eb9899c 74-109
+tools/ci/ci_ros.sh
+  h_f1b9066eb9899c 25-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7fc05e20bc9dea4beb05b7d19b9e6067523219eb",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
