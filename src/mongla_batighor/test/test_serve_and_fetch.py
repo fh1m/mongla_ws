@@ -75,6 +75,23 @@ def test_the_link_names_the_host_the_browser_used():
     assert 'ws%3A%2F%2F192.168.0.103%3A8765' in serve.app_link('192.168.0.103', 8765, 'x')
 
 
+def test_a_forged_host_is_refused_not_turned_into_a_bridge_address(site):
+    """The Host header names the bridge the app connects to (CodeQL, #168)."""
+    import http.client
+    base, _ = site
+    port = int(base.rsplit(':', 1)[1])
+    for host in ('a b', 'x/y', 'x@y', 'h:80/\x00', 'x:8000:9'):
+        c = http.client.HTTPConnection('127.0.0.1', port)
+        c.putrequest('GET', '/', skip_host=True)
+        c._output(f'Host: {host}'.encode())  # bypasses http.client's own check
+        c.endheaders()
+        r = c.getresponse()
+        assert r.status == 400 and r.getheader('Location') is None, host
+        c.close()
+    for ok in ('mongla.local:8000', '192.168.0.103', '[::1]:8000'):
+        assert serve._HOST.match(ok), ok
+
+
 def test_an_unknown_layout_is_refused_not_served_empty(site):
     base, _ = site
     assert _get(base + '/?layout=nope')[0] == 404
@@ -136,3 +153,24 @@ def test_the_pin_is_a_release_asset_with_a_full_hash():
     p = pin(Path(__file__).resolve().parents[1])
     assert p['url'].endswith(f'/v{p["version"]}/lichtblick-web.tar.gz')
     assert len(p['sha256']) == 64 and int(p['sha256'], 16) >= 0
+
+
+def test_a_path_that_leaves_the_web_root_is_refused_however_it_is_spelt(tmp_path):
+    web = tmp_path / 'web'
+    (web / 'a').mkdir(parents=True)
+    (web / 'a' / 'x.js').write_text('x')
+    (tmp_path / 'secret').write_text('s')
+    (web / 'out').symlink_to(tmp_path / 'secret')
+    files = serve.index(web)
+    assert files == {'a/x.js': (web / 'a' / 'x.js').resolve()}
+    for bad in ('', '.', '../secret', 'a/../../secret', str(tmp_path / 'secret'), 'out', '../web2/x'):
+        assert bad not in files, bad
+
+
+def test_every_kind_of_file_lichtblick_ships_has_its_type():
+    """The types come from a fixed table now. Lichtblick 1.30.0 ships these
+    kinds (seen on Kutum); WebAssembly must be application/wasm or the
+    browser refuses to stream-compile it."""
+    for ext in ('.html', '.js', '.png', '.wasm', '.ttf', '.ico', '.json'):
+        assert ext in serve.TYPES, ext
+    assert serve.TYPES['.wasm'] == 'application/wasm'
