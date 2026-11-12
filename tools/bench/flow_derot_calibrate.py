@@ -53,7 +53,7 @@ import time
 import cv2
 import numpy as np
 import rclpy
-from cv_bridge import CvBridge
+from mongla_vision import image_msg
 from geometry_msgs.msg import Vector3Stamped
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
@@ -139,7 +139,6 @@ def main():
 
     rclpy.init()
     n = Collector(a.camera)
-    b = CvBridge()
     prev = pt = None
     prev_t = 0.0
     rows = []
@@ -152,8 +151,8 @@ def main():
             m = n.imgs.pop()
             n.imgs.clear()
             t = m.header.stamp.sec + m.header.stamp.nanosec * 1e-9
-            g = (b.imgmsg_to_cv2(m, 'mono8') if m.encoding == 'mono8'
-                 else cv2.cvtColor(b.imgmsg_to_cv2(m, 'bgr8'),
+            g = (image_msg.to_array(m, 'mono8') if m.encoding == 'mono8'
+                 else cv2.cvtColor(image_msg.to_array(m, 'bgr8'),
                                    cv2.COLOR_BGR2GRAY))
             if prev is not None and pt is not None and len(pt) > 10:
                 nx, st, _ = cv2.calcOpticalFlowPyrLK(

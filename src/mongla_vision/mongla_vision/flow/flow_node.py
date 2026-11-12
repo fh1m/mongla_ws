@@ -57,7 +57,6 @@ from typing import Optional
 
 import rclpy
 from rclpy.executors import ExternalShutdownException
-from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import (QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy)
 from sensor_msgs.msg import Image, Range
@@ -223,7 +222,6 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         self._pub_cal = self.create_publisher(String, f'{ns}/flow_calibration',
                                               ctrl_qos)
 
-        self._bridge = CvBridge()
         self._acc = DistanceAccumulator()
         self._rate_buf: deque = deque(maxlen=128)
         self._yaw_rate_buf: deque = deque(maxlen=128)

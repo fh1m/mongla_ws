@@ -123,10 +123,13 @@ def main(args=None):
                 self.create_subscription(Detection2DArray, f'{ns}/lock',
                                          keep('lock'), qos.DETECTIONS)
 
+    from mongla_localization.params_file import refuse_unknown
+    from mongla_localization.spin import spin
     rclpy.init(args=args)
     node = Overlay()
+    refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
-        rclpy.spin(node)
+        spin(node)
     except KeyboardInterrupt:
         pass
     finally:

@@ -73,7 +73,6 @@ from typing import Dict, Optional
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from cv_bridge        import CvBridge
 
 from mongla_vision import qos
 from mongla_vision.detection.detector  import largest
@@ -290,7 +289,6 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
 
         from vision_msgs.msg import Detection2DArray, VisionInfo
         from std_msgs.msg import String
-        self._bridge       = CvBridge()
         # Depth 1 BEST_EFFORT: the publisher's mailbox is only a mailbox if
         # the subscriber is one too. A depth-5 RELIABLE queue here (which is
         # what an int `5` means, and also what `qos_profile_sensor_data` gives)

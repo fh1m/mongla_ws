@@ -78,6 +78,16 @@ WIRED = {
 # NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a
 # debt with a name, not a silent gap.
 DEFERRED = {
+    'mongla_vision/mongla_vision/trigger_stamps.py': (
+        'pairs each camera frame with the board trigger pulse that exposed '
+        'it, so a frame carries the instant it was taken. The consumer is '
+        '`camera_node._make_header`, the capture stamp every freshness gate '
+        'reads. It waits on the board: no firmware sends CAMERA_TRIGGER yet '
+        '(srot-control-board#44, upstream pr-w) and no fitted camera takes a '
+        'trigger. Wiring it now would stamp frames from a message that never '
+        'arrives. The pairing itself is settled against synthetic truth '
+        '(test_trigger_stamps.py), so the day the board sends the message '
+        'the work left is the decode in SrotFC and one call in camera_node.'),
     'mongla_vision/mongla_vision/tracking/cascade.py': (
         'the association cascade that makes appearance affordable -- it runs '
         'the expensive stage only on detections motion could not explain, and '
