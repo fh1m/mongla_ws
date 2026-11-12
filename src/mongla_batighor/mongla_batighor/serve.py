@@ -126,8 +126,9 @@ class Handler(BaseHTTPRequestHandler):
             host = self.headers.get('Host', '')
             if not path.is_file() or not _HOST.match(host):
                 return self._file(path, cache=False)
-            # The desktop app opens this by `layoutUrl`: its 3D layers need
-            # the absolute URL the org layouts carry.
+            # tools/pool/batighor_desktop.py copies this into the desktop
+            # app's layout folder: its 3D layers need the absolute URL the
+            # org layouts carry.
             data = absolute(json.loads(path.read_text()), f'http://{host}')
             return self._bytes(json.dumps(data).encode(), 'application/json', cache=False)
         if url.path.startswith('/theme/'):

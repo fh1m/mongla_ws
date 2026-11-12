@@ -174,9 +174,9 @@
           "second": "RawMessages!range",
           "splitPercentage": 50.0
         },
-        "splitPercentage": 60.0
+        "splitPercentage": 75.0
       },
-      "splitPercentage": 37.5
+      "splitPercentage": 42.9
     },
     "second": {
       "direction": "column",
