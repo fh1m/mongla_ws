@@ -21,6 +21,7 @@ const SVG = "http://www.w3.org/2000/svg";
 const lockTopic = (c) => `/mongla/vision/${c}/lock`;
 const seeingTopic = (c) => `/mongla/vision/${c}/seeing`;
 const modelTopic = (c) => `/mongla/vision/${c}/vision_info`;
+const STAGES_TOPIC = "/mongla/batighor/stages";     // overlay.py, once a second
 const ageS = (t) => (t ? (Date.now() - t) / 1000 : Infinity);
 
 function svg(tag, attrs, ...kids) {
@@ -50,7 +51,7 @@ function compass(deg) {
     const r = (t * Math.PI) / 180;
     return svg("line", { x1: 40 + 34 * Math.sin(r), y1: 40 - 34 * Math.cos(r), x2: 40 + 38 * Math.sin(r), y2: 40 - 38 * Math.cos(r), stroke: "var(--mb-ink-3)" });
   });
-  return svg("svg", { viewBox: "0 0 80 80", width: "80", height: "80" },
+  return svg("svg", { viewBox: "0 0 80 80", class: "dial" },
     svg("circle", { cx: 40, cy: 40, r: 38, fill: "var(--mb-sunk)", stroke: "var(--mb-rule-lit)" }),
     ...ticks,
     svg("text", { x: 40, y: 14, "text-anchor": "middle", "font-size": 8, fill: "var(--mb-ink-3)" }, "N"),
@@ -63,7 +64,7 @@ function depthGauge(depthBelow, floorM) {
   const ok = fin(depthBelow);
   const f = Math.max(floorM, ok ? depthBelow : 0, 0.5);
   const y = ok ? 6 + (68 * Math.max(0, depthBelow)) / f : null;
-  return svg("svg", { viewBox: "0 0 26 80", width: "26", height: "80" },
+  return svg("svg", { viewBox: "0 0 26 80", class: "gauge" },
     svg("rect", { x: 9, y: 6, width: 8, height: 68, rx: 2, fill: "var(--mb-sunk)", stroke: "var(--mb-rule-lit)" }),
     svg("line", { x1: 4, y1: 6, x2: 22, y2: 6, stroke: "var(--mb-sea)" }),
     ok && svg("rect", { x: 9, y: 6, width: 8, height: y - 6, fill: "var(--mb-sea)", opacity: 0.35 }),
@@ -134,9 +135,11 @@ function foldDiagnostics(s, m) {
 const INSTRUMENTS = {
   Vehicle: {
     title: "Vehicle",
-    topics: ["/mongla/state", "/mongla/batighor/helm_state", "/mongla/flare_order"],
+    topics: ["/mongla/state", "/mongla/batighor/helm_state", "/mongla/flare_order", "/mongla/mission_alive"],
     fold(s, topic, m) {
       if (topic === "/mongla/state") { s.v = m; s.at = Date.now(); }
+      // The runner's 2 Hz beat, carrying its name; silent 1.5 s is no mission (helm.MISSION_ALIVE_S).
+      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = Date.now(); }
       else if (topic === "/mongla/flare_order") { try { s.flare = JSON.parse(m.data); } catch { /* keep */ } }
       else { try { s.helm = JSON.parse(m.data); } catch { /* keep */ } }
     },
@@ -149,13 +152,14 @@ const INSTRUMENTS = {
           el("span", { class: v.armed ? "armed" : "ok" }, v.armed ? "ARMED" : "disarmed"),
           el("span", {}, v.mode || "--"),
           h.mission && el("span", { class: "live" }, `mission ${h.mission}`)),
-        el("div", { class: "row", style: "align-items:center;gap:14px" },
+        el("div", { class: "row gauges" },
           compass(v.yaw_deg), depthGauge(below, 3),
-          el("div", { style: "display:flex;flex-direction:column;gap:6px" },
+          el("div", { class: "readouts" },
             el("span", { class: "big" }, num(below, 2), el("span", { class: "unit" }, "m deep")),
             el("span", { class: "big" }, num(v.yaw_deg, 0), el("span", { class: "unit" }, "deg")),
             el("span", { class: "big" }, num(v.battery_voltage, 1), el("span", { class: "unit" }, "V")))),
-        kv(["pilot", h.pilot || "nobody"], ["state age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 2 ? "warn" : ""],
+        kv(ageS(s.aliveAt) < 1.5 ? ["mission", `running ${s.missionName || ""}`, "live"] : ["mission", "none"],
+          ["pilot", h.pilot || "nobody"], ["state age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 2 ? "warn" : ""],
           // Silence is "no order", never a default (node_vision._publish_flare_order).
           ["flare order", s.flare ? (s.flare.colours || []).join("-") : "none latched", s.flare ? "live" : ""]),
       ];
@@ -164,10 +168,11 @@ const INSTRUMENTS = {
 
   Vision: {
     title: "Vision",
-    topics: [...CAMERAS.flatMap((c) => [lockTopic(c), seeingTopic(c), modelTopic(c)]), "/mongla/vision/active_camera"],
+    topics: [...CAMERAS.flatMap((c) => [lockTopic(c), seeingTopic(c), modelTopic(c)]), "/mongla/vision/active_camera", STAGES_TOPIC],
     fold(s, topic, m) {
       s.lock = s.lock || {}; s.lockAt = s.lockAt || {}; s.seeing = s.seeing || {}; s.model = s.model || {};
       if (topic === "/mongla/vision/active_camera") { s.active = m.data; return; }
+      if (topic === STAGES_TOPIC) { try { s.stages = JSON.parse(m.data); } catch { /* keep */ } return; }
       for (const c of CAMERAS) {
         if (topic === lockTopic(c)) { s.lock[c] = m; s.lockAt[c] = Date.now(); }
         if (topic === seeingTopic(c)) s.seeing[c] = m.data;
@@ -194,6 +199,16 @@ const INSTRUMENTS = {
         out.push(el("div", { class: "bar" }, el("b", { style: `width:${stale || !fin(authority) ? 0 : 100 * Math.min(1, authority)}%;background:${RUNG_COLOUR[rung] || "var(--mb-sea)"}` })));
         const notes = [(s.model || {})[c] && `model ${s.model[c]}`, (s.seeing || {})[c] && `seeing ${s.seeing[c]}`].filter(Boolean);
         if (notes.length) out.push(el("div", { class: "note" }, notes.join("   ")));
+        // What runs on this camera, and what is off with the switch that turns it on.
+        // The overlay node counts publishers: a topic the graph lists is not
+        // a stage that runs (a subscriber alone lists it too).
+        const st = (s.stages || {})[c];
+        if (st) {
+          out.push(el("div", { class: "stages" }, ...st.map((x) =>
+            el("i", { class: x.on ? "on" : "off", title: x.on ? x.topic : `off: ${x.switch}` }, x.stage))));
+          const off = st.filter((x) => !x.on);
+          if (off.length) out.push(el("div", { class: "note" }, "off: " + off.map((x) => `${x.stage} (${x.switch})`).join("  ")));
+        } else out.push(el("div", { class: "note" }, "stages: no word from the overlay node (batighor:=true)"));
       }
       return out;
     },

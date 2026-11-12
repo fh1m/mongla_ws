@@ -7,7 +7,8 @@
           "/mongla/vision/downward/annotations": {
             "visible": true
           }
-        }
+        },
+        "synchronize": true
       }
     },
     "RawMessages!dets": {

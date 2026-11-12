@@ -353,3 +353,36 @@ def test_a_page_that_does_not_link_the_theme_gets_it_from_the_panel():
         assert f'const THEME_CSS = {json.dumps(THEME.read_text())};' in code
     common = (PANELS / 'common.js').read_text()
     assert re.search(r'function mount\([^)]*\) \{\s*theme\(\);', common)
+
+
+def test_every_perception_stage_is_a_topic_a_node_publishes():
+    """A stage reads `on` while its topic has a publisher; a renamed topic would
+    read `off` forever while the stage ran."""
+    import pathlib
+    from mongla_batighor.overlay import STAGES
+    src = pathlib.Path(__file__).resolve().parents[2]
+    code = ''.join(p.read_text() for pkg in ('mongla_vision', 'mongla_batighor')
+                   for p in (src / pkg / pkg).rglob('*.py'))
+    for _, rel, _ in STAGES:
+        assert re.search(r"\}/" + re.escape(rel) + r"[_'\"{]", code), rel
+
+
+def test_a_stage_is_on_only_while_a_node_publishes_it():
+    """The graph lists a topic a subscriber alone asked for: that is not a stage running."""
+    from mongla_batighor.overlay import stages
+    ns = '/mongla/vision/forward/'
+    names = [ns + 'lock', ns + 'detections', ns + 'target_pose_near']
+    pubs = {ns + 'detections': 1, ns + 'lock': 0, ns + 'target_pose_near': 1}
+    st = {x['stage']: x for x in stages('forward', names, lambda t: pubs.get(t, 0))}
+    assert st['detector']['on'] and st['pose (PnP)']['on']
+    assert not st['lock ladder']['on'] and st['lock ladder']['switch'] == 'lock:=true'
+    assert not st['flow']['on']
+
+
+def test_the_vehicle_panel_calls_a_mission_running_as_the_helm_does():
+    """One silence for "no mission", in the helm and on the operator's screen."""
+    import pathlib
+    from mongla_batighor import helm
+    js = (pathlib.Path(__file__).resolve().parents[1] / 'panels' / 'instruments' / 'extension.js').read_text()
+    (limit,) = re.findall(r'ageS\(s\.aliveAt\) < ([0-9.]+)', js)
+    assert float(limit) == helm.MISSION_ALIVE_S

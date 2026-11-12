@@ -23,38 +23,6 @@
         }
       }
     },
-    "StateTransitions!ladder": {
-      "paths": [
-        {
-          "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.class_id",
-          "label": "forward rung"
-        },
-        {
-          "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.class_id",
-          "label": "downward rung"
-        },
-        {
-          "value": "/mongla/vision/active_camera.data",
-          "label": "live camera",
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mongla/state.mode",
-          "label": "mode"
-        },
-        {
-          "value": "/mongla/mission_alive.data",
-          "label": "mission",
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mongla/localization/aiding.data",
-          "label": "aided by",
-          "timestampMethod": "receiveTime"
-        }
-      ],
-      "isSynced": true
-    },
     "mongla.batighor.ControlCenter!control": {},
     "mongla.batighor.Vehicle!vehicle": {},
     "3D!hull": {
@@ -122,13 +90,8 @@
     "first": {
       "direction": "column",
       "first": "Image!forward",
-      "second": {
-        "direction": "column",
-        "first": "Image!downward",
-        "second": "StateTransitions!ladder",
-        "splitPercentage": 66.7
-      },
-      "splitPercentage": 50.0
+      "second": "Image!downward",
+      "splitPercentage": 60.0
     },
     "second": {
       "direction": "column",
@@ -142,10 +105,10 @@
           "splitPercentage": 50.0
         },
         "second": "mongla.batighor.Vision!vision",
-        "splitPercentage": 58.3
+        "splitPercentage": 46.2
       },
-      "splitPercentage": 47.8
+      "splitPercentage": 40.9
     },
-    "splitPercentage": 62.0
+    "splitPercentage": 60.0
   }
 }

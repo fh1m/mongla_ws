@@ -36,6 +36,7 @@ def desk(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, 'install', lambda base: [])
     monkeypatch.setattr(mod.shutil, 'which', lambda _: '/bin/true')
     monkeypatch.setattr(mod, 'running', lambda: False)
+    monkeypatch.setenv('GDK_SCALE', '1')        # the desktop scales: no flag of ours
     mod.launches = []
     monkeypatch.setattr(mod.subprocess, 'Popen', lambda argv, **_: mod.launches.append(argv))
     return mod
@@ -64,3 +65,16 @@ def test_a_changed_view_is_named_with_how_to_refresh_it(desk, capsys):
     out = capsys.readouterr().out
     assert 'WARNING: thrust changed' in out and 'delete thrust' in out
     assert json.loads((desk.LAYOUTS / 'thrust.json').read_text())['v'] == 2
+
+
+def test_a_dense_screen_starts_the_app_at_a_scale_it_can_be_read_at(desk):
+    """A 4K 15-inch panel at device scale 1 drew 12 px type 1 mm tall."""
+    laptop = ('HDMI-A-1 connected 1920x1080+7680+0 (normal) 480mm x 260mm\n'
+              'eDP-1 connected primary 3840x2160+0+0 (normal) 340mm x 190mm\n')
+    assert desk.screen_scale(laptop) == 2.5
+    assert desk.screen_scale('DP-1 connected 1920x1080+0+0 (normal) 527mm x 296mm') == 1.0
+    assert desk.screen_scale('eDP-1 connected 1920x1080+0+0 (normal) 0mm x 0mm') is None
+    assert desk.main(['h']) == 0
+    assert not any(a.startswith('--force-device-scale-factor') for a in desk.launches[0])
+    assert desk.main(['h', '--scale', '2']) == 0
+    assert '--force-device-scale-factor=2' in desk.launches[1]
