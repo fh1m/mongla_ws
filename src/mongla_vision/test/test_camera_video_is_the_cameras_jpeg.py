@@ -1,5 +1,7 @@
 """The operator's video is the camera's own JPEG: never re-encoded, rate-capped, and free unwatched.
 
+A source with no JPEG of its own is encoded once, only when a topic is due and watched.
+
 Batighor shows the cameras in a browser. The camera already compressed every
 frame (MJPG over USB), so the cheapest picture Kutum can send is the one it
 was given. These hold the three properties that make that true: the bytes
@@ -95,13 +97,33 @@ def test_a_topic_nobody_watches_is_never_built():
     assert len(node._jpeg_out[1][0].sent) == 1
 
 
-def test_zero_turns_a_topic_off_and_a_decoded_source_sends_no_video():
+def test_zero_turns_a_topic_off():
     node = _node(preview_hz=0)
     node._publish_jpeg(FrameMeta(jpeg=_jpeg()), _header(), now=0.0)
     assert len(node._jpeg_out[0][0].sent) == 1 and not node._jpeg_out[1][0].sent
+
+
+def test_a_decoded_source_is_encoded_once_and_only_when_watched(monkeypatch):
+    """A recorded video, a ROS topic or OpenCV's fallback hands over pixels and
+    no JPEG. Batighor must still show it: an empty panel on a camera that
+    fell back is the operator flying blind."""
+    calls = []
+    real = CN._encode_jpeg
+    monkeypatch.setattr(CN, '_encode_jpeg', lambda f: calls.append(1) or real(f))
+    frame = np.zeros((36, 64, 3), np.uint8)
+    node = _node(subs=(0, 0))
+    node._publish_jpeg(FrameMeta(), _header(), now=0.0, frame=frame)
+    assert not calls and all(not o[0].sent for o in node._jpeg_out)
     node = _node()
-    node._publish_jpeg(FrameMeta(), _header(), now=0.0)    # OpenCV, a file, a topic
-    assert all(not o[0].sent for o in node._jpeg_out)
+    node._publish_jpeg(FrameMeta(), _header(), now=0.0, frame=frame)
+    assert len(calls) == 1                       # one encode serves both topics
+    for out in node._jpeg_out:
+        (msg,) = out[0].sent
+        assert cv2.imdecode(np.frombuffer(bytes(msg.data), np.uint8), 1).shape == frame.shape
+    node._publish_jpeg(FrameMeta(), _header(), now=0.001, frame=frame)
+    assert len(calls) == 1                       # nothing due: nothing encoded
+    node._publish_jpeg(FrameMeta(), _header(), now=0.0)    # no frame, no JPEG
+    assert len(calls) == 1
 
 
 def test_the_mailbox_hands_over_the_payload_it_decoded():

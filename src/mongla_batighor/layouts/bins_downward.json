@@ -7,7 +7,8 @@
           "/mongla/vision/downward/annotations": {
             "visible": true
           }
-        }
+        },
+        "synchronize": true
       }
     },
     "RawMessages!dets": {
@@ -17,19 +18,29 @@
       "paths": [
         {
           "value": "/mongla/move/_action/feedback.feedback.err_x_px",
+          "label": "err_x_px",
           "enabled": true,
-          "label": "err_x_px"
+          "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/move/_action/feedback.feedback.err_y_px",
+          "label": "err_y_px",
           "enabled": true,
-          "label": "err_y_px"
+          "timestampMethod": "receiveTime"
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp"
     }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
   },
   "layout": {
     "direction": "row",
@@ -38,13 +49,8 @@
       "direction": "column",
       "first": "RawMessages!dets",
       "second": "Plot!align",
-      "splitPercentage": 50
+      "splitPercentage": 50.0
     },
-    "splitPercentage": 60
-  },
-  "globalVariables": {},
-  "userNodes": {},
-  "playbackConfig": {
-    "speed": 1
+    "splitPercentage": 60.0
   }
 }

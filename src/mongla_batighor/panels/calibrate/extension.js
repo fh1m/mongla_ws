@@ -1,6 +1,6 @@
 // The calibrate panel: a running calibration's words and buttons (calibrate_node.py).
 //
-// Plain DOM, no build, zipped by serve.py like the helm panel. The picture
+// Plain DOM, no build, zipped by serve.py like the Control Center. The picture
 // and what is drawn over it (corners, the cell to fill, the worst point) are
 // Lichtblick's Image panel, from the camera's own stream and the overlay; this
 // panel is the rest: where the capture is, how good the fit is, and the
@@ -9,46 +9,10 @@
 
 const SERVICE = "/mongla/batighor/helm";
 const STATE = "/mongla/vision/calibration/state";
-const NAME_KEY = "mongla.batighor.operator";   // the helm panel's: one name per browser
 const STEPS = ["skip", "undo", "reset", "solve"];
 
-const CSS = `
-.bc{font:13px/1.4 system-ui,sans-serif;padding:8px;display:flex;flex-direction:column;gap:8px;height:100%;box-sizing:border-box;overflow:auto}
-.bc-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.bc button{font:inherit;padding:4px 10px;border-radius:4px;border:1px solid #888;background:transparent;color:inherit;cursor:pointer}
-.bc button:disabled{opacity:.4;cursor:default}
-.bc input,.bc select{font:inherit;padding:3px 6px;border-radius:4px;border:1px solid #888;background:transparent;color:inherit}
-.bc .bc-big{font-size:16px;font-weight:700}
-.bc .bc-bad{color:#e55}
-.bc .bc-ok{color:#3c3}
-.bc .bc-grid{display:grid;grid-template-columns:max-content 1fr;gap:2px 10px}
-.bc pre{font:12px/1.35 ui-monospace,monospace;white-space:pre-wrap;margin:0;max-height:12em;overflow:auto;border-top:1px solid #8884;padding-top:4px}
-.bc table{border-collapse:collapse;font:12px ui-monospace,monospace}
-.bc td,.bc th{padding:2px 6px;text-align:left;border-bottom:1px solid #8884}
-`;
-
-function el(tag, attrs, ...kids) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
-    else if (k === "class") e.className = v;
-    else e.setAttribute(k, v);
-  }
-  for (const k of kids) e.append(k);
-  return e;
-}
-
-function readName() {
-  try { return localStorage.getItem(NAME_KEY) || ""; } catch { return ""; }
-}
-
-const num = (x, d, unit) => (x === undefined || x === null || Number.isNaN(x) ? "--" : x.toFixed(d) + (unit || ""));
-
 function initPanel(context) {
-  const root = context.panelElement;
-  root.append(el("style", {}, CSS));
-  const box = el("div", { class: "bc" });
-  root.append(box);
+  const box = mount(context);
   const canCall = typeof context.callService === "function";
   let st = null;
 
@@ -57,10 +21,10 @@ function initPanel(context) {
   name.addEventListener("input", () => draw());
   const me = () => name.value.trim();
 
-  const msg = el("div");
+  const msg = el("div", { class: "msg" });
   function say(text, bad) {
     msg.textContent = text;
-    msg.className = bad ? "bc-bad" : "";
+    msg.className = bad ? "msg bad" : "msg";
   }
 
   async function call(op, fields) {
@@ -77,9 +41,9 @@ function initPanel(context) {
   }
 
   // -- where the capture is ------------------------------------------
-  const step = el("div", { class: "bc-big" });
+  const step = el("div", { class: "big", style: "font-size:16px" });
   const now = el("div");
-  const fit = el("div", { class: "bc-grid" });
+  const fit = el("div", { class: "kv" });
   const stepButtons = STEPS.map((s) => el("button", { onclick: () => call(s) }, s));
 
   // -- which camera, which water, which board -------------------------
@@ -89,6 +53,7 @@ function initPanel(context) {
   const grid = el("input", { size: "5", placeholder: "8x6" });
   const square = el("input", { size: "6", type: "number", step: "any", placeholder: "0.025" });
   const bConfigure = el("button", {
+    class: "go",
     onclick: () => {
       const out = { medium: medium.value };
       if (applies.value.trim()) out.applies_to = applies.value.trim();
@@ -103,17 +68,14 @@ function initPanel(context) {
   const library = el("div");
   const applyButtons = [];
 
-  box.append(
-    el("div", { class: "bc-row" }, name, msg),
-    step,
-    now,
-    el("div", { class: "bc-row" }, ...stepButtons),
-    fit,
-    el("div", { class: "bc-row" }, "camera", applies, medium, "board", grid, "square m", square, bConfigure),
-    solveOut,
-    cameras,
-    library,
-  );
+  card(box, "operator").append(el("div", { class: "row" }, name, msg));
+  card(box, "capture").append(step, now, el("div", { class: "row" }, ...stepButtons));
+  card(box, "fit").append(fit, solveOut);
+  card(box, "new capture").append(el("div", { class: "row" },
+    el("label", {}, "camera"), applies, medium, el("label", {}, "board"), grid,
+    el("label", {}, "square m"), square, bConfigure));
+  card(box, "cameras on this vehicle").append(cameras);
+  card(box, "saved calibrations").append(library);
 
   function draw() {
     const named = me() !== "";
@@ -121,6 +83,9 @@ function initPanel(context) {
     if (!st) {
       step.textContent = "no calibration running";
       now.textContent = "ros2 launch mongla_batighor calibrate.launch.py device_path:=<camera>";
+      // The cameras and the saved calibrations come from the node too: say so
+      // rather than leave two empty boxes that read as "none on this vehicle".
+      cameras.textContent = library.textContent = "listed once a calibration runs";
       return;
     }
     step.textContent = st.done
@@ -129,15 +94,15 @@ function initPanel(context) {
     now.replaceChildren(
       `${st.applies_to} in ${st.medium}, board ${st.grid} at ${st.square} m   `,
       st.cell ? `seen: ${st.cell}, ${st.band}   hold ${Math.round(100 * st.hold)} %   ` : "no board seen   ",
-      el("span", { class: st.sharp != null && st.sharp > st.sharp_max ? "bc-bad" : "" },
+      el("span", { class: st.sharp != null && st.sharp > st.sharp_max ? "bad" : "" },
         `blur ${num(st.sharp, 2, " px")}`),
       st.msg ? `   ${st.msg}` : "",
-      st.err ? el("span", { class: "bc-bad" }, `   ${st.err}`) : "",
+      st.err ? el("span", { class: "bad" }, `   ${st.err}`) : "",
     );
     // Each cell its own element: adjacent text nodes merge into ONE grid item,
     // which ran every label and value into a single line (seen on Kutum).
     const cell = (x, cls) => (x instanceof Node ? x : el("span", cls ? { class: cls } : {}, String(x)));
-    const ereClass = st.ere == null ? "" : st.ere <= st.ere_bar ? "bc-ok" : "bc-bad";
+    const ereClass = st.ere == null ? "" : st.ere <= st.ere_bar ? "good" : "bad";
     const pairs = [
       ["Max ERE", cell(`${num(st.ere, 2, " px")} (bar ${num(st.ere_bar, 2, " px")})`, ereClass)],
       ["after the next pose", num(st.ere_pred, 2, " px")],
@@ -147,12 +112,12 @@ function initPanel(context) {
       ["boards", st.n_boards ?? "--"],
       ["solve", st.solve || "--"],
     ];
-    if (st.assess_err) pairs.push(["fit", cell(st.assess_err, "bc-bad")]);
+    if (st.assess_err) pairs.push(["fit", cell(st.assess_err, "bad")]);
     fit.replaceChildren(...pairs.flatMap(([k, v]) => [cell(k), cell(v)]));
     solveOut.textContent = st.solve_out || "";
     // Which camera may be trusted: "confirmed" is a calibration taken on this
     // very unit (its USB id), "unverified" one that plausibly belongs to it.
-    const match = { confirmed: "bc-ok", unverified: "", null: "bc-bad" };
+    const match = { confirmed: "good", unverified: "", null: "bad" };
     const cams = st.cameras || [];
     cameras.replaceChildren(cams.length
       ? el("table", {}, el("tr", {}, ...["camera", "device", "calibration", ""].map((h) => el("th", {}, h))),

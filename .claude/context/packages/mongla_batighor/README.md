@@ -28,6 +28,17 @@ ros2 launch mongla_batighor batighor.launch.py
 `vision_dual` starts both detectors paused, as a mission expects: take the helm and choose a
 camera to resume one, or add `paused:=false` for both.
 
+To see every view filled with no board, run the whole stack against the test suite's fake
+board with `bench_motion=True`: a bench tremor under the ZUPT's stillness bar, a healthy IMU at the board's
+rate and both battery packs, so the rate, gyro and battery plots move. The tests use it at
+rest, with none of that.
+
+```bash
+cd src/mongla_manager/test && python3 -c "import fake_srot_board as f, time; \
+  f.FakeSrotBoard(14555, bench_motion=True).start(); time.sleep(1e9)" &
+ros2 launch mongla_manager bringup.launch.py batighor:=true mav_device:=udpin:127.0.0.1:14555
+```
+
 To measure a camera, in air or in water, with the vision stack stopped (the calibration opens
 the camera itself, at 1280x720):
 
@@ -42,10 +53,12 @@ ros2 launch mongla_batighor calibrate.launch.py device_path:=/dev/mongla_cam_dow
 |---|---|
 | `LICHTBLICK.json` | the one Lichtblick version we serve: release URL and SHA-256. `fetch` refuses any other bytes |
 | `fetch.py` | downloads (or takes `--from` a local tarball), checks the hash, leaves the source maps out (130 of 173 MB), and writes a gzip copy of every text asset |
-| `serve.py` | a static server. `/` answers with a link to the app carrying `ds=foxglove-websocket`, the bridge address *as the browser reached Kutum* (tether or Wi-Fi alike), `workspace=mongla` and the layout's name. Hashed assets are cached for good, `index.html` never. `/api/` answers the part of Lichtblick's workspace API the app reads, read only: our layouts as the organisation's, and our panels as its extensions. `/layouts/<name>.json` is the same layout as a file, for the desktop app. A browser shows Kutum's copy of a layout until its operator rearranges it; then it keeps theirs, marked with a dot, until they choose Revert in the layout's menu. A layout changed on Kutum shows on a browser's second load: the app fetches the new copy after it has opened the one it holds |
-| `panels.py`, `panels/` | our own Lichtblick panels, plain JavaScript with no build step, zipped into a `.foxe` as served. The release bundle names no API, so `panels.py` turns it on in the one line that does, and serve says `WARNING` and serves no panels if a new release moved that line. `panels/helm` is the helm: name, Request/Give/Release, STOP/SURFACE/DISARM, Arm behind two ticks, any verb with its own fields (the list comes from `commands.py`), missions, the camera, the detectors' settings with each detector's model registry offered for `active_model`, and the log. `panels/calibrate` is a running calibration: the pose wanted and the one seen, blur, Max ERE against its bar, fx and the field of view, the solver's output, and the vehicle's saved calibrations with an apply button each. `test_panels.py` runs `node --check` on each panel as served |
-| `overlay.py` | what the vision stack sees, as `foxglove_msgs/ImageAnnotations` on `/mongla/vision/<cam>/annotations`: detector boxes with class and score, track ids, and the lock drawn thicker; and on `<cam>/flow_annotations` the flow node's tracked pairs, a segment from anchor to now; and on `/mongla/vision/calibration/annotations` a calibration's board corners, the cell its next pose belongs in and the point its fit is least sure of. The browser draws them over the camera's own JPEG |
-| `layouts/` | our Lichtblick layouts; `test_layouts.py` fails when one shows a topic nothing publishes, or plots a topic with no header (`std_msgs`) without `timestampMethod: receiveTime`: Lichtblick plots by header stamp otherwise, and the plot stays empty while the topic publishes. `weak_link` is the one for a slow connection. `board_health` carries the manager's health board (`/diagnostics`): every subsystem graded, with its evidence, worst first. `board_link` draws `/mongla/board_link`: the link's bytes/s against the line's capacity, the board's drops and errors, the rate of every message type and every named channel with its age. `flow` is the downward camera as a velocity sensor: the floor with the point pairs the flow node tracked (`<cam>/flow_annotations`, from `flow_tracks`), velocity, distance travelled, quality, tracks and height. `calibrate` is a calibration: the camera with those annotations, its undistorted preview, and the Calibrate panel |
+| `serve.py` | a static server. `/` answers with a link to the app carrying `ds=foxglove-websocket`, the bridge address *as the browser reached Kutum* (tether or Wi-Fi alike), `workspace=mongla` and the layout's name. Hashed assets are cached for good, `index.html` never. `/api/` answers the part of Lichtblick's workspace API the app reads, read only: our layouts as the organisation's, and our panels as its extensions. `/layouts/<name>.json` is the same layout as a file, for the desktop app. `/model/` serves the hull for the 3D scene from memory (`model.py`): a name is a key or it is not found. Lichtblick refuses a root path as a 3D layer's URL, so a layout keeps `/model/mongla.urdf` and Kutum writes in the host the browser used; it folds that host into the layout's date, because Lichtblick replaces its copy only when the date differs, and a deck that reaches Kutum by another name would otherwise keep URLs on the old one A browser shows Kutum's copy of a layout until its operator rearranges it; then it keeps theirs, marked with a dot, until they choose Revert in the layout's menu. A layout changed on Kutum shows on a browser's second load: the app fetches the new copy after it has opened the one it holds |
+| `panels.py`, `panels/` | our own Lichtblick panels, plain JavaScript with no build step, zipped into a `.foxe` as served. The release bundle names no API, so `panels.py` turns it on in the one line that does, and serve says `WARNING` and serves no panels if a new release moved that line. `panels/control` is the **Control Center** (the helm's browser half): STOP/SURFACE/DISARM first and pinned to the top so no window size scrolls them away, then name, Request/Give/Release, Arm behind two ticks, any verb with its own fields (the list comes from `commands.py`), missions, the live camera, the detectors' settings with each detector's model registry offered for `active_model`, and the log. `panels/instruments` is Mongla's own gauges, one Lichtblick panel each from one table: **Vehicle** (armed, mode, a compass, a depth gauge and the numbers, all growing with the panel, battery, the mission running by its beat, pilot, the flare order the board latched or `none latched`), **Vision** (each camera's lock ladder, the identity held, its authority as a bar, the model its detector runs and its epoch, what it is seeing, and every perception stage lit when it runs and struck through when off, carrying the bringup switch that turns it on; the two cameras side by side once the panel is 440 px wide), **Navigation** (a north-up plan view of the filter's last two minutes of track with the prop fixes, aiding, motion, speed), **Thrust** (the demand sent to the board as centred bars, one bar per ESC the board reports, never a zero for an ESC it has not announced), **Link** (the line's use against capacity, drops, errors, and tables of the frames per second by message and the board's named channels), **Health** (every `/diagnostics` row but Kutum's, worst first) and **Kutum** (Kutum's own rows). A narrow panel wraps a long value instead of clipping it, and below 280 px the big numbers shrink. Each names only small topics, never an image or a detection stream, and redraws at most ten times a second. A new gauge is one entry in that table. `panels/calibrate` is a running calibration: the pose wanted and the one seen, blur, Max ERE against its bar, fx and the field of view, the solver's output, and the vehicle's saved calibrations with an apply button each. `panels/common.js` holds the helpers every panel shares (`el`, `num`, `mount`, `card`, the operator name), put above each panel as it is served. `test_panels.py` runs `node --check` on each panel as served, fails a panel that carries its own CSS or helpers, and fails an instrument that names a topic nothing publishes or a heavy one |
+| `theme/batighor.css` | the site's look (`docs/assets/site.css`) on the operator's screen: its palette as `--mb-*` tokens, Zed Mono for every panel and Zed Sans for Lichtblick's own chrome, the font files served by Kutum from `/theme/fonts/` because the deck has no internet at the pool. `serve.py` links it into the app page, with Lichtblick's dark scheme as the default until an operator picks another. A new panel takes the look by using the classes (`mb`, `section`, `row`, `kv`, `danger`...), with no CSS of its own; `test_panels.py` checks the tokens against the site's and that every font asked for is installed |
+| `overlay.py` | what the vision stack sees, as `foxglove_msgs/ImageAnnotations` on `/mongla/vision/<cam>/annotations`, with nothing left off and each thing saying what it is: every detection in its class's own colour (one per class, the same on every frame) with class, score and the track carrying it; a box below the detector's floor thin and faint with its class, score and `weak`; a track with nothing under it grey with `coasting` (the tracker predicting); every layer from the frame being drawn and no other, so a track or candidate from the frame before never sits beside a box; two lines of stats at the bottom left (camera, model, size; the detector's rate and how far its boxes are behind the frame); the contours a detector traced, the lock drawn thickest in its rung's colour (detection red, held amber, follow glass, anchor violet) with the identity it holds and its authority, and the anchor's matched features on the camera's pixels while they are fresh; and on `<cam>/flow_annotations` the flow node's tracked pairs, a segment from anchor to now, with their count just above the stats lines, clear of box labels pinned to the top edge; and on `/mongla/vision/calibration/annotations` a calibration's board corners, the cell its next pose belongs in and the point its fit is least sure of. The browser draws them over the camera's own JPEG. The overlay subscribes to a camera's streams only while a browser shows its annotations (`Watched`, polled twice a second), so no viewer costs the vehicle nothing. Once a second it also publishes `/mongla/batighor/stages`: each perception stage of each camera (camera, detector, below floor, tracker, lock ladder, anchor (XFeat), contours, pose (PnP), overlay, and flow on the downward camera only), on while a node publishes its topic, with the bringup argument that turns it on (a test holds that bringup takes each one). Counted publishers, because the graph also lists a topic only a subscriber asked for |
+| `model.py` | the hull in the 3D scene. The site's CAD (`docs/assets/cad/hull.mgla`, one copy, installed beside the layouts) becomes one binary STL per livery colour and a URDF whose link is `mongla`, the body frame the localization publishes on `/tf`, with every measured thruster as a ring in its tunnel, read from `hull_geometry.yaml` itself (installed beside the hull), not from the allocator, which stays off the flight path until it is wired. Built and gzipped once at start, 0.15 s on Kutum, 4.2 MB of mesh sent as 1.4 MB. The CAD's glTF axes go to FRD as body = (z, -x, -y); `test_model.py` checks the extents (702 x 176 x 172 mm along x, y, z), the nose at +x and that the change is a rotation. The up sense rests on Onshape's Y-up export, as the site's viewer assumes; `hull_geometry.yaml` leaves signs to be checked against the vehicle |
+| `views.py`, `layouts/` | every layout is generated from one table, `views.py` (`ros2 run mongla_batighor views --write`); `test_views.py` fails when a committed layout is not what it generates, or when one was made by hand, and fails a topic the stack publishes that no view, panel or overlay layer shows, unless `NOT_SHOWN` in `views.py` names it with the reason (a command, a raw frame, a copy shown elsewhere). A camera added to `seat.CAMERAS` reaches every per-camera view, a sensor is one series in its aspect's view, an aspect is one function. Each aspect is its own layout in Lichtblick's layout menu: `mongla_layout`, the cockpit: both cameras with everything drawn over them taking the left column, the Control Center, Vehicle with the hull, and Vision beside. `vision`: detection and tracking in depth, each camera synchronised so every frame shows with its own boxes (boxes come about two frames after the picture; the cockpit stays unsynchronised, because a synchronised picture stops when the detector does), the lock's history, the visibility range and its map when `depth_estimation` runs, every rung, identity and seeing state, lock authority, the fused target pose, the anchor's decomposition and the alignment error. `flow`: the downward camera as a speed sensor, the floor with the pairs tracked, flow velocity against the filter's, distance, where its velocity scale came from, quality, tracks and height. `localization`: navigation, Lichtblick's 3D scene following `mongla` in `odom_ned` with the hull and its thrusters drawn on it, the plan view, aiding and motion, position with the prop fixes, odometry against flow, heading from each source, floor height against depth. `thrust`: the chain's far end, the demand, each ESC's rpm, the pack voltage and the body rates. `board_health`: every subsystem graded, the board's and Kutum's, each row once. `board_link`: the line's use and drops plotted, every message rate and named channel in the Link instrument. `bins_downward`, `calibrate`, and `weak_link` for a slow connection. `test_layouts.py` fails when one shows a topic nothing publishes, or plots a topic with no header (`std_msgs`) without `timestampMethod: receiveTime`: Lichtblick plots by header stamp otherwise, and the plot stays empty while the topic publishes |
 
 `launch/batighor.launch.py` starts `foxglove_bridge` (port 8765), the server (port 8000), the
 overlay and the helm, each respawned like every other process; `batighor:=true` in
@@ -61,7 +74,7 @@ Decided with the owner (bead `mongla_ws-102.25.3`). Each job gets the surface th
 | **TUI**, `ros2 run mongla_batighor deck` | the person at the pool, over mosh: the vehicle, the pilot, missions and the command log live; `s` stop, `u` surface, `d` disarm, `:` any verb | a terminal is trusted and sends to `/mongla/move` itself |
 | **CLI**, `ros2 run mongla_planner mongla <verb>` | one verb, scripted | unchanged, and trusted |
 
-**The helm** (`helm.py`, rules in `seat.py`, the browser half in `panels/helm`) is the only
+**The helm** (`helm.py`, rules in `seat.py`, the browser half the Control Center in `panels/control`) is the only
 way a browser drives. It serves
 `/mongla/batighor/helm` (`mongla_interfaces/srv/Helm`), because `foxglove_bridge` relays service
 calls but not actions and cannot tell browsers apart, so each operator types a name and the
@@ -102,12 +115,41 @@ tmux showed the same three lines and refused its own `stop` with "the manager is
 /mongla/move", since no manager ran. The browser panel that carries the heartbeat comes with our
 Lichtblick build: the release cannot load server panels (its `apiUrl` is unset).
 
+## Where things go on the screen
+
+`views.py` places every panel by these rules. A view that breaks one says why in its docstring.
+
+| rule | why | source |
+|---|---|---|
+| The picture is the largest thing, on the left; numbers and controls are on the right | the eye reads the scene first, and the hand goes to the controls beside it. QGroundControl's Fly View keeps the video large and puts its instrument panel at the right centre | [QGroundControl, Fly View](https://docs.qgroundcontrol.com/master/en/qgc-user-guide/fly_view/fly_view.html) |
+| One aspect per view, chosen from the layout menu; nothing is crammed into one panel | a glance answers one question. Workload and situational awareness are the factors a mission-control display is judged on | [DLR, UX/UI for Columbus operations (SpaceOps 2025)](https://elib.dlr.de/220842/1/SpaceOps2025-Paper-Investigating%20UX-UI%20design%20for%20Columbus%20Operations_FIN1.pdf) |
+| Show what moves, and quieten what does not: health worst first, absence as `--`, never a reassuring zero | mission-control displays are designed to cut the detail of what is unimportant and draw attention to dynamic data | [NASA/JPL, Mars Observer mission-control displays](https://ntrs.nasa.gov/api/citations/19940019415/downloads/19940019415.pdf) |
+| STOP, SURFACE and DISARM in the same place in every view that drives, one press for anyone | an operator under load must not search for the way out | the owner's rule (bead 102.25.3) |
+| Every operator gets the same panels, from one place | a team that published its Foxglove extensions so every member had the latest GUI | [Foxglove, Duke Robotics spotlight](https://foxglove.dev/blog/spotlight-duke-robotics-clubs-journey-to-underwater-autonomy) |
+| Every published topic is shown somewhere, or named with the reason it is not | an operator cannot reason about what they cannot see | `test_views.py` |
+
 ## Video, by link
 
-Kutum never encodes a frame for an operator. `camera_node` republishes the JPEG the camera
-sent, unchanged, on `<cam>/stream/compressed` (the camera's rate, capped at 30) and
-`<cam>/preview/compressed` (5 a second), and builds neither while nobody watches; the
-overlay is drawn by the browser. On Kutum's USB camera at 640x360 a frame is 41 KB and costs
+### The desktop app
+
+`python3 tools/pool/batighor_desktop.py [host]` on the operator's machine installs Kutum's
+panels, writes every view into `~/.lichtblick-suite/layouts/`, and starts the Lichtblick
+desktop app connected, on the cockpit (`--view <name>` for another). Lichtblick 1.27 imports a
+folder layout once, by file name, and a layout opened from a link carries no file name, so the
+next start imported the folder copy beside it; so no link names a layout, and the app selects
+the view by name (`--defaultLayout`). A view changed on Kutum is named with how to refresh it
+(delete it under Layouts, restart). On a dense screen the app is started at a scale read from
+the screen's pixels and millimetres (`--force-device-scale-factor`, `--scale` to set it): a 4K
+15-inch panel at scale 1 drew the panels' 12 px type 1 mm tall. If the app is already open it
+keeps its view, and the tool says so.
+
+Kutum does not re-encode a camera's frame for an operator. `camera_node` republishes the
+JPEG the camera sent, unchanged, on `<cam>/stream/compressed` (the camera's rate, capped at
+30) and `<cam>/preview/compressed` (5 a second), and builds neither while nobody watches;
+the overlay is drawn by the browser. A source with no JPEG of its own (a recorded video, a
+ROS topic, the OpenCV fallback a camera takes when its mailbox fails) is encoded once per
+due frame, at quality 80, only while someone watches: before that it sent nothing, and a
+camera that fell back showed the operator an empty panel. On Kutum's USB camera at 640x360 a frame is 41 KB and costs
 0.062 ms to publish (`measured-bars` 84). Open `/` on the tether and `/?layout=weak_link` on
 anything slower.
 
@@ -135,9 +177,11 @@ with no summary line shows as *(no summary)* until it gets one.
 | `deck.py` | The deck: Batighor in a terminal, for the person standing at the pool. |
 | `fetch.py` | Put the pinned Lichtblick web build on this machine. |
 | `helm.py` | The helm: the one way a browser drives the vehicle, and the log of who did. |
+| `model.py` | The hull in Lichtblick's 3D scene: the site's CAD, in the body frame, with its thrusters. |
 | `overlay.py` | What the vision stack sees, drawn by the browser over the camera's own picture. |
 | `panels.py` | Our panels, served to Lichtblick as a workspace's extensions. |
 | `pin.py` | The Lichtblick build Batighor serves: one pinned version, one hash. |
 | `seat.py` | Who is the pilot: Batighor's token, as rules with no ROS in them. |
 | `serve.py` | Serve Lichtblick and our layouts to every operator's browser. |
+| `views.py` | Every Batighor view, from one table: `layouts/*.json` are generated here. |
 <!-- modules:end -->

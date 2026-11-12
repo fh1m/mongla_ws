@@ -3,6 +3,8 @@ from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'mongla_batighor'
+THEME_FONTS = ('zed-mono-extended', 'zed-mono-extendedbold',
+               'zed-sans-extended', 'zed-sans-extendedbold')
 
 setup(
     name=package_name,
@@ -12,9 +14,22 @@ setup(
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml', 'LICHTBLICK.json']),
         ('share/' + package_name + '/layouts', glob('layouts/*.json')),
-        ('share/' + package_name + '/panels/helm', glob('panels/helm/*')),
-        ('share/' + package_name + '/panels/calibrate', glob('panels/calibrate/*')),
+        # Every panel directory, so a new panel ships without an edit here,
+        # and the helpers panels.py puts above each one.
+        ('share/' + package_name + '/panels', glob('panels/*.js')),
+        *[('share/' + package_name + '/' + d, glob(d + '/*'))
+          for d in sorted(glob('panels/*')) if glob(d + '/extension.js')],
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
+        ('share/' + package_name + '/theme', glob('theme/*.css')),
+        # The site's own font files, one copy in the repo: Kutum serves them,
+        # because the deck has no internet at the pool.
+        ('share/' + package_name + '/theme/fonts',
+         [f'../../docs/assets/fonts/{f}.woff2' for f in THEME_FONTS]),
+        # The site's hull, one copy in the repo: serve.py turns it into the
+        # 3D scene's meshes (model.py).
+        # And where its thrusters are, measured off the same CAD.
+        ('share/' + package_name + '/model', ['../../docs/assets/cad/hull.mgla',
+                                              '../mongla_control/config/hull_geometry.yaml']),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -29,6 +44,7 @@ setup(
             'overlay = mongla_batighor.overlay:main',
             'helm = mongla_batighor.helm:main',
             'deck = mongla_batighor.deck:main',
+            'views = mongla_batighor.views:main',
         ],
     },
 )
