@@ -53,8 +53,13 @@ ACK_CANCELLED = 6
 
 class FakeSrotBoard:
     def __init__(self, port: int, *, behaviour_rev: int = 14,
-                 params: dict | None = None, boot_lines: list | None = None):
+                 params: dict | None = None, boot_lines: list | None = None,
+                 bench_motion: bool = False):
         self.port = port
+        # A hull rocking gently, with SCALED_IMU2 and both BATTERY_STATUS
+        # instances, so a bench shows every Batighor plot moving. Off for the
+        # tests, which assert on a board at rest.
+        self.bench_motion = bench_motion
         # The boot burst, if this board REPEATS it on REQUEST_MESSAGE(STATUSTEXT).
         # None = today's firmware, which accepts that request and sends nothing.
         # A UDP link has no auto-reset, so the burst is never seen otherwise.
@@ -117,9 +122,40 @@ class FakeSrotBoard:
             ML.MAV_TYPE_SUBMARINE, ML.MAV_AUTOPILOT_GENERIC, base, self.mode,
             ML.MAV_STATE_ACTIVE if self.armed else ML.MAV_STATE_STANDBY)
 
+    def _rock(self):
+        """(roll, pitch, roll rate, pitch rate): a slow swell, or the board at rest."""
+        if not self.bench_motion:
+            return 0.0, 0.0, 0.0, 0.0
+        t = time.monotonic() - self._t0
+        wr, wp = 2 * math.pi * 0.2, 2 * math.pi * 0.13
+        ar, ap = math.radians(3.0), math.radians(2.0)
+        return (ar * math.sin(wr * t), ap * math.sin(wp * t),
+                ar * wr * math.cos(wr * t), ap * wp * math.cos(wp * t))
+
+    def _imu(self, roll, pitch, droll, dpitch):
+        # Specific force at rest in FRD, then into the sensor's axes the way
+        # the real board packs it: (x, y, z) -> (y, x, -z), srot_telemetry.
+        g = 1000.0                                                  # mG
+        frd = (g * math.sin(pitch), -g * math.sin(roll) * math.cos(pitch),
+               -g * math.cos(roll) * math.cos(pitch))
+        acc = (frd[1], frd[0], -frd[2])
+        self._link.mav.scaled_imu2_send(
+            self._boot_ms(), *(int(a) for a in acc),
+            int(droll * 1000), int(dpitch * 1000), 0, 0, 0, 0)
+
+    def _battery(self):
+        t = time.monotonic() - self._t0
+        for bid, volts in ((0, 12.4), (1, 14.8 - 0.002 * (t % 300))):
+            cells = [int(volts * 1000)] + [0xFFFF] * 9
+            self._link.mav.battery_status_send(bid, 0, 0, 2500, cells,
+                                               150 if bid else 80, -1, -1, -1)
+
     def _telemetry(self):
-        self._link.mav.attitude_send(self._boot_ms(), 0.0, 0.0, self.yaw,
-                                     0.0, 0.0, 0.0)
+        roll, pitch, droll, dpitch = self._rock()
+        self._link.mav.attitude_send(self._boot_ms(), roll, pitch, self.yaw,
+                                     droll, dpitch, 0.0)
+        if self.bench_motion:
+            self._imu(roll, pitch, droll, dpitch)
         self._link.mav.vfr_hud_send(0.0, 0.0, int(math.degrees(self.yaw)) % 360,
                                     0, self.depth_m, 0.0)
         self._link.mav.ahrs2_send(0.0, 0.0, self.yaw, self.depth_m, 0, 0)
@@ -131,6 +167,9 @@ class FakeSrotBoard:
 
     def _sys_status(self):
         baro = ML.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+        if self.bench_motion:
+            # A healthy BNO085; without it the manager withholds every rate.
+            baro |= ML.MAV_SYS_STATUS_SENSOR_3D_GYRO | ML.MAV_SYS_STATUS_SENSOR_3D_ACCEL
         self._link.mav.sys_status_send(baro, baro, baro, 100, 16000, -1, -1,
                                        0, 0, 0, 0, 0, 0)
 
@@ -231,6 +270,8 @@ class FakeSrotBoard:
             if now - last_sys >= 0.5:
                 self._sys_status()
                 self._named_values()
+                if self.bench_motion:
+                    self._battery()
                 last_sys = now
             if now - last_prog >= 0.1:
                 self._advance_move()

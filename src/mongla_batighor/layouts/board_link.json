@@ -1,6 +1,5 @@
 {
   "configById": {
-    "mongla.batighor.Link!link": {},
     "Plot!bytes": {
       "paths": [
         {
@@ -37,12 +36,7 @@
       "isSynced": true,
       "xAxisVal": "timestamp"
     },
-    "RawMessages!named": {
-      "topicPath": "/mongla/board_link.named"
-    },
-    "RawMessages!rates": {
-      "topicPath": "/mongla/board_link.rates"
-    }
+    "mongla.batighor.Link!link": {}
   },
   "globalVariables": {},
   "userNodes": {},
@@ -53,21 +47,11 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "mongla.batighor.Link!link",
-      "second": {
-        "direction": "column",
-        "first": "Plot!bytes",
-        "second": "Plot!drops",
-        "splitPercentage": 50.0
-      },
-      "splitPercentage": 33.3
+      "first": "Plot!bytes",
+      "second": "Plot!drops",
+      "splitPercentage": 50.0
     },
-    "second": {
-      "direction": "row",
-      "first": "RawMessages!named",
-      "second": "RawMessages!rates",
-      "splitPercentage": 55.0
-    },
-    "splitPercentage": 45.0
+    "second": "mongla.batighor.Link!link",
+    "splitPercentage": 55.0
   }
 }

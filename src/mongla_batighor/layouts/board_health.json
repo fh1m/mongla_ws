@@ -41,18 +41,8 @@
       "isSynced": true,
       "xAxisVal": "timestamp"
     },
-    "RawMessages!order": {
-      "topicPath": "/mongla/flare_order"
-    },
     "mongla.batighor.Health!health": {},
-    "mongla.batighor.Kutum!kutum": {},
-    "DiagnosticSummary!graded": {
-      "minLevel": 0,
-      "pinnedIds": [],
-      "hardwareIdFilter": "mongla",
-      "topicToRender": "/diagnostics",
-      "sortByLevel": true
-    }
+    "mongla.batighor.Kutum!kutum": {}
   },
   "globalVariables": {},
   "userNodes": {},
@@ -64,24 +54,14 @@
     "first": {
       "direction": "column",
       "first": "Plot!depthyaw",
-      "second": {
-        "direction": "column",
-        "first": "Plot!gyro",
-        "second": "RawMessages!order",
-        "splitPercentage": 50.0
-      },
-      "splitPercentage": 33.3
+      "second": "Plot!gyro",
+      "splitPercentage": 50.0
     },
     "second": {
       "direction": "column",
       "first": "mongla.batighor.Health!health",
-      "second": {
-        "direction": "column",
-        "first": "mongla.batighor.Kutum!kutum",
-        "second": "DiagnosticSummary!graded",
-        "splitPercentage": 40.0
-      },
-      "splitPercentage": 37.5
+      "second": "mongla.batighor.Kutum!kutum",
+      "splitPercentage": 60.0
     },
     "splitPercentage": 55.0
   }

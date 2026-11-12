@@ -178,11 +178,13 @@ function initPanel(context) {
   const vehLine = el("div", { class: "row" });
   const log = el("div", { class: "log" });
 
+  // First and pinned: in a small window the helm above it pushed STOP below
+  // the fold, and a key that needs a scroll is not one press.
+  const cSafe = card(box, "anyone, one press", null, "pinned");
+  cSafe.append(el("div", { class: "keys" }, ...safe), vehLine, msg);
   const cHelm = card(box, "helm");
   cHelm.append(el("div", { class: "row" }, name, pilotLine),
     el("div", { class: "row" }, bRequest, bGive, bRelease));
-  const cSafe = card(box, "anyone, one press");
-  cSafe.append(el("div", { class: "keys" }, ...safe), vehLine, msg);
   const cVerb = card(box, "command", "pilot only");
   cVerb.append(el("div", { class: "row" }, bArm, pick, bSend), help, fields);
   const cMission = card(box, "mission");

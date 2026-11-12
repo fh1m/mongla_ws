@@ -108,8 +108,10 @@ function kv(...pairs) {
   return el("div", { class: "kv" }, ...pairs.flatMap(([k, v, cls]) => [el("span", {}, k), el("span", cls ? { class: cls } : {}, v)]));
 }
 
+// `filter` keeps the rows naming it; a leading "!" keeps every other row.
 function healthRows(rows, filter) {
-  const shown = rows.filter((r) => !filter || r.name.includes(filter))
+  const not = filter.startsWith("!"), key = not ? filter.slice(1) : filter;
+  const shown = rows.filter((r) => !key || r.name.includes(key) !== not)
     .sort((a, b) => (b.level - a.level) || a.name.localeCompare(b.name));
   return shown.length
     ? el("div", { class: "health" }, ...shown.flatMap((r) => [
@@ -132,9 +134,10 @@ function foldDiagnostics(s, m) {
 const INSTRUMENTS = {
   Vehicle: {
     title: "Vehicle",
-    topics: ["/mongla/state", "/mongla/batighor/helm_state"],
+    topics: ["/mongla/state", "/mongla/batighor/helm_state", "/mongla/flare_order"],
     fold(s, topic, m) {
       if (topic === "/mongla/state") { s.v = m; s.at = Date.now(); }
+      else if (topic === "/mongla/flare_order") { try { s.flare = JSON.parse(m.data); } catch { /* keep */ } }
       else { try { s.helm = JSON.parse(m.data); } catch { /* keep */ } }
     },
     draw(s) {
@@ -152,7 +155,9 @@ const INSTRUMENTS = {
             el("span", { class: "big" }, num(below, 2), el("span", { class: "unit" }, "m deep")),
             el("span", { class: "big" }, num(v.yaw_deg, 0), el("span", { class: "unit" }, "deg")),
             el("span", { class: "big" }, num(v.battery_voltage, 1), el("span", { class: "unit" }, "V")))),
-        kv(["pilot", h.pilot || "nobody"], ["state age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 2 ? "warn" : ""]),
+        kv(["pilot", h.pilot || "nobody"], ["state age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 2 ? "warn" : ""],
+          // Silence is "no order", never a default (node_vision._publish_flare_order).
+          ["flare order", s.flare ? (s.flare.colours || []).join("-") : "none latched", s.flare ? "live" : ""]),
       ];
     },
   },
@@ -271,6 +276,11 @@ const INSTRUMENTS = {
           ["board errors", num(l.board_errors, 0)],
           ["message types", String((l.rates || []).length)],
           ["named channels", String((l.named || []).length)]),
+        el("div", { class: "note" }, "frames per second, by message"),
+        kv(...[...(l.rates || [])].sort((a, b) => b.hz - a.hz).map((r) => [r.type, num(r.hz, 1, " Hz")])),
+        el("div", { class: "note" }, "the board's named channels (-- once stale)"),
+        kv(...[...(l.named || [])].sort((a, b) => a.name.localeCompare(b.name))
+          .map((n) => [n.name, num(n.value, 3), n.age_s > 2 ? "stale" : ""])),
       ];
     },
   },
@@ -279,7 +289,9 @@ const INSTRUMENTS = {
     title: "Health",
     topics: ["/diagnostics"],
     fold: (s, topic, m) => foldDiagnostics(s, m),
-    draw: (s) => [healthRows(s.health || [], "")],
+    // Kutum's rows have their own instrument beside this one; shown here too
+    // they pushed the board's rows off a small panel.
+    draw: (s) => [healthRows(s.health || [], "!kutum.")],
   },
 
   // Kutum's own rows (clock, disk, Hailo, power, temperature), on their own.

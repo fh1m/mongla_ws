@@ -138,6 +138,16 @@ def test_the_main_layout_carries_the_control_center():
     assert 'setDefaultPanelTitle("Control Center")' in HELM_JS
 
 
+def test_stop_surface_and_disarm_are_first_and_never_scroll_away():
+    """In a small window the helm card above them pushed STOP below the fold."""
+    cards = re.findall(r'card\(box, "([^"]+)"(?:, [^,)]*)?(?:, "(\w+)")?\)', HELM_JS)
+    assert cards[0] == ('anyone, one press', 'pinned'), cards
+    css = (PANELS.parent / 'theme' / 'batighor.css').read_text()
+    pinned = re.search(r'\.mb section\.pinned\{([^}]*)\}', css)
+    # -10px: flush over .mb's own 10px padding, or the scrolled card shows above it.
+    assert pinned and 'position:sticky' in pinned.group(1) and 'top:-10px' in pinned.group(1)
+
+
 CALIBRATE_JS = (PANELS / 'calibrate' / 'extension.js').read_text()
 
 
