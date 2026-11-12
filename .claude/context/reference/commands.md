@@ -342,7 +342,7 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked *not shipped* 
 | `demo_move_see` | minimal open-loop + vision demo (two-verb). | — | `move_back`, `move_forward`, `set_depth`, `yaw_left` |
 | `demo_pursue` | torpedo-style approach using align() then move(). | — | `move_back`, `move_forward`, `set_depth`, `stop`, `yaw_right` |
 | `demo_square` | the classic shakedown mission. | — | `move_forward`, `pause`, `set_depth`, `yaw_right` |
-| `out_and_back` | dive, swim straight, turn clockwise, swim back. Control only. | — | `move_forward`, `set_depth`, `yaw_right` |
+| `out_and_back` | dive, swim straight, turn clockwise, swim back. Control only. | — | `move_forward`, `pause`, `set_depth`, `yaw_right` |
 | `pool_day_practice` | Pool day practice run: Gate → Slalom → Torpedo → Bin. | `bin_fire_blood`, `gate_sharks`, `slalom_red_pipe` (not shipped), `torpedo_blood_hole` (not shipped) | `move_forward`, `pause`, `set_depth`, `stop`, `turn` |
 | `pool_day_torpedo` | Pool day torpedo practice: align → approach → fine-lock → fire. | `torpedo_blood_hole` (not shipped) | `move_forward`, `set_depth`, `stop`, `turn` |
 | `sauvc_full` | SAUVC 2026 full run: Navigation, Target Acquisition, then (opt-in) the flares. | `sauvc_sim` | `move_back`, `move_forward`, `set_depth` |
