@@ -96,3 +96,18 @@ def test_every_not_shown_reason_is_still_about_a_published_topic():
     published = {t.rsplit('/', 1)[-1] for t in _published()}
     for name in views.NOT_SHOWN:
         assert name in published, f'{name} is no longer published: drop it from NOT_SHOWN'
+
+
+def _images(name):
+    return {k: c['imageMode'] for k, c in views.build(name)['configById'].items()
+            if k.startswith('Image!')}
+
+
+def test_a_view_for_judging_boxes_shows_each_frame_with_its_own():
+    """Boxes come ~2 frames after the picture; unsynced, a box trails a moving
+    target. Synced, the picture stops with the detector, so never in the
+    cockpit, where a live picture comes first."""
+    for name in ('vision', 'bins_downward'):
+        cams = [m for m in _images(name).values() if m['imageTopic'].endswith('stream/compressed')]
+        assert cams and all(m.get('synchronize') for m in cams), name
+    assert not any(m.get('synchronize') for m in _images('cockpit').values())

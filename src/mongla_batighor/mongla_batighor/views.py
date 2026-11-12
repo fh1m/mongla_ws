@@ -52,17 +52,26 @@ def states(*lines: dict) -> tuple:
                                           for s in lines], 'isSynced': True}
 
 
-def image(topic: str, *layers: str) -> tuple:
+def image(topic: str, *layers: str, synced: bool = False) -> tuple:
     mode = {'imageTopic': topic}
     if layers:
         mode['annotations'] = {a: {'visible': True} for a in layers}
+    if synced:
+        mode['synchronize'] = True
     return 'Image', {'imageMode': mode}
 
 
-def camera(cam: str, *extra: str, stream: str = 'stream') -> tuple:
-    """A camera's own JPEG with what the vision stack drew over it."""
+def camera(cam: str, *extra: str, stream: str = 'stream', synced: bool = False) -> tuple:
+    """A camera's own JPEG with what the vision stack drew over it.
+
+    `synced`: show only frames the detector answered, each with its own
+    boxes. The boxes come at the detector's rate, ~2 frames after the picture
+    (Kutum, 2026-11-12: 20 Hz and 68 ms against 30 Hz and 35 ms), so unsynced
+    a box trails a moving target. Synced, the picture stops when the
+    detector does, so the cockpit never is: there a live picture comes first.
+    """
     return image(f'{V}/{cam}/{stream}/compressed', f'{V}/{cam}/annotations',
-                 *(f'{V}/{cam}/{e}' for e in extra))
+                 *(f'{V}/{cam}/{e}' for e in extra), synced=synced)
 
 
 def align(x_label: str, y_label: str) -> tuple:
@@ -152,23 +161,23 @@ def _ladder_lines(detail: bool) -> list:
 
 
 def cockpit(v: View):
-    """The default: both cameras, the lock's history, the vehicle and its hull, and control."""
+    """The default: both cameras, what the vehicle sees and feels, and control.
+
+    The cameras take the left column whole. The lock's history is in `vision`;
+    here the Vision instrument says what holds the target now and which
+    stages run, and it needs the room more than a strip of history does."""
     extra = {'downward': ['flow_annotations']}
     cams = [(3 if i == 0 else 2, v(c, camera(c, *extra.get(c, []))))
             for i, c in enumerate(CAMERAS)]
-    strip = v('ladder', states(*_ladder_lines(False),
-                               series('/mongla/state.mode', 'mode'),
-                               series('/mongla/mission_alive.data', 'mission', True),
-                               series('/mongla/localization/aiding.data', 'aided by', True)))
-    return row((62, col(*cams, (1, strip))),
-               (38, col((11, v('control', instrument('ControlCenter'))),
-                        (7, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
-                        (5, v('vision', instrument('Vision'))))))
+    return row((60, col(*cams)),
+               (40, col((9, v('control', instrument('ControlCenter'))),
+                        (6, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
+                        (7, v('vision', instrument('Vision'))))))
 
 
 def vision(v: View):
     """Detection and tracking in depth: every rung, its authority, the pose solved."""
-    cams = [(3, v(c, camera(c))) for c in CAMERAS]
+    cams = [(3, v(c, camera(c, synced=True))) for c in CAMERAS]
     fwd, dwn = f'{V}/forward', f'{V}/downward'
     # How far each detection is, when depth_estimation runs (off by default).
     depth = row(v('range_map', image(f'{fwd}/vis_range_map')), v('range', raw(f'{fwd}/vis_range')))
@@ -277,7 +286,7 @@ def board_link(v: View):
 
 def bins_downward(v: View):
     """Aligning over a target below: the floor with boxes, the detections, the error."""
-    return row((60, v('down', camera('downward'))),
+    return row((60, v('down', camera('downward', synced=True))),
                (40, col(v('dets', raw(f'{V}/downward/detections')),
                         v('align', align('err_x_px', 'err_y_px')))))
 

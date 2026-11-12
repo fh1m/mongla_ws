@@ -38,6 +38,7 @@ import base64
 import datetime
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -123,6 +124,40 @@ def embed_fonts(code: bytes, base: str) -> bytes:
     return re.sub(rb'/theme/fonts/([a-z0-9-]+\.woff2)', inline, code)
 
 
+# The density the app's sizes were drawn for, on a laptop read at arm's
+# length. A 4K 15-inch panel is ~290 dpi; at device scale 1, the app's 12 px
+# type is 1 mm tall on it (seen on the dev box 2026-11-12).
+READ_DPI = 120
+
+
+def screen_scale(xrandr: str) -> float | None:
+    """The scale for the first screen `xrandr --query` lists (the primary if
+    marked), from its pixels and millimetres, to a quarter; None if unknown."""
+    lines = [ln for ln in xrandr.splitlines() if ' connected' in ln]
+    lines.sort(key=lambda ln: ' primary ' not in ln)
+    for ln in lines[:1]:
+        m = re.search(r'(\d+)x\d+\+\d+\+\d+.* (\d+)mm x \d+mm', ln)
+        if m and int(m.group(2)) > 0:
+            dpi = int(m.group(1)) / (int(m.group(2)) / 25.4)
+            return max(1.0, min(3.0, round(dpi / READ_DPI * 4) / 4))
+    return None
+
+
+def scale_flag(asked: float | None) -> list[str]:
+    """`--force-device-scale-factor` for the app, unless the desktop scales it."""
+    if asked:
+        return [f'--force-device-scale-factor={asked:g}']
+    if os.environ.get('GDK_SCALE') or not shutil.which('xrandr'):
+        return []
+    xrdb = subprocess.run(['xrdb', '-query'], capture_output=True, text=True).stdout \
+        if shutil.which('xrdb') else ''
+    dpi = re.search(r'Xft\.dpi:\s*(\d+)', xrdb)
+    if dpi and int(dpi.group(1)) > 96:
+        return []                      # the desktop already scales its apps
+    found = screen_scale(subprocess.run(['xrandr', '--query'], capture_output=True, text=True).stdout)
+    return [f'--force-device-scale-factor={found:g}'] if found and found > 1 else []
+
+
 def running() -> bool:
     """Whether the desktop app is open already (Linux and macOS; False if unknown)."""
     if shutil.which('pgrep') is None:
@@ -141,6 +176,7 @@ def main(argv=None) -> int:
     ap.add_argument('--port', type=int, default=8000, help="Batighor's web port")
     ap.add_argument('--bridge', type=int, default=8765, help="foxglove_bridge's port")
     ap.add_argument('--view', help='open on this view (default: the cockpit, mongla_layout)')
+    ap.add_argument('--scale', type=float, help='the app\'s scale (default: from the screen\'s density)')
     ap.add_argument('--list', action='store_true', help="print Kutum's views and exit")
     ap.add_argument('--no-launch', action='store_true', help='install the panels only')
     a = ap.parse_args(argv)
@@ -157,9 +193,15 @@ def main(argv=None) -> int:
     if a.view and a.view not in views:
         print(f'ERROR: Kutum has no view {a.view!r}; it has: {", ".join(views)}', file=sys.stderr)
         return 1
-    wrote = install(base)
-    print(f'ok  panels: {", ".join(wrote) if wrote else "already current"}')
-    new, changed = install_views(base, views)
+    try:
+        wrote = install(base)
+        print(f'ok  panels: {", ".join(wrote) if wrote else "already current"}')
+        new, changed = install_views(base, views)
+    except OSError as exc:
+        # Half a set is still a set the app can open; the operator reruns this.
+        print(f'ERROR: Batighor stopped answering at {base} mid-install: {exc}; run this again',
+              file=sys.stderr)
+        return 1
     print(f'ok  views: {", ".join(new + changed) if new or changed else "already current"}')
     if a.no_launch:
         return 0
@@ -173,9 +215,10 @@ def main(argv=None) -> int:
         # A second launch hands its link to the open app, which ignores flags.
         print(f'WARNING: the app is already open and keeps its view; pick {view} under '
               f'Layouts, or close the app and run this again')
-    subprocess.Popen([app, f'--defaultLayout={view}', url], start_new_session=True,
+    flags = scale_flag(a.scale)
+    subprocess.Popen([app, *flags, f'--defaultLayout={view}', url], start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f'ok  opened {view} on {a.host}')
+    print(f'ok  opened {view} on {a.host}' + (f' at scale {flags[0].split("=")[1]}' if flags else ''))
     for name in changed:
         print(f'WARNING: {name} changed on Kutum and the app keeps its older copy: in '
               f'Layouts, delete {name}, then restart the app to import the new one')

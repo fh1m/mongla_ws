@@ -71,6 +71,10 @@ PUBLISHED_UNREAD = {
         'a human: Batighor\'s `calibrate` layout shows it beside the raw '
         'picture, so straight edges show whether the fit is right. Built '
         'only while someone watches.',
+    '/mongla/batighor/stages':
+        'for a human: which perception stages have a publisher, per camera, '
+        'from mongla_batighor/overlay.py once a second; the Vision instrument '
+        '(panels/instruments/extension.js, STAGES_TOPIC) draws it.',
     '/mongla/localization/aiding':
         'a DIAGNOSTIC of which aiding sources the filter accepted. Read in a '
         'bag after a run, never in the loop.',

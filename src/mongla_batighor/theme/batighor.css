@@ -57,6 +57,14 @@
 .mb .unit{font-size:10px;color:var(--mb-ink-3);margin-left:3px;letter-spacing:.06em}
 .mb .note{color:var(--mb-ink-3);font-size:11px}
 .mb .wide{grid-column:1/-1}
+/* The Vehicle readout grows with its tile: a dial and three numbers read
+   from across the tent, not 80 px in the corner of a quarter-screen panel. */
+.mb .gauges{align-items:center;gap:4cqi;flex-wrap:nowrap}
+.mb .gauges .dial{width:clamp(80px,30cqi,260px);height:auto;flex:none}
+.mb .gauges .gauge{width:clamp(26px,9.75cqi,84px);height:auto;flex:none}
+.mb .gauges .readouts{display:flex;flex-direction:column;gap:1.5cqi;min-width:0}
+.mb .gauges .big{font-size:clamp(18px,8cqi,64px)}
+.mb .gauges .unit{font-size:clamp(10px,2.6cqi,18px)}
 
 /* states: words first, colour second */
 .mb .ok{color:var(--mb-ink-2)}
@@ -110,6 +118,12 @@
   font-style:normal;font-size:9px;letter-spacing:.06em;display:flex;align-items:center;justify-content:center;
   color:var(--mb-ink-3)}
 .mb .ladder i.on{color:var(--mb-d0);font-weight:700;border-color:transparent}
+/* What runs on a camera: lit when its topic is advertised, struck when off. */
+.mb .stages{display:flex;flex-wrap:wrap;gap:3px}
+.mb .stages i{font-style:normal;font-size:10px;letter-spacing:.06em;padding:3px 6px;border-radius:2px;
+  border:1px solid var(--mb-rule);background:var(--mb-d3);color:var(--mb-ink-3)}
+.mb .stages i.on{background:color-mix(in srgb,var(--mb-sea) 22%,transparent);border-color:var(--mb-sea);color:var(--mb-ink)}
+.mb .stages i.off{text-decoration:line-through;opacity:.6}
 .mb .bar{height:4px;background:var(--mb-d3);border-radius:2px;overflow:hidden}
 .mb .bar b{display:block;height:100%;background:var(--mb-sea)}
 .mb .health{display:grid;grid-template-columns:fit-content(45%) minmax(0,1fr);gap:2px 12px}
