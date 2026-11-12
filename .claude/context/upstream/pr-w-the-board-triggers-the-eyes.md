@@ -103,6 +103,21 @@ A forward camera that can be triggered:
   (`time_usec`, `seq`) in the reader thread, and `camera_node` takes each
   frame's capture stamp from the nearest trigger in board time, mapped through
   `TIMESYNC`, instead of from arrival. The consumer is the capture stamp every
-  freshness gate already reads (`camera_node._make_header`). It is not written yet,
-  because a decoder for a message the board does not send would be a capability
-  that nothing can reach.
+  freshness gate already reads (`camera_node._make_header`). The decode and
+  that one call are not written, because a decoder for a message the board
+  does not send would be a capability that nothing can reach.
+- The part that could be settled without the board is settled:
+  `mongla_vision/trigger_stamps.py` pairs each frame with the pulse that
+  exposed it. A pulse is a frame's pulse when it lies in the camera's measured
+  latency window before the arrival; a window narrower than the trigger
+  period holds at most one, so the pairing is exact and learns nothing. On
+  synthetic streams with 5 % of frames and 10 % of trigger messages lost, at
+  50, 60 and 210 Hz, it named the wrong pulse **0 times**, stamped at least
+  99 % of frames, and timed a pulse the wire did not deliver to within
+  100 µs. A board that reports only every fourth pulse (section 2's
+  link-budget option) is enough. It refuses, with the reason counted, when
+  the window is as wide as the period, when the link has been silent for
+  0.5 s, and across a board reboot.
+- **What that asks of the bench when the camera arrives:** the latency window
+  per camera and per mode, measured with a light the board fires on a known
+  pulse. At 210 Hz it has to be known to better than 4.8 ms.

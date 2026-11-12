@@ -348,7 +348,12 @@ def _orphan_guard(node, executor, parent_pid: int):
 def main(args=None):
     rclpy.init(args=args)
     parent_pid = os.getppid()
+    # Before the node exists, so the reader, heartbeat and executor threads it
+    # starts inherit the priority (measured-bars 76).
+    from mongla_localization import realtime
+    took = realtime.apply(rclpy.logging.get_logger('mongla_manager'))
     node = AUVManagerNode()
+    node.get_logger().info(f'[RT   ] {took}')
     executor = MultiThreadedExecutor()
     executor.add_node(node)
 
