@@ -14,11 +14,18 @@ layout from a URL. So this, on the operator's machine:
   3. opens the app connected to Kutum's bridge, on one of Kutum's views,
      which carries the hull's URL on the host named here.
 
-The app imports a layout file once per name and keeps its own copy, so a
-view changed on Kutum reaches the menu only as a new name; the view this
-opens is always fetched fresh.
+The app imports a layout file once, by file name (its `from`), and keeps
+its own copy; a later change to the file never reaches that copy. A link
+that names a layout saves a copy with no `from`, so the next start imports
+the file again beside it: two of each in the menu. So no link names a
+layout. Every run writes every view to the folder (a fresh app imports them
+all), and starts the app with `--defaultLayout=<view>`, which selects by
+name once the folder is imported: the cockpit, unless `--view` names
+another. A view that changed is named, with how to refresh it. Read from
+Lichtblick 1.27: `loadDefaultLayouts.ts`, `DesktopLayoutLoader.ts`,
+`useLayoutTransfer.tsx` and `CurrentLayoutProvider/index.tsx`.
 
-    python3 tools/pool/batighor_desktop.py                    # mongla.local, the cockpit
+    python3 tools/pool/batighor_desktop.py                    # mongla.local, every view
     python3 tools/pool/batighor_desktop.py 192.168.0.103 --view localization
     python3 tools/pool/batighor_desktop.py --list             # the views Kutum serves
 
@@ -79,11 +86,15 @@ def install(base: str, into: Path = EXTENSIONS) -> list[str]:
     return wrote
 
 
-def install_views(base: str, views: list[str], into: Path = LAYOUTS) -> list[str]:
-    """Each view as Kutum serves it for this host (the hull's URL absolute)."""
+def install_views(base: str, views: list[str]) -> tuple[list[str], list[str]]:
+    """Each view as Kutum serves it for this host (the hull's URL absolute).
+
+    Returns (new, changed): a changed file is one the app may already hold
+    an older copy of."""
+    into = LAYOUTS
     into.mkdir(parents=True, exist_ok=True)
     attic = Path.home() / 'attic' / datetime.date.today().isoformat() / 'lichtblick-layouts'
-    wrote = []
+    new, changed = [], []
     for name in views:
         data = get(f'{base}/layouts/{quote(name)}.json')
         json.loads(data)                       # a page that is not a layout stops here
@@ -93,9 +104,11 @@ def install_views(base: str, views: list[str], into: Path = LAYOUTS) -> list[str
         if target.is_file():
             attic.mkdir(parents=True, exist_ok=True)
             shutil.move(str(target), attic / target.name)
+            changed.append(name)
+        else:
+            new.append(name)
         target.write_bytes(data)
-        wrote.append(name)
-    return wrote
+    return new, changed
 
 
 def embed_fonts(code: bytes, base: str) -> bytes:
@@ -110,10 +123,16 @@ def embed_fonts(code: bytes, base: str) -> bytes:
     return re.sub(rb'/theme/fonts/([a-z0-9-]+\.woff2)', inline, code)
 
 
-def link(host: str, port: int, bridge: int, view: str) -> str:
+def running() -> bool:
+    """Whether the desktop app is open already (Linux and macOS; False if unknown)."""
+    if shutil.which('pgrep') is None:
+        return False
+    return subprocess.run(['pgrep', '-xi', 'lichtblick'], capture_output=True).returncode == 0
+
+
+def link(host: str, bridge: int) -> str:
     ds = quote(f'ws://{host}:{bridge}', safe='')
-    layout = quote(f'http://{host}:{port}/layouts/{view}.json', safe='')
-    return f'lichtblick://open?ds=foxglove-websocket&ds.url={ds}&layoutUrl={layout}'
+    return f'lichtblick://open?ds=foxglove-websocket&ds.url={ds}'
 
 
 def main(argv=None) -> int:
@@ -121,7 +140,7 @@ def main(argv=None) -> int:
     ap.add_argument('host', nargs='?', default='mongla.local', help="Kutum's name or address")
     ap.add_argument('--port', type=int, default=8000, help="Batighor's web port")
     ap.add_argument('--bridge', type=int, default=8765, help="foxglove_bridge's port")
-    ap.add_argument('--view', default='mongla_layout', help='the layout to open')
+    ap.add_argument('--view', help='open on this view (default: the cockpit, mongla_layout)')
     ap.add_argument('--list', action='store_true', help="print Kutum's views and exit")
     ap.add_argument('--no-launch', action='store_true', help='install the panels only')
     a = ap.parse_args(argv)
@@ -135,23 +154,31 @@ def main(argv=None) -> int:
     if a.list:
         print('\n'.join(views))
         return 0
-    if a.view not in views:
+    if a.view and a.view not in views:
         print(f'ERROR: Kutum has no view {a.view!r}; it has: {", ".join(views)}', file=sys.stderr)
         return 1
     wrote = install(base)
     print(f'ok  panels: {", ".join(wrote) if wrote else "already current"}')
-    laid = install_views(base, views)
-    print(f'ok  views: {", ".join(laid) if laid else "already current"}')
+    new, changed = install_views(base, views)
+    print(f'ok  views: {", ".join(new + changed) if new or changed else "already current"}')
     if a.no_launch:
         return 0
     app = shutil.which('lichtblick')
     if app is None:
         print('ERROR: the lichtblick desktop app is not on PATH', file=sys.stderr)
         return 1
-    url = link(a.host, a.port, a.bridge, a.view)
-    subprocess.Popen([app, url], start_new_session=True,
+    view = a.view or 'mongla_layout'
+    url = link(a.host, a.bridge)
+    if running():
+        # A second launch hands its link to the open app, which ignores flags.
+        print(f'WARNING: the app is already open and keeps its view; pick {view} under '
+              f'Layouts, or close the app and run this again')
+    subprocess.Popen([app, f'--defaultLayout={view}', url], start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f'ok  opened {a.view} on {a.host}')
+    print(f'ok  opened {view} on {a.host}')
+    for name in changed:
+        print(f'WARNING: {name} changed on Kutum and the app keeps its older copy: in '
+              f'Layouts, delete {name}, then restart the app to import the new one')
     return 0
 
 

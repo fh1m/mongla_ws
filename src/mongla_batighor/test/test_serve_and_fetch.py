@@ -209,7 +209,7 @@ def test_the_org_layouts_carry_the_hosts_urdf_url(tmp_path):
 
 
 def test_a_layout_file_carries_the_hosts_urdf_url_for_the_desktop_app(tmp_path):
-    """The desktop app opens `/layouts/<name>.json` by `layoutUrl`."""
+    """batighor_desktop.py copies `/layouts/<name>.json` into the desktop app's folder."""
     (tmp_path / 'layouts').mkdir()
     (tmp_path / 'layouts' / 'nav.json').write_text(
         json.dumps({'configById': {'3D!a': {'layers': {'h': {'url': '/model/mongla.urdf'}}}}}))

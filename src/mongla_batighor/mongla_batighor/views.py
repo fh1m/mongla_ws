@@ -185,7 +185,8 @@ def vision(v: View):
                              series(f'{dwn}/anchor_decomposition.vector.y', 'anchor scale'),
                              series(f'{dwn}/anchor_decomposition.vector.z', 'anchor range m')))),
         (2, v('align', align('align err x px', 'align err y px'))))
-    return row((55, col(*cams, (2, depth))), (45, right))
+    # A strip, not a third of the column: depth_estimation is off by default.
+    return row((55, col(*cams, (1, depth))), (45, right))
 
 
 def flow(v: View):
