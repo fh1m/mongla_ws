@@ -70,15 +70,14 @@ def main():
         import rclpy
         from rclpy.node import Node
         from sensor_msgs.msg import Image
-        from cv_bridge import CvBridge
+        from mongla_vision import image_msg
         from mongla_vision import qos
         rclpy.init()
         node = Node('mongla_water_check')
-        br = CvBridge()
         topic = f'/mongla/vision/{a.camera}/image_raw'
         node.create_subscription(
             Image, topic,
-            lambda m: frames.append(br.imgmsg_to_cv2(m, 'bgr8')), qos.IMAGE)
+            lambda m: frames.append(image_msg.to_array(m, 'bgr8')), qos.IMAGE)
         import time
         end = time.monotonic() + 20.0
         while rclpy.ok() and len(frames) < a.frames and time.monotonic() < end:

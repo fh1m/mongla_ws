@@ -1,0 +1,56 @@
+# The HailoRT service: the one process that opens the Hailo-8, serving every
+# vision process over a local socket (measured-bars 80: +0.012 ms a frame).
+# Ours rather than the one HailoRT installs, because that one starts
+# /usr/bin/hailort_service and a source build installs to /usr/local/bin, and
+# because a vehicle wants it back fast: always restarted, 200 ms later, with
+# no limit on how often. A vision process that loses it exits and is
+# respawned; on start it waits for this unit, then the forward process opens
+# the chip directly and the downward one runs without it (hailo_device.py).
+[Unit]
+Description=HailoRT service (the Hailo-8, shared between processes)
+Documentation=https://github.com/hailo-ai/hailort
+After=systemd-modules-load.service
+StartLimitIntervalSec=0
+
+#
+# Confined like every service Kutum installs (#67): its own user, read-only
+# system, private /tmp. Private /tmp is why the socket is not HailoRT's
+# default /tmp/hailort_uds.sock: it lives in /run/hailo, group hailort, and
+# every client is told so by HAILORT_SERVICE_ADDRESS (kutum/env.sh, and
+# mongla_vision/detection/__init__.py before anything loads the library).
+# The service only fixes the permissions of the default path, so UMask makes
+# the socket the group's; the operator is in that group (setup.sh).
+#
+# CAP_KILL is the one capability it keeps, and it needs it: the service checks
+# that each client is alive by signalling its pid, which a different user may
+# not do, so without it every client looked dead and lost its network
+# (HAILO_NOT_FOUND, or a timeout). Bisected on Kutum, measured-bars 83.
+# HOME is its state directory, which the library expects to exist.
+[Service]
+Type=forking
+User=hailort
+Group=hailort
+UMask=0007
+AmbientCapabilities=CAP_KILL
+CapabilityBoundingSet=CAP_KILL
+Environment=HOME=/var/lib/hailort
+Environment=HAILORT_SERVICE_ADDRESS=unix:///run/hailo/hailort_uds.sock
+Environment=HAILORT_LOGGER_PATH=/var/log/hailo
+EnvironmentFile=-/etc/default/hailort_service
+ExecStart=/usr/local/bin/hailort_service
+PIDFile=/run/hailo/hailort_service.pid
+RuntimeDirectory=hailo
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+LogsDirectory=hailo
+StateDirectory=hailort
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+Restart=always
+RestartSec=200ms
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target
