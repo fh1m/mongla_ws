@@ -1,0 +1,52 @@
+.claude/context/packages/mongla_batighor/README.md
+  h_f1b9066eb9899c 46-49
+src/mongla_batighor/layouts/bins_downward.json
+  h_f1b9066eb9899c 31-32
+src/mongla_batighor/layouts/board_health.json
+  h_f1b9066eb9899c 18-19,41-42
+src/mongla_batighor/layouts/board_link.json
+  h_f1b9066eb9899c 18-19,36-37
+src/mongla_batighor/layouts/flow.json
+  h_f1b9066eb9899c 30-31,44-45,70-71
+src/mongla_batighor/layouts/localization.json
+  h_f1b9066eb9899c 3-33,50-59,64-65,92-122,130-134,139-140,142-163,170-200,202
+src/mongla_batighor/layouts/mongla_layout.json
+  h_f1b9066eb9899c 13-24,26,29-34,37-48,51,53,63,65,68-70,72-78,80
+src/mongla_batighor/layouts/vision.json
+  h_f1b9066eb9899c 1-188
+src/mongla_batighor/mongla_batighor/overlay.py
+  h_f1b9066eb9899c 5-24,36-69,90-118,123-124,127-151,160-163,169-171,183,248-280,285,287,289,293,300,303,307-315,321-333,337-339,341-342,350-356
+src/mongla_batighor/mongla_batighor/panels.py
+  h_f1b9066eb9899c 13-14,81-82
+src/mongla_batighor/mongla_batighor/serve.py
+  h_f1b9066eb9899c 38-53,78,102-107,119,121-123
+src/mongla_batighor/panels/calibrate/extension.js
+  h_f1b9066eb9899c 15,24,27,44,46,56,71-78,94,97,102,112,117
+src/mongla_batighor/panels/common.js
+  h_f1b9066eb9899c 1-46
+src/mongla_batighor/panels/helm/extension.js
+  h_f1b9066eb9899c 5-7,22,38,41,64-65,71,76,80-85,104-105,125,140-141,151,171-172,175,177-178,180-194,201-208,217,237-238,243-249
+src/mongla_batighor/panels/mongla/extension.js
+  h_f1b9066eb9899c 1-187
+src/mongla_batighor/setup.py
+  h_f1b9066eb9899c 6-7,17-21,23-27
+src/mongla_batighor/test/test_layouts.py
+  h_f1b9066eb9899c 47
+src/mongla_batighor/test/test_overlay.py
+  h_f1b9066eb9899c 10-11,124-201
+src/mongla_batighor/test/test_panels.py
+  h_f1b9066eb9899c 77-78,151-152,154,179-292
+src/mongla_batighor/theme/batighor.css
+  h_f1b9066eb9899c 1-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5a6196ca01c39ab9823368e70a92af9f4a41ef13",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
