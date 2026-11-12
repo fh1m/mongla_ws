@@ -49,19 +49,19 @@ TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.json': 'application/j
 
 
 def inside(base: Path, rel: str) -> Path | None:
-    """`base/rel` when it stays inside `base`, else None.
+    """`base/rel` when it is a path under `base`, else None.
 
-    Normalised, then compared as strings, before and after symlinks resolve:
-    a `..`, an absolute `rel` and a symlink out all return None.
+    Resolved (`..` and symlinks), then compared as a string against the
+    root's own resolved path with its separator: a `..`, an absolute `rel`
+    and a symlink out all return None, and so does the root itself. One
+    normalisation and one prefix test, the form CodeQL follows
+    (py/path-injection).
     """
-    root = os.path.realpath(base)
-    path = os.path.normpath(os.path.join(root, rel))
-    if path != root and not path.startswith(root + os.sep):
+    root = os.path.realpath(base) + os.sep
+    path = os.path.realpath(os.path.join(root, rel))
+    if not path.startswith(root):
         return None
-    real = os.path.realpath(path)
-    if real != root and not real.startswith(root + os.sep):
-        return None
-    return Path(real)
+    return Path(path)
 
 
 def app_link(host: str, bridge_port: int, layout: str) -> str:
