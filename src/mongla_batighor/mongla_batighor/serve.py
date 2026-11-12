@@ -109,7 +109,7 @@ class Handler(BaseHTTPRequestHandler):
             name = url.path[len('/layouts/'):].removesuffix('.json')
             if not _NAME.match(name):
                 return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-            return self._file(inside(self.layouts, f'{name}.json'), cache=False)
+            return self._file(self.layouts, f'{name}.json', cache=False)
         if url.path.startswith('/api/'):
             return self._api(url.path[len('/api/'):])
         if url.path == '/app' or url.path.startswith('/app/'):
@@ -128,10 +128,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.bundle and rel == self.bundle[1]:
                 return self._bytes(self.bundle[2], 'text/javascript', cache=True,
                                    gz=self.bundle[3])
-            target = inside(self.web, rel)
-            if target is None:
-                return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-            return self._file(target, cache=bool(_HASHED.search(target.name)))
+            return self._file(self.web, rel, cache=bool(_HASHED.search(rel.rsplit('/', 1)[-1])))
         return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
 
     def _api(self, rel: str):
@@ -182,11 +179,12 @@ class Handler(BaseHTTPRequestHandler):
                            'timestamp': '1970-01-01T00:00:00Z'}).encode()
         return self._bytes(body, 'application/json', cache=False)
 
-    def _file(self, path: Path | None, cache: bool):
-        """A file `inside()` returned (None is not found), typed from TYPES."""
+    def _file(self, base: Path, rel: str, cache: bool):
+        """`base/rel`, typed from TYPES; both it and its `.gz` go through `inside(base, ...)`."""
+        path = inside(base, rel)
         if path is None or not path.is_file():
             return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
-        gz = inside(path.parent, path.name + '.gz')     # checked like the file itself
+        gz = inside(base, rel + '.gz')                  # from the root, like the file itself
         return self._bytes(path, TYPES.get(path.suffix, 'application/octet-stream'), cache,
                            gz=gz if gz is not None and gz.is_file() else None)
 
