@@ -316,3 +316,30 @@ def test_the_installed_share_carries_everything_serve_reads():
     for f in re.findall(r'/theme/(fonts/[\w-]+\.woff2)', css):
         assert (share / 'theme' / f).is_file(), f
     panels.extensions(share / 'panels')               # what serve.py does at start
+    assert (share / 'model' / 'hull.mgla').is_file(), 'the hull: add it to setup.py'
+    assert (share / 'model' / 'hull_geometry.yaml').is_file(), 'the thrusters: add it to setup.py'
+
+
+def test_one_layout_opens_our_panels_in_the_web_and_the_desktop_app():
+    """The web app names a panel `<qualifiedName>.<panel>` from the API entry,
+    the desktop app (1.27) `<package.json displayName>.<panel>`; a layout
+    names `mongla.batighor.<panel>`. Seen on the desktop 2026-11-12:
+    "Unknown panel type: mongla.batighor.Navigation"."""
+    for entry, data in panels.extensions(PANELS).values():
+        pkg = json.loads(zipfile.ZipFile(io.BytesIO(data)).read('package.json'))
+        assert entry['qualifiedName'] == pkg['displayName'] == panels.QUALIFIED
+        # The description is the panel's own first line, not the preamble.
+        assert not pkg['description'].startswith('const') and len(pkg['description']) < 200
+    for f in (PANELS.parent / 'layouts').glob('*.json'):
+        for pid in json.loads(f.read_text())['configById']:
+            if pid.startswith('mongla.'):
+                assert pid.startswith(panels.QUALIFIED + '.'), (f.name, pid)
+
+
+def test_a_page_that_does_not_link_the_theme_gets_it_from_the_panel():
+    """The desktop app's page is not Kutum's: the sheet travels in the panel."""
+    for _, data in panels.extensions(PANELS).values():
+        code = zipfile.ZipFile(io.BytesIO(data)).read('dist/extension.js').decode()
+        assert f'const THEME_CSS = {json.dumps(THEME.read_text())};' in code
+    common = (PANELS / 'common.js').read_text()
+    assert re.search(r'function mount\([^)]*\) \{\s*theme\(\);', common)

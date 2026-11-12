@@ -28,8 +28,19 @@ function keepName(n) {
 const fin = (x) => typeof x === "number" && Number.isFinite(x);
 const num = (x, d, unit) => (fin(x) ? x.toFixed(d) + (unit || "") : "--");
 
+// The look: Kutum's page links theme/batighor.css; any other page (the
+// desktop app) gets the same sheet once, from THEME_CSS.
+function theme() {
+  if (!THEME_CSS || document.querySelector('link[href$="batighor.css"], style[data-mb]')) return;
+  const s = document.createElement("style");
+  s.dataset.mb = "theme";
+  s.textContent = THEME_CSS;
+  document.head.append(s);
+}
+
 // The panel's root, themed. `kind` adds a layout class.
 function mount(context, kind) {
+  theme();
   const box = el("div", { class: kind ? `mb ${kind}` : "mb" });
   context.panelElement.append(box);
   return box;

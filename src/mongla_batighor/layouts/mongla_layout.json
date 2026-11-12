@@ -57,6 +57,59 @@
     },
     "mongla.batighor.ControlCenter!control": {},
     "mongla.batighor.Vehicle!vehicle": {},
+    "3D!hull": {
+      "followTf": "mongla",
+      "followMode": "follow-position",
+      "topics": {
+        "/mongla/odom": {
+          "visible": true
+        }
+      },
+      "scene": {
+        "backgroundColor": "#05070c",
+        "labelScaleFactor": 0.3,
+        "transforms": {
+          "showLabel": false,
+          "enablePreloading": true
+        }
+      },
+      "cameraState": {
+        "distance": 2.2,
+        "perspective": true,
+        "phi": 55,
+        "thetaOffset": 200,
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "layers": {
+        "hull": {
+          "visible": true,
+          "label": "Mongla",
+          "layerId": "foxglove.Urdf",
+          "instanceId": "hull",
+          "sourceType": "url",
+          "url": "/model/mongla.urdf",
+          "order": 1
+        }
+      }
+    },
     "mongla.batighor.Vision!vision": {}
   },
   "globalVariables": {},
@@ -82,11 +135,16 @@
       "first": "mongla.batighor.ControlCenter!control",
       "second": {
         "direction": "column",
-        "first": "mongla.batighor.Vehicle!vehicle",
+        "first": {
+          "direction": "row",
+          "first": "mongla.batighor.Vehicle!vehicle",
+          "second": "3D!hull",
+          "splitPercentage": 50.0
+        },
         "second": "mongla.batighor.Vision!vision",
-        "splitPercentage": 50.0
+        "splitPercentage": 58.3
       },
-      "splitPercentage": 52.4
+      "splitPercentage": 47.8
     },
     "splitPercentage": 62.0
   }
