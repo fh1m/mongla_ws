@@ -1,0 +1,28 @@
+src/mongla_batighor/layouts/board_health.json
+  h_f1b9066eb9899c 9-19,71-77
+src/mongla_batighor/layouts/flow.json
+  h_f1b9066eb9899c 97-112,132-138,140,142
+src/mongla_batighor/layouts/vision.json
+  h_f1b9066eb9899c 90,96-106,163-167,212-217
+src/mongla_batighor/mongla_batighor/views.py
+  h_f1b9066eb9899c 91-92,94-95,206-210,214-215,233-234,237-238,286-288
+src/mongla_batighor/panels/calibrate/extension.js
+  h_f1b9066eb9899c 86-88
+src/mongla_batighor/test/test_views.py
+  h_f1b9066eb9899c 129-140
+src/mongla_manager/mongla_manager/health_reporters.py
+  h_f1b9066eb9899c 292-294
+src/mongla_manager/test/test_health.py
+  h_f1b9066eb9899c 267-275
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "809c5d06c04b23399192ae9100c20c7d28b42043",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
