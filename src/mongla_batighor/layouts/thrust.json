@@ -54,9 +54,6 @@
       "legendDisplay": "left",
       "isSynced": true,
       "xAxisVal": "timestamp"
-    },
-    "RawMessages!esc": {
-      "topicPath": "/mongla/esc_rpm"
     }
   },
   "globalVariables": {},
@@ -75,13 +72,8 @@
     "second": {
       "direction": "column",
       "first": "Plot!power",
-      "second": {
-        "direction": "column",
-        "first": "Plot!rates",
-        "second": "RawMessages!esc",
-        "splitPercentage": 50.0
-      },
-      "splitPercentage": 33.3
+      "second": "Plot!rates",
+      "splitPercentage": 50.0
     },
     "splitPercentage": 50.0
   }

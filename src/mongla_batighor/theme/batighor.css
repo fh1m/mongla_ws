@@ -38,15 +38,21 @@
 .mb, .mb *{font-family:var(--mb-mono)!important;box-sizing:border-box}
 .mb{font-size:12px;line-height:1.45;color:var(--mb-ink);background:var(--mb-d1);height:100%;
   overflow:auto;padding:10px;display:flex;flex-direction:column;gap:10px;
-  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;container-type:inline-size}
+/* A small window shrinks the panel, not the words an operator reads. */
+@container (max-width:280px){.mb .big{font-size:18px}.mb section{padding:8px}.mb .keys{grid-template-columns:repeat(auto-fit,minmax(72px,1fr))}}
 .mb section{background:var(--mb-d2);border:1px solid var(--mb-rule);border-radius:4px;
   padding:10px 12px;display:flex;flex-direction:column;gap:8px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+/* The emergency keys stay on screen however far the panel scrolls. */
+.mb section.pinned{position:sticky;top:-10px;z-index:2;flex:none;box-shadow:0 8px 12px -6px rgba(0,0,0,.7)}
 .mb h3{margin:0;font-size:10px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;
   color:var(--mb-ink-3);display:flex;justify-content:space-between;gap:8px}
 .mb .row{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap}
 .mb .kv{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;align-items:center}
 .mb .kv > :nth-child(odd){color:var(--mb-ink-3)}
+/* A narrow panel wraps a long value; it never clips it or scrolls sideways. */
+.mb .kv > *{min-width:0;overflow-wrap:anywhere}
 .mb .big{font-size:24px;line-height:1.05}
 .mb .unit{font-size:10px;color:var(--mb-ink-3);margin-left:3px;letter-spacing:.06em}
 .mb .note{color:var(--mb-ink-3);font-size:11px}
@@ -106,5 +112,5 @@
 .mb .ladder i.on{color:var(--mb-d0);font-weight:700;border-color:transparent}
 .mb .bar{height:4px;background:var(--mb-d3);border-radius:2px;overflow:hidden}
 .mb .bar b{display:block;height:100%;background:var(--mb-sea)}
-.mb .health{display:grid;grid-template-columns:max-content 1fr;gap:2px 12px}
+.mb .health{display:grid;grid-template-columns:fit-content(45%) minmax(0,1fr);gap:2px 12px}
 .mb .health span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

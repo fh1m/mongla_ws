@@ -75,11 +75,6 @@ def raw(topic: str) -> tuple:
     return 'RawMessages', {'topicPath': topic}
 
 
-def diagnostics() -> tuple:
-    return 'DiagnosticSummary', {'minLevel': 0, 'pinnedIds': [], 'hardwareIdFilter': 'mongla',
-                                 'topicToRender': '/diagnostics', 'sortByLevel': True}
-
-
 def scene() -> tuple:
     """Lichtblick's 3D panel, following the vehicle in the odometry frame."""
     return '3D', {'followTf': 'mongla', 'followMode': 'follow-position',
@@ -241,6 +236,7 @@ def localization(v: View):
 
 def thrust(v: View):
     """The chain's far end: what was demanded, what the ESCs turned, what it cost."""
+    # The ESC rpm is the Thrust instrument's bars, one per ESC the board reports.
     return row(
         (50, col((3, v('thrust', instrument('Thrust'))),
                  (2, v('demand', plot(series('/mongla/demand.vector.x', 'demand surge'),
@@ -248,36 +244,34 @@ def thrust(v: View):
         (50, col(v('power', plot(series('/mongla/state.battery_voltage', 'PM1 V'))),
                  v('rates', plot(series('/mongla/imu.angular_velocity.x', 'roll rate'),
                                  series('/mongla/imu.angular_velocity.y', 'pitch rate'),
-                                 series('/mongla/imu.angular_velocity.z', 'yaw rate'))),
-                 v('esc', raw('/mongla/esc_rpm')))))
+                                 series('/mongla/imu.angular_velocity.z', 'yaw rate'))))))
 
 
 def board_health(v: View):
-    """Every subsystem graded by the manager, the board's and Kutum's alike."""
+    """Every subsystem graded by the manager: the board's on top, Kutum's below."""
+    # One reading of /diagnostics per row: Health and Kutum split it, and a
+    # DiagnosticSummary beside them showed every row a third time.
     return row(
         (55, col(v('depthyaw', plot(series('/mongla/state.depth_m', 'depth m'),
                                     series('/mongla/state.battery_voltage', 'PM1 V'))),
                  v('gyro', plot(series('/mongla/imu.angular_velocity.x', 'gx'),
                                 series('/mongla/imu.angular_velocity.y', 'gy'),
-                                series('/mongla/imu.angular_velocity.z', 'gz'))),
-                 v('order', raw('/mongla/flare_order')))),
+                                series('/mongla/imu.angular_velocity.z', 'gz'))))),
         (45, col((3, v('health', instrument('Health'))),
-                 (2, v('kutum', instrument('Kutum'))),
-                 (3, v('graded', diagnostics())))))
+                 (2, v('kutum', instrument('Kutum'))))))
 
 
 def board_link(v: View):
     """The one USB-C line: its use against capacity, the board's drops, every channel."""
+    # The per-message rates and named channels are tables in the Link
+    # instrument; as raw message trees they read as JSON, not as a link.
     return row(
-        (45, col((2, v('link', instrument('Link'))),
-                 (2, v('bytes', plot(series('/mongla/board_link.bytes_per_s', 'bytes/s'),
-                                     series('/mongla/board_link.capacity_bytes_per_s',
-                                            'the line, 115200 8N1')))),
-                 (2, v('drops', plot(series('/mongla/board_link.board_drop_pct', 'board drop %'),
-                                     series('/mongla/board_link.board_errors',
-                                            'board errors')))))),
-        (55, row((55, v('named', raw('/mongla/board_link.named'))),
-                 (45, v('rates', raw('/mongla/board_link.rates'))))))
+        (55, col(v('bytes', plot(series('/mongla/board_link.bytes_per_s', 'bytes/s'),
+                                 series('/mongla/board_link.capacity_bytes_per_s',
+                                        'the line, 115200 8N1'))),
+                 v('drops', plot(series('/mongla/board_link.board_drop_pct', 'board drop %'),
+                                 series('/mongla/board_link.board_errors', 'board errors'))))),
+        (45, v('link', instrument('Link'))))
 
 
 def bins_downward(v: View):
