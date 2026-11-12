@@ -22,6 +22,12 @@ echo "== ROS $distro at $(git rev-parse --short HEAD 2>/dev/null || echo unknown
 # mirror sync. apt retries a download itself; the index refresh is retried
 # here, 30 s apart. Either still failing after that fails the job.
 echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+# An index that could not be fetched is an error, not a warning. By default
+# `apt-get update` exits 0 when a mirror cannot be reached as long as one
+# other source answered, so the retry below never ran: on 2026-11-11 the
+# runner could not resolve the mirror, the refresh "passed", and the job died
+# at the install with "no installation candidate".
+echo 'APT::Update::Error-Mode "any";' >> /etc/apt/apt.conf.d/80-retries
 # The archive mirror GitHub's own runners use, beside them in Azure: on
 # 2026-11-10 archive.ubuntu.com took 33 of a 45 minute budget to serve the
 # dependencies. Same archive, same packages; only the host changes.
