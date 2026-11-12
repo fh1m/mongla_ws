@@ -77,12 +77,6 @@
           "timestampMethod": "receiveTime"
         },
         {
-          "value": "/mongla/vision/downward/distance_debug.data[2]",
-          "label": "tracks",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
-        },
-        {
           "value": "/mongla/vision/downward/distance_debug.data[1]",
           "label": "height m",
           "enabled": true,
@@ -92,6 +86,22 @@
           "value": "/mongla/vision/downward/floor_height.range",
           "label": "floor height m",
           "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!tracks": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/distance_debug.data[2]",
+          "label": "tracks",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
         }
       ],
       "showLegend": true,
@@ -119,12 +129,17 @@
         "second": {
           "direction": "column",
           "first": "StateTransitions!calibration",
-          "second": "Plot!quality",
-          "splitPercentage": 50.0
+          "second": {
+            "direction": "column",
+            "first": "Plot!quality",
+            "second": "Plot!tracks",
+            "splitPercentage": 50.0
+          },
+          "splitPercentage": 33.3
         },
-        "splitPercentage": 33.3
+        "splitPercentage": 25.0
       },
-      "splitPercentage": 25.0
+      "splitPercentage": 20.0
     },
     "splitPercentage": 58.0
   }
