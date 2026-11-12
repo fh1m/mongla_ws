@@ -1,0 +1,31 @@
+#!/bin/sh
+# Kutum's login banner: who this machine is, and the state an operator
+# checks first. Read from files only, so a login never waits on ROS.
+# Installed by kutum/setup.sh --system; Ubuntu's own header, help, sysinfo and
+# news are switched off there (chmod -x, not deleted).
+OWNER=fh1m
+H=/home/$OWNER
+release=$(basename "$(readlink -f "$H/mongla_ws" 2>/dev/null)" 2>/dev/null)
+temp=$(awk '{printf "%.1f C", $1/1000}' /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
+mhz=$(awk '{printf "%d MHz", $1/1000}' /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 2>/dev/null)
+gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)
+hailo=$([ -e /dev/hailo0 ] && echo present || echo ABSENT)
+board=/dev/srot
+[ -e "$board" ] || board=$(ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | head -1)
+[ -n "$board" ] || board="none attached"
+
+stack=$(su -s /bin/sh "$OWNER" -c 'tmux ls -F "#S" 2>/dev/null' 2>/dev/null | tr '\n' ' ')
+cat <<BANNER
+
+  K U T U M
+  Mongla's mind. In Bangla a kutum is the relative who comes to stay;
+  this one lives in a sealed tube, underwater, and still asks for the Wi-Fi.
+
+  release   ${release:-none}
+  cpu       ${mhz:---} ${gov:-}, ${temp:---}
+  hailo     $hailo        board  $board
+  tmux      ${stack:-nothing running}
+
+  The board keeps the reflexes. Kutum only thinks. Props clear before you arm.
+
+BANNER
