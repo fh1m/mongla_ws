@@ -65,4 +65,4 @@ matplotlib>=3.5; platform_machine == "x86_64"
 # tests
 # The ROS distro's own python3-pytest (6.2 on Humble, 7.4 on Jazzy): ROS's
 # launch_testing plugin fails to load under pytest 9.
-pytest>=6.2,<9
+pytest>=6.2,<10
