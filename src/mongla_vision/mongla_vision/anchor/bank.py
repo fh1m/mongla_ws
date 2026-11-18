@@ -328,10 +328,6 @@ class CheckpointBank(LookupMixin, StoreMixin):
         return len(self._refs)
 
     @property
-    def yields(self) -> list[int]:
-        return list(self._yields)
-
-    @property
     def has_reference(self) -> bool:
         return bool(self._refs)
 
