@@ -82,22 +82,6 @@ DEFERRED = {
         'arrives. The pairing itself is settled against synthetic truth '
         '(test_trigger_stamps.py), so the day the board sends the message '
         'the work left is the decode in SrotFC and one call in camera_node.'),
-    'mongla_vision/mongla_vision/tracking/cascade.py': (
-        'the association cascade that makes appearance affordable -- it runs '
-        'the expensive stage only on detections motion could not explain, and '
-        'carries the ego-motion stage no published tracker has, because ours '
-        'is MEASURED rather than fitted from image content. Waits on '
-        'tracker_node, which currently calls its tracker library directly; '
-        'inserting a cascade is a change to the association hot path and its '
-        'rate must be measured on the vehicle first.'),
-    'mongla_vision/mongla_vision/tracking/reid.py': (
-        'the 179-switch fix, and the one piece of the BoT-SORT / McByte++ '
-        'recipe an embedded budget can normally not afford -- a dedicated '
-        'Re-ID network costs 15-25 ms/frame, while XFeat is ALREADY loaded '
-        'for the anchor rung at 701 FPS on the Hailo. Waits on tracker_node '
-        'supplying crop descriptors at track birth and death, which is a '
-        'change to the tracker hot path and needs its rate measured on the '
-        'vehicle first.'),
     'mongla_vision/mongla_vision/continuity.py': (
         'NOW EXERCISED by tools/studies/continuity_from_bag.py, which produced the '
         'measurement it was written for (section 50): 338 real gaps, p50 '

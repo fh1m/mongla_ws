@@ -129,6 +129,7 @@ def _track(frames, w, h, fps, start, n, make_tracker, needs_frame=False, ts=None
     import supervision as sv
     tr = make_tracker()
     out = []
+    locked = -1      # the id the vehicle's align holds (motion_vision/align.py)
     for i in range(start, start + n):
         boxes = frames.get(i, [])
         if boxes:
@@ -149,12 +150,19 @@ def _track(frames, w, h, fps, start, n, make_tracker, needs_frame=False, ts=None
             res = tr.update(dets, frame=np.zeros((h, w, 3), np.uint8))
         best = None
         if isinstance(res, list):          # our wrapper: TrackedDetection[]
-            for td in res:
+            # Selected as the vehicle selects: stay on the locked id while it
+            # is published; otherwise the largest box, and lock on it. Taking
+            # the largest every frame flips between two live tracks the
+            # vehicle never jumps between, and counts that as a switch.
+            held = [td for td in res if td.track_id == locked]
+            for td in (held or res):
                 x1, y1, x2, y2 = td.xyxy
                 area = (x2 - x1) * (y2 - y1)
                 if best is None or area > best[0]:
                     best = (area, (x1 + x2) / 2 / w, (y1 + y2) / 2 / h,
                             td.score, td.track_id)
+            if best is not None and not held:
+                locked = best[4]
         else:                              # the bare library: sv.Detections
             for j in range(len(res.xyxy)):
                 x1, y1, x2, y2 = res.xyxy[j]
