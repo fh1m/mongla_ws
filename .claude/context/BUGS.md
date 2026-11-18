@@ -507,6 +507,38 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-114: the tracker's coast windows were frame counts, so their length moved with the detection rate `READ 2026-11-18` **FIXED 2026-11-18**
+
+**What.** Both tracker windows were frames. The Roboflow buffer lasts
+`int(frame_rate / 30 * track_buffer)` update calls and the Kalman expiry
+`ceil(max_predict_s * frame_rate)` calls, with `frame_rate` a hand-set
+parameter (20 by default, 30/32 from the Pi launch). Detections arrive at 30 to
+58 Hz depending on load, so the documented 5.0 s lost-track window was 1.7 to
+3.3 s on the vehicle. Offline, `tools/studies/tracker_ab.py` took the
+container's nominal rate, which is 1000 on every Cockpit recording (gate.mkv:
+6142 frames over 191.8 s, 32 fps), so every tracker comparison on those clips
+measured gaps and coasts 31x off.
+
+**Fix.** Both windows are seconds on the frames' capture stamps: the wrapper
+drops a coasted box `track_buffer / 30` s after its last real detection and the
+smoother expires a track after `max_predict_s` s. `frame_rate`,
+`frame_rate_warn_ratio`, `fwd_frame_rate` and `dwn_frame_rate` are deleted, and
+the laptop launch no longer overrides `track_buffer` to 30 (1.0 s, below
+`max_predict_s`). `tracker_ab.py` reads frame times from the container's
+packets. Guards: `test_roboflow_tracker.py::test_the_coast_window_is_seconds_on_capture_time_at_any_rate`
+and `test_coast_ladder_ordering.py`, both injection-verified.
+
+**How it survived.** A rate warning compared the measured rate with the
+parameter and asked the operator to fix the parameter; it fixed the symptom
+twice (2026-09-09 among them) and left the unit wrong. A tracker with a short
+coast still publishes and looks healthy.
+
+**Not settled by this.** On gate.mkv with real times, presence is 25.7 %
+detector-only and 34.6 % (OC-SORT, shipped) to 58.8 % (ByteTrack) tracked. That
+ranks nothing: presence counts predicted boxes, so a tracker that coasts past
+the gate's departure scores higher. Ranking needs a clip labelled with when
+the gate is truly in view.
+
 ### B-113: a lapsed DHCP lease renumbered Kutum's Ethernet under a running stack `READ 2026-11-12` **FIXED 2026-11-12** (in the repo; on Kutum at the next `setup.sh --system`)
 
 **What.** With the stack and Batighor running, the bench router let eth0's

@@ -209,12 +209,6 @@
 # kalman_adaptive_noise: true
 
 #   (passed to vision_pi.launch.py, which sets the default)
-# fwd_frame_rate: 30.0
-
-#   (passed to vision_pi.launch.py, which sets the default)
-# dwn_frame_rate: 32.0
-
-#   (passed to vision_pi.launch.py, which sets the default)
 # dwn_calibration: ''
 
 #   (passed to vision_pi.launch.py, which sets the default)
@@ -349,9 +343,6 @@
 #     viewer: true
 #     tracking: true
 #     tracker_type: ocsort
-#     track_buffer: 30
-#     min_hits: 1
-#     max_predict_s: 1.5
 #     depth: false
 #     depth_model: ''
 #     flow: false
@@ -414,8 +405,6 @@
 #     tracking: true
 #     tracker_type: ocsort
 #     kalman_adaptive_noise: true
-#     fwd_frame_rate: 30.0
-#     dwn_frame_rate: 32.0
 #     dwn_calibration: ''
 #     fwd_calibration: ''
 #     flow: true

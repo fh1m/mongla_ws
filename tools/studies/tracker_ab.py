@@ -35,6 +35,26 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..',
 from mongla_vision.continuity import Obs, analyse    # noqa: E402
 
 
+def packet_times(video):
+    """Each frame's presentation time, from the container's packets.
+
+    OpenCV derives both CAP_PROP_FPS and CAP_PROP_POS_MSEC from the stream's
+    nominal rate, and a variable-frame-rate recording (every Cockpit clip)
+    declares its 1000 Hz timebase there: gate.mkv is 6142 frames over
+    191.8 s, 32 fps, and was analysed as 1000. None when ffprobe is absent.
+    """
+    import shutil, subprocess
+    if not shutil.which('ffprobe'):
+        return None
+    out = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                          '-show_entries', 'packet=pts_time', '-of', 'csv=p=0',
+                          video], capture_output=True, text=True).stdout
+    t = np.sort(np.array([float(x) for x in out.split() if x not in ('', 'N/A')]))
+    # Non-decreasing, not strictly: a recorder glitch repeats a stamp (gate.mkv
+    # has 155.07 s four times), which is a zero interval, not a bad file.
+    return t if len(t) > 1 and np.all(np.diff(t) >= 0) else None
+
+
 def cache_detections(a):
     """Run the detector ONCE over the clip; store every box for one class."""
     import cv2
@@ -51,6 +71,9 @@ def cache_detections(a):
         cap.set(cv2.CAP_PROP_POS_FRAMES, a.start_frame)
 
     rows = []          # frame_idx, x1, y1, x2, y2, score
+    # Each frame's own timestamp. A variable-frame-rate recording (every
+    # Cockpit clip) reports its 1000 Hz timebase as CAP_PROP_FPS, and dividing
+    # by it put every gap and coast window on a timescale 31x wrong.
     idx = a.start_frame
     kept = 0
     t0 = time.monotonic()
@@ -69,13 +92,21 @@ def cache_detections(a):
         if kept % 1000 == 0:
             print(f'    ... {kept} frames', flush=True)
     cap.release()
-    np.savez(a.cache, rows=np.array(rows, dtype=np.float64),
+    t = None if a.fps else packet_times(a.video)
+    if t is not None and len(t) >= a.start_frame + kept:
+        t = t[a.start_frame:a.start_frame + kept]
+    else:
+        if not a.fps:
+            print(f'  WARNING: no usable packet times; using {fps:.1f} fps '
+                  f'(pass --fps if the container lies)')
+        t = np.arange(kept) / fps
+    np.savez(a.cache, rows=np.array(rows, dtype=np.float64), t=t - t[0] if len(t) else t,
              meta=np.array([fps, w, h, a.start_frame, kept, a.conf]))
     print(f'  cached {len(rows)} boxes over {kept} frames in '
           f'{time.monotonic() - t0:.0f}s -> {a.cache}')
 
 
-def _obs_from(frames, w, h, fps, start, n):
+def _obs_from(frames, w, h, fps, start, n, ts=None):
     """Detector-only observations: largest box per frame, as `bbox_error` picks."""
     out = []
     for i in range(start, start + n):
@@ -84,14 +115,14 @@ def _obs_from(frames, w, h, fps, start, n):
             area = (x2 - x1) * (y2 - y1)
             if best is None or area > best[0]:
                 best = (area, (x1 + x2) / 2 / w, (y1 + y2) / 2 / h, sc)
-        out.append(Obs(t=i / fps, seen=best is not None,
+        out.append(Obs(t=(ts[i - start] if ts is not None else i / fps), seen=best is not None,
                        score=best[3] if best else 0.0,
                        cx=best[1] if best else float('nan'),
                        cy=best[2] if best else float('nan')))
     return out
 
 
-def _track(frames, w, h, fps, start, n, make_tracker, needs_frame=False):
+def _track(frames, w, h, fps, start, n, make_tracker, needs_frame=False, ts=None):
     """Feed the cached detections through a tracker; a coasted box counts as
     SEEN, which is the whole point -- that is what the control loop steers on
     when `coast_s > 0`."""
@@ -108,7 +139,7 @@ def _track(frames, w, h, fps, start, n, make_tracker, needs_frame=False):
             xyxy = np.empty((0, 4)); conf = np.empty(0); cid = np.empty(0, int)
         dets = sv.Detections(xyxy=xyxy, confidence=conf, class_id=cid)
         if hasattr(tr, 't') or type(tr).__name__ == '_Shim':
-            type(tr).t = i / fps
+            type(tr).t = (ts[i - start] if ts is not None else i / fps)
         try:
             res = tr.update(dets)
         except TypeError:
@@ -134,7 +165,7 @@ def _track(frames, w, h, fps, start, n, make_tracker, needs_frame=False):
                     sc = (float(res.confidence[j])
                           if res.confidence is not None else 0.0)
                     best = (area, (x1 + x2) / 2 / w, (y1 + y2) / 2 / h, sc, tid)
-        out.append(Obs(t=i / fps, seen=best is not None,
+        out.append(Obs(t=(ts[i - start] if ts is not None else i / fps), seen=best is not None,
                        score=best[3] if best else 0.0,
                        cx=best[1] if best else float('nan'),
                        cy=best[2] if best else float('nan'),
@@ -145,6 +176,7 @@ def _track(frames, w, h, fps, start, n, make_tracker, needs_frame=False):
 def compare(a):
     z = np.load(a.cache)
     rows, meta = z['rows'], z['meta']
+    ts = z['t'] if 't' in z.files else None
     fps, w, h, start, n, conf = (meta[0], int(meta[1]), int(meta[2]),
                                  int(meta[3]), int(meta[4]), meta[5])
     frames = {}
@@ -153,7 +185,11 @@ def compare(a):
     print(f'\n  {n} frames @ {fps:.0f} fps, {len(rows)} boxes cached at '
           f'conf={conf:.2f}\n')
 
-    hz = float(fps)
+    # The rate the trackers are told is the clip's MEASURED rate, from the
+    # frame times, never the container's nominal one (1000 on Cockpit clips).
+    hz = (float(1.0 / np.median(np.diff(ts))) if ts is not None and len(ts) > 1
+          else float(fps))
+    print(f'  measured rate {hz:.1f} Hz')
     # OUR WRAPPER, not the raw library. `RoboflowTracker.update()` adds the
     # COASTED rows out of `tracked_objects` on top of whatever the library
     # returns -- which is the entire coast layer. Comparing the bare library
@@ -165,7 +201,7 @@ def compare(a):
     def _wrapped(ttype, min_hits=3):
         def make():
             tr = RoboflowTracker(tracker_type=ttype, track_buffer=150,
-                                 frame_rate=hz, min_hits=min_hits,
+                                 min_hits=min_hits,
                                  iou_threshold=0.2,
                                  track_activation_threshold=0.40)
 
@@ -197,8 +233,8 @@ def compare(a):
     ]
     reports = []
     for name, mk in arms:
-        obs = (_obs_from(frames, w, h, fps, start, n) if mk is None
-               else _track(frames, w, h, fps, start, n, mk))
+        obs = (_obs_from(frames, w, h, fps, start, n, ts=ts) if mk is None
+               else _track(frames, w, h, fps, start, n, mk, ts=ts))
         r = analyse(obs, name)
         reports.append(r)
         print(r.text())

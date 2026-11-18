@@ -63,7 +63,7 @@ nothing before.
 ## 2. Three defects in the code whose job is to survive a gap
 
 **A real detection could not revive an expired Kalman filter.**
-`is_expired()` reads `predict_streak`; `predict_streak` resets **only** inside
+`is_expired()` reads `predict_s`; `predict_s` resets **only** inside
 `smooth()`; the old `continue` skipped `smooth()`. `prune()` only drops filters
 whose id is *absent*. So once a filter expired while the backend still held the
 id, a returning target was suppressed **for ever** — it could never reach the
