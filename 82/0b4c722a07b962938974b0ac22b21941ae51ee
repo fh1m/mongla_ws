@@ -1,0 +1,182 @@
+src/mongla_manager/launch/bringup.launch.py
+  s_d9cd6692c91d8a::t_ff2db53e84081b 82
+.claude/context/packages/mongla_vision/README.md
+  s_d9cd6692c91d8a::t_6a6badc929800b 118-121,135-136
+  s_d9cd6692c91d8a::t_3f2b9cd4fe8b77 158
+tools/pool/pool_record.sh
+  s_d9cd6692c91d8a::t_ac83fb5f537dba 30-31
+tools/site/render_real_stills.py
+  s_d9cd6692c91d8a::t_75e0314fa56a47 87,117,160
+src/mongla_vision/test/test_no_function_is_built_and_uncalled.py
+  s_d9cd6692c91d8a::t_69c249785a19c2 159,171-172,177
+.claude/context/measured-bars.md
+  s_d9cd6692c91d8a::t_d32700523b86fa 2221-2244
+  s_d9cd6692c91d8a::t_97d29bdaf6e466 5603-5608
+  s_d9cd6692c91d8a::t_f3365b7f027823 5609
+src/mongla_vision/test/test_flow_distance_heading.py
+  s_d9cd6692c91d8a::t_9192b4a3fdb1f9 1-55
+src/mongla_vision/mongla_vision/flow/flow_setup.py
+  s_d9cd6692c91d8a::t_16918a10829786 379-388
+src/mongla_localization/mongla_localization/pnp_node.py
+  s_d9cd6692c91d8a::t_e80002fd1b9125 197-201,214-219
+src/mongla_vision/mongla_vision/detection/detector.py
+  s_d9cd6692c91d8a::t_f60572523fc94c 88-89
+  s_d9cd6692c91d8a::t_1420af1c0aeb97 22
+src/mongla_vision/test/test_lock_visibility_bearing.py
+  s_d9cd6692c91d8a::t_44864a55a0f5f5 1-48
+src/mongla_vision/test/test_device_holders_die_with_their_parent.py
+  s_d9cd6692c91d8a::t_10fd68443c92e6 72
+src/mongla_vision/test/test_anchor_box_is_in_camera_pixels.py
+  s_d9cd6692c91d8a::t_4442d0fd7da5db 1-62,64-69
+  s_d9cd6692c91d8a::t_e58a7486a03781 63
+src/mongla_vision/mongla_vision/identity.py
+  s_d9cd6692c91d8a::t_0967832b4e96cb 4-5,15-18
+src/mongla_vision/mongla_vision/detector_publish.py
+  s_d9cd6692c91d8a::t_d947f9cb298d30 65
+.claude/context/packages/mongla_batighor/README.md
+  s_d9cd6692c91d8a::t_cbae2919b9771b 166
+src/mongla_vision/test/test_loop_closure_is_actually_wired.py
+  s_d9cd6692c91d8a::t_ea080251a38510 176-184
+  s_d9cd6692c91d8a::t_6fc5b29ca2789a 100-104,136-139,143-144
+src/mongla_vision/test/test_image_msg.py
+  s_d9cd6692c91d8a::t_912843b8a03df7 29,99,118,121
+.claude/context/platform/foxglove-and-bags.md
+  s_d9cd6692c91d8a::t_cbae2919b9771b 177
+src/mongla_vision/test/test_track_size_smoothing.py
+  s_d9cd6692c91d8a::t_9d1209b4b524b4 1-48
+src/mongla_vision/mongla_vision/detector_node.py
+  s_d9cd6692c91d8a::t_d947f9cb298d30 560
+src/mongla_vision/mongla_vision/flow/flow_frame.py
+  s_d9cd6692c91d8a::t_16918a10829786 419-421
+src/mongla_manager/mongla_manager/vision_choice.py
+  s_d9cd6692c91d8a::t_ae92407285185f 88,140,143,231,333
+src/mongla_vision/mongla_vision/image_msg.py
+  s_d9cd6692c91d8a::t_918c8840e4dfcf 56-57,65
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  s_d9cd6692c91d8a::t_444779362ece52 343-349
+.claude/context/platform/first-pool-verification.md
+  s_d9cd6692c91d8a::t_f0ac2d340b3356 127
+  s_d9cd6692c91d8a::t_742aae2e8c26d7 123-126
+  s_d9cd6692c91d8a::t_9785f40026907d 119-121
+  s_d9cd6692c91d8a::t_b3b75bedaea5d4 122
+src/mongla_vision/mongla_vision/anchor/xfeat_onnx.py
+  s_d9cd6692c91d8a::t_4289871aff3c05 143-147
+src/mongla_vision/mongla_vision/draw_strip.py
+  s_d9cd6692c91d8a::t_1476f7f6314a09 345-350,355,358
+  s_d9cd6692c91d8a::t_d8d3dfb313f759 111,313,369-371
+  s_d9cd6692c91d8a::t_33a0cc8d6c3d34 359
+src/mongla_manager/test/test_mission_keepalive.py
+  s_d9cd6692c91d8a::t_444779362ece52 425-427
+src/mongla_vision/mongla_vision/preflight.py
+  s_d9cd6692c91d8a::t_0b5726a616428a 84-85
+.claude/context/perception/vision-what-to-do-next.md
+  s_d9cd6692c91d8a::t_cbae2919b9771b 257-260
+.claude/context/packages/mongla_vision/audit.md
+  s_d9cd6692c91d8a::t_0516c9c5b577e9 1-6,8-52,56-71,76-94,96-135,137-138,140-145,147-174,176-187,189-190,192,194,196-218
+  s_d9cd6692c91d8a::t_2a4bbbeb33f0b0 55
+  s_d9cd6692c91d8a::t_125ab7892abcf1 53-54
+  s_d9cd6692c91d8a::t_1b40c4266fba42 72-75,175
+  s_d9cd6692c91d8a::t_5ec7cf7dc00c4e 7
+  s_d9cd6692c91d8a::t_6a6badc929800b 95
+  s_d9cd6692c91d8a::t_e7bee9662e681a 136,139,146,188,191,193,195
+src/mongla_vision/mongla_vision/lock_wiring.py
+  s_d9cd6692c91d8a::t_ff2db53e84081b 144
+  s_d9cd6692c91d8a::t_bd837a77dcca3f 154-157,220-224,226-228
+src/mongla_vision/launch/vision_pi.launch.py
+  s_d9cd6692c91d8a::t_ff2db53e84081b 442-445,447-450,455
+.claude/context/README.md
+  s_d9cd6692c91d8a::t_2f8f1c8440eca4 54-59,63-69,73-82,86-88,92-95,99-105,109-112,116-118
+src/mongla_vision/mongla_vision/tracking/lock_state.py
+  s_d9cd6692c91d8a::t_1a370979bebc28 197
+src/mongla_manager/mongla_manager/bringup_host.py
+  s_d9cd6692c91d8a::t_444779362ece52 345-356
+src/mongla_vision/mongla_vision/utils/switch_camera.py
+  s_d9cd6692c91d8a::t_65424ae4ad8837 6-11
+src/mongla_vision/mongla_vision/lock_publish.py
+  s_d9cd6692c91d8a::t_5ed22db6916ef0 192,216-220,222
+.claude/context/reference/commands.md
+  s_d9cd6692c91d8a::t_3f2b9cd4fe8b77 531-534
+src/mongla_vision/test/test_anchor_pose.py
+  s_d9cd6692c91d8a::t_9f37202904ece1 161-170
+src/mongla_manager/mongla_manager/vision_state.py
+  s_d9cd6692c91d8a::t_b4be4ae523eaa6 447-452,454
+  s_d9cd6692c91d8a::t_ae92407285185f 145
+src/mongla_vision/mongla_vision/lock_inputs.py
+  s_d9cd6692c91d8a::t_b1117dda55728f 168-171
+  s_d9cd6692c91d8a::t_4fbc460caa368d 15-17
+  s_d9cd6692c91d8a::t_6646a7458a5e90 115
+  s_d9cd6692c91d8a::t_1ed615f5f3abdf 128-133,136-138
+  s_d9cd6692c91d8a::t_bd837a77dcca3f 140
+  s_d9cd6692c91d8a::t_d3804c674633d7 179
+src/mongla_vision/mongla_vision/__init__.py
+  s_d9cd6692c91d8a::t_10fd68443c92e6 9,11-12
+.claude/agents/vision-model-reviewer.md
+  s_d9cd6692c91d8a::t_cbae2919b9771b 33
+src/mongla_vision/mongla_vision/draw_video.py
+  s_d9cd6692c91d8a::t_60d9a5e54883ab 150,218
+src/mongla_vision/mongla_vision/tracking/visibility.py
+  s_d9cd6692c91d8a::t_0b5726a616428a 4
+src/mongla_vision/mongla_vision/underwater.py
+  s_d9cd6692c91d8a::t_0b5726a616428a 3-5
+src/mongla_vision/test/test_loop_closure_refuses.py
+  s_d9cd6692c91d8a::t_ea080251a38510 242-260,265-267,269-279,281-308
+  s_d9cd6692c91d8a::t_73943d48d3be99 261-264,268,280
+src/mongla_vision/mongla_vision/anchor/loop_closure.py
+  s_d9cd6692c91d8a::t_9611ea931f4cc5 161-162,165-167
+  s_d9cd6692c91d8a::t_4d162bda55b4ef 86-87,90-96,99-102,109-139
+src/mongla_manager/test/test_vision_state.py
+  s_d9cd6692c91d8a::t_1495c116ea08ac 331-336,339-343,349-351
+.claude/context/BUGS.md
+  s_d9cd6692c91d8a::t_9b6feeb145981b 532-555
+  s_d9cd6692c91d8a::t_4289871aff3c05 510-531
+tools/bench/dataset_survey.py
+  s_d9cd6692c91d8a::t_912843b8a03df7 6-7,14-16,32,84-85,87-88
+src/mongla_vision/mongla_vision/cameras/camera.py
+  s_d9cd6692c91d8a::t_262d094844c3b2 18-20,25
+src/mongla_vision/mongla_vision/tracker_node.py
+  s_d9cd6692c91d8a::t_4d0f3d4f53eb24 12,38,164-195,294,355-357
+  s_d9cd6692c91d8a::t_85a6d20c7b1b04 146-151
+src/mongla_vision/mongla_vision/factory.py
+  s_d9cd6692c91d8a::t_10fd68443c92e6 3
+src/mongla_vision/mongla_vision/lock_setup.py
+  s_d9cd6692c91d8a::t_bd837a77dcca3f 72-74,77,200,236
+  s_d9cd6692c91d8a::t_413f92c6d88b65 190-198
+src/mongla_vision/mongla_vision/anchor/pose.py
+  s_d9cd6692c91d8a::t_9f37202904ece1 200-214,254
+src/mongla_vision/mongla_vision/tracking/confidence.py
+  s_d9cd6692c91d8a::t_74349716bbfd8c 89-91
+src/mongla_localization/test/test_pose_cluster.py
+  s_d9cd6692c91d8a::t_9f37202904ece1 210-225
+src/mongla_vision/mongla_vision/tracking/follower.py
+  s_d9cd6692c91d8a::t_780feb5032c70b 181
+.claude/context/sota/sources/vision-features-and-matching.md
+  s_d9cd6692c91d8a::t_cbae2919b9771b 287-289,897
+src/mongla_vision/mongla_vision/draw.py
+  s_d9cd6692c91d8a::t_10fd68443c92e6 1,3-6,8-9,32-33
+src/mongla_vision/mongla_vision/config.py
+  s_d9cd6692c91d8a::t_e49dca17cb2659 4
+  s_d9cd6692c91d8a::t_9dbbbacdc68bdc 54-55,57-59
+src/mongla_vision/mongla_vision/cameras/discover.py
+  s_d9cd6692c91d8a::t_10fd68443c92e6 4
+src/mongla_vision/mongla_vision/lock_anchor.py
+  s_d9cd6692c91d8a::t_e7e6d6bae72a47 202-209,211-214
+  s_d9cd6692c91d8a::t_4289871aff3c05 15-16
+src/mongla_vision/mongla_vision/detection/messages.py
+  s_d9cd6692c91d8a::t_4fe1af921f9b6b 175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "820b4c722a07b962938974b0ac22b21941ae51ee",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
