@@ -1,0 +1,21 @@
+src/mongla_vision/mongla_vision/tracker_node.py
+  s_b4c45e3235679b::t_6ab09b2087012d 109-124,328,419
+src/mongla_vision/test/test_tracker_runs_on_capture_time.py
+  s_b4c45e3235679b::t_8e4b2aa9dd7040 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "03629dc44b569eb83508c270c4ef2daa25f2ff95",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
