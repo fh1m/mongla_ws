@@ -257,7 +257,7 @@ def test_eviction_drops_the_least_useful_reference_not_the_oldest():
         b.locate(view(1, 400))                       # exercises the yields
     b.enrol(view(1, 400, drop=200), roi=None, det_conf=0.9, force=True)
     assert b.size == 2
-    assert b.yields[0] == max(b.yields), 'the useful reference was evicted'
+    assert b._yields[0] == max(b._yields), 'the useful reference was evicted'
 
 
 # --------------------------------------------------------------------------- #

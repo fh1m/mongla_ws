@@ -435,10 +435,6 @@ class TimeOffset:
         return self._td
 
     @property
-    def td(self) -> float:
-        return self._td
-
-    @property
     def quality(self) -> float:
         return self._quality
 
