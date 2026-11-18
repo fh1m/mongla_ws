@@ -204,8 +204,8 @@ systemctl is-active networkd-dispatcher >/dev/null 2>&1 && ok "networkd-dispatch
   || warn "networkd-dispatcher not running -- a new DHCP address gets no reply route"
 [ "$(hostname)" = kutum ] && ok "hostname kutum" \
   || fail "hostname is $(hostname), not kutum -- the laptop looks for kutum.local (kutum/setup.sh --system)"
-[ -f /etc/cloud/cloud.cfg.d/99-kutum-hostname.cfg ] && ok "cloud-init keeps the hostname" \
-  || warn "cloud-init may put the imaged hostname back at the next boot (kutum/setup.sh --system)"
+# Without it cloud-init may put the imaged hostname back at the next boot.
+same "$KUTUM/system/cloud/99-kutum-hostname.cfg" /etc/cloud/cloud.cfg.d/99-kutum-hostname.cfg "cloud-init keeps the hostname"
 # avahi reads the hostname when it starts: renamed under a running avahi, the
 # Pi itself resolves the new name while the network is still told the old one
 # (2026-11-18). Its own startup line says which name it publishes.
