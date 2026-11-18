@@ -225,12 +225,11 @@ def test_no_shared_argument_is_left_to_be_inherited(src, target, keys):
     keep it out.
 
     MEASURED on the vehicle: bringup's boolean `vision:=true` reached
-    vision_pi's `vision`, which is a profile STRING, and detector_dual_node
-    died with `InvalidParameterTypeException ... 'True' of type 'BOOL',
-    expecting type 'STRING': vision_profile`.
+    vision_pi's `vision`, then a profile STRING, and detector_dual_node
+    died with `InvalidParameterTypeException`.
 
     The remedy is to pass it -- a passed value beats an inherited one -- under
-    a distinct parent name when the meanings differ (`vision_profile` here).
+    a distinct parent name when the meanings differ.
     This guard deliberately does NOT ask for `GroupAction(forwarding=False)`:
     that does stop the inheritance, and it also hides the values the include's
     own condition and passthrough dict need, so nothing launches at all. Also

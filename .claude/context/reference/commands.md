@@ -105,7 +105,6 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `allow_fw_behaviour_mismatch` | `false` | Arm against firmware older than FW_BEHAVIOUR_REV_REQUIRED. Accepts an un-braked stop -- leave false |
 | `vision` | `true` | The vision stack: both cameras, detectors, lock ladder, flow. vision:=false for a board-only bench session. |
 | `vision_stack` | `pi` | pi = both cameras + calibration (vision_pi.launch.py, the vehicle); generic = single camera, no calibration (vision.launch.py, dev box). |
-| `vision_profile` | `fast` | vision_stack:=pi -- vision_pi's own profile argument (its `vision:=`). Renamed here because `vision` is this file's boolean on/off switch. |
 | `fwd_model` | `gate_sharks` | vision_stack:=pi -- forward-camera model stem. |
 | `dwn_model` | `bin_fire_blood` | vision_stack:=pi -- downward-camera model stem. |
 | `fwd_classes` | `` | vision_stack:=pi -- forward class allowlist (empty = the model sidecar's full set). |
@@ -150,9 +149,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `dwn_active` | `` | (passed to vision_pi.launch.py, which sets the default) |
 | `contours` | `true` | (passed to vision_pi.launch.py, which sets the default) |
 | `assoc_conf` | `0.10` | (passed to vision_pi.launch.py, which sets the default) |
-| `preprocess` | `auto` | (passed to vision_pi.launch.py, which sets the default) |
-| `range_crop` | `-1` | (passed to vision_pi.launch.py, which sets the default) |
-| `preprocess_clip` | `0.0` | (passed to vision_pi.launch.py, which sets the default) |
+| `range_crop` | `false` | (passed to vision_pi.launch.py, which sets the default) |
 | `tracking` | `true` | (passed to vision_pi.launch.py, which sets the default) |
 | `tracker_type` | `ocsort` | (passed to vision_pi.launch.py, which sets the default) |
 | `kalman_adaptive_noise` | `true` | (passed to vision_pi.launch.py, which sets the default) |
@@ -280,10 +277,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `conf` | `0.45` | The acting bar: gate_sharks' measured bar. Another model's bar is in its <stem>.yaml; see the module docstring. |
 | `assoc_conf` | `0.10` |  |
 | `max_det` | `100` |  |
-| `vision` | `fast` |  |
-| `preprocess` | `auto` |  |
-| `range_crop` | `-1` |  |
-| `preprocess_clip` | `0.0` |  |
+| `range_crop` | `false` |  |
 | `imgsz` | `640` |  |
 | `paused` | `true` | Start both detectors paused. The mission resumes the one it needs; leaving BOTH live makes them compete for the chip (~35 Hz each instead of ~98). paused:=false to watch both streams with no mission. |
 | `viewer` | `false` |  |
@@ -468,7 +462,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `lock` | `False` |
 | `flow` | `False` |
 
-**`mongla_vision/detector_node.py`** — 27 parameters
+**`mongla_vision/detector_node.py`** — 24 parameters
 
 | parameter | default |
 |---|---|
@@ -495,10 +489,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `alignment_deadband` | `0.05` |
 | `paused` | `False` |
 | `direct_feed` | `True` |
-| `preprocess` | `'auto'` |
-| `preprocess_clip` | `0.0` |
-| `range_crop` | `-1` |
-| `vision_profile` | `''` |
+| `range_crop` | `False` |
 
 **`mongla_vision/flow/flow_node.py`** — 41 parameters
 

@@ -247,7 +247,8 @@ camera: **63.8°** air, so **46.7°** water -- computed, not yet checked in wate
 **71 real detection gaps**.
 
 **Warning: Image preprocessing stays off.** Measured in 17 configurations across four props and three
-venues: never positive; on the gate it destroyed 95 % of detections. A test keeps it off.
+venues: never positive; on the gate it destroyed 95 % of detections. The preprocessor is
+deleted; `tools/studies/recall_matrix.py --clahe` re-runs the measurement.
 
 **Warning: A model's `<stem>.yaml` sidecar must ship beside the artifact.** Missing sidecar → empty
 allowlist → a silent `[]` every frame, with the pipeline looking healthy.

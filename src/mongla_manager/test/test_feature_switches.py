@@ -81,7 +81,7 @@ def test_the_switch_reaches_its_node(arg):
 # Launch arguments that are not capability switches: what to load, where it
 # is, how it looks. Everything else on bringup is a switch and needs a reason.
 _NOT_SWITCHES = {
-    'mav_device', 'payload_channels', 'vision_profile', 'fwd_model', 'dwn_model',
+    'mav_device', 'payload_channels', 'fwd_model', 'dwn_model',
     'fwd_classes', 'dwn_classes', 'lock_class', 'camera', 'camera_profile',
     'model', 'models', 'active_model', 'classes', 'conf', 'imgsz', 'max_det',
     'batighor_port', 'foxglove_port',

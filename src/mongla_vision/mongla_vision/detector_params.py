@@ -1,7 +1,6 @@
 """How the detector's parameters are read.
 
-Model specs (`active_model`, `models`), per-model confidence, and the "unset"
-sentinels that let a launch profile fill in what the operator left alone.
+Model specs (`active_model`, `models`) and per-model confidence.
 Pure functions: no ROS, so each is tested without a node.
 """
 import os
@@ -60,31 +59,6 @@ def _parse_model_conf(s: str) -> Dict[str, float]:
         except ValueError:
             continue
     return result
-
-
-# "not set by the operator". A launch file passes every parameter, so the
-# only way to tell a deliberate choice from a filled-in default is a value
-# that means nothing on its own. Each is outside the setting's real range.
-_UNSET = {
-    # `conf` is DELIBERATELY ABSENT. It also feeds the tracker's confidence
-    # clamp through the launch (`detector_conf`), and a sentinel there would
-    # silently disable the clamp -- which measured as the tracker emitting
-    # NOTHING on real water. A profile therefore cannot lower `conf` below an
-    # explicit launch value; set both, or set neither.
-    'preprocess': 'auto',     # 'off'/'clahe' are the real values
-    'preprocess_clip': 0.0,   # a real clip limit is > 0
-    'range_crop': -1,         # an int, because a bool cannot carry a third state
-}
-
-
-def _is_unset(name, value) -> bool:
-    """True when `value` is the documented sentinel for `name`."""
-    s = _UNSET.get(name)
-    if s is None:
-        return False
-    if isinstance(s, str):
-        return str(value).strip().lower() == s
-    return value == s
 
 
 def _parse_models_param(s: str) -> Dict[str, str]:

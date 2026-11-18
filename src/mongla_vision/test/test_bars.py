@@ -55,20 +55,9 @@ MV = 'mongla_control/mongla_control/motion_vision/freshness.py'
 # --------------------------------------------------------------------------- #
 #  1. The conf floor  (measured-bars.md section 1)
 # --------------------------------------------------------------------------- #
-def test_every_profile_conf_is_inside_the_measured_range():
-    """0.15 -> 0.10 was measured on 7 labelled held-out pairs: it buys
-    +0.0..+3.0 points of recall and costs 0.0..-8.3 of precision, and every F1
-    knee sits at 0.25-0.50 except the cross-venue gate at 0.05.
-
-    So the shipped floor belongs BELOW the knee (a miss stalls the control
-    loop; a false positive is partly filtered by lock_on / ctrl_conf / the
-    distinct-frame gate) but not below what was measured at all."""
-    from mongla_vision.detection.profiles import PROFILES
-    for name, (settings, _why) in PROFILES.items():
-        c = settings['conf']
-        assert 0.08 <= c <= 0.15, (
-            f'profile {name!r} conf {c} is outside the measured range '
-            f'0.08..0.15 -- see measured-bars.md section 1')
+# The profiles this section guarded are gone: the acting bar is the model's
+# own measured `conf` (0.45 for gate_sharks, measured-bars 59), passed by
+# the launch, and no profile lowers it.
 
 
 # --------------------------------------------------------------------------- #
