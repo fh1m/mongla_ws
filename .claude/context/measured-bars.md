@@ -153,6 +153,7 @@ is how `recommend()` happened.
 - [87. THE WHOLE VISION GRAPH AT ONCE — both detectors, the lock ladder and flow live in one process: forward at the camera's rate, downward 32 Hz, 2.7 GB free (2026-11-18)](#87-the-whole-vision-graph-at-once--both-detectors-the-lock-ladder-and-flow-live-in-one-process-forward-at-the-cameras-rate-downward-32-hz-27-gb-free-2026-11-18)
 - [88. TRACKERS AGAINST TRUTH — the shipped OC-SORT more than doubles recall at the vehicle's bars, ByteTrack and track-before-detect are rejected, and the gate model loses 70 % of its recall in another pool (2026-11-18)](#88-trackers-against-truth--the-shipped-oc-sort-more-than-doubles-recall-at-the-vehicles-bars-bytetrack-and-track-before-detect-are-rejected-and-the-gate-model-loses-70--of-its-recall-in-another-pool-2026-11-18)
 - [89. FLOW IN THE CAMERA'S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18)](#89-flow-in-the-cameras-process--the-downward-detector-gains-37--flow-keeps-110-frames-a-second-total-cpu-unchanged-2026-11-18)
+- [90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18)](#90-retrodiction-on-the-pi--4-to-6--of-a-core-while-moving-so-it-stays-off-until-its-benefit-is-measured-2026-11-18)
 <!-- contents:end -->
 
 ---
@@ -8198,4 +8199,33 @@ only 40.1 Hz of downward detection.
 **Decision.** Shipped composed. **Reversal:** on the vehicle with the board, a
 mission graph in which composed flow processes under 50 frames a second (the
 rate that follows 0.5 m/s at 0.3 m), or a detector falls under 25 Hz.
+
+## 90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18)
+
+`retrodict:=true` applies each flow sample at its own stamp and replays the
+events after it. It was off only because its cost on the Pi had never been
+measured. `tools/bench/retro_cost.py` drives the shipped `LocalizationNode`
+through its own callbacks: the board's IMU at 50 Hz and flow while moving, one
+interval per ~8 px of floor (~46 a second at 0.5 m/s, 1 m over the floor),
+each arriving late by a set amount.
+
+**Bar, written before the run:** on Kutum, on at 46 Hz of flow 60 ms late
+costs under 5 % of one core and keeps the callback p99 under 5 ms; either
+failing keeps it off.
+
+| Kutum, 60 s | off | on | added | p99 on |
+|---|---|---|---|---|
+| flow 46 Hz, 60 ms late | 2.35 % | 8.43 % | 6.1 % | 1.45 ms |
+| flow 46 Hz, 25 ms late | 2.40 % | 6.31 % | 3.9 % | 1.19 ms |
+| flow 20 Hz, 30 ms late | 1.88 % | 3.37 % | 1.5 % | 0.88 ms |
+
+The p99 is far inside the 20 ms IMU period, so a replay never holds the
+filter up. The CPU bar fails while moving. The bench cannot tell what the
+replay buys in position: that needs a run with moving truth, where a
+measurement applied on arrival and one applied at its stamp can be scored
+against where the vehicle really was.
+
+**Decision.** Stays off. **Reversal:** that moving-truth run shows on-arrival
+flow costs position the vehicle needs, at which point 4 to 6 % of a core is
+cheap.
 

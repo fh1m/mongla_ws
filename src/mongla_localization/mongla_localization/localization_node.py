@@ -147,8 +147,8 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
             tau_s=float(self.declare_parameter('demand_tau_s', 1.0).value))
         self._model_aid = bool(self.declare_parameter('demand_aid', True).value)
         # Apply every measurement at the instant it describes (retro.py). OFF by
-        # default until its Pi cost is measured: flow ~0.8 ms per sample 60 ms
-        # late and a fix ~19 ms per second late, on the dev box.
+        # default: on Kutum it costs 3.9-6.1 % more of a core while moving
+        # (measured-bars 90), and what it buys in position is not measured yet.
         self._retro = None
         if bool(self.declare_parameter('retrodict', False).value):
             self._retro = Retrodictor(
