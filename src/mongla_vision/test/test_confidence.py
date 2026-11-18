@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_vision.tracking.confidence import (          # noqa: E402
-    ConfidenceModel, ConfidenceTrend, NSA_MIN_FACTOR, NSA_MAX_FACTOR)
+    ConfidenceModel, NSA_MIN_FACTOR, NSA_MAX_FACTOR)
 from mongla_vision.tracking.kalman import TrackKalmanSmoother   # noqa: E402
 
 
@@ -151,38 +151,3 @@ def test_adaptive_off_is_byte_for_byte_the_old_behaviour():
         p1 = a.smooth(1, 0.5 + i * 0.001, 0.5, i * 0.033, False)
         p2 = b.smooth(1, 0.5 + i * 0.001, 0.5, i * 0.033, False, conf=0.9)
         assert p1 == p2
-
-
-# --------------------------------------------------------------------------- #
-#  The early warning
-# --------------------------------------------------------------------------- #
-def test_a_sustained_confidence_drop_is_reported():
-    """Measured on the `bin` clip: confidence fell 0.891 -> 0.357 BEFORE the
-    box began to wander. The loop reads only an absolute floor, so today it
-    learns about the degradation from the error signal -- after the fact."""
-    t = ConfidenceTrend()
-    for _ in range(60):
-        t.observe(0.89)
-    assert not t.degrading()
-    for _ in range(12):
-        t.observe(0.36)
-    assert t.degrading()
-
-
-def test_one_bad_frame_is_NOT_a_trend():
-    """A single dropout is what the freshness and coast machinery already
-    handles. Firing here too would make the warning meaningless."""
-    t = ConfidenceTrend()
-    for _ in range(60):
-        t.observe(0.89)
-    t.observe(0.05)
-    assert not t.degrading()
-
-
-def test_the_trend_says_nothing_until_it_has_seen_enough():
-    t = ConfidenceTrend()
-    for _ in range(5):
-        t.observe(0.9)
-    r = t.ratio()
-    assert r != r          # NaN
-    assert not t.degrading()

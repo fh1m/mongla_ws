@@ -10,7 +10,9 @@ Ours are plain JavaScript with no build step; `foxe` zips one directory of
 `panels/` and puts the verb table above the code, read from
 `mongla_control/commands.py` and the Move action, and the tunable settings
 and cameras from `seat.py`, so a change there reaches the browser with no
-edit here.
+edit here; then `panels/common.js`, the helpers every panel shares. The look
+is not in a panel: it is `theme/batighor.css`, linked into Kutum's app page,
+and carried as THEME_CSS for a page that does not link it (the desktop app).
 
 Lichtblick keeps an extension in the browser and downloads it again only when
 its version changes; the version is the content's hash, so every change is
@@ -27,6 +29,7 @@ from pathlib import Path
 
 WORKSPACE = 'mongla'
 PUBLISHER = 'mongla'
+QUALIFIED = f'{PUBLISHER}.batighor'      # every panel type is `mongla.batighor.<Name>`
 API = '/api'
 
 # The one switch in the release bundle (lichtblick 1.30.0, main.<hash>.js):
@@ -49,11 +52,16 @@ def verbs() -> dict:
 
 def foxe(src: Path, preamble: str = '') -> tuple[dict, bytes]:
     """(the API's description of the extension, the .foxe bytes) for one panel dir."""
-    code = preamble + (src / 'extension.js').read_text()
+    own = (src / 'extension.js').read_text()
+    code = preamble + own
     name = f'batighor-{src.name}'
     digest = int(hashlib.sha256(code.encode()).hexdigest()[:8], 16)
+    # The desktop app names a panel type `<displayName>.<panel>`, the web app
+    # `<qualifiedName>.<panel>` from the API entry: both are QUALIFIED, so one
+    # layout opens in either.
     info = {'name': name, 'publisher': PUBLISHER, 'version': f'1.0.{digest}',
-            'displayName': f'Batighor {src.name}', 'description': (code.splitlines() or [''])[0].lstrip('/ '),
+            'displayName': QUALIFIED,
+            'description': (own.splitlines() or [''])[0].lstrip('/ '),
             'license': 'see the mongla_ws repository', 'main': 'dist/extension.js'}
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
@@ -63,13 +71,23 @@ def foxe(src: Path, preamble: str = '') -> tuple[dict, bytes]:
     entry = {
         'id': ext_id, 'extensionId': ext_id, 'fileId': ext_id, 'scope': 'org',
         # Lichtblick names the panel type `<qualifiedName>.<panel name>`.
-        'qualifiedName': f'{PUBLISHER}.batighor',
+        'qualifiedName': QUALIFIED,
         'createdAt': '1970-01-01T00:00:00Z', 'updatedAt': '1970-01-01T00:00:00Z',
-        **{k: info[k] for k in ('name', 'publisher', 'version', 'displayName',
-                                'description', 'license')},
+        **{k: info[k] for k in ('name', 'publisher', 'version', 'description', 'license')},
+        'displayName': f'Batighor {src.name}',          # the web app's extension list
         'homepage': '', 'keywords': [], 'readme': '', 'changelog': '',
     }
     return entry, buf.getvalue()
+
+
+def theme_css(panels_dir: Path) -> str:
+    """theme/batighor.css, which a panel adds to a page that does not link it.
+
+    Kutum's page links it (serve.py); the desktop app's page is not Kutum's,
+    so the look travels inside each panel. Empty when not installed.
+    """
+    css = panels_dir.parent / 'theme' / 'batighor.css'
+    return css.read_text() if css.is_file() else ''
 
 
 def extensions(panels_dir: Path) -> dict:
@@ -77,7 +95,9 @@ def extensions(panels_dir: Path) -> dict:
     from mongla_batighor.seat import CAMERAS, TUNABLE
     pre = (f'const VERBS = {json.dumps(verbs(), sort_keys=True)};\n'
            f'const TUNABLE = {json.dumps({k: v.__name__ for k, v in TUNABLE.items()})};\n'
-           f'const CAMERAS = {json.dumps(list(CAMERAS))};\n')
+           f'const CAMERAS = {json.dumps(list(CAMERAS))};\n'
+           f'const THEME_CSS = {json.dumps(theme_css(panels_dir))};\n'
+           + (panels_dir / 'common.js').read_text())
     out = {}
     for d in sorted(p for p in panels_dir.iterdir() if (p / 'extension.js').is_file()):
         entry, data = foxe(d, pre)

@@ -88,6 +88,26 @@ VIDIOC_DQBUF = 0xC0585611
 VIDIOC_STREAMON = 0x40045612
 VIDIOC_STREAMOFF = 0x40045613
 VIDIOC_S_PARM = 0xC0CC5616
+VIDIOC_G_CTRL = 0xC008561B
+VIDIOC_S_CTRL = 0xC008561C
+VIDIOC_QUERYCTRL = 0xC0445624
+
+# The controls a profile may set, by the names `v4l2-ctl --list-ctrls` prints.
+# A name not here is a configuration error and refuses at startup: a control
+# that silently did not apply is how the cameras ran in auto exposure with a
+# falling frame rate while a mission line believed it had fixed the exposure.
+CONTROLS = {
+    'auto_exposure':              0x009A0901,   # 1 manual, 3 aperture priority
+    'exposure_time_absolute':     0x009A0902,   # 100 us units
+    'exposure_dynamic_framerate': 0x009A0903,   # 1 lets auto exposure slow the rate
+    'gain':                       0x00980913,
+    'brightness':                 0x00980900,
+    'contrast':                   0x00980901,
+    'gamma':                      0x00980910,
+    'sharpness':                  0x0098091B,
+    'backlight_compensation':     0x0098091C,
+    'power_line_frequency':       0x00980918,
+}
 
 V4L2_BUF_TYPE_VIDEO_CAPTURE = 1
 V4L2_MEMORY_MMAP = 1
@@ -96,11 +116,43 @@ V4L2_BUF_FLAG_TIMESTAMP_MASK = 0x0000E000
 V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC = 0x00002000
 # WHICH INSTANT the stamp marks -- a separate field from which CLOCK it is on,
 # and the one nobody read (issue #34). `uvcvideo`, which serves both vehicle
-# cameras, sets SOE: the stamp is taken when the frame STARTS arriving, so a
-# mid-exposure correction must ADD half the exposure, not subtract it.
+# cameras, sets SOE: start of exposure. Both cameras send the UVC PTS and SCR
+# (the camera's own clock in every payload header, 2026-11-18), from which the
+# driver recovers that instant on CLOCK_MONOTONIC; the Sonix's 120 fps stamps
+# step 8.000 ms +- 3 us. A mid-exposure correction must ADD half the exposure.
 V4L2_BUF_FLAG_TSTAMP_SRC_MASK = 0x00070000
 V4L2_BUF_FLAG_TSTAMP_SRC_EOF = 0x00000000
 V4L2_BUF_FLAG_TSTAMP_SRC_SOE = 0x00010000
+
+
+def parse_controls(text) -> dict:
+    """'name=value, name=value' -> {name: int}; unknown names and non-integers
+    raise, naming the bad entry. A launch argument cannot carry a dict, so the
+    controls a deck sets on the day travel as this string."""
+    out = {}
+    for item in str(text or '').replace(';', ',').split(','):
+        item = item.strip()
+        if not item:
+            continue
+        name, sep, value = item.partition('=')
+        name = name.strip()
+        if not sep or name not in CONTROLS:
+            raise ValueError(f'camera control {item!r}: want name=value, name one of {sorted(CONTROLS)}')
+        try:
+            out[name] = int(value.strip())
+        except ValueError:
+            raise ValueError(f'camera control {item!r}: value is not an integer') from None
+    return out
+
+
+def exposure_controls(exposure_us, auto_mode=None) -> dict:
+    """A shutter in microseconds as the controls that set it: manual mode and
+    the time in V4L2's 100 us units. 0 hands exposure back to the camera, in
+    the auto mode it powered up in (`auto_mode`; nothing when that is unknown)."""
+    us = float(exposure_us or 0)
+    if us > 0:
+        return {'auto_exposure': 1, 'exposure_time_absolute': max(1, round(us / 100.0))}
+    return {} if auto_mode is None else {'auto_exposure': int(auto_mode)}
 
 
 def stamp_source(flags: int) -> str:
@@ -187,6 +239,18 @@ class _Captureparm(ctypes.Structure):
                 ('reserved', ctypes.c_uint32 * 4)]
 
 
+class _Control(ctypes.Structure):
+    _fields_ = [('id', ctypes.c_uint32), ('value', ctypes.c_int32)]
+
+
+class _Queryctrl(ctypes.Structure):
+    _fields_ = [('id', ctypes.c_uint32), ('type', ctypes.c_uint32),
+                ('name', ctypes.c_char * 32), ('minimum', ctypes.c_int32),
+                ('maximum', ctypes.c_int32), ('step', ctypes.c_int32),
+                ('default_value', ctypes.c_int32), ('flags', ctypes.c_uint32),
+                ('reserved', ctypes.c_uint32 * 2)]
+
+
 class _Streamparm(ctypes.Structure):
     class _U(ctypes.Union):
         _fields_ = [('capture', _Captureparm), ('raw', ctypes.c_uint8 * 200)]
@@ -233,16 +297,28 @@ class V4L2MailboxCamera(Camera):
     _NBUF = 16
 
     def __init__(self, device='/dev/video0', width=640, height=360, fps=60,
-                 frame_id='cam', name='cam', logger=None, fourcc='MJPG'):
+                 frame_id='cam', name='cam', logger=None, fourcc='MJPG',
+                 controls=None):
         self.name = str(name)
         self._frame_id = str(frame_id)
         self._log = logger
         self._device = device
         self._requested = (int(width), int(height), int(fps))
+        unknown = sorted(set(controls or {}) - set(CONTROLS))
+        if unknown:
+            raise ValueError(f'v4l2: unknown control(s) {unknown}; known: {sorted(CONTROLS)}')
+        self._controls_asked = dict(controls or {})
+        self.controls = {}
+        # The camera's own auto-exposure mode: the control's DECLARED default.
+        # Not its current value -- the camera keeps what the last process set,
+        # and a run that died in manual left it there (2026-11-18).
+        self.auto_mode = None
 
         self._fd = os.open(str(device), os.O_RDWR)
         try:
             self._negotiate(width, height, fps, fourcc)
+            self.auto_mode = self._default_control('auto_exposure')
+            self.set_controls(self._controls_asked)
             self._map_buffers()
             self._streamon()
         except Exception:
@@ -352,6 +428,51 @@ class V4L2MailboxCamera(Camera):
         den = p.parm.capture.timeperframe_den or int(fps)
         num = p.parm.capture.timeperframe_num or 1
         self._fps = float(den) / float(num)
+
+    def _default_control(self, name):
+        q = _Queryctrl(CONTROLS[name])
+        try:
+            fcntl.ioctl(self._fd, VIDIOC_QUERYCTRL, q)
+        except OSError:
+            return None
+        return int(q.default_value)
+
+    def _get_control(self, name):
+        g = _Control(CONTROLS[name], 0)
+        try:
+            fcntl.ioctl(self._fd, VIDIOC_G_CTRL, g)
+        except OSError:
+            return None
+        return int(g.value)
+
+    def set_controls(self, controls) -> dict:
+        """Set each control and read it back; returns {name: what it reads}.
+
+        Called at open, after the format (UVC cameras reset some controls on
+        a format change), and at any time while streaming. One that does not
+        hold is logged by name with what it reads, and its entry says so; it
+        does not stop the camera, because a vehicle without video is worse
+        than one at the camera's own setting. Exposure time is ignored while
+        auto exposure is on, so the mode goes first."""
+        unknown = sorted(set(controls) - set(CONTROLS))
+        if unknown:
+            raise ValueError(f'v4l2: unknown control(s) {unknown}; known: {sorted(CONTROLS)}')
+        got_all = {}
+        for name in sorted(controls, key=lambda n: n != 'auto_exposure'):
+            want = int(controls[name])
+            try:
+                fcntl.ioctl(self._fd, VIDIOC_S_CTRL, _Control(CONTROLS[name], want))
+            except OSError as exc:
+                if self._log:
+                    self._log.warning(f'[CAM  ] {self._device!r} {name}={want} refused: {exc}')
+            got = self._get_control(name)
+            got_all[name] = got
+            if got != want and self._log:
+                self._log.warning(f'[CAM  ] {self._device!r} {name}: asked {want}, reads {got}')
+        self.controls.update(got_all)
+        if got_all and self._log:
+            self._log.info(f'[CAM  ] {self._device!r} controls {self.controls}')
+        return got_all
 
     def _map_buffers(self):
         r = _Requestbuffers()
@@ -650,6 +771,7 @@ class V4L2MailboxCamera(Camera):
             'store_age_max_ms': 1000.0 * self._store_age_max,
             'stamp_source': self._stamp_source,
             'clock_monotonic': self._clock_monotonic,
+            'controls': dict(getattr(self, 'controls', {})),
         }
 
     def close(self) -> None:

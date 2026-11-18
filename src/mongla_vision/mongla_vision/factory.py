@@ -6,9 +6,25 @@ changes.
 """
 
 
+def _refuse(rest, source):
+    """A key no builder reads is an error, not a no-op. `**_` swallowed
+    `device_path` once (both cameras opened index 0) and would have swallowed
+    `controls`: a setting that is read, logged and ignored is worse than one
+    that is refused. `node` is injected for every source and used by one."""
+    unknown = sorted(k for k in rest if k != 'node')
+    if unknown:
+        raise ValueError(f"camera source {source!r} does not take {unknown}")
+
+
 def _build_webcam(*, device=None, device_path=None, width=640, height=480,
                   fps=30, frame_id='laptop_cam', name='laptop', logger=None,
-                  fourcc='MJPG', **_):
+                  fourcc='MJPG', exposure_us=0, controls=None, **rest):
+    _refuse(rest, 'webcam')
+    if controls and logger:
+        # OpenCV owns this capture and resets controls when it configures the
+        # stream; only `exposure_us` is honoured, by WebcamCamera itself.
+        logger.warning(f'[CAM  ] the OpenCV source cannot apply camera controls '
+                       f'{sorted(controls)}; they are not set')
     # `device_path` was silently ignored. Every profile that names one -- the
     # two Pi cameras and both vehicle cameras -- passed it in as a kwarg, it
     # landed in `**_`, and the builder used `device`, which those profiles do
@@ -22,12 +38,13 @@ def _build_webcam(*, device=None, device_path=None, width=640, height=480,
     from .cameras.webcam import WebcamCamera
     return WebcamCamera(
         device=device, width=width, height=height, fps=fps,
-        frame_id=frame_id, name=name, logger=logger, fourcc=fourcc)
+        frame_id=frame_id, name=name, logger=logger, fourcc=fourcc,
+        exposure_us=exposure_us)
 
 
 def _build_v4l2(*, device=None, device_path=None, width=640, height=360,
                 fps=60, frame_id='cam', name='cam', logger=None,
-                fourcc='MJPG', **_):
+                fourcc='MJPG', exposure_us=0, controls=None, **rest):
     """The low-latency path: a keep-up thread and a one-deep mailbox.
 
     Falls back to `webcam` when the device is not a real V4L2 node -- an int
@@ -35,6 +52,9 @@ def _build_v4l2(*, device=None, device_path=None, width=640, height=360,
     safe to put in a shared profile: a dev box with a different camera stack
     gets OpenCV instead of a stack trace.
     """
+    _refuse(rest, 'v4l2')
+    from .cameras.v4l2_mailbox import exposure_controls
+    asked = {**dict(controls or {}), **exposure_controls(exposure_us)}
     # A profile's `device_path` is the device. See `_build_webcam`.
     if device_path:
         device = device_path
@@ -50,12 +70,14 @@ def _build_v4l2(*, device=None, device_path=None, width=640, height=360,
                 f'by-id symlink) for the mailbox.')
         return _build_webcam(device=device, width=width, height=height,
                              fps=fps, frame_id=frame_id, name=name,
-                             logger=logger, fourcc=fourcc)
+                             logger=logger, fourcc=fourcc,
+                             exposure_us=exposure_us, controls=controls)
     from .cameras.v4l2_mailbox import V4L2MailboxCamera
     try:
         return V4L2MailboxCamera(
             device=dev, width=width, height=height, fps=fps,
-            frame_id=frame_id, name=name, logger=logger, fourcc=fourcc)
+            frame_id=frame_id, name=name, logger=logger, fourcc=fourcc,
+            controls=asked)
     except OSError as exc:
         if logger:
             logger.warning(
@@ -65,12 +87,14 @@ def _build_v4l2(*, device=None, device_path=None, width=640, height=360,
                 f'against 17 ms on the mailbox.')
         return _build_webcam(device=dev, width=width, height=height, fps=fps,
                              frame_id=frame_id, name=name, logger=logger,
-                             fourcc=fourcc)
+                             fourcc=fourcc, exposure_us=exposure_us,
+                             controls=controls)
 
 
 def _build_ros_topic(*, node=None, topic=None, frame_id='ros_cam', name='ros_topic',
                      expected_width=0, expected_height=0, expected_fps=30.0,
-                     logger=None, **_):
+                     logger=None, **rest):
+    _refuse(rest, 'ros_topic')
     if node is None:
         raise ValueError(
             "source='ros_topic' requires node=<rclpy.node.Node>. "
@@ -85,7 +109,8 @@ def _build_ros_topic(*, node=None, topic=None, frame_id='ros_cam', name='ros_top
 
 
 def _build_video_file(*, path='', loop=True, width=0, height=0, fps=0,
-                      frame_id='video_cam', name='video', logger=None, **_):
+                      frame_id='video_cam', name='video', logger=None, **rest):
+    _refuse(rest, 'video_file')
     if not path:
         raise ValueError(
             "source='video_file' requires path=<str>. "

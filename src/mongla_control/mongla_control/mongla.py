@@ -527,7 +527,7 @@ class Mongla(VisionVerbs):
             state = prov() if callable(prov) else prov
             if state is None:
                 return self._make_result(
-                    False, 'calc_distance: no distance node (launch flow:=true)',
+                    False, 'calc_distance: no distance node (flow:=false, or flow_node died)',
                     final_value=0.0)
             if str(phase or 'start').strip().lower() == 'start':
                 ok, msg = state.start(lateral=(self._distance_axis == 'lateral'))

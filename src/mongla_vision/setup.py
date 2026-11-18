@@ -46,7 +46,7 @@ setup(
             # knocked lens or a swapped camera has to be recalibrated, and if
             # it cannot be, the uplink aims with the wrong focal length and
             # the DVL's velocity scale is wrong by the same factor.
-            'calibrate           = mongla_vision.calibration.guide:main',
+            'calibrate           = mongla_vision.calibration.calibrate_node:main',
             'calibrate_solve     = mongla_vision.calibration.solver:main',
             'depth_estimation_node = mongla_vision.depth.depth_estimation_node:main',
             'flow_node = mongla_vision.flow.flow_node:main',

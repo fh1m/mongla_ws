@@ -67,12 +67,6 @@ WIRED = {
     # slow real drift was never reported. The orphan was the BETTER
     # implementation of a comparison already happening.
     'mongla_vision/mongla_vision/flow/scale_check.py': 'flow/flow_node.py',
-    # Loaded by path, not imported, so the calibration tool runs without ROS:
-    # `guide.py` calls `sibling('guide_capture')`, `sibling('guide_files')`
-    # and `sibling('guide_page')`.
-    'mongla_vision/mongla_vision/calibration/guide_files.py': 'calibration/guide.py',
-    'mongla_vision/mongla_vision/calibration/guide_capture.py': 'calibration/guide.py',
-    'mongla_vision/mongla_vision/calibration/guide_page.py': 'calibration/guide.py',
 }
 
 # NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a
@@ -88,50 +82,6 @@ DEFERRED = {
         'arrives. The pairing itself is settled against synthetic truth '
         '(test_trigger_stamps.py), so the day the board sends the message '
         'the work left is the decode in SrotFC and one call in camera_node.'),
-    'mongla_vision/mongla_vision/tracking/cascade.py': (
-        'the association cascade that makes appearance affordable -- it runs '
-        'the expensive stage only on detections motion could not explain, and '
-        'carries the ego-motion stage no published tracker has, because ours '
-        'is MEASURED rather than fitted from image content. Waits on '
-        'tracker_node, which currently calls its tracker library directly; '
-        'inserting a cascade is a change to the association hot path and its '
-        'rate must be measured on the vehicle first.'),
-    'mongla_vision/mongla_vision/tracking/reid.py': (
-        'the 179-switch fix, and the one piece of the BoT-SORT / McByte++ '
-        'recipe an embedded budget can normally not afford -- a dedicated '
-        'Re-ID network costs 15-25 ms/frame, while XFeat is ALREADY loaded '
-        'for the anchor rung at 701 FPS on the Hailo. Waits on tracker_node '
-        'supplying crop descriptors at track birth and death, which is a '
-        'change to the tracker hot path and needs its rate measured on the '
-        'vehicle first.'),
-    'mongla_vision/mongla_vision/tracking/presence.py': (
-        'the rung BELOW detection -- track-before-detect, which postpones the '
-        'threshold and accumulates sub-threshold evidence across frames. ERROR: IT '
-        'MAY NEVER BE WIRED, and the reason is B-59: on real water the band '
-        'below the bar is not faint signal, it is confident open-water FALSE '
-        'POSITIVES. The gate model fires on 90.8 % of gate-free frames at the '
-        'shipped 0.15, with half-frame boxes over empty turquoise at '
-        '0.44-0.56, and separation between gate-present and gate-absent '
-        'footage is +0.0 points at 0.15 and 0.30. Accumulating that would '
-        'manufacture a confident track out of hallucination. Its constants '
-        '(GATE_PX 40, MIN_RUN 3) come from a PERSON IN AIR, where the control '
-        'is 0.090; the one water control measured 0.360, which would need '
-        'MIN_RUN 6 to stay under 1 % false chains -- longer than the median '
-        'gap. Precedent: continuity.py, whose person-in-air constants were '
-        'also not shipped. '
-        'RESULT: HALF THE BLOCKER LIFTED 2026-09-28, and it was lifted by a MODEL '
-        'CHANGE nobody re-checked. B-59 is model-SPECIFIC: re-run with the '
-        'same tool on the same clips, `gate_sharks` separates +84.2 points at '
-        '0.30 and +96.8 at 0.45, where `gate_rescue_repair` gives +0.0 at '
-        'every bar. The band below the bar on THAT graph is signal, not '
-        'hallucination -- see section 59. '
-        'ERROR: THE OTHER HALF STANDS, and a second measurement replaced it: on '
-        'gate.mkv `gate_sharks` detects the gate in 900 of 900 frames at '
-        '0.892-0.932, so there are NO GAPS to accumulate across and the rung '
-        'has nothing to do. Its value shrinks exactly as the detector '
-        'improves. Promote it only when a clip with REAL dropouts on a graph '
-        'with measured separation shows the in-view and departed regimes '
-        'separating -- neither of which the archive currently contains.'),
     'mongla_vision/mongla_vision/continuity.py': (
         'NOW EXERCISED by tools/studies/continuity_from_bag.py, which produced the '
         'measurement it was written for (section 50): 338 real gaps, p50 '
@@ -153,42 +103,6 @@ DEFERRED = {
         'vehicle, and a tools-only consumer is a real but different kind of '
         'reachability. WARNING: Nearly deleted on the strength of a sweep that could '
         'not see tools/; the sweep now scans it.'),
-    'mongla_vision/mongla_vision/time_to_contact.py': (
-        'BLOCKER CORRECTED 2026-09-28 (section 62). It was "needs metres we do '
-        'not have"; the literature form `tau = scale / (d scale/dt)` needs '
-        'none -- the metres cancel, and we already compute that scale in THREE '
-        'places and discard all three. The real blocker is noise: measured on '
-        'a 600-frame approach, tau p50 2.5 s with a frame-to-frame swing of '
-        'p50 2.4 s and p90 27.2 s, so it is noise with a unit. Same shape as '
-        'the per-frame plane tilt, where smoothing bought smoothness and NOT '
-        'accuracy. Closes with one pool run at a known constant speed from a '
-        'known start range, which makes true tau a straight line and the '
-        'filter a fit rather than a guess.'),
-    'mongla_vision/mongla_vision/approach.py': (
-        'WARNING: AND ITS BANDS CAME FROM THE RETIRED GRAPH. `tools/studies/approach_band.py` '
-        'was run against `gate_rescue_repair`, whose documented failure mode '
-        'is half-frame boxes over empty water -- so the peaks may be peaks of '
-        'hallucination, and the module\'s own docstring says class bands '
-        'belong to ONE graph and do not transfer. Re-run the tool on '
-        '`gate_sharks` before wiring anything to this. '
-        'the BAND is measured (section 23) but the controller that would act '
-        'on back-off does not exist; vision_verbs closes range only. Wiring '
-        'it means a new verb, which is a mission-surface change.'),
-    'mongla_vision/mongla_vision/detection/confidence_calibration.py': (
-        'ships OFF by design: its gain is DECLARED, not measured, and it '
-        'needs a labelled per-venue set to calibrate. Wiring it before that '
-        'would put an unmeasured constant in the detection path. '
-        'ERROR: STRENGTHENED 2026-09-28 -- the blocker is now EVIDENCE, not just '
-        'absence. This module maps a TURBIDITY statistic onto a confidence '
-        'adjustment, and that family has now failed twice on real data: '
-        '`underwater.recommend()` was deleted for fitting exactly such a rule '
-        'to two clips that a third venue contradicted, and section 60 measured '
-        'a chromatic bar collapsing from a margin of 20.2 to 0.8 between two '
-        'SIM lighting setups -- before sunlight, depth or time of day enter. A '
-        'turbidity-to-confidence gain is not merely unmeasured here, it is the '
-        'shape of thing this stack has twice measured to be unstable. Promote '
-        'it only with a labelled set spanning MULTIPLE venues, and only if the '
-        'gain survives a held-out one.'),
 }
 
 

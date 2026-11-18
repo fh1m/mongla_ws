@@ -80,11 +80,11 @@ def test_the_filename_rule_has_ONE_definition(fs):
         'pi_forward_1280x720.json'
     assert fs.calibration_filename('pi_forward', 1280, 720, 'water') == \
         'pi_forward_1280x720_water.json'
-    # The guide serves what the solver installed; it must not restate the
+    # The node names what the solver installs; it must not restate the
     # rule. A second copy of a naming rule is how a calibration once
     # outlived the camera it was named for.
-    from mongla_vision.calibration import guide
-    assert 'calibration_filename' in open(guide.__file__).read()
+    from mongla_vision.calibration import calibrate_node
+    assert 'solver.calibration_filename' in open(calibrate_node.__file__).read()
 
 
 # ------------------------------------------------------------ end to end
@@ -195,10 +195,13 @@ def test_the_intrinsics_recover_the_camera_they_were_rendered_with(
 
 # --------------------------------------------- the frames, not the filename
 def test_each_medium_gets_its_own_capture_FOLDER(fs):
-    from mongla_vision.calibration import guide
-    assert guide.capture_dir('pi_forward', 'air') != \
-        guide.capture_dir('pi_forward', 'water')
-    assert guide.capture_dir('pi_forward', 'water').endswith('_water')
+    from mongla_vision.calibration import guide_files as files
+    assert files.capture_dir('pi_forward', 'air') != \
+        files.capture_dir('pi_forward', 'water')
+    assert files.capture_dir('pi_forward', 'water').endswith('_water')
+
+
+_AIR = {'applies_to': 'pi_forward', 'medium': 'air', 'grid': '8x6', 'square': 0.025}
 
 
 def test_switching_to_water_does_not_resume_the_AIR_capture():
@@ -207,25 +210,30 @@ def test_switching_to_water_does_not_resume_the_AIR_capture():
     Solve installs `..._water.json`; the frames inside it were taken in air.
     Every naming and file-content test above passes, because the artifact is
     right and the INPUT is wrong -- the `_srot_drive` shape again. So the
-    guard has to be on the argv the re-exec runs with.
+    guard is on the folder the new capture reads and writes.
     """
-    from mongla_vision.calibration import guide
-    argv = ['calibrate', '--device', '3', '--applies-to', 'pi_forward',
-            '--out', guide.capture_dir('pi_forward', 'air')]
-    new = guide.restart_argv(argv, 'pi_forward', 'air', medium='water')
-    out = new[new.index('--out') + 1]
-    assert out == guide.capture_dir('pi_forward', 'water')
-    assert out != guide.capture_dir('pi_forward', 'air')
-    assert new[new.index('--medium') + 1] == 'water'
+    from mongla_vision.calibration import guide_files as files
+    from mongla_vision.calibration.calibrate_node import next_capture
+    cfg, why = next_capture(_AIR, {'medium': 'water'})
+    assert not why
+    assert cfg['out'] == files.capture_dir('pi_forward', 'water')
+    assert cfg['out'] != files.capture_dir('pi_forward', 'air')
+    assert cfg['medium'] == 'water'
 
 
 def test_a_camera_switch_still_keeps_the_current_medium():
-    from mongla_vision.calibration import guide
-    new = guide.restart_argv(
-        ['calibrate', '--medium', 'water'], 'pi_forward', 'water',
-        device='5', applies_to='pi_downward')
-    assert new[new.index('--out') + 1] == \
-        guide.capture_dir('pi_downward', 'water')
+    from mongla_vision.calibration import guide_files as files
+    from mongla_vision.calibration.calibrate_node import next_capture
+    water = dict(_AIR, medium='water')
+    cfg, _ = next_capture(water, {'applies_to': 'pi_downward'})
+    assert cfg['out'] == files.capture_dir('pi_downward', 'water')
+
+
+def test_a_setting_that_is_not_one_is_refused():
+    from mongla_vision.calibration.calibrate_node import next_capture
+    assert next_capture(_AIR, {'medim': 'water'})[0] is None
+    assert next_capture(_AIR, {'grid': '1x6'})[0] is None
+    assert next_capture(_AIR, {'square': 0})[0] is None
 
 
 def test_the_refraction_matches_OUR_OWN_measured_pair(fs):

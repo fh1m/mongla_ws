@@ -20,9 +20,8 @@
         }
       }
     },
-    "RawMessages!state": {
-      "topicPath": "/mongla/state"
-    }
+    "mongla.batighor.Vehicle!vehicle": {},
+    "mongla.batighor.ControlCenter!control": {}
   },
   "globalVariables": {},
   "userNodes": {},
@@ -35,9 +34,14 @@
       "direction": "column",
       "first": "Image!forward",
       "second": "Image!downward",
-      "splitPercentage": 50
+      "splitPercentage": 50.0
     },
-    "second": "RawMessages!state",
-    "splitPercentage": 70
+    "second": {
+      "direction": "column",
+      "first": "mongla.batighor.Vehicle!vehicle",
+      "second": "mongla.batighor.ControlCenter!control",
+      "splitPercentage": 50.0
+    },
+    "splitPercentage": 70.0
   }
 }

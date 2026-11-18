@@ -8,6 +8,13 @@ from mongla_vision.detection.factory   import make_detector
 from .detector_params import _model_stem, _parse_model_conf, _split_active
 
 
+
+# What the callback below applies. Any other name is refused: rclpy
+# reports success for every declared parameter, and imgsz, preprocess or
+# a model path set live used to print "successful" and change nothing.
+LIVE_PARAMS = ('active_model', 'assoc_conf', 'classes', 'conf', 'masks',
+                'max_det', 'model_conf', 'nms_floor', 'nms_iou', 'paused')
+
 class DetectorSetupMixin:
     """Methods of `DetectorNode`; see `detector_node.py` for the node."""
 
@@ -290,6 +297,10 @@ class DetectorSetupMixin:
         if a > 0.0 and hasattr(det, 'update_assoc_conf'):
             det.update_assoc_conf(a)
         self._apply_nms(det)
+        # `masks` was read only by the live-set callback, so `masks: false`
+        # in bringup.yaml left every segmentation model decoding masks.
+        if hasattr(det, 'set_masks'):
+            det.set_masks(bool(self.get_parameter('masks').value))
 
     def _apply_nms(self, det) -> None:
         """Push `nms_floor` / `nms_iou` onto a freshly built detector.
@@ -342,8 +353,22 @@ class DetectorSetupMixin:
             return name
         return self._stem_to_key.get(_model_stem(name))
 
+    LIVE_PARAMS = LIVE_PARAMS
+
     def _on_parameter_change(self, params):
         from rcl_interfaces.msg import SetParametersResult
+        fixed = [p.name for p in params if p.name not in LIVE_PARAMS]
+        if fixed:
+            if fixed == ['iou']:
+                return SetParametersResult(
+                    successful=False,
+                    reason='iou is read once, when a .pt model is built. On '
+                           'the vehicle set nms_iou, which changes the Hailo '
+                           'NMS live.')
+            return SetParametersResult(successful=False, reason=(
+                f'{", ".join(fixed)}: read once at startup -- set it under '
+                f'`nodes:` in bringup.yaml and restart. Live here: '
+                f'{", ".join(LIVE_PARAMS)}'))
         for p in params:
             if p.name == 'classes':
                 classes_str = str(p.value).strip()
@@ -459,15 +484,6 @@ class DetectorSetupMixin:
                     return SetParametersResult(successful=False, reason=why)
                 self.get_logger().info(
                     f"[DET  ] {p.name} → {value:.3f} (models configured again)")
-
-            elif p.name == 'iou':
-                # Read at construction by the .pt backend and never by a HEF.
-                # Accepting a live value would report a change nothing made.
-                return SetParametersResult(
-                    successful=False,
-                    reason='iou is read once, when a .pt model is built. On '
-                           'the vehicle set nms_iou, which changes the Hailo '
-                           'NMS live.')
 
             elif p.name == 'max_det':
                 new_max = int(p.value)

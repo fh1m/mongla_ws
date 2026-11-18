@@ -29,7 +29,7 @@ def _run(tracker, frames):
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("ttype", ["ocsort", "bytetrack"])
 def test_assigns_stable_id_to_a_steady_track(ttype):
-    t = RoboflowTracker(tracker_type=ttype, track_buffer=12, frame_rate=20.0,
+    t = RoboflowTracker(tracker_type=ttype, track_buffer=12,
                         min_hits=2)
     outs = _run(t, [[_det(100 + i * 5)] for i in range(6)])
     # after maturity the same id is held every frame
@@ -42,7 +42,7 @@ def test_assigns_stable_id_to_a_steady_track(ttype):
 @pytest.mark.parametrize("ttype", ["ocsort", "bytetrack"])
 def test_coasts_through_a_gap_then_drops(ttype):
     # 5 real frames, then a long gap that exceeds the (scaled) buffer.
-    t = RoboflowTracker(tracker_type=ttype, track_buffer=12, frame_rate=20.0,
+    t = RoboflowTracker(tracker_type=ttype, track_buffer=12,
                         min_hits=2)
     frames = [[_det(100 + i * 10)] for i in range(5)] + [[] for _ in range(12)]
     outs = _run(t, frames)
@@ -58,14 +58,14 @@ def test_coasts_through_a_gap_then_drops(ttype):
     # The coasted box advances (constant-velocity Kalman), not frozen.
     assert outs[6][0].cx > outs[5][0].cx
 
-    # Eventually the track is dropped (buffer scaled by frame_rate: 20/30*12=8).
+    # Eventually the track is dropped: track_buffer 12 is 0.4 s of capture time.
     assert len(outs[-1]) == 0, "track must be dropped after the buffer expires"
 
 
 def test_ocsort_reassociates_same_id_after_gap():
     # The competition-critical property: a target that reappears after a brief
     # gap keeps its id (no phantom/duplicate), so a lock doesn't jump objects.
-    t = RoboflowTracker(tracker_type='ocsort', track_buffer=20, frame_rate=20.0,
+    t = RoboflowTracker(tracker_type='ocsort', track_buffer=20,
                         min_hits=2)
     frames = ([[_det(100 + i * 10)] for i in range(5)]
               + [[] for _ in range(3)]
@@ -78,7 +78,7 @@ def test_ocsort_reassociates_same_id_after_gap():
 
 
 def test_reset_clears_state():
-    t = RoboflowTracker(tracker_type='ocsort', frame_rate=20.0, min_hits=2)
+    t = RoboflowTracker(tracker_type='ocsort', min_hits=2)
     _run(t, [[_det(100 + i * 5)] for i in range(4)])
     t.reset()
     assert not t._meta
@@ -88,7 +88,7 @@ def test_reset_clears_state():
 
 
 def test_two_objects_get_distinct_ids():
-    t = RoboflowTracker(tracker_type='ocsort', track_buffer=12, frame_rate=20.0,
+    t = RoboflowTracker(tracker_type='ocsort', track_buffer=12,
                         min_hits=2)
     frames = [[_det(100 + i * 5, cls='hole'), _det(400 + i * 5, cls='hole')]
               for i in range(5)]
@@ -100,7 +100,7 @@ def test_two_objects_get_distinct_ids():
 # --------------------------------------------------------------------------- #
 #  Coast ladder, 4th rung: the tracker + Kalman smoother pair (what            #
 #  tracker_node composes) must keep a coasted id on /tracks for the FULL       #
-#  max_predict_frames window, then suppress it. This is the cross-component    #
+#  max_predict_s window, then suppress it.    This is the cross-component    #
 #  truncation that pure VisionState tests can't see -- if max_predict is below #
 #  vision.coast_s in frames the control coast silently truncates early.        #
 # --------------------------------------------------------------------------- #
@@ -108,9 +108,9 @@ def test_coast_survives_to_max_predict_then_suppressed():
     from mongla_vision.tracking.kalman import TrackKalmanSmoother
 
     max_predict = 12
-    t = RoboflowTracker(tracker_type='ocsort', track_buffer=60, frame_rate=20.0,
+    t = RoboflowTracker(tracker_type='ocsort', track_buffer=60,
                         min_hits=2)
-    kal = TrackKalmanSmoother(max_predict_frames=max_predict, default_dt=1.0 / 20.0)
+    kal = TrackKalmanSmoother(max_predict_s=max_predict / 20.0, default_dt=1.0 / 20.0)
 
     def publish_ids(tracked, frame_t):
         """Mirror tracker_node: drop expired tracks, smooth the rest -> the ids
@@ -151,3 +151,33 @@ def test_coast_survives_to_max_predict_then_suppressed():
     # And it does eventually stop (the roboflow buffer / smoother drop it).
     final = publish_ids(t.update([], fi / 20.0), fi / 20.0)
     assert tid not in final
+
+
+def _coast_seconds(rate_hz):
+    """Seconds a track keeps coasting after its target vanishes, at a rate."""
+    from mongla_vision.detection.detector import Detection
+    from mongla_vision.tracking.roboflow_tracker import RoboflowTracker
+    tr = RoboflowTracker(tracker_type='ocsort', track_buffer=30,
+                         min_hits=1, detector_conf=0.15)
+    det = Detection(class_id=0, class_name='gate', score=0.9,
+                    xyxy=(100.0, 100.0, 200.0, 200.0))
+    dt = 1.0 / rate_hz
+    t = 0.0
+    for _ in range(int(rate_hz)):          # one second seen
+        tr.update([det], t)
+        t += dt
+    gone = t
+    last = None
+    while t < gone + 5.0:
+        if any(o.predicted for o in tr.update([], t)):
+            last = t
+        t += dt
+    return (last - gone) if last is not None else 0.0
+
+
+def test_the_coast_window_is_seconds_on_capture_time_at_any_rate():
+    """track_buffer 30 = 1.0 s of coasting whether detections arrive at 20 or
+    60 Hz. Counted in frames it was 1.0 s at 20 Hz and 0.33 s at 60 Hz, and an
+    offline study at a 1000 Hz container rate coasted for ever (2026-11-18)."""
+    a, b = _coast_seconds(20.0), _coast_seconds(60.0)
+    assert 0.9 <= a <= 1.05 and 0.9 <= b <= 1.05, (a, b)

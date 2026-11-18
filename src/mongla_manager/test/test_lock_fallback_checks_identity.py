@@ -39,9 +39,6 @@ class _Lock(LockPublishMixin):
     def _note_visibility(self, x1, y1, x2, y2):
         pass
 
-    def _remember_world(self, x1, y1, x2, y2):
-        pass
-
 
 def _ladder(rung, **ids):
     lk = _Lock(**ids)

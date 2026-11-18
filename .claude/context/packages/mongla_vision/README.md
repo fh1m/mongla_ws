@@ -84,7 +84,9 @@ IMU, state, odometry and floor-height callbacks, each with its freshness check),
 health log). To find where a `self._x` is defined, grep them together:
 `grep -n "def _x" lock_*.py`.
 
-`flow_node` is split the same way, under `flow/`: `flow_node.py` (the per-frame pipeline),
+Under `vision_pi`, flow runs inside the vision process beside the downward camera and takes its
+frames by reference (`direct_feed`, measured-bars section 89); `vision` and `vision_dual` still
+start it as `flow_node` on the topic. It is split the same way, under `flow/`: `flow_node.py` (the per-frame pipeline),
 `flow_setup.py` (parameters, intrinsics, input callbacks), `flow_checks.py` (every check that
 may refuse a frame), `flow_floor.py` (tile-grid heading and lane lines), `flow_publish.py`
 (topics and the log) and `flow_constants.py` (the measured constants, each in
@@ -105,8 +107,8 @@ and direct feed), `detector_publish.py` (topics and operator log lines) and
 ## Tools
 
 ```bash
-ros2 run mongla_vision vision_check          # is the pipeline alive and seeing?
-ros2 run mongla_vision calibrate             # measure this camera, in air or in water
+ros2 run mongla_vision vision_check          # grade the whole mission graph; exits 1 on a FAIL
+ros2 launch mongla_batighor calibrate.launch.py device_path:=<camera>   # measure it, air or water
 ros2 run mongla_vision vision_thrust_check   # detection → thrust, disarmed and safe
 ```
 
@@ -142,7 +144,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | module | what it is |
 |---|---|
 | `_text_engine.py` | TrueType text rendering engine for HUD widgets. |
-| `approach.py` | How close should the vehicle get before it trusts what it sees? |
 | `camera_node.py` | read from a Camera and publish standard ROS image topics. |
 | `config.py` | Named camera profiles. THIS DICT IS THE ONE THE CODE READS. |
 | `continuity.py` | Detection continuity: the statistics the whole lock ladder is tuned on. |
@@ -160,9 +161,10 @@ with no summary line shows as *(no summary)* until it gets one.
 | `identity.py` | Take GEOMETRY from the structure, IDENTITY from the symbol on it. |
 | `image_msg.py` | `sensor_msgs/Image` to a NumPy array and back, with no `cv_bridge`. |
 | `ladder_config.py` | One deck file for the ladder's switches, read by the node itself. |
+| `live_params.py` | Which of a node's parameters change while it runs, and a refusal for the rest. |
 | `lock_anchor.py` | The anchor rung: enrol a reference or locate against the bank, and box what it found. |
 | `lock_frames.py` | LockNode's image and detection inputs: by topic, or by reference when composed. |
-| `lock_inputs.py` | LockNode's inputs besides images and detections: attitude, odometry, |
+| `lock_inputs.py` | LockNode's inputs besides images and detections: odometry, floor |
 | `lock_node.py` | run the ladder, publish one target position. |
 | `lock_publish.py` | LockNode's outputs: the /lock box, its decomposition, the pose |
 | `lock_setup.py` | LockNode's setup: parameters, the anchor and the bank, and live retuning. |
@@ -173,7 +175,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `seeing.py` | Can this camera see at all? A blinded camera and an empty scene look alike. |
 | `stamps.py` | When was this actually SEEN? One implementation, every consumer. |
 | `target_geometry.py` | Committed prop widths, keyed by the class name the detector emits. |
-| `time_to_contact.py` | Seconds until contact, for a MOVING observer. |
 | `tool_geometry.py` | Where each tool is, relative to the camera that aims it. |
 | `tracker_node.py` | subscribe to detections, publish stable tracks. |
 | `trigger_stamps.py` | Which trigger made this frame: pairing camera frames with the board's pulses. |
@@ -181,7 +182,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `vision_node.py` | single-process diagnostic for camera + detector. |
 | `anchor/anchor.py` | Hold a target with NO detection at all. |
 | `anchor/bank.py` | Several references instead of one, and a policy for when to add another. |
-| `anchor/bank_lookup.py` | Asking the bank where the vehicle is: locate, recognise, corroborate, verify. |
+| `anchor/bank_lookup.py` | Asking the bank where the vehicle is: locate, recognise, verify. |
 | `anchor/bank_store.py` | Saving the bank to disk and loading it back (a practice bank, or the last run). |
 | `anchor/geometry.py` | The half of the homography we were throwing away. |
 | `anchor/health.py` | A fouled lens and a changed world look identical, and need opposite answers. |
@@ -190,10 +191,9 @@ with no summary line shows as *(no summary)* until it gets one.
 | `anchor/xfeat_hailo.py` | XFeat on the Hailo-8, so the anchor rung stops burning the Pi's CPU. |
 | `anchor/xfeat_onnx.py` | XFeat on the vehicle: ONNX + numpy, no torch. |
 | `calibration/binding.py` | Which calibration belongs to which camera -- resolved ONCE, from the data. |
-| `calibration/guide.py` | Step-by-step guided camera calibration in a browser. |
+| `calibration/calibrate_node.py` | Guided camera calibration as a node; Batighor is its page. |
 | `calibration/guide_capture.py` | The capture half of the guided calibration: the pose script and its threads. |
 | `calibration/guide_files.py` | Where calibrations and captures live on disk, and which camera is which. |
-| `calibration/guide_page.py` | The calibration page `guide.py` serves at `/`: one HTML document, inline |
 | `calibration/solver.py` | Camera calibration that PROVES its own answer instead of asserting it. |
 | `cameras/camera.py` | Abstract Camera — every image source implements this. |
 | `cameras/discover.py` | discover_cameras() -- probe connected USB cameras. |
@@ -203,7 +203,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `cameras/video_file.py` | run the vision pipeline on a pre-recorded video file. |
 | `cameras/webcam.py` | local USB / built-in webcam via cv2.VideoCapture. |
 | `depth/depth_estimation_node.py` | monocular depth estimation for detected objects. |
-| `detection/confidence_calibration.py` | A confidence of 0.5 does not mean the same thing in every pool. |
 | `detection/contours.py` | Detections -> outlines. A box and a mask become the same thing here. |
 | `detection/detector.py` | Abstract Detector — every detection backend implements this. |
 | `detection/factory.py` | Pick a detector backend from the resolved model path. One seam, three callers. |
@@ -231,17 +230,14 @@ with no summary line shows as *(no summary)* until it gets one.
 | `flow/flow_velocity.py` | Optical flow -> BODY VELOCITY. The observation an estimator can actually use. |
 | `flow/scale_check.py` | Is the height that scales every flow velocity actually right? |
 | `tracking/bytetrack.py` | ByteTrack wrapper using supervision.ByteTrack. |
-| `tracking/cascade.py` | Never lose the target: an association cascade, cheapest cue first. |
 | `tracking/confidence.py` | Detection confidence as the vehicle's measure of how much to trust a box. |
 | `tracking/follower.py` | The fast rung: carry a box across the frames the detector has nothing for. |
 | `tracking/kalman.py` | Per-track 4-state constant-velocity Kalman smoother. |
 | `tracking/lock_state.py` | One target position, from whichever rung can still supply it. |
-| `tracking/presence.py` | The rung BELOW detection: accumulate evidence the detector refused to call. |
-| `tracking/reid.py` | Stitch a track's identity back together after a gap. The 179-switch fix. |
 | `tracking/roboflow_tracker.py` | Roboflow `trackers` backend (OC-SORT / ByteTrack) behind the Tracker ABC. |
 | `tracking/tracker.py` | Tracker ABC and TrackedDetection dataclass. |
 | `tracking/visibility.py` | Keep the target in frame — and know where it went if it leaves anyway. |
-| `utils/check_pipeline.py` | standalone health probe for the perception pipeline. |
+| `utils/check_pipeline.py` | grade the vision graph a mission runs on, before it runs. |
 | `utils/check_thrust.py` | end-to-end smoke test: detection -> a thrust command. |
 | `utils/check_tracker.py` | health probe for the tracking pipeline. |
 | `utils/display_draw.py` | What the vision display draws besides the frame: the splash, the |

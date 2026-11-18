@@ -2,8 +2,8 @@
 """Solve a camera calibration from a capture set without a sourced ROS; a shim
 over `mongla_vision.calibration.solver`.
 
-    ros2 run mongla_vision calibrate         # the guided capture
-    ros2 run mongla_vision calibrate_solve   # the solver alone
+    ros2 launch mongla_batighor calibrate.launch.py   # the guided capture
+    ros2 run mongla_vision calibrate_solve            # the solver alone
 
 Loads by path, not by package import. The first version did
 `from mongla_vision.calibration.solver import main` after putting the source

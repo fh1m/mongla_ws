@@ -19,12 +19,10 @@ For the operator, on a pool or competition day: consoles, recorders, calibration
 
 | tool | what it does |
 |---|---|
+| `batighor_desktop.py` | Open Batighor in the Lichtblick desktop app: Kutum's panels, look and views, connected. |
 | `build_practice_bank.py` | Build a checkpoint bank BEFORE the run, from practice footage or stills. |
 | `depth_sign_check.py` | Prove the depth loop's SIGN on the bench, disarmed, with nothing spinning. |
 | `fov_board_check.py` | Live board screening in a browser: aim, identify the grid, measure flatness. |
-| `fov_calibrate.py` | Measure a camera's intrinsics and FIELD OF VIEW from checkerboard images. |
-| `fov_calibrate_web.py` | Run the guided calibration capture page without a sourced ROS; a shim over `mongla_vision.calibration.guide`. |
-| `fov_capture_guide.py` | Guided camera calibration with live video in a browser. |
 | `fov_external_capture.py` | Capture a frontal board shot for the EXTERNAL calibration check. |
 | `fov_quick.py` | FOV in one minute, with a phone screen and no printer. |
 | `fov_solve.py` | Solve a camera calibration from a capture set without a sourced ROS; a shim over `mongla_vision.calibration.solver`. |
@@ -83,6 +81,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `model_inventory.py` | Every model on this box, what it detects, and whether it has been checked. |
 | `overclock_soak.py` | Is a faster ARM clock worth keeping on Kutum? A soak with the answer. |
 | `restart_blind_time.py` | How long the vehicle is blind while its vision process starts: frame and detection. |
+| `retro_cost.py` | What retrodiction costs the localiser, on the machine that runs it. |
 | `rtc_vs_counter.py` | Is the RTC a better clock for control than the system counter? Kutum has a dedicated real-time clock with its own cell. |
 | `srot_loop_soak.py` | Run the board link at the shipping vision-loop rate for minutes and report the jitter distribution. |
 | `srot_loop_sweep.py` | Where does the vision->thrust loop saturate, and on what? `VISION_LOOP_HZ = 20` was chosen when perception was 3-4 Hz on a .pt and 20-30 Hz on the old GPU path. |
@@ -194,6 +193,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `rung_independence.py` | Do the ladder's two carried rungs fail TOGETHER? Redundancy of two, or of one? The question nobody asked. |
 | `tau_from_scale.py` | Rank the four scale sources against a KNOWN-CONSTANT-SPEED approach. |
 | `tracker_ab.py` | Which tracker closes more gaps on REAL competition footage? The question this settles, with numbers rather than an argument: the coast layer exists to bridge detection gaps, and nobody has ever ... |
+| `truth/` | Hand-labelled truth for the studies: when a target is really in view, labelled by eye from the frames and independently of any model, so a tracker or detector can be scored rather than compared with ... |
 | `weak_box_locality.py` | Are the weak boxes inside a gap WHERE THE TARGET WAS, or scattered noise? `gap_recovery_potential.py` showed every gap contains weak detections. |
 | `weak_box_persistence.py` | Does sub-threshold evidence persist WHILE THE TARGET IS STILL IN SIGHT? Track-before-detect postpones the threshold: a target too dim to clear a per-frame bar is accumulated across frames until the ... |
 | `xfeat_finetune_score.py` | Did fine-tuning on our water actually help? Scored on a HELD-OUT venue. |

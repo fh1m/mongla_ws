@@ -88,6 +88,7 @@ mongla_vision:
       fps:         210
       fourcc:      MJPG
       frame_id:    forward_cam
+      controls:    {auto_exposure: 3, exposure_dynamic_framerate: 1}
 
     # The SONIX GLOBAL SHUTTER -- bottom, and the optical-flow velocity sensor
     # that stands in for the DVL. Global shutter is the right sensor for that
@@ -105,6 +106,7 @@ mongla_vision:
       fps:         210
       fourcc:      MJPG
       frame_id:    downward_cam
+      controls:    {auto_exposure: 3, exposure_dynamic_framerate: 1}
 
     # Generic USB camera roles (no calibration declared). The vehicle uses pi_*.
     # Bench override: -p device:=N at launch (no file edit needed).

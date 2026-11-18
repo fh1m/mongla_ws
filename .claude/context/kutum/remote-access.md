@@ -12,7 +12,7 @@ inside it down too. So nothing runs inside one. Two jobs, two tools:
 | Job | Tool | Why |
 |---|---|---|
 | Terminal: launches, missions, the CLI, debugging | **mosh + tmux** | instant echo; survives a tether unplug; **the run outlives the link** |
-| Watching vision | **Batighor** (`batighor:=true`, then `http://mongla.local:8000/`) in a browser | no desktop pixels at all |
+| Watching vision | **Batighor** (`batighor:=true`, then `http://kutum.local:8000/`) in a browser | no desktop pixels at all |
 
 ---
 
@@ -23,7 +23,7 @@ by itself across an unplug or a roam. `tmux` keeps the session alive on the Pi, 
 link never kills a running mission.
 
 ```bash
-mosh fh1m@mongla.local              # from the laptop
+mosh fh1m@kutum.local              # from the laptop
 tmux new -s run                     # or, after a drop: tmux attach -t run
 # inside tmux -- pin the run folder, then launch as usual
 source tools/pool/pool_session.sh gate_am
@@ -39,7 +39,7 @@ Drop the tether and `mosh` reconnects. If the whole link died, `mosh` again and
 
 ## Vision without a desktop
 
-Launch with `batighor:=true`, then open `http://mongla.local:8000/` in any browser:
+Launch with `batighor:=true`, then open `http://kutum.local:8000/` in any browser:
 Lichtblick, connected and on our layout, with the helm. Setup, the FPS check and offline replay:
 [`foxglove-and-bags.md`](../platform/foxglove-and-bags.md).
 

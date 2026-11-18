@@ -5,7 +5,7 @@ The bug this pins. `tracker_node._on_detections` had:
     if self._kalman.is_expired(td.track_id):
         continue
 
-`is_expired()` reads `predict_streak`, and `predict_streak` resets ONLY inside
+`is_expired()` reads `predict_s`, and `predict_s` resets ONLY inside
 `smooth()` (`kalman.py:83`) -- which the `continue` skips. `prune()` only drops
 filters whose id is ABSENT from `tracked`. So once a filter expired while the
 backend still held the id, a returning target with that id was suppressed
@@ -59,7 +59,7 @@ def _node_pass(kal, tracked, frame_t):
 
 def _smoother(max_predict=5):
     return TrackKalmanSmoother(process_noise=0.05, measurement_noise=2.0,
-                               max_predict_frames=max_predict)
+                               max_predict_s=max_predict * 0.05)
 
 
 def test_a_real_detection_revives_an_expired_track():

@@ -67,10 +67,61 @@ def test_the_switch_defaults_to_what_the_node_ships(arg):
 def test_the_switch_reaches_its_node(arg):
     _rel, param, where = SWITCHES[arg]
     src = open(where).read()
-    assert re.search(rf"'{re.escape(param)}'\s*:\s*(ParameterValue\(\s*)?"
+    # `flow_` is the prefix the vision process strips before handing a value
+    # to the flow node composed inside it (`detector_dual_node.flow_overrides`).
+    assert re.search(rf"'(flow_)?{re.escape(param)}'\s*:\s*(ParameterValue\(\s*)?"
                      rf"LaunchConfiguration\('{arg}'\)", src), \
         f'{arg} is declared but never passed to {param!r} in {os.path.basename(where)}'
     if where == _VISION_PI:
         # bringup must FORWARD it into the vision include, with the same default there
         assert re.search(rf"'{arg}'\s*:\s*LaunchConfiguration\('{arg}'\)", open(_BRINGUP).read()), arg
         assert _same(_launch_default(_VISION_PI, arg), _launch_default(_BRINGUP, arg)), arg
+
+
+# Launch arguments that are not capability switches: what to load, where it
+# is, how it looks. Everything else on bringup is a switch and needs a reason.
+_NOT_SWITCHES = {
+    'mav_device', 'payload_channels', 'vision_profile', 'fwd_model', 'dwn_model',
+    'fwd_classes', 'dwn_classes', 'lock_class', 'camera', 'camera_profile',
+    'model', 'models', 'active_model', 'classes', 'conf', 'imgsz', 'max_det',
+    'batighor_port', 'foxglove_port',
+}
+_ROADMAP = os.path.join(_SRC, '..', '.claude', 'context', 'ROADMAP.md')
+
+
+def _switch_rows():
+    text = open(_ROADMAP).read()
+    sec = text[text.index('### Launch (`ros2 launch mongla_manager bringup'):]
+    sec = sec[:sec.index('### Live')]
+    rows = {}
+    for line in sec.splitlines():
+        cells = [c.strip() for c in line.strip().strip('|').split('|')]
+        if len(cells) != 5 or not cells[0].startswith('`'):
+            continue
+        for name in re.findall(r'`([a-z_0-9]+)`', cells[0]):
+            rows[name] = (cells[1].strip('`'), cells[4])
+    return rows
+
+
+def test_every_bringup_switch_says_why_it_has_its_default():
+    """A mission runs every sensor, so a switch is off only for a written
+    reason. This is the check that a default was decided, not inherited:
+    flow and the lock ladder sat off for months on reasons that had gone
+    stale (2026-11-18)."""
+    text = open(_BRINGUP).read()
+    declared = dict(re.findall(
+        r"DeclareLaunchArgument\(\s*'([a-z_0-9]+)'\s*,\s*default_value=\s*'([^']*)'", text))
+    rows = _switch_rows()
+    problems = []
+    for arg, default in sorted(declared.items()):
+        if arg in _NOT_SWITCHES:
+            continue
+        if arg not in rows:
+            problems.append(f'{arg}: no row in ROADMAP.md §9')
+            continue
+        shown, why = rows[arg]
+        if shown != default:
+            problems.append(f'{arg}: ROADMAP says {shown!r}, the launch {default!r}')
+        if len(why) < 20:
+            problems.append(f'{arg}: no reason for its default')
+    assert not problems, '\n'.join(problems)

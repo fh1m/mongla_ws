@@ -418,3 +418,19 @@ def test_the_shield_is_off_until_the_deck_sets_a_floor():
 def test_bringup_check_says_when_no_floor_is_set(nodes, want):
     from mongla_manager import bringup_grade as G, bringup_host as H
     assert H.depth_floor_verdict(nodes)[0] == getattr(G, want)
+
+
+@pytest.mark.parametrize('top, want', [
+    ({}, 'WARN'),                                           # on, no height
+    ({'pool_depth_m': 2.0}, 'PASS'),
+    ({'pool_depth_min_m': 1.2, 'pool_depth_max_m': 2.0}, 'PASS'),
+    ({'pool_depth_min_m': 1.2}, 'WARN'),                    # half a range
+    ({'tile_m': 0.3}, 'PASS'),
+    ({'pool_depth_m': 'nan'}, 'WARN'),
+    ({'flow': False, 'pool_depth_m': 2.0}, 'WARN'),         # no velocity sensor
+])
+def test_bringup_check_says_when_flow_cannot_measure(top, want):
+    """Flow is on by default and refuses without a height. Silent, that is a
+    run with no velocity sensor that looks healthy."""
+    from mongla_manager import bringup_grade as G, bringup_host as H
+    assert H.flow_height_verdict(top)[0] == getattr(G, want)

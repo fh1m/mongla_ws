@@ -1,45 +1,48 @@
 {
   "configById": {
-    "Plot!link": {
+    "Plot!bytes": {
       "paths": [
         {
           "value": "/mongla/board_link.bytes_per_s",
-          "enabled": true,
-          "label": "bytes/s"
+          "label": "bytes/s",
+          "enabled": true
         },
         {
           "value": "/mongla/board_link.capacity_bytes_per_s",
-          "enabled": true,
-          "label": "the line, 115200 8N1"
+          "label": "capacity",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "bytes per second"
     },
     "Plot!drops": {
       "paths": [
         {
           "value": "/mongla/board_link.board_drop_pct",
-          "enabled": true,
-          "label": "board drop %"
+          "label": "drop %",
+          "enabled": true
         },
         {
           "value": "/mongla/board_link.board_errors",
-          "enabled": true,
-          "label": "board errors"
+          "label": "errors",
+          "enabled": true
         }
       ],
       "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "board drops"
     },
-    "RawMessages!named": {
-      "topicPath": "/mongla/board_link.named"
-    },
-    "RawMessages!rates": {
-      "topicPath": "/mongla/board_link.rates"
-    }
+    "mongla.batighor.Link!link": {}
   },
   "globalVariables": {},
   "userNodes": {},
@@ -50,16 +53,11 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "Plot!link",
+      "first": "Plot!bytes",
       "second": "Plot!drops",
-      "splitPercentage": 60
+      "splitPercentage": 50.0
     },
-    "second": {
-      "direction": "row",
-      "first": "RawMessages!named",
-      "second": "RawMessages!rates",
-      "splitPercentage": 55
-    },
-    "splitPercentage": 45
+    "second": "mongla.batighor.Link!link",
+    "splitPercentage": 55.0
   }
 }

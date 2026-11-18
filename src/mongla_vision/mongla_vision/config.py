@@ -93,6 +93,18 @@ CAMERA_PROFILES = {
         'height':      360,
         'fps':         210,
         'fourcc':      'MJPG',
+        # Set at every open, not inherited: this camera keeps the controls
+        # the last process left (an exposure sweep's 30 ms was still set an
+        # hour later). Measured on this unit, 2026-11-18, room light:
+        # dynamic framerate OFF gives a black frame (mean 0.0) at 120 and 210
+        # fps, because exposure is capped by the frame period; ON keeps 211
+        # fps with no repeated payloads and statistically independent frames
+        # (consecutive-difference variance / temporal variance 1.01), reads
+        # 4 ms exposure, and lifts the mean to 87-129 by gain. Short exposure
+        # and every frame a new one is what flow needs. The control's name
+        # promises a lower rate; on this bridge it does not (measured-bars
+        # "Global-shutter exposure at speed").
+        'controls':    {'auto_exposure': 3, 'exposure_dynamic_framerate': 1},
         'frame_id':    'forward_cam',
     },
     'pi_downward': {
@@ -116,6 +128,18 @@ CAMERA_PROFILES = {
         'height':      360,
         'fps':         210,
         'fourcc':      'MJPG',
+        # Set at every open, not inherited: this camera keeps the controls
+        # the last process left (an exposure sweep's 30 ms was still set an
+        # hour later). Measured on this unit, 2026-11-18, room light:
+        # dynamic framerate OFF gives a black frame (mean 0.0) at 120 and 210
+        # fps, because exposure is capped by the frame period; ON keeps 211
+        # fps with no repeated payloads and statistically independent frames
+        # (consecutive-difference variance / temporal variance 1.01), reads
+        # 4 ms exposure, and lifts the mean to 87-129 by gain. Short exposure
+        # and every frame a new one is what flow needs. The control's name
+        # promises a lower rate; on this bridge it does not (measured-bars
+        # "Global-shutter exposure at speed").
+        'controls':    {'auto_exposure': 3, 'exposure_dynamic_framerate': 1},
         'frame_id':    'downward_cam',
     },
 

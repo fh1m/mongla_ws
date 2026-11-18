@@ -42,6 +42,15 @@ class PoseFuseNode(Node):
             max_ambiguity=float(self.declare_parameter('max_ambiguity', 0.9).value),
             max_reproj_px=float(self.declare_parameter('max_reproj_px', 10.0).value),
         )
+        from mongla_vision.live_params import apply_live
+        c = self._cluster
+        apply_live(self, {
+            'window_s':      lambda v: setattr(c, 'window_s', float(v)),
+            'tol_deg':       lambda v: setattr(c, 'tol_deg', float(v)),
+            'min_poses':     lambda v: setattr(c, 'min_poses', int(v)),
+            'max_ambiguity': lambda v: setattr(c, 'max_ambiguity', float(v)),
+            'max_reproj_px': lambda v: setattr(c, 'max_reproj_px', float(v)),
+        })
         self._pub = self.create_publisher(TargetPose, f'{ns}/target_pose_fused', 10)
         self.create_subscription(TargetPose, f'{ns}/target_pose', self._on_pose, 10)
         # The hull's own heading, which is what turns counting into evidence:

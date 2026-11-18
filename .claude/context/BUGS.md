@@ -507,6 +507,80 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-116: Batighor on Kutum served no layout and no font, and a panel half-installed stayed so `READ 2026-11-18` **FIXED 2026-11-18**
+
+**What.** Kutum builds with `--symlink-install`, so every installed layout and
+theme file is a link back into the workspace (`src/mongla_batighor/`, and the
+fonts into `docs/assets/fonts/`). `serve.index()` drops any file whose real path
+leaves the directory it serves, so on the vehicle every `/layouts/<view>.json`
+and every font answered 404: an operator's browser and the desktop app got no
+view. The bench never saw it, because the tests built a plain tree. Then
+`tools/pool/batighor_desktop.py` died on the font 404 between a panel's
+`package.json` and its `extension.js`, and every later run skipped the
+directory because it existed, so the calibrate view read "Unknown panel type"
+for good.
+
+**Fix.** A link may land in the colcon workspace the package was built from
+(found from where its own `package.xml` link lands); any link out of that
+workspace still stays out. The desktop tool builds each panel beside its
+target and renames it in whole, and an incomplete directory is moved to the
+attic and rebuilt. Guarded by
+`test_serve_and_fetch.py::test_a_symlink_install_serves_its_layouts_and_nothing_else`
+and
+`test_batighor_desktop_holds_each_view_once.py::test_a_panel_is_whole_or_absent_and_a_half_one_is_repaired`
+(both injection-verified). Seen and verified on Kutum: 404, then 200 for the
+layouts and fonts, and all ten views shot from the desktop app.
+
+### B-115: one target width outlived the class it was measured for `READ 2026-11-18` **FIXED 2026-11-18**
+
+**What.** `target_width_m` (launch arguments `target_width_m_forward` and
+`target_width_m_downward`, and a `ladder.yaml` key) set one width for the
+lock's whole run, and it won over the per-class table. A mission switches
+target class on every vision verb (gate, then a bin), so after the first
+switch the 6-DoF pose scaled the new prop by the old prop's width: a
+confident range off by the ratio of two props, with nothing logged.
+`_retarget_width` re-resolved the table on a switch only when the parameter
+was unset, so the one case an operator had measured was the one that broke.
+
+**Fix.** The parameter, both launch arguments and the ladder key are gone.
+The width is `width_for(class)` for every class the lock follows; a measured
+prop goes in `~/.mongla/target_geometry.yaml` under its class, where it
+cannot outlive a switch. Guarded by
+`test_lock_follows_the_mission_class.py::test_a_measured_width_follows_its_class_through_a_switch`
+(injection-verified: keeping the old width on a switch fails it).
+
+### B-114: the tracker's coast windows were frame counts, so their length moved with the detection rate `READ 2026-11-18` **FIXED 2026-11-18**
+
+**What.** Both tracker windows were frames. The Roboflow buffer lasts
+`int(frame_rate / 30 * track_buffer)` update calls and the Kalman expiry
+`ceil(max_predict_s * frame_rate)` calls, with `frame_rate` a hand-set
+parameter (20 by default, 30/32 from the Pi launch). Detections arrive at 30 to
+58 Hz depending on load, so the documented 5.0 s lost-track window was 1.7 to
+3.3 s on the vehicle. Offline, `tools/studies/tracker_ab.py` took the
+container's nominal rate, which is 1000 on every Cockpit recording (gate.mkv:
+6142 frames over 191.8 s, 32 fps), so every tracker comparison on those clips
+measured gaps and coasts 31x off.
+
+**Fix.** Both windows are seconds on the frames' capture stamps: the wrapper
+drops a coasted box `track_buffer / 30` s after its last real detection and the
+smoother expires a track after `max_predict_s` s. `frame_rate`,
+`frame_rate_warn_ratio`, `fwd_frame_rate` and `dwn_frame_rate` are deleted, and
+the laptop launch no longer overrides `track_buffer` to 30 (1.0 s, below
+`max_predict_s`). `tracker_ab.py` reads frame times from the container's
+packets. Guards: `test_roboflow_tracker.py::test_the_coast_window_is_seconds_on_capture_time_at_any_rate`
+and `test_coast_ladder_ordering.py`, both injection-verified.
+
+**How it survived.** A rate warning compared the measured rate with the
+parameter and asked the operator to fix the parameter; it fixed the symptom
+twice (2026-09-09 among them) and left the unit wrong. A tracker with a short
+coast still publishes and looks healthy.
+
+**Not settled by this.** On gate.mkv with real times, presence is 25.7 %
+detector-only and 34.6 % (OC-SORT, shipped) to 58.8 % (ByteTrack) tracked. That
+ranks nothing: presence counts predicted boxes, so a tracker that coasts past
+the gate's departure scores higher. Ranking needs a clip labelled with when
+the gate is truly in view.
+
 ### B-113: a lapsed DHCP lease renumbered Kutum's Ethernet under a running stack `READ 2026-11-12` **FIXED 2026-11-12** (in the repo; on Kutum at the next `setup.sh --system`)
 
 **What.** With the stack and Batighor running, the bench router let eth0's

@@ -6,7 +6,7 @@ NetworkManager shared link and changes whenever the link is rebuilt or the
 vehicle is plugged into a venue network. An operator following a printed URL
 that quietly stopped being true reads it as "the server did not start".
 
-The mDNS name is the stable one -- the Pi answers to `mongla.local` at every
+The mDNS name is the stable one -- the Pi answers to `kutum.local` at every
 address it has ever had -- so it goes FIRST, with the live addresses listed
 after it as the fallback for a network where mDNS is filtered.
 

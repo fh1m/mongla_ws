@@ -24,8 +24,9 @@
 #   braked stop -- leave false
 # allow_fw_behaviour_mismatch: false
 
-#   Start camera + detector alongside manager
-# vision: false
+#   The vision stack: both cameras, detectors, lock ladder, flow.
+#   vision:=false for a board-only bench session.
+# vision: true
 
 #   pi = both cameras + calibration (vision_pi.launch.py, the vehicle);
 #   generic = single camera, no calibration (vision.launch.py, dev box).
@@ -55,7 +56,7 @@
 
 #   vision_stack:=pi -- start flow_node (downward-camera velocity). Pairs with
 #   the manager's position_source:=flow.
-# flow: false
+# flow: true
 
 #   flow:=true -- the venue's shallowest floor, metres (#35).
 # pool_depth_min_m: nan
@@ -63,8 +64,9 @@
 #   flow:=true -- the venue's deepest floor, metres (#35).
 # pool_depth_max_m: nan
 
-#   flow:=true -- metres from the DOWNWARD camera to the floor. Required:
-#   without it flow_node publishes quality 0 and refuses, by design.
+#   flow:=true -- metres from the DOWNWARD camera to the floor, until a
+#   mission's use_course() sets the venue's own. With neither, flow publishes
+#   quality 0 and refuses, by design.
 # pool_depth_m: nan
 
 #   manager: RIEKF body velocity -> board (VISION_SPEED_ESTIMATE). Needs fw PR
@@ -208,12 +210,6 @@
 # kalman_adaptive_noise: true
 
 #   (passed to vision_pi.launch.py, which sets the default)
-# fwd_frame_rate: 30.0
-
-#   (passed to vision_pi.launch.py, which sets the default)
-# dwn_frame_rate: 32.0
-
-#   (passed to vision_pi.launch.py, which sets the default)
 # dwn_calibration: ''
 
 #   (passed to vision_pi.launch.py, which sets the default)
@@ -233,15 +229,6 @@
 #   matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-
 #   reference is measured
 # anchor_semi_dense: false
-
-#   (passed to vision_pi.launch.py, which sets the default) measured TRUE
-#   width of the forward target in metres; 0 = use the rulebook nominal. A
-#   measured prop beats a nominal, which is what SAUVC +/-5 % allows for
-# target_width_m_forward: 0.0
-
-#   (passed to vision_pi.launch.py, which sets the default) measured true
-#   width of the downward target, metres
-# target_width_m_downward: 0.0
 
 #   (passed to vision_pi.launch.py, which sets the default) Class the DOWNWARD
 #   ladder follows. Empty = any class, and no 6-DoF pose (the geometry table
@@ -278,6 +265,11 @@
 #   and checkpoint bank all run for real, on input that never changes.
 # replay: false
 
+#   (passed to vision_pi.launch.py, which sets the default) One vision process
+#   per camera, through the HailoRT service. Off: one process, the chip opened
+#   directly, 6 ms faster an inference (measured-bars 86).
+# split: false
+
 #   (passed to vision_pi.launch.py, which sets the default)
 # fwd_device_path: ''
 
@@ -294,6 +286,15 @@
 #   batighor:
 #     batighor_port: 8000
 #     foxglove_port: 8765
+#   calibrate:
+#     device_path: /dev/mongla_cam_downward
+#     applies_to: pi_downward
+#     medium: air
+#     grid: 8x6
+#     square: 0.025
+#     width: 1280
+#     height: 720
+#     batighor: true
 #   video:
 #     fwd_video: ''
 #     dwn_video: ''
@@ -334,9 +335,6 @@
 #     viewer: true
 #     tracking: true
 #     tracker_type: ocsort
-#     track_buffer: 30
-#     min_hits: 1
-#     max_predict_s: 1.5
 #     depth: false
 #     depth_model: ''
 #     flow: false
@@ -399,17 +397,13 @@
 #     tracking: true
 #     tracker_type: ocsort
 #     kalman_adaptive_noise: true
-#     fwd_frame_rate: 30.0
-#     dwn_frame_rate: 32.0
 #     dwn_calibration: ''
 #     fwd_calibration: ''
-#     flow: false
-#     lock: false
+#     flow: true
+#     lock: true
 #     act_conf: 0.45
 #     anchor_xfeat_hef: true
 #     anchor_semi_dense: false
-#     target_width_m_forward: 0.0
-#     target_width_m_downward: 0.0
 #     lock_class: ''
 #     dwn_lock_class: ''
 #     pool_depth_m: nan
@@ -426,6 +420,7 @@
 #     fwd_publish_hz: 40
 #     dwn_publish_hz: 0
 #     replay: false
+#     split: false
 #     fwd_device_path: ''
 #     dwn_device_path: ''
 

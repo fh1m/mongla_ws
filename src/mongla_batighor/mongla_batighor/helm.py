@@ -20,7 +20,10 @@ typed. The rules of the token are `seat.py`; this node adds the vehicle:
     live one for the pilot -- the same operation as the DSL's `use_camera`:
     the latched `/mongla/vision/active_camera`, the other detector paused.
     The bridge gives browsers no parameter access of their own
-    (`bringup.launch.py` BRIDGE_LIMITS), so these are the only way.
+    (`bringup.launch.py` BRIDGE_LIMITS), so these are the only way;
+  * `calibrate` passes one op to a running calibration
+    (`mongla_vision/calibration/calibrate_node.py`), by the same rule as
+    `tune`: any named operator, never during a mission.
 
 The terminal is trusted and does not come here (owner, 2026-11-12): `mongla`,
 a mission started in a shell and the TUI send to `/mongla/move` directly.
@@ -61,6 +64,7 @@ MISSION_ALIVE_S = 1.5     # the runner beats /mongla/mission_alive at 2 Hz
 # `active_model` picks from (the panel offers its keys).
 POLLED = (*TUNABLE, 'paused', 'models')
 ACTIVE_CAMERA = '/mongla/vision/active_camera'
+CALIBRATION_OP = '/mongla/vision/calibration/op'
 
 
 def param_value(v):
@@ -175,6 +179,7 @@ class HelmNode(Node):
         self.create_subscription(String, ACTIVE_CAMERA,
                                  lambda m: setattr(self, 'camera', m.data), LATCHED)
         self.create_timer(1.0, self._poll)
+        self._calibration = self.create_client(Helm, CALIBRATION_OP)
 
     # -- the record ---------------------------------------------------
     def _log(self, **entry):
@@ -233,6 +238,8 @@ class HelmNode(Node):
             v = self._tune(who, req.cmd, req.fields_json)
         elif op == 'camera':
             v = self._camera(who, req.cmd)
+        elif op == 'calibrate':
+            v = self._calibrate(who, req.cmd, req.fields_json)
         else:
             v = Verdict(False, f'unknown op {op!r}')
         res.ok, res.message = v.ok, v.message
@@ -376,6 +383,28 @@ class HelmNode(Node):
                 self._set_param(who, other, 'paused', True)
         self._set_param(who, cam, 'paused', False)
         return Verdict(True, f'{cam} is the live camera')
+
+    # -- a calibration ------------------------------------------------
+    def _calibrate(self, who, cal_op, fields_json):
+        from mongla_vision.calibration.calibrate_node import OPS
+        v = self.seat.may_tune(who, self._mission_running())
+        if not v.ok:
+            return v
+        if cal_op not in OPS:
+            return Verdict(False, f'{cal_op!r} is not a calibration op; ops: {", ".join(OPS)}')
+        if not self._calibration.service_is_ready():
+            return Verdict(False, 'no calibration is running (ros2 launch '
+                                  'mongla_batighor calibrate.launch.py)')
+        fut = self._calibration.call_async(
+            Helm.Request(who=who, op=cal_op, fields_json=fields_json or '{}'))
+        fut.add_done_callback(lambda f: self._calibrated(who, cal_op, f))
+        return Verdict(True, f'calibration {cal_op} sent')
+
+    def _calibrated(self, who, cal_op, fut):
+        res = fut.result()
+        self._log(operator=who, event=f'calibration {cal_op}: '
+                                      f'{res.message if res is not None else "no answer"}',
+                  ok=bool(res is not None and res.ok))
 
     def _on_mission_alive(self, msg):
         self.mission_heard = (msg.data, time.monotonic())

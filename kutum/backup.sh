@@ -2,8 +2,8 @@
 # Copy what lives only on Kutum to the dev box, so a dead SD card costs a
 # morning instead of a model.
 #
-#   kutum/backup.sh fh1m@mongla.local              # the irreplaceable set
-#   kutum/backup.sh fh1m@mongla.local --runs       # ... and every run and capture
+#   kutum/backup.sh fh1m@kutum.local              # the irreplaceable set
+#   kutum/backup.sh fh1m@kutum.local --runs       # ... and every run and capture
 #   KUTUM_BACKUP=/elsewhere kutum/backup.sh ...    # default ~/kutum-backup/<host>
 #
 # The repo rebuilds everything else: kutum/setup.sh the machine, deploy.sh the

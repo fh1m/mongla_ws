@@ -16,7 +16,7 @@ import math
 import pytest
 
 from mongla_vision.tracking.visibility import (CRITICAL, LOST, NEAR_EDGE, OK,
-                                               SLACK, Visibility, WorldTarget,
+                                               SLACK, Visibility,
                                                assess, bearing_from_pixel)
 
 W, H, FX, FY = 640.0, 480.0, 500.0, 500.0
@@ -89,89 +89,9 @@ def test_bearing_is_a_unit_vector():
 
 
 # --------------------------------------------------------------------------- #
-#  World-frame memory: leaving the frame is not forgetting
+#  The region prior: a detection near where the lock was clears a lower bar
 # --------------------------------------------------------------------------- #
-def test_a_target_seen_ahead_is_remembered_in_the_world():
-    t = WorldTarget()
-    assert t.observe((0.0, 0.0), yaw_deg=0.0, bearing_deg=0.0,
-                     range_m=5.0, now=0.0)
-    assert t.xy == pytest.approx((5.0, 0.0))
-
-
-def test_after_the_vehicle_turns_the_bearing_back_is_known():
-    """The whole point. Image-plane tracking forgets the moment the box
-    leaves; a world-frame memory turns that into a navigation problem."""
-    t = WorldTarget()
-    t.observe((0.0, 0.0), yaw_deg=0.0, bearing_deg=0.0, range_m=5.0, now=0.0)
-    rel = t.bearing_from((0.0, 0.0), yaw_deg=90.0, now=1.0)
-    assert rel == pytest.approx(-90.0, abs=1e-6)
-
-
-def test_after_the_vehicle_moves_the_bearing_updates():
-    t = WorldTarget()
-    t.observe((0.0, 0.0), yaw_deg=0.0, bearing_deg=0.0, range_m=5.0, now=0.0)
-    rel = t.bearing_from((5.0, -5.0), yaw_deg=0.0, now=1.0)
-    assert rel == pytest.approx(90.0, abs=1e-6)
-
-
-def test_a_stale_memory_answers_NOTHING():
-    """A position from a minute ago is not knowledge, it is a rumour."""
-    t = WorldTarget(max_age_s=10.0)
-    t.observe((0.0, 0.0), yaw_deg=0.0, bearing_deg=0.0, range_m=5.0, now=0.0)
-    assert t.bearing_from((0.0, 0.0), 0.0, now=5.0) is not None
-    assert t.bearing_from((0.0, 0.0), 0.0, now=999.0) is None
-
-
-def test_no_memory_answers_NOTHING():
-    assert WorldTarget().bearing_from((0.0, 0.0), 0.0, now=0.0) is None
-
-
-def test_a_bad_range_is_REFUSED_not_stored():
-    """Range is the weakest number we have. A memory built from a guess sends
-    the vehicle confidently to the wrong place."""
-    t = WorldTarget()
-    for bad in (0.0, -1.0, float('nan'), float('inf')):
-        assert not t.observe((0.0, 0.0), 0.0, 0.0, bad, 0.0)
-    assert t.xy is None
-
-
-def test_the_memory_carries_no_confidence_that_looks_like_a_sighting():
-    """It stores where the target WAS. Nothing downstream may read it as
-    'the target is there now'."""
-    t = WorldTarget()
-    t.observe((0.0, 0.0), 0.0, 0.0, 5.0, 0.0)
-    assert not hasattr(t, 'score') and not hasattr(t, 'confidence')
-    assert not hasattr(t, 'detected')
-
-
-# --------------------------------------------------------------------------- #
-#  PRIOR-GUIDED DETECTION -- measured on the recorded session, section 56
-# --------------------------------------------------------------------------- #
-from mongla_vision.tracking.visibility import (project_world_target,
-                                               region_conf_bar)
-
-
-def test_a_target_dead_ahead_projects_to_the_frame_centre():
-    px = project_world_target((5.0, 0.0), (0.0, 0.0), 0.0, W, H, FX)
-    assert px is not None and px[0] == pytest.approx(W / 2, abs=1e-6)
-
-
-def test_a_target_to_the_left_projects_left():
-    px = project_world_target((5.0, 5.0), (0.0, 0.0), 0.0, W, H, FX)
-    assert px is not None and px[0] > W / 2
-
-
-def test_range_does_not_change_the_projected_pixel():
-    """Bearing only. A target's horizontal pixel depends on its BEARING,
-    not on how far away it is -- and range is what we are least sure of."""
-    near = project_world_target((2.0, 1.0), (0.0, 0.0), 0.0, W, H, FX)
-    far = project_world_target((20.0, 10.0), (0.0, 0.0), 0.0, W, H, FX)
-    assert near[0] == pytest.approx(far[0], abs=1e-6)
-
-
-def test_a_target_behind_the_vehicle_has_NO_pixel():
-    """Projecting it anyway would silently fold it back into the frame."""
-    assert project_world_target((-5.0, 0.0), (0.0, 0.0), 0.0, W, H, FX) is None
+from mongla_vision.tracking.visibility import region_conf_bar  # noqa: E402
 
 
 def test_inside_the_predicted_region_the_floor_is_enough():

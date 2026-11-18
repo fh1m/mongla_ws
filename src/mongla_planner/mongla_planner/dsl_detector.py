@@ -358,16 +358,18 @@ class DetectorMixin:
 
         One method, seven subsystems, no new layer::
 
-            mongla.set_node('tracker', coast_s=1.2)      # hold a flickering lock
+            mongla.set_node('tracker', classes='gate')   # track one class
             mongla.set_node('camera',  exposure_us=4000) # kill motion blur
-            mongla.set_node('lock',    full_authority_s=3.0)
+            mongla.set_node('lock',    full_authority_s=1.0)
             mongla.set_node('pnp',     max_reproj_px=15.0)
             mongla.set_node('flow',    max_baseline_s=0.4)
             mongla.set_node('manager', **{'vision.kp_yaw': 70.0})
 
         ``camera`` selects which per-camera instance; ``flow`` and ``manager``
-        are single nodes and ignore it. Raises on a rejected or undeclared
-        parameter, for the same reason ``set_detector`` does: a silent no-op is
+        are single nodes and ignore it. Each node applies only the parameters
+        in its ``LIVE_PARAMS`` while running and refuses the rest with the
+        reason (a value read once at startup cannot change mid-run). Raises on
+        a rejected or undeclared parameter, for the same reason ``set_detector`` does: a silent no-op is
         a mission believing it changed something.
         """
         if not params:
@@ -510,7 +512,8 @@ class DetectorMixin:
         node = self._detector_node(camera, node)
         self._set_detector_param(node, 'paused', False)
         # This camera is now the live detector. Recording it means a later switch
-        # to a DIFFERENT camera pauses THIS one (never two detectors on the Hailo),
+        # to a DIFFERENT camera pauses THIS one (one detector at a time unless
+        # `use_both_cameras` is on),
         # even when a mission resumed it manually rather than via _activate_camera.
         self._live_camera = cam
         self.log.info(f"[DSL  ] {node} resumed")

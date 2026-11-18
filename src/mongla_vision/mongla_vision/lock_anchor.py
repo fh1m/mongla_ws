@@ -45,9 +45,8 @@ class AnchorMixin:
         #
         # The bank takes a new checkpoint when the best stored one has
         # decayed toward the trust bar, judged on the inlier count the
-        # 3 Hz `locate()` below already produced. Asking
-        # `wants_refresh()` here instead would run a SECOND full match
-        # per frame to learn what we just measured.
+        # 3 Hz `locate()` below already produced, rather than a second full
+        # match per frame to learn what was just measured.
         stale = (self._anchor.has_reference
                  and self._anchor_inliers < self._anchor._refresh)
         # AND the criterion that matters more, per §21.2: the bank

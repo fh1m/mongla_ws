@@ -10,7 +10,8 @@ overrides. The node publishes:
                                                               empty until we
                                                               ship a calib file)
   /mongla/vision/<cam>/stream/compressed   sensor_msgs/CompressedImage  (the
-  /mongla/vision/<cam>/preview/compressed  camera's own JPEG, 30 and 5 Hz)
+  /mongla/vision/<cam>/preview/compressed  camera's own JPEG, 30 and 5 Hz;
+                                           encoded only for a source with none)
 
 Examples
 --------
@@ -52,6 +53,18 @@ from mongla_vision import (
 from mongla_vision.calibration.binding import calibration_for_profile
 from mongla_vision.cameras.discover import discover_cameras
 from mongla_vision.cameras.reopen import ABSENT, GAVE_UP, REOPEN, CameraWatch
+
+
+# The browser's quality for a frame we encode ourselves; a camera's own JPEG
+# is never re-encoded.
+STREAM_JPEG_QUALITY = 80
+
+
+def _encode_jpeg(frame) -> bytes:
+    """A decoded frame as JPEG for the video topics, or b'' if it will not encode."""
+    import cv2
+    ok, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY])
+    return buf.tobytes() if ok else b''
 
 
 def advance_slot(last: float, period: float, now: float) -> float:
@@ -112,7 +125,7 @@ class CameraNode(Node):
         # default, which left the node's own default able to do it again.
         self.declare_parameter('fps',             0)
         self.declare_parameter('frame_id',        '')
-        # Path to a calibration.json from tools/pool/fov_calibrate.py. Empty (the
+        # Path to a calibration.json from calibration/solver.py. Empty (the
         # default) keeps the historical behaviour EXACTLY: size-only CameraInfo
         # with K and D left zero. Nothing changes until a real calibration
         # exists for this camera.
@@ -130,6 +143,13 @@ class CameraNode(Node):
         self.declare_parameter('path',            '')        # for source=video_file
         self.declare_parameter('loop',            True)      # for source=video_file
         self.declare_parameter('discover_on_start', False)   # log USB camera table
+        # The two settings a mission or the deck changes while frames flow.
+        # `exposure_us` is a shutter in MICROSECONDS (0 = the camera's own
+        # auto exposure); `controls` is 'name=value, ...' in the names
+        # `v4l2-ctl --list-ctrls` prints, on top of the profile's own. Both
+        # apply live on the V4L2 source and are read back; see _on_set.
+        self.declare_parameter('exposure_us',     0)
+        self.declare_parameter('controls',        '')
 
         if self.get_parameter('discover_on_start').get_parameter_value().bool_value:
             cams = discover_cameras()
@@ -142,6 +162,7 @@ class CameraNode(Node):
                 self.get_logger().warn('[CAM  ] no USB cameras found via discover')
 
         self._cam     = self._build_camera_with_retry()
+        self.add_on_set_parameters_callback(self._on_set)
         self._log_rate_source = True
         self._info    = self._cam.info()
         self._cam_name = str(self._info.get('name') or 'cam')
@@ -265,6 +286,8 @@ class CameraNode(Node):
             fps_override = int(self.get_parameter('fps').value)
             if fps_override > 0:
                 profile['fps'] = fps_override
+            if profile.get('source') in ('v4l2', 'webcam'):
+                profile.update(self._asked_controls(profile.get('controls')))
                 # WARN, not info. The launch files pin the process default to
                 # `warn`, so an info line here is invisible -- and a silently
                 # capped camera is the exact round-26 defect, which cost a
@@ -340,7 +363,9 @@ class CameraNode(Node):
                           or str(self.get_parameter('name').value).strip()
                           or source,
         }
-        if source == 'webcam':
+        # `v4l2` is the mailbox with the camera's own JPEG, at any size; the
+        # calibration launch uses it at the size a calibration is taken at.
+        if source in ('webcam', 'v4l2'):
             if device_path:
                 dev = device_path   # by-path symlink (port-stable) wins
                 self.get_logger().info(f'[CAM  ] device_path (port-stable) → {device_path}')
@@ -357,6 +382,7 @@ class CameraNode(Node):
                 width=int(self.get_parameter('width').value),
                 height=int(self.get_parameter('height').value),
                 fps=fps_explicit,
+                **self._asked_controls(None),
             )
         elif source == 'ros_topic':
             kwargs.update(
@@ -377,6 +403,48 @@ class CameraNode(Node):
             )
 
         return make_camera(source, logger=self.get_logger(), **kwargs)
+
+    def _asked_controls(self, base, exposure_us=None, controls=None):
+        """The profile's controls with this node's parameters on top, as the
+        builder's `controls` and `exposure_us` keywords."""
+        from .cameras.v4l2_mailbox import parse_controls
+        text = self.get_parameter('controls').value if controls is None else controls
+        us = self.get_parameter('exposure_us').value if exposure_us is None else exposure_us
+        return {'controls': {**dict(base or {}), **parse_controls(text)},
+                'exposure_us': int(us)}
+
+    # Applied while streaming: the two the V4L2 camera can change without a
+    # reopen. Everything else is read once, and a live set of it is refused
+    # with the reason, because `ros2 param set` and `set_node` report success
+    # for any declared name and the camera would carry on unchanged.
+    LIVE_PARAMS = ('exposure_us', 'controls')
+
+    def _on_set(self, params):
+        from rcl_interfaces.msg import SetParametersResult
+        from .cameras.v4l2_mailbox import exposure_controls
+        fixed = [p.name for p in params if p.name not in self.LIVE_PARAMS]
+        if fixed:
+            return SetParametersResult(successful=False, reason=(
+                f'{", ".join(fixed)}: read once when the camera opens -- set it '
+                f'under `nodes:` in bringup.yaml and restart'))
+        new = {p.name: p.value for p in params}
+        if not hasattr(self._cam, 'set_controls'):
+            return SetParametersResult(successful=False, reason=(
+                f'the {self._cam.source_kind} source cannot change camera '
+                f'controls while streaming; only the V4L2 source can'))
+        try:
+            asked = self._asked_controls(None, new.get('exposure_us'), new.get('controls'))
+        except ValueError as exc:
+            return SetParametersResult(successful=False, reason=str(exc))
+        want = {**asked['controls'],
+                **exposure_controls(asked['exposure_us'], self._cam.auto_mode)}
+        got = self._cam.set_controls(want)
+        wrong = {k: (v, got.get(k)) for k, v in want.items() if got.get(k) != v}
+        if wrong:
+            return SetParametersResult(successful=False, reason=(
+                'the camera did not take ' + ', '.join(
+                    f'{k}={a} (reads {b})' for k, (a, b) in wrong.items())))
+        return SetParametersResult(successful=True)
 
     # How long to wait after a source reports "nothing new". A source that
     # already owns a keep-up thread (the v4l2 mailbox) answers instantly and
@@ -569,12 +637,18 @@ class CameraNode(Node):
             self._last_pub = advance_slot(self._last_pub, self._min_period,
                                           time.monotonic())
 
-        try:
-            img_msg = image_msg.to_msg(frame, 'bgr8')
-        except Exception as exc:
-            self.get_logger().warning(f"[CAM  ] image encode failed: {exc!r}")
-            self._dropped += 1
-            return
+        # The raw image only for a reader. The composed consumers take frames
+        # by reference, so on the vehicle `image_raw` is usually unread, and
+        # building a 691 kB message per frame for nobody was paid at camera
+        # rate (210 Hz downward).
+        img_msg = None
+        if self._pub_img.get_subscription_count() > 0:
+            try:
+                img_msg = image_msg.to_msg(frame, 'bgr8')
+            except Exception as exc:
+                self.get_logger().warning(f"[CAM  ] image encode failed: {exc!r}")
+                self._dropped += 1
+                return
 
         # The capture time, not now(). This stamped `now()` at PUBLISH time,
         # which makes the header say the frame is 0 ms old at the instant it
@@ -590,17 +664,19 @@ class CameraNode(Node):
         # by the source from the kernel's monotonic capture stamp. Sources that
         # cannot know better (a video file, a ROS topic) set it at read time,
         # which is the best available answer there and no worse than before.
-        img_msg.header = self._make_header(meta)
+        header = self._make_header(meta)
 
         info = CameraInfo()
-        info.header = img_msg.header
-        info.width  = int(meta.width  or img_msg.width)
-        info.height = int(meta.height or img_msg.height)
+        info.header = header
+        info.width  = int(meta.width  or frame.shape[1])
+        info.height = int(meta.height or frame.shape[0])
         self._fill_calibration(info)
 
-        self._pub_img.publish(img_msg)
+        if img_msg is not None:
+            img_msg.header = header
+            self._pub_img.publish(img_msg)
         self._pub_info.publish(info)
-        self._publish_jpeg(meta, img_msg.header)
+        self._publish_jpeg(meta, header, frame=frame)
         # A composed consumer that wants intrinsics takes them by reference
         # too (the lock ladder, `submit_info`), rather than subscribing to a
         # topic this same process publishes at camera rate.
@@ -609,15 +685,21 @@ class CameraNode(Node):
             submit_info(info)
         self._sent += 1
 
-    def _publish_jpeg(self, meta, header, now=None):
+    def _publish_jpeg(self, meta, header, now=None, frame=None):
         """The camera's JPEG, unchanged, to whichever video topic is due.
 
-        Nothing is encoded: the bytes are the ones the sensor sent, so the
-        cost is a message and a copy. A topic nobody subscribes to costs
-        nothing at all. Sources that hand over decoded pixels (a file, a ROS
-        topic, OpenCV's capture) leave `meta.jpeg` empty and publish no video.
+        Nothing is encoded when the camera sent a JPEG: the bytes are the ones
+        the sensor sent, so the cost is a message and a copy. A topic nobody
+        subscribes to costs nothing at all.
+
+        A source that hands over decoded pixels (a recorded video, a ROS
+        topic, OpenCV's fallback capture) has no JPEG, and once published
+        nothing: Batighor showed a bench's footage as an empty panel, and a
+        vehicle camera fallen back to OpenCV would have shown the operator
+        the same. Its frame is encoded here, once, and only when a topic is
+        due and watched.
         """
-        if not meta.jpeg:
+        if not meta.jpeg and frame is None:
             return
         now = time.monotonic() if now is None else now
         msg = None
@@ -629,8 +711,10 @@ class CameraNode(Node):
                 continue
             out[2] = advance_slot(last, period, now)
             if msg is None:
-                msg = CompressedImage(header=header, format='jpeg',
-                                      data=meta.jpeg)
+                data = meta.jpeg or _encode_jpeg(frame)
+                if not data:
+                    return
+                msg = CompressedImage(header=header, format='jpeg', data=data)
             pub.publish(msg)
 
     def _make_header(self, meta):
@@ -648,7 +732,7 @@ class CameraNode(Node):
         return h
 
     def _load_calibration(self) -> dict | None:
-        """Load intrinsics measured by tools/pool/fov_calibrate.py, if any.
+        """Load intrinsics measured by calibration/solver.py, if any.
 
         Returns None when unset or unreadable -- a missing calibration must
         never stop the camera. It is published as a WARN, not an exception,

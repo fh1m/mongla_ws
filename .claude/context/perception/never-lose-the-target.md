@@ -102,9 +102,6 @@ the prior; nothing supplies it yet.
 |---|---|
 | `anchor/health.py` — fouled lens vs changed world | **wired** into `lock_node` |
 | `anchor/bank.py` contamination guard — refuses to remember a view of the fault | **Key point: wired into `enrol()`**, the DAM4SAM principle without a second bank |
-| `tracking/reid.py` — XFeat short-term identity memory, §25's 40-inlier bar, 1.5× margin | built, 13 tests, **deferred**: needs crop descriptors |
-| `tracking/cascade.py` — motion → **measured ego-motion** → appearance, capped at 4 calls | built, 17 tests, **deferred**: touches the association hot path |
-| `detection/confidence_calibration.py` — turbidity-aware, ships OFF | built; DQR-RTDETR validates the idea, our gain is still declared |
 
 ---
 
@@ -237,7 +234,8 @@ gaps either side of it.
        |          |            |
        |          |            +-- bank, contamination-guarded   (section 5)
        |          +-- LK + forward-backward + RANSAC similarity  (scale!)
-       +-- cascade: motion -> MEASURED ego-motion -> XFeat re-ID  (sections 2,4)
+       +-- OC-SORT + Kalman coast on capture time (re-ID and the cascade:
+           measured unneeded, deleted -- measured-bars section 88)
 ```
 
 Each addition attacks a different half of the same failure:
@@ -250,8 +248,7 @@ coming.
 
 ## 11. THE LAST PIECE: THE VEHICLE IS THE LARGEST CAUSE OF LOSING THE TARGET
 
-Sections 1–10 are all **perception**. Every one of them — the cascade, the
-re-identification, the contamination guard, the anticipation — operates in the
+Sections 1–10 are all **perception**. Every one of them — the contamination guard, the anticipation — operates in the
 **image plane**, downstream of a decision the vehicle has already made about
 where to point.
 
@@ -302,15 +299,10 @@ robot-behaviour patent states it plainly: store target position **"not on a
 sensor coordinate system but on a world coordinate system"**, so it "remains
 identical from the behaviour control perspective" however the vehicle moves.
 
-`WorldTarget` projects a sighting into the pool frame using the localiser's
-pose. Losing sight then stops being a perception failure and becomes a
-**navigation** one — the vehicle still knows the bearing to turn back to.
-
-**Warning:** It stores a **memory, never a sighting**: it refuses a non-finite or absurd
-range rather than storing a guess, it answers `None` once the estimate is
-staler than its horizon (a position from a minute ago is a rumour, not
-knowledge), and a test asserts it carries **no `score`, `confidence` or
-`detected` field** that anything downstream could mistake for a detection.
+A world-frame target memory (`WorldTarget`) was built for this, wired as a
+write from the downward lock, and never read by any consumer; it was deleted on
+2026-11-18. Turning back to a lost target is done by the localiser and the
+course map, which already hold where the props are.
 
 ### Where the golden goal now stands
 
@@ -318,8 +310,7 @@ knowledge), and a test asserts it carries **no `score`, `confidence` or
 |---|---|---|
 | target flickers | ladder + coast | shipped |
 | target changes appearance | bank, contamination-guarded | shipped |
-| identity fragments after a gap | XFeat re-ID + cascade | built |
-| vehicle's own motion moves the box | measured ego-motion stage | built |
+| identity fragments after a gap | align re-locks on the next real detection; re-ID measured unneeded (measured-bars §88) | shipped |
 | the view is about to degrade | falling-trend anticipation | **wired** |
 | target approaches or recedes | similarity fit tracks scale | **wired** |
 | **the controller steers it out of frame** | **visibility guard** | built |
@@ -381,7 +372,7 @@ rendered boxes, and then searching the archive: **208 `.pt` on this box, 96
 unique, 29 with a gate class**, against the 4 that ship. The better model had
 been sitting there the whole time.
 
-### FOV and object permanence — confirmed by others, still half-wired
+### FOV and object permanence — confirmed by others
 
 **VISTA-CBF+ELR (2026)** keeps collision constraints hard while relaxing
 field-of-view ones — independently confirming the `SLACK = True` decision
@@ -391,9 +382,8 @@ after.
 
 **Object permanence** (*Out of Sight, Still in Mind*; RoboStream 2026's causal
 memory) — a target leaving frame should become a navigation problem, not a
-forgotten one. `WorldTarget` implements this and is reached by **tests only**;
-its blocker is two missing signals (yaw, absolute range), named precisely in
-`ladder-register.md`. Do not wire it by inventing a range.
+forgotten one. Here that is the localiser and the course map; the separate
+in-vision memory was deleted unread (see above).
 
 ---
 
@@ -588,8 +578,8 @@ evaluation:**
    (section 23) precisely because apparent SIZE is what the approach
    controller reads — and the anchor has been producing a *better* scale all
    along, fitted frame-to-REFERENCE against a stored patch rather than
-   frame-to-frame with LK's drift. `time_to_contact.py` and `approach.py` are
-   both DEFERRED for want of exactly this signal.
+   frame-to-frame with LK's drift. A time-to-contact or standoff controller would read exactly this
+   signal; none exists yet (measured-bars section 62).
 2. **`theta` is an in-plane rotation** measured against a fixed reference. On a
    hull whose roll is unactuated (the five thrusters in the current CAD) that is
    a direct observation of the one attitude the controller cannot command, and
@@ -597,8 +587,8 @@ evaluation:**
    which turns it into a check on a commanded axis instead.
 
 **Caution: Neither is wired here, and neither should be on this evidence.** `scale` is
-metric only if the reference patch's true width is known (`target_width_m`,
-which is why that parameter now reaches the node), and `theta` is in-plane
+metric only if the reference patch's true width is known (the locked class's
+entry in `target_geometry.yaml`), and `theta` is in-plane
 camera rotation which is only hull roll for the DOWNWARD camera. Both are
 real signals with a named consumer and a named precondition -- which is the
 standard §9 asks for, and is more than they had.

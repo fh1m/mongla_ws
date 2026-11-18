@@ -51,9 +51,11 @@ Bring it up **bare first** if anything is unfamiliar — control only, then visi
 localization. Every capability is a switch, and that is exactly so a fault can be isolated
 instead of argued about.
 
-Check before trusting vision:
+Check before trusting vision: the whole graph first (both cameras and detectors, trackers,
+lock ladders, flow, the board's IMU and state, odometry; exits 1 on a FAIL), then the target:
 
 ```bash
+ros2 run mongla_vision vision_check
 ros2 run mongla_vision vision_check --camera forward --require-class gate
 ```
 

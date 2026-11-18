@@ -243,12 +243,15 @@ class MonglaMission(PlanMixin, ReportMixin, SeeMixin, WhereMixin, HeadingMixin, 
         # probes each detector node at most once).
         self._param_clients: dict[str, object] = {}
         self._detector_ok:   set[str] = set()
-        # Single-live-detector orchestration (the Hailo holds one model's
-        # context at a time: never run two detectors at once). `_live_camera` is the camera whose detector is currently
+        # One live detector by default: one model alone gets the chip to
+        # itself (downward 58.6 Hz alone against 32 with both, measured-bars
+        # 87). `use_both_cameras` lifts it for a task that needs both views
+        # (`_both_live`). `_live_camera` is the camera whose detector is currently
         # resumed; a vision verb / use_camera on a DIFFERENT camera pauses the old
         # one, resumes the new, points the HUD at it, and settles -- see
         # _activate_camera. None = nothing resumed yet (launch starts both paused).
         self._live_camera: str | None = None
+        self._both_live = False
         # Cameras whose detector we have already probed for the first-query
         # resume. Probing is not free (DDS discovery settle), and a repeat
         # probe cannot tell us anything new inside one mission.
@@ -552,7 +555,9 @@ class MonglaMission(PlanMixin, ReportMixin, SeeMixin, WhereMixin, HeadingMixin, 
     # Known dual-camera detector cameras. On every switch we pause EVERY one of
     # these except the target (not just the previously-live one), so exclusivity
     # holds from the FIRST use_camera even if the node was launched paused:=false
-    # (both detectors inferring from t=0 -> the concurrent-inference OOM). Pausing
+    # (both detectors inferring from t=0, each at about half the rate it gets
+    # alone, measured-bars 87). `use_both_cameras` is the deliberate way to run
+    # both. Pausing
     # an absent one is a quiet no-op, so single-camera runs are unaffected.
     _KNOWN_CAMERAS = ('forward', 'downward')
 

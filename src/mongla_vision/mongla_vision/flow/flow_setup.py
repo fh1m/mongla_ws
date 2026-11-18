@@ -5,7 +5,6 @@ node knows about its camera and the hull, never what the floor is doing.
 """
 import math
 import time
-import cv2
 import numpy as np
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
@@ -33,6 +32,7 @@ class FlowSetupMixin:
         One place to look for a knob; values are read in __init__.
         """
         self.declare_parameter('camera', 'downward')
+        self.declare_parameter('direct_feed', False)
         # NaN, not 4.0. A default pool depth is a scale factor nobody sets
         # deliberately multiplying every output -- the same shape as the
         # 50-vs-72 cm height error that produced an 83 % scale gap on the
@@ -395,19 +395,33 @@ class FlowSetupMixin:
         except Exception as exc:
             self.get_logger().warning(f'[FLOW ] image decode failed: {exc!r}')
             return
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        if not self._admit_frame_size((int(gray.shape[1]), int(gray.shape[0]))):
-            return
+        self._take(frame, msg.header)
+
+    # -- composed intake (`direct_feed`) ------------------------------------ #
+    def wants_frame(self) -> bool:
+        """Every frame: the worker keeps the newest and counts the rest, and
+        the speed flow can follow scales with the rate it is fed."""
+        return True
+
+    def submit_frame(self, frame_bgr, header) -> None:
+        """A decoded frame from the camera in this process, by reference.
+
+        Runs on the camera's capture thread, so it only fills the slot. The
+        camera decodes a new array per frame, so holding it is safe.
+        """
+        self._take(frame_bgr, header)
+
+    def _take(self, frame, header) -> None:
         # The capture stamp, never `now()`. dt is the denominator of every
         # velocity here, and re-stamping on arrival makes it the scheduler's
         # jitter rather than the shutter interval. This stack has shipped that
         # bug three times.
-        t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        t = header.stamp.sec + header.stamp.nanosec * 1e-9
         if t <= 0.0:
             t = time.monotonic()
         with self._slot_lock:
             if self._slot is not None:
                 self._dropped += 1
             self._seq += 1
-            self._slot = (gray, t, self._seq)
+            self._slot = (frame, t, self._seq)
         self._slot_evt.set()

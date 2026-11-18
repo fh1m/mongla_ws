@@ -118,3 +118,18 @@ def test_control_still_gates_on_ctrl_conf():
     assert 'min_score=ctrl_conf' in mv, (
         'the control-side confidence gate is gone -- assoc_conf must not ship '
         'without it')
+
+
+def test_a_launch_value_of_masks_reaches_the_model_it_builds():
+    """`masks` was read only by the live-set callback: `masks: false` at
+    launch left a segmentation model decoding masks. Every build applies it."""
+    from types import SimpleNamespace
+    from mongla_vision.detector_setup import DetectorSetupMixin
+    got = []
+    params = {'assoc_conf': 0.0, 'masks': False}
+    node = SimpleNamespace(
+        get_parameter=lambda n: SimpleNamespace(value=params[n]),
+        _apply_nms=lambda det: None)
+    det = SimpleNamespace(set_masks=got.append)
+    DetectorSetupMixin._apply_assoc_conf(node, det)
+    assert got == [False]

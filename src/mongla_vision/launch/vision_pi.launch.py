@@ -33,7 +33,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -67,7 +67,10 @@ for _n in ('mongla_detector_dual',
            # says whether XFeat landed on the Hailo-8 or fell back to the CPU.
            # Filtered out, a vehicle running the 4.5x slower path looked
            # identical to one on the chip.
-           'mongla_lock_forward', 'mongla_lock_downward'):
+           'mongla_lock_forward', 'mongla_lock_downward',
+           # Composed flow: its once-a-second line is the only place an
+           # operator sees it refusing, and why.
+           'mongla_flow_velocity'):
     _QUIET += ['--log-level', f'{_n}:=info']
 
 
@@ -186,49 +189,6 @@ def arguments() -> list:
         # `:=false` read back as True and both arms of the A/B were identical.
         # Third appearance of that trap; the fix is to declare the argument.
         DeclareLaunchArgument('kalman_adaptive_noise', default_value='true'),
-        # PER CAMERA, because they do not run at the same rate. Every coast
-        # window is sized from this, so one shared value guarantees one of the
-        # two trackers has a wrong coast -- and a tracker with a truncated
-        # coast still publishes and looks healthy.
-        #
-        # Full configuration, both cameras live with tracking on, taken from
-        # the TRACKER'S OWN in-process count -- which is the only trustworthy
-        # source on this machine. Two earlier values were wrong for two
-        # different reasons and the check caught both:
-        #
-        #   55  the standalone figure with the other camera paused, which is
-        #       not how the stack runs
-        #   30  what `ros2 topic hz` reported -- and that tool's own subscriber
-        #       load depresses the stream it measures. It read 27.7 det/s on
-        #       the same run the tracker measured 49.
-        #
-        # The 1.8x gap is worth carrying: `ros2 topic hz` UNDER-REPORTS on a
-        # loaded Pi, so every rate quoted from it is a floor, not a figure.
-        # These size the coast window, and both were stale.
-        # `tracker_node` converts its `max_predict_s` (1.5 s) into FRAMES as
-        # ceil(max_predict_s * frame_rate), and that frame count is the
-        # outermost rung of the coast ladder
-        # (_freshness 0.4 < vision.coast_s 0.8 < lost_grace_s 1.0 < THIS).
-        # Under-estimating frame_rate shortens the outer rung until it falls
-        # BELOW an inner one, and the coast then truncates early -- a target
-        # dropped mid-lock, while the tracker still publishes and looks
-        # healthy. The node's own comment records this happening once already,
-        # "made live by perception getting 5x faster".
-        #
-        # It went stale again on 2026-09-09 when pi_forward's fps went 15->60.
-        # Measured live on the vehicle with the full vision_pi stack up, off
-        # the node's own rate check:
-        #
-        #     forward  detections 30 Hz  (arg said 49 -- over, harmless)
-        #     downward detections 32 Hz  (arg said 15 -- UNDER, and 1.5*15/32
-        #                                 = 0.70 s of coast against a 0.8 s
-        #                                 vision.coast_s: truncating)
-        #
-        # Set to the measured rates, so max_predict_s means 1.5 s of real
-        # time. `frame_rate_warn_ratio` (1.5) still catches the next drift at
-        # runtime -- that warning is what surfaced this.
-        DeclareLaunchArgument('fwd_frame_rate', default_value='30.0'),
-        DeclareLaunchArgument('dwn_frame_rate', default_value='32.0'),
         # These were the wrong way round, and both halves were live.
         # The only calibration we hold declares itself, in its own metadata,
         # as `pi_test_global_shutter (Microdia USB)` -- USB vendor 0c45,
@@ -264,31 +224,33 @@ def arguments() -> list:
         # THE DVL. flow_node existed only as a setup.py entry point -- in no
         # launch file at all -- so the bottom-camera velocity sensor had to be
         # started by hand, which on a pool deck means it does not get started.
-        # OFF by default because it needs `pool_depth_m`, which it REFUSES to
-        # guess: height is a clean multiplier on every velocity it emits.
-        DeclareLaunchArgument('flow', default_value='false'),
+        # ON: it is the vehicle's only velocity sensor, and localization
+        # drifts without it. It still REFUSES to publish a speed until it has
+        # a height (`pool_depth_m`, or the floor tiles) and the board's gyro:
+        # height is a clean multiplier on every velocity, and an underived one
+        # is a confident wrong speed. Refusing is loud (quality 0 and a reason
+        # in the log), and bringup_check says which input is missing.
+        DeclareLaunchArgument('flow', default_value='true'),
         # The lock ladder: the follower and the XFeat anchor. It publishes `<ns>/lock`, NEVER `/detections`: a followed or anchored
         # box on the detector's topic is indistinguishable from something the
         # detector saw, and every consumer including the HUD would report a
         # detection that never happened.
         #
-        # Starting it does not steer the vehicle. The control loop consults
-        # the ladder only when `vision.lock_s > 0`, and that stays 0. This
-        # publishes the evidence so it can be watched on the deck before
-        # anything acts on it -- the same staging the firmware vision uplink
-        # uses (echo the numbers, confirm they match, THEN actuate).
-        # Default off, deliberately. Measured A/B on the vehicle: the ladder
-        # costs 23 % of the forward detection rate (30.23 -> 23.14 Hz) and
-        # 30 % of the downward (42.71 -> 29.82). `vision.lock_s` is 0, so the
-        # control loop does not read `/lock` -- paying a quarter of perception
-        # for evidence nothing consumes is the wrong trade. Turn BOTH on
-        # together: `lock:=true` plus `vision.lock_s > 0`, once the deck has
-        # watched /lock and the rungs agree with what the operator sees.
+        # ON. The manager consults it whenever detection drops out
+        # (`vision.lock_s` 1.0, vision_tunables.py), and its XFeat bank is
+        # what publishes loop-closure fixes to localization. A target lost for
+        # want of the rung that holds it through a gap costs the task, so the
+        # ladder is not a place to save CPU. Measured with both detectors,
+        # the ladder and flow live in one direct process: forward 29.8 Hz (the
+        # camera's rate), downward 32.4 to 33.1 Hz, 2.7 GB free (measured-bars
+        # 87). Its old A/B (23 to 30 % of the detection rate) was taken
+        # through the service, before measured-bars 86.
         DeclareLaunchArgument(
-            'lock', default_value='false',
-            description='Run the lock ladder (follower + XFeat anchor) on the '
-                        'forward camera, publishing <ns>/lock. Control ignores '
-                        'it until vision.lock_s > 0.'),
+            'lock', default_value='true',
+            description='Run the lock ladder (follower + XFeat anchor), '
+                        'publishing <ns>/lock and loop-closure fixes. The '
+                        'manager steers on it when detection drops out '
+                        '(vision.lock_s).'),
         # The ladder's own bars, reachable from the command line. Defaults
         # mirror `lock_node`'s declarations exactly -- two copies of a default
         # is how they drift, so if one moves the other must.
@@ -312,14 +274,6 @@ def arguments() -> list:
             'anchor_semi_dense', default_value='false',
             description='semi-dense matching: 2.1-2.6x inliers for +37 % '
                         'match cost. OFF until frame-to-reference is measured'),
-        DeclareLaunchArgument(
-            'target_width_m_forward', default_value='0.0',
-            description='measured TRUE width of the forward target in metres; '
-                        '0 = use the rulebook nominal. A measured prop beats '
-                        'a nominal, which is what SAUVC +/-5 % allows for'),
-        DeclareLaunchArgument(
-            'target_width_m_downward', default_value='0.0',
-            description='measured true width of the downward target, metres'),
         DeclareLaunchArgument(
             'lock_class', default_value='',
             description='Class the ladder locks onto. Empty = whatever the '
@@ -438,6 +392,16 @@ def arguments() -> list:
                         'recorded session becomes a regression fixture: the '
                         'detector, tracker, lock ladder and checkpoint bank '
                         'all run for real, on input that never changes.'),
+        # Both cameras in one process that opens the chip directly (the
+        # default), or one process per camera sharing it through the HailoRT
+        # service. The service adds 6 ms to every inference and the split
+        # gave no rate back on Kutum, so one process is the default
+        # (measured-bars 86). `split:=true` is for a third chip user.
+        DeclareLaunchArgument(
+            'split', default_value='false',
+            description='One vision process per camera, through the HailoRT '
+                        'service. Off: one process, the chip opened directly, '
+                        '6 ms faster an inference (measured-bars 86).'),
         DeclareLaunchArgument('fwd_device_path', default_value=''),
         DeclareLaunchArgument('dwn_device_path', default_value=''),
     ]
@@ -457,11 +421,28 @@ def generate_launch_description():
     # to `mongla_detector_dual` and ros2 warned about duplicate names. The
     # launcher's own default name is already `mongla_detector_dual`, and the two
     # detectors name themselves.
-    def detectors() -> Node:
+    def detectors(cameras: str = '', fallback: str = '', condition=None,
+                  prefer: str = '') -> Node:
+        """The vision process. With `cameras`, one of a pair: each camera,
+        its detector and its lock ladder in a process of their own, sharing
+        the chip through the HailoRT service. A node-targeted remap renames
+        only the launcher, so the detector and camera nodes keep their names.
+        `fallback` is MONGLA_HAILO_FALLBACK (hailo_device.py): if the service
+        is lost the forward process opens the chip itself and the downward
+        one stops, so the forward detector is the one that survives.
+        `prefer` is MONGLA_HAILO_PREFER: 'direct' for the single process,
+        which is the chip's only user and skips the service's round trip."""
+        extra = {'cameras': cameras} if cameras else {}
+        remap = (['-r', f'mongla_detector_dual:__node:=mongla_vision_{cameras}']
+                 if cameras else [])
         return Node(
             package='mongla_vision', executable='detector_dual_node',
-            output='screen', ros_arguments=_QUIET,
-            parameters=[{
+            output='screen', ros_arguments=_QUIET + remap,
+            additional_env=({**({'MONGLA_HAILO_FALLBACK': fallback} if fallback else {}),
+                             **({'MONGLA_HAILO_PREFER': prefer} if prefer else {})}
+                            or None),
+            condition=condition,
+            parameters=[extra, {
                 'fwd_model_path': LaunchConfiguration('fwd_model'),
                 'dwn_model_path': LaunchConfiguration('dwn_model'),
                 'fwd_models':     LaunchConfiguration('fwd_models'),
@@ -506,8 +487,6 @@ def generate_launch_description():
                 # with XFeat on the chip they raced the detector for it. Composed,
                 # all of them share one VDevice. Why each value is passed:
                 #   act_conf      -- the B-59 acting bar; a pool day must reach it
-                #   target_width  -- the anchor's metric scale; a measured prop
-                #                    beats the rulebook nominal
                 #   medium        -- the lock rectifies its OBJECT points
                 # Place recognition is deliberately NOT plumbed: it configures
                 # itself from ~/.mongla/*.yaml so every launch path behaves alike
@@ -526,14 +505,33 @@ def generate_launch_description():
                 'dwn_lock_target_class':  LaunchConfiguration('dwn_lock_class'),
                 'fwd_lock_anchor_bank':   LaunchConfiguration('bank_forward'),
                 'dwn_lock_anchor_bank':   LaunchConfiguration('bank_downward'),
-                'fwd_lock_target_width_m': ParameterValue(
-                    LaunchConfiguration('target_width_m_forward'), value_type=float),
-                'dwn_lock_target_width_m': ParameterValue(
-                    LaunchConfiguration('target_width_m_downward'), value_type=float),
+
+                # Optical flow on the downward camera, in this process: frames
+                # by reference rather than ~210 raw images a second over DDS
+                # (measured-bars 87). The calibration and profile are the
+                # downward camera's own, so the two cannot disagree.
+                'flow':                ParameterValue(
+                    LaunchConfiguration('flow'), value_type=bool),
+                'flow_medium':         LaunchConfiguration('medium'),
+                'flow_pool_depth_m':   ParameterValue(
+                    LaunchConfiguration('pool_depth_m'), value_type=float),
+                'flow_pool_depth_min_m': ParameterValue(
+                    LaunchConfiguration('pool_depth_min_m'), value_type=float),
+                'flow_pool_depth_max_m': ParameterValue(
+                    LaunchConfiguration('pool_depth_max_m'), value_type=float),
+                'flow_calibration':    LaunchConfiguration('dwn_calibration'),
+                'flow_profile':        LaunchConfiguration('dwn_profile'),
+                # Floor instruments. Both OFF by default; see flow_node.
+                'flow_tile_m':         ParameterValue(
+                    LaunchConfiguration('tile_m'), value_type=float),
+                'flow_lane_lines':     ParameterValue(
+                    LaunchConfiguration('lane_lines'), value_type=bool),
+                'flow_caustic_suppression': ParameterValue(
+                    LaunchConfiguration('caustics'), value_type=bool),
             }],
         )
 
-    def tracker(camera_name: str, rate_arg: str) -> Node:
+    def tracker(camera_name: str) -> Node:
         return Node(
             package='mongla_vision', executable='tracker_node',
             name=f'mongla_tracker_{camera_name}', output='screen',
@@ -542,7 +540,6 @@ def generate_launch_description():
                          'tracker_type': LaunchConfiguration('tracker_type'),
                          'kalman_adaptive_noise':
                              LaunchConfiguration('kalman_adaptive_noise'),
-                         'frame_rate': LaunchConfiguration(rate_arg),
                          # Clamp the tracker's gates to the detector's
                          # floor: above it NO track is created and
                          # /tracks stays empty while looking healthy.
@@ -611,32 +608,6 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('lock')),
         )
 
-    def flow() -> Node:
-        return Node(package='mongla_vision', executable='flow_node',
-               name='mongla_flow_velocity', output='screen',
-               parameters=[{
-                   'camera':       'downward',
-                   'medium':       LaunchConfiguration('medium'),
-                   'pool_depth_m': ParameterValue(
-                       LaunchConfiguration('pool_depth_m'), value_type=float),
-                   'pool_depth_min_m': ParameterValue(
-                       LaunchConfiguration('pool_depth_min_m'), value_type=float),
-                   'pool_depth_max_m': ParameterValue(
-                       LaunchConfiguration('pool_depth_max_m'), value_type=float),
-                   # The SAME calibration the downward camera_node gets. Passing
-                   # them separately is how they came to disagree.
-                   'calibration':  LaunchConfiguration('dwn_calibration'),
-                   'profile':      LaunchConfiguration('dwn_profile'),
-                   # Floor instruments. Both OFF by default; see flow_node.
-                   'tile_m':       ParameterValue(
-                       LaunchConfiguration('tile_m'), value_type=float),
-                   'lane_lines':   ParameterValue(
-                       LaunchConfiguration('lane_lines'), value_type=bool),
-                   'caustic_suppression': ParameterValue(
-                       LaunchConfiguration('caustics'), value_type=bool),
-               }],
-               condition=IfCondition(LaunchConfiguration('flow')))
-
     # `launch: vision_pi:` in ~/.mongla/bringup.yaml re-defaults these, and its
     # `nodes:` reach the nodes below -- only when this file is the one typed.
     args, settings = launch_defaults.for_launch_file(args, __file__)
@@ -653,10 +624,15 @@ def generate_launch_description():
         # Every process below restarts 2 s after it dies mid-run, three times,
         # then stays down (`launch_respawn`). The cameras live inside
         # `detectors`, so its restart also reopens a camera that vanished.
-        *respawning(detectors, 'the detectors and cameras'),
-        *respawning(lambda: tracker('forward', 'fwd_frame_rate'), 'the forward tracker'),
-        *respawning(lambda: tracker('downward', 'dwn_frame_rate'), 'the downward tracker'),
-        *respawning(flow, 'the flow node'),
+        *respawning(lambda: detectors(condition=UnlessCondition(
+            LaunchConfiguration('split')), prefer='direct'),
+            'the detectors and cameras'),
+        *respawning(lambda: detectors('forward', 'direct', IfCondition(
+            LaunchConfiguration('split'))), 'the forward vision process'),
+        *respawning(lambda: detectors('downward', 'none', IfCondition(
+            LaunchConfiguration('split'))), 'the downward vision process'),
+        *respawning(lambda: tracker('forward'), 'the forward tracker'),
+        *respawning(lambda: tracker('downward'), 'the downward tracker'),
         # The ladders are composed into `detectors` above (`lock:=`), not
         # started here: as separate processes they raced it for the Hailo.
         *respawning(lambda: solver('forward'), 'the forward pose solver'),

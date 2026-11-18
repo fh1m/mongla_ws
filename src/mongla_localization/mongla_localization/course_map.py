@@ -65,10 +65,25 @@ class Prop:
 class Course:
     """A named set of prop priors, with refusals instead of defaults."""
 
-    def __init__(self, name: str, props: Dict[str, Prop], source: str = ''):
+    def __init__(self, name: str, props: Dict[str, Prop], source: str = '',
+                 pool: Optional[Dict[str, Optional[float]]] = None):
         self.name = name
         self.props = props
         self.source = source
+        # The venue's floor: `depth_m`, and `depth_min_m`/`depth_max_m` for a
+        # floor that slopes or steps. None where unset, never a default.
+        self.pool = dict(pool or {})
+
+    def pool_depth(self):
+        """(depth, min, max) in metres, min and max NaN when unset; None when
+        the course gives no depth at all, so flow keeps what it was given."""
+        d = self.pool.get('depth_m')
+        if d is None:
+            return None
+        lo, hi = self.pool.get('depth_min_m'), self.pool.get('depth_max_m')
+        nan = float('nan')
+        return (float(d), nan if lo is None else float(lo),
+                nan if hi is None else float(hi))
 
     def prop(self, name: str) -> Prop:
         key = str(name).strip().lower()
@@ -141,7 +156,9 @@ def load_course(name: str) -> Course:
                 detect_class=str(body.get('detect_class', '') or ''),
                 measured=bool(body.get('measured', False)),
                 note=str(body.get('note', '') or ''))
-        return Course(stem, props, source=str(path))
+        pool = {k: _opt_float((raw.get('pool') or {}).get(k))
+                for k in ('depth_m', 'depth_min_m', 'depth_max_m')}
+        return Course(stem, props, source=str(path), pool=pool)
     raise FileNotFoundError(
         f'no course {stem!r}. Looked in: '
         f'{[str(d) for d in _search_dirs()]}')
