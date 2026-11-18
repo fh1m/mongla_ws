@@ -13,6 +13,7 @@
   <depend>sensor_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>diagnostic_msgs</depend>
+  <depend>rcl_interfaces</depend>  <!-- SetParametersResult: the live-parameter refusal (node_setup.py) -->
   <depend>vision_msgs</depend>
   <depend>mongla_control</depend>
   <depend>mongla_interfaces</depend>
