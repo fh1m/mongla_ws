@@ -1,4 +1,4 @@
-"""Asking the bank where the vehicle is: locate, recognise, corroborate, verify.
+"""Asking the bank where the vehicle is: locate, recognise, verify.
 
 Each answers from the enrolled references and returns a `BankPose` or None.
 
@@ -271,71 +271,6 @@ class LookupMixin:
         dst = cv2.perspectiveTransform(src, np.asarray(H, np.float64))
         return {n: (float(dst[i, 0, 0]), float(dst[i, 0, 1]))
                 for i, n in enumerate(names)}
-
-    def corroborate(self, gray: np.ndarray, xyxy, *,
-                    label: Optional[str] = None,
-                    overlap: float = 0.3) -> BankPose:
-        """Does the bank agree that THIS BOX is the thing it remembers?
-
-        The two-way use, and it is one mechanism. A detector confidence is a
-        semantic opinion with no geometry behind it; the bank's inliers are
-        geometry with no semantics. Asking the bank about a specific box gets
-        both, and answers two opposite questions at once:
-
-          a WEAK detection the bank corroborates is worth acting on -- the
-            prop is really there and the detector was merely unsure, which on
-            our own footage is the common case (p50 confidence 0.49)
-          a CONFIDENT detection the bank contradicts is a distractor -- the
-            failure that steals the vehicle, and the one a confidence
-            threshold alone cannot catch at any setting
-
-        Its discrimination depends entirely on the detector -- §30, §31.
-        Scored with a model never trained for the footage, the distractor clip
-        beat the true clip (26 vs 20 median inliers) and no threshold
-        separated them. With the per-prop model for that footage, the
-        distractor drops to a median of **0** against 10 -- a 9.5x separation
-        from the same code.
-
-        So this is only as good as the box it is handed, and it must not be
-        wired into a control path until it has been scored with the model that
-        will actually run beside it. Mask-based enrolment was proposed as the
-        fix in §30 and MEASURED WORSE (§31): a tight prop box leaves too little
-        to segment.
-
-        It does not invent a fused score. There is no principled way to
-        combine "0.31 confident" with "62 inliers" into one number, and a
-        fabricated one would be acted on as though it meant something. The
-        caller gets the inlier count, the overlap, and a verdict, and decides.
-
-        `overlap` is the fraction of the bank's matched quad that must fall
-        inside the box for them to be talking about the same object. Without
-        it, a match anywhere in frame would corroborate a box anywhere else.
-        """
-        p = self.locate(gray, label=label)
-        p.identity_why = ''
-        if not p.ok or p.pose is None or p.pose.corners is None:
-            p.identity_ok = False
-            p.identity_why = f'bank has no match (inliers {p.inliers})'
-            return p
-
-        # The box arrives in FULL-FRAME pixels; the quad is in backend pixels.
-        fh, fw = gray.shape[:2]
-        sx, sy = self._be.w / float(fw), self._be.h / float(fh)
-        x1, y1, x2, y2 = (float(v) for v in xyxy)
-        bx = (min(x1, x2) * sx, min(y1, y2) * sy,
-              max(x1, x2) * sx, max(y1, y2) * sy)
-        quad = np.asarray(p.pose.corners, np.float32).reshape(-1, 2)
-        inside = ((quad[:, 0] >= bx[0]) & (quad[:, 0] <= bx[2])
-                  & (quad[:, 1] >= bx[1]) & (quad[:, 1] <= bx[3]))
-        frac = float(inside.mean()) if len(quad) else 0.0
-
-        ok = p.inliers >= self._id_inliers and frac >= overlap
-        p.identity_ok = bool(ok)
-        p.identity_why = (f'inliers {p.inliers}'
-                          f'{"" if p.inliers >= self._id_inliers else f"<{self._id_inliers}"}; '
-                          f'quad {frac:.0%} inside the box'
-                          f'{"" if frac >= overlap else f" <{overlap:.0%}"}')
-        return p
 
     def verify(self, gray: np.ndarray, *,
                label: Optional[str] = None) -> int:
