@@ -212,8 +212,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `detection/hailo_seg.py` | `HailoSegDetector`: a raw segmentation HEF behind the same `Detector` API. |
 | `detection/hef_file.py` | What a `.hef` and its sidecar say about themselves, read without a device. |
 | `detection/messages.py` | Convert internal Detection objects to vision_msgs. |
-| `detection/preprocess.py` | Contrast preprocessing for underwater frames, measured on real footage. |
-| `detection/profiles.py` | ONE WORD instead of five knobs, because competition day is not the time. |
 | `detection/rangecrop.py` | Trade field of view for range, automatically, when the target is far. |
 | `detection/seg_decode.py` | Host-side decode of a RAW YOLOv8/v11-seg head, in the QUANTISED domain. |
 | `detection/yolo.py` | Ultralytics YOLO11 (or any compatible model file). |

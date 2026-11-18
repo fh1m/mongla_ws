@@ -41,8 +41,6 @@ src/mongla_vision/mongla_vision/
     gpu.py                # select_device — the CUDA decision for the .pt path on a dev box.
     hailo.py              # Hailo-8 detector backend: a compiled ``.hef`` behind the same `Detector` API.
     messages.py           # Convert internal Detection objects to vision_msgs.
-    preprocess.py         # Contrast preprocessing for underwater frames, measured on real footage.
-    profiles.py           # ONE WORD instead of five knobs, because competition day is not the time.
     rangecrop.py          # Trade field of view for range, automatically, when the target is far.
     seg_decode.py         # Host-side decode of a RAW YOLOv8/v11-seg head, in the QUANTISED domain.
     yolo.py               # YoloDetector — Ultralytics YOLO11 (or any compatible model file).

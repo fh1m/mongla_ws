@@ -182,7 +182,8 @@ def test_it_is_OFF_by_default():
     """Half the field of view is a real cost, and the mission decides whether
     it is worth paying. Nothing that trades away FOV should switch itself on
     without being asked."""
-    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py')
-    assert "self.declare_parameter('range_crop', -1)" in src
-    assert "if int(_p('range_crop', 0)) > 0" in src
+    pkg = Path(__file__).resolve().parents[1]
+    setup = code_of_file(pkg / 'mongla_vision' / 'detector_setup.py')
+    assert "self.declare_parameter('range_crop', False)" in setup
+    launch = (pkg / 'launch' / 'vision_pi.launch.py').read_text()
+    assert "DeclareLaunchArgument('range_crop', default_value='false')" in launch

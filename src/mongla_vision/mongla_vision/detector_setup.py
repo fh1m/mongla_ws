@@ -10,7 +10,7 @@ from .detector_params import _model_stem, _parse_model_conf, _split_active
 
 
 # What the callback below applies. Any other name is refused: rclpy
-# reports success for every declared parameter, and imgsz, preprocess or
+# reports success for every declared parameter, and imgsz, range_crop or
 # a model path set live used to print "successful" and change nothing.
 LIVE_PARAMS = ('active_model', 'assoc_conf', 'classes', 'conf', 'masks',
                 'max_det', 'model_conf', 'nms_floor', 'nms_iou', 'paused')
@@ -98,33 +98,16 @@ class DetectorSetupMixin:
         # says so loudly. A misconfiguration costs one warning and two
         # seconds, never a dead detector.
         self.declare_parameter('direct_feed',         True)
-        # Underwater contrast preprocessing. 'clahe' or 'off'.
-        #
-        # Measured on real RoboSub 2025 footage: on the gate approach -- 3.7x
-        # blurrier than the bin clip at the same brightness -- it takes target
-        # presence from 10.7 % to 56.2 % and the mean score from 0.226 to
-        # 0.410. On footage that already works it costs nothing: bin stays
-        # 100 %, octagon stays 100 % with a HIGHER mean score.
-        #
-        # Off by default because it is 3.78 ms on the Pi (77 Hz -> ~46), which
-        # is a real trade the operator should make deliberately.
-        self.declare_parameter('preprocess',          'auto')
-        self.declare_parameter('preprocess_clip',     0.0)
         # Range crop. Feed the detector a centre crop while the target is far,
         # so it occupies more of the 640x640 the chip sees. Measured on real
         # labelled data: recall at 4x the training distance goes 65.9 % ->
         # 100 %, and at 6.7x, 20.2 % -> 67.4 %. It releases automatically on
         # approach because a fixed crop LOSES close targets (69 % at 1x).
         # `imgsz` cannot do this on the Hailo -- it is baked into the HEF.
-        # An INT, not a bool: 0/1 are the operator's answer and -1 is
-        # 'not set', which a bool cannot express -- and without a third
-        # state a profile can never turn this on.
-        self.declare_parameter('range_crop',          -1)
-        # ONE WORD instead of four knobs. `vision:=murky` on competition day
-        # beats getting conf/preprocess/clip/crop right under a run clock.
-        # A profile supplies DEFAULTS ONLY -- an explicit parameter still
-        # wins, so debugging keeps the individual knobs.
-        self.declare_parameter('vision_profile',      '')
+        # Off until it is measured on the vehicle's own approach: the numbers
+        # above are an offline approach simulated on one dataset, and while
+        # active it halves the field of view a search needs.
+        self.declare_parameter('range_crop',          False)
 
     # ------------------------------------------------------------------ #
     #  Running more than one model on the same frame
@@ -188,6 +171,9 @@ class DetectorSetupMixin:
         from .detection.messages import remint_class_ids
         out = list(detections)
         for det in self._extra:
+            # Caught here, not counted: the failure counter rebuilds the
+            # PRIMARY detector, and a secondary model's fault must not tear
+            # down a primary that just succeeded.
             try:
                 out.extend(det.infer(frame))
             except Exception as exc:                        # noqa: BLE001
