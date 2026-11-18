@@ -348,9 +348,10 @@ def flow_height_verdict(top: dict) -> tuple[str, str]:
         return PASS, f'flow scales on a floor between {lo:.2f} and {hi:.2f} m'
     if num('tile_m') > 0:
         return PASS, f'flow reads its height off {num("tile_m"):.3f} m tiles'
-    return WARN, ('flow has no height: it will refuse every interval. Set '
-                  'pool_depth_m (or pool_depth_min_m and pool_depth_max_m), or '
-                  'tile_m, in ~/.mongla/bringup.yaml for this venue')
+    return WARN, ('flow has no height until a mission\'s use_course() gives it '
+                  'the course\'s pool: depth_m; a run with no course refuses every '
+                  'interval. Set pool: in ~/.mongla/courses/<course>.yaml, or '
+                  'pool_depth_m or tile_m in ~/.mongla/bringup.yaml')
 
 
 def _check_flow_height() -> tuple[str, str]:
