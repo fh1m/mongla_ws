@@ -59,6 +59,10 @@ measured as no help, was never wired, or duplicated something that runs.
 | camera log and calibration | the fps-override warning fired on every V4L2 start; a calibration of another aspect ratio was stretched onto the frame | FIXED: the warning fires only for an override, a cross-aspect file is refused (flow already refused it) |
 | pixel distance path | `DistanceAccumulator.add` and its helpers integrated raw pixels; nothing on the vehicle called them | DELETED; the distance is the integral of gated velocity |
 | scale cross-check | kept every pair since start and walked them all on each check | FIXED: only its window is kept |
+| empty snap | `Anchor.snap` with a box on a frame with no keypoints raised instead of returning 0, so the bank's `'empty'` refusal was never reached | FIXED, injection-verified |
+| bank scores after eviction | `last_lookup_scores` keyed by reference index survived an eviction, pairing one reference's current yield with another's best for the camera-health verdict | FIXED: eviction and clear reset them |
+| written, never read | a scan of every package for attributes assigned and never loaded: in vision, display_node's `yaw_source` parameter and four HUD fields, ByteTrack's copies of its settings, the lock's `_anchor_best`, and five more | DELETED; subscriptions held for teardown are kept |
+| stale odometry | the lock stores the odometry's arrival time and never reads it, so loop closure would search and scale with a position however old | open: loop closure is off (item 5); give it an age bar, measured on the odometry's real rate, before turning it on |
 
 ## Cameras
 
