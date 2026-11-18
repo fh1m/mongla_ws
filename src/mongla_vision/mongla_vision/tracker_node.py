@@ -106,6 +106,22 @@ def _build_tracker(tracker_type, *, track_buffer, frame_rate, min_hits,
             track_activation_threshold=track_activation_threshold)
 
 
+def capture_time(header) -> float:
+    """The instant the frame was taken, in seconds, from the camera's stamp.
+
+    Not the arrival time. The Kalman's transition and process noise are built
+    from the interval between two calls, and at the Hailo path's ~99 Hz a
+    frame interval is 10 ms -- so a few milliseconds of DDS delivery jitter
+    was a 30 % error in the interval, and the same error in every velocity
+    the filter carried. The detector copies the camera's capture stamp
+    (kernel start-of-exposure) into the header, so the interval between two
+    headers is the interval between two exposures. A header with no stamp
+    (a hand-built test message) falls back to arrival time.
+    """
+    t = header.stamp.sec + header.stamp.nanosec * 1e-9
+    return t if t > 0.0 else time.monotonic()
+
+
 def kalman_pass(kalman, tracked, frame_t):
     """Smooth every track's centre, reviving any filter a real box returns to.
 
@@ -309,7 +325,7 @@ class TrackerNode(Node):
         self.add_on_set_parameters_callback(self._on_param_change)
 
         self.get_logger().info(
-            f"[TRK  ] subscribed {ns}/detections  engine={self._tracker.name} "
+            f"[TRK  ] subscribed {ns}/candidates  engine={self._tracker.name} "
             f"track_buffer={track_buffer}@{frame_rate:.0f}Hz min_hits={min_hits} "
             f"coast={max_pred_s:.1f}s({max_pred}f) "
             f"act_thresh={act_thresh:.2f} "
@@ -400,7 +416,7 @@ class TrackerNode(Node):
             f"target is dropped mid-lock. Set frame_rate:={measured:.0f}.")
 
     def _on_detections(self, msg: Detection2DArray) -> None:
-        frame_t    = time.monotonic()
+        frame_t    = capture_time(msg.header)
         self._check_rate(frame_t)
         detections = array_to_detections(msg)
 
