@@ -28,19 +28,10 @@ splitting strategy makes it "robust to bounded distance estimation errors",
 which matters here because we are monocular with no DVL and range is the thing
 we are least sure of.
 
-And the second half, for when the guard is not enough.
-A target that leaves the frame is forgotten by anything that tracks in pixels.
-The fix is old and is stated most plainly in a robot-behaviour patent: store
-target position "**not on a sensor coordinate system but on a world coordinate
-system**", so it "remains identical from the behaviour control perspective"
-however the vehicle moves. Then losing sight stops being a perception failure
-and becomes a navigation problem — the vehicle still knows the bearing to turn
-back to.
-
-What this is not. It never invents a detection. `WorldTarget` holds where
-the target WAS and how stale that is; it refuses to answer once the estimate is
-older than its own horizon, and it carries no confidence that could be mistaken
-for a sighting. The ladder's rule is unchanged: no rung fabricates.
+A target that has left the frame is a navigation problem, and the stack
+answers it with the localiser and the course map, not with a memory here: a
+world-frame target memory was built in this module, written by the downward
+lock on every sighting, never read by anything, and deleted (2026-11-18).
 """
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -165,73 +156,6 @@ def assess(cx: float, cy: float, w: float, h: float, fx: float, fy: float,
                               f'{100 * hv:.0f} % margin', ang)
 
 
-class WorldTarget:
-    """Where the target is in the WORLD, so leaving frame is not forgetting.
-
-    Image-plane tracking forgets the instant the box leaves. Holding the
-    target in world coordinates turns that from a perception failure into a
-    navigation problem: the vehicle still knows which way to turn back.
-
-    It stores a MEMORY, never a sighting. `bearing_from` answers only while
-    the estimate is fresher than `max_age_s`, and there is no confidence field
-    that downstream could mistake for a detection.
-    """
-
-    def __init__(self, max_age_s: float = 20.0):
-        self.max_age_s = float(max_age_s)
-        self._xy: Optional[Tuple[float, float]] = None
-        self._t: float = 0.0
-        self.updates = 0
-
-    def observe(self, vehicle_xy, yaw_deg: float, bearing_deg: float,
-                range_m: float, now: float) -> bool:
-        """Project a sighting into the world and remember it.
-
-        Range is the weakest number we have, so a non-finite or absurd one
-        is refused rather than stored. A remembered position built from a
-        guessed range would send the vehicle confidently to the wrong place.
-        """
-        # `> 0.0` is True for inf. A memory built from an infinite range
-        # is a point at infinity, and the bearing to it is meaningless.
-        if vehicle_xy is None or not math.isfinite(range_m) or range_m <= 0.0:
-            return False
-        if not math.isfinite(yaw_deg) or not math.isfinite(bearing_deg):
-            return False
-        th = math.radians(yaw_deg + bearing_deg)
-        self._xy = (float(vehicle_xy[0]) + range_m * math.cos(th),
-                    float(vehicle_xy[1]) + range_m * math.sin(th))
-        self._t = float(now)
-        self.updates += 1
-        return True
-
-    def age(self, now: float) -> float:
-        return float('inf') if self._xy is None else (now - self._t)
-
-    def bearing_from(self, vehicle_xy, yaw_deg: float,
-                     now: float) -> Optional[float]:
-        """Relative bearing to turn to, degrees, or None.
-
-        None means "I do not know", and it is returned for a stale memory as
-        readily as for no memory at all -- because a position from a minute
-        ago is not knowledge, it is a rumour.
-        """
-        if self._xy is None or vehicle_xy is None:
-            return None
-        if (now - self._t) > self.max_age_s:
-            return None
-        dx = self._xy[0] - float(vehicle_xy[0])
-        dy = self._xy[1] - float(vehicle_xy[1])
-        if abs(dx) < 1e-9 and abs(dy) < 1e-9:
-            return None
-        world = math.degrees(math.atan2(dy, dx))
-        rel = (world - float(yaw_deg) + 180.0) % 360.0 - 180.0
-        return rel
-
-    @property
-    def xy(self) -> Optional[Tuple[float, float]]:
-        return self._xy
-
-
 # --------------------------------------------------------------------------- #
 #  PRIOR-GUIDED DETECTION -- vision stops fighting alone
 # --------------------------------------------------------------------------- #
@@ -251,11 +175,8 @@ class WorldTarget:
 # existing tracklets is what lets a LOW-SCORE box be recovered rather than
 # discarded.
 #
-# We already hold every input. `WorldTarget` has the target in pool
-# coordinates, the localiser has the vehicle pose, and `optics` has the
-# intrinsics. Projecting one through the others gives the predicted pixel --
-# which is the sonar-substitute of section 4, built from geometry instead of a
-# second sensor.
+# The prior used is the lock's own last centre (`lock_frames.py`): the place
+# the target was a moment ago, in the same image, with no world model needed.
 #
 # And the bar is never lowered below what the detector can produce. Our HEF
 # bakes an NMS floor of 0.200; nothing at runtime brings back what the chip
@@ -266,30 +187,6 @@ class WorldTarget:
 # fraction of frame width. Generous: the point is to exclude the far corners,
 # not to demand precision from a memory.
 PRIOR_RADIUS_FRAC = 0.25
-
-
-def project_world_target(target_xy, vehicle_xy, yaw_deg: float,
-                         w: float, h: float, fx: float,
-                         ) -> Optional[Tuple[float, float]]:
-    """Where a remembered world position should appear in the image, in px.
-
-    Bearing only -- no range is used, because the horizontal pixel of a target
-    depends on its BEARING and not on how far away it is. Returns None when the
-    target is behind the vehicle, where no pixel exists and a projection would
-    silently fold it back into the frame.
-    """
-    if target_xy is None or vehicle_xy is None or not (fx > 0 and w > 0):
-        return None
-    dx = float(target_xy[0]) - float(vehicle_xy[0])
-    dy = float(target_xy[1]) - float(vehicle_xy[1])
-    if abs(dx) < 1e-9 and abs(dy) < 1e-9:
-        return None
-    rel = math.radians(
-        (math.degrees(math.atan2(dy, dx)) - float(yaw_deg) + 180.0) % 360.0
-        - 180.0)
-    if abs(rel) >= math.radians(89.0):
-        return None                      # abeam or behind: no pixel
-    return (w * 0.5 + fx * math.tan(rel), h * 0.5)
 
 
 def region_conf_bar(px: Optional[Tuple[float, float]],

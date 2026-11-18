@@ -371,7 +371,7 @@ class LockSetupMixin:
         """Aim at another class, and forget everything about the old one (#75).
 
         Changing `_cls` alone left the old detection box, the follower's
-        points, the anchor's pose and label and the world memory in place,
+        points and the anchor's pose and label in place,
         so until a detection of the new class arrived the ladder kept
         publishing the OLD target, now read against the new class's width.
         The anchor's bank keeps its references: they are labelled by class,
@@ -394,8 +394,6 @@ class LockSetupMixin:
             self._follower.drop()
         self._anchor_pose, self._anchor_header, self._anchor_label = None, None, ''
         self._anchor_inliers, self._anchor_best = 0, None
-        if self._world is not None:
-            self._world = type(self._world)()
 
     def _retarget_width(self):
         """Re-resolve the committed width for the class we now follow.

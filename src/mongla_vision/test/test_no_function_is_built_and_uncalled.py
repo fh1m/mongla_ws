@@ -109,12 +109,6 @@ DEFERRED_FUNCTIONS = {
     'src/mongla_vision/mongla_vision/tracking/confidence.py:degrading':
         'ConfidenceTrend, measured as an early warning (0.891 -> 0.357 before the '
         'box wandered); waits for the control loop to read a trend, not a floor',
-    'src/mongla_vision/mongla_vision/tracking/visibility.py:bearing_from':
-        'object permanence; blocked on two missing signals, see '
-        'perception/ladder-register.md item 5',
-    'src/mongla_vision/mongla_vision/tracking/visibility.py:project_world_target':
-        'object permanence; blocked on two missing signals, see '
-        'perception/ladder-register.md item 5',
 }
 
 
