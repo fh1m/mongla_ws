@@ -302,7 +302,6 @@ class V4L2MailboxCamera(Camera):
         self._frame_id = str(frame_id)
         self._log = logger
         self._device = device
-        self._requested = (int(width), int(height), int(fps))
         unknown = sorted(set(controls or {}) - set(CONTROLS))
         if unknown:
             raise ValueError(f'v4l2: unknown control(s) {unknown}; known: {sorted(CONTROLS)}')
@@ -414,7 +413,6 @@ class V4L2MailboxCamera(Camera):
         self._w, self._h = int(g.fmt.pix.width), int(g.fmt.pix.height)
         got = int(g.fmt.pix.pixelformat)
         self._fourcc = ''.join(chr((got >> (8 * i)) & 0xFF) for i in range(4))
-        self._sizeimage = int(g.fmt.pix.sizeimage)
 
         p = _Streamparm()
         p.type = V4L2_BUF_TYPE_VIDEO_CAPTURE

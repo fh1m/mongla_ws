@@ -336,7 +336,6 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         # and enough to notice a drift.
         self.create_timer(10.0, self._log_efficiency)
 
-        self._device_str = device
         self._deadband   = float(self.get_parameter('alignment_deadband').value)
 
         # Per-model conf overrides from launch (applied on top of the uniform
