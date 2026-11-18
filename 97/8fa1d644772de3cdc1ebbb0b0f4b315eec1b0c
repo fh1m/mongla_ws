@@ -1,0 +1,45 @@
+.claude/context/README.md
+  s_b4c45e3235679b::t_7c475e8331c8a9 82-83,87-89,93-96,100-106,110-113,117-119
+.claude/context/platform/batighor-views.md
+  s_b4c45e3235679b::t_63a1c275e87460 1-133
+src/mongla_batighor/layouts/bins_downward.json
+  s_b4c45e3235679b::t_af1c021bc4acd9 21,27,37-38
+src/mongla_batighor/layouts/board_health.json
+  s_b4c45e3235679b::t_9f8e9bf04e556c 16-17,32-33,58-59
+src/mongla_batighor/layouts/board_link.json
+  s_b4c45e3235679b::t_ff1d8cb40e8091 12,21-22,28,33,42-43
+src/mongla_batighor/layouts/flow.json
+  s_b4c45e3235679b::t_d4e00be3da6a25 43-44,60-61,67,71-72,90,99-100,116-117
+src/mongla_batighor/layouts/localization.json
+  s_b4c45e3235679b::t_dc655635c633d8 74-75,110-111,141-142,173-174,180,185,194-195
+src/mongla_batighor/layouts/thrust.json
+  s_b4c45e3235679b::t_1fd65e7012de4a 8,13,22-23,38-39,64-65,79
+src/mongla_batighor/layouts/vision.json
+  s_b4c45e3235679b::t_a43b7e56dfc7e8 60-61,67,72,81-82,97-98,109,118-119,125,130,135,144-145,151,157,163,172-173,186-187
+src/mongla_batighor/mongla_batighor/overlay.py
+  s_b4c45e3235679b::t_29936b599f243f 156-201,240-245,276-295,301,303,310,313-316
+src/mongla_batighor/mongla_batighor/views.py
+  s_b4c45e3235679b::t_197398f83318d9 44-52,151-156,217,223-231,245,251,278-279,286-290,319-321,329,358-361
+src/mongla_batighor/test/test_overlay.py
+  s_b4c45e3235679b::t_0ea9b8f5348ef8 62-87
+src/mongla_batighor/test/test_views.py
+  s_b4c45e3235679b::t_8716a4452d840f 141-153
+src/mongla_batighor/theme/batighor.css
+  s_b4c45e3235679b::t_5f4d24aa4ca5d7 136-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "978fa1d644772de3cdc1ebbb0b0f4b315eec1b0c",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
