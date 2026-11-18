@@ -41,7 +41,7 @@ measured as no help, was never wired, or duplicated something that runs.
 | | What | State |
 |---|---|---|
 | B-117 | every loop closure was refused as a self-closure: the guards read the newest place, not the matched one | FIXED, truth test, injection-verified; BUILT, NEVER FLOWN |
-| B-118 | the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame, so `/lock`, the follower cross-check and the reseed used the wrong place | FIXED, truth test, injection-verified; BUILT, NEVER FLOWN |
+| B-118 | the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame, so `/lock`, the follower cross-check and the reseed used the wrong place | FIXED, truth test, injection-verified; on Kutum with the Sonix the old release returned a box 300 px off and the fixed one within 4 px, on both backends; BUILT, NEVER FLOWN |
 | pose ambiguity | two perfectly fitting IPPE branches reported ambiguity 0.0 ("certain"), and `pnp_node` wrote an unknown ambiguity or reprojection as 0.0 | FIXED at both ends; unknown is now the value that refuses |
 | visibility bearing | the field-of-view warning computed its angle with the backend K on full-frame pixels (the state itself was right) | FIXED, test |
 | flow distance | a distance started with no heading took an invented 0 deg axis and later mixed a real heading against it | FIXED: body frame for the whole run, and said |
@@ -79,9 +79,10 @@ What has to happen before a run counts, in the order it bites:
 3. **Give flow its floor.** A course file with `pool: depth_m` and its range, or
    `tile_m` once the tiles are measured. Without a range the velocity's covariance treats
    the typed depth as exact, and the gate now says so.
-4. **Check the anchor rung on Kutum with the Sonix.** B-118 changed where its box lands;
-   the bench check is a box held still in front of the camera, with the anchor rung's
-   centre compared against the detection's.
+4. **Watch the anchor rung on a detected prop.** B-118's grid is verified on Kutum with
+   the Sonix (a box comes back within 4 px); what is not yet seen is the rung taking over
+   from a real detection on a prop the model knows, and its box agreeing with the
+   follower's.
 5. **Leave these off until measured:** loop closure (needs a working barometer and the
    floor height, never fired), lane lines (a path marker reads as a lane), `range_crop`
    (halves the field of view; its gain was measured offline only).

@@ -527,7 +527,16 @@ stand-in backend with XFeat's resize contract, enrolled and located on one
 640x360 frame; with the scaling removed the box enrolled at x 440-600 comes
 back at 220-300). Same pass: the lock's field-of-view warning fed `assess` the
 backend `K` beside full-frame pixels, so its bearing angles were off by the
-same ratio (`test_lock_visibility_bearing.py`). Still BUILT, NEVER FLOWN.
+same ratio (`test_lock_visibility_bearing.py`).
+
+**On Kutum, 2026-11-18.** The Sonix downward camera, still, at 640x360: a box
+snapped and located on the next frame through the shipping `_anchor_box`, on
+the Hailo-8 HEF and on the ONNX path, two boxes each. Bar set before the run:
+every edge within 10 px. The release before the fix returned (400, 100, 600,
+300) as (200, 67, 300, 200), worst edge 300 px, on both backends; the fixed
+release returned it within 1.7 px (HEF) and 2.4 px (ONNX), and the left box
+within 2.5 and 4.0 px. Inliers 75-97. Still BUILT, NEVER FLOWN: the rung's
+behaviour in water is not measured.
 
 ### B-117: every loop closure was refused as a self-closure, because the guards read the newest place, not the matched one `READ 2026-11-18` **FIXED 2026-11-18**
 
