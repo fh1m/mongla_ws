@@ -795,7 +795,7 @@ the kind of thing that goes stale — `test_doc_drift.py` fails any doc that sta
 > it's wrong."* — Richard Feynman
 
 [`measured-bars.md`](.claude/context/measured-bars.md) is the file this project is really built
-on: **130 entries, 1,028 rows of numbers**, each with the method, the conditions and the bar it had
+on: **130 entries, 1,033 rows of numbers**, each with the method, the conditions and the bar it had
 to clear. Tests read it. A constant that drifts from it fails CI.
 
 **18 of those 130 entries say in their own title that they took an earlier result back.** 10

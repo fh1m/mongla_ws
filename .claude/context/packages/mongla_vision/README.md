@@ -236,7 +236,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `tracking/follower.py` | The fast rung: carry a box across the frames the detector has nothing for. |
 | `tracking/kalman.py` | Per-track 4-state constant-velocity Kalman smoother. |
 | `tracking/lock_state.py` | One target position, from whichever rung can still supply it. |
-| `tracking/presence.py` | The rung BELOW detection: accumulate evidence the detector refused to call. |
 | `tracking/reid.py` | Stitch a track's identity back together after a gap. The 179-switch fix. |
 | `tracking/roboflow_tracker.py` | Roboflow `trackers` backend (OC-SORT / ByteTrack) behind the Tracker ABC. |
 | `tracking/tracker.py` | Tracker ABC and TrackedDetection dataclass. |

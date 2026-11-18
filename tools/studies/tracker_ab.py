@@ -179,9 +179,15 @@ def compare(a):
     ts = z['t'] if 't' in z.files else None
     fps, w, h, start, n, conf = (meta[0], int(meta[1]), int(meta[2]),
                                  int(meta[3]), int(meta[4]), meta[5])
-    frames = {}
+    # The vehicle's two bars: a box ACTS (and may start a track) at `act`;
+    # the tracker also sees candidates down to `assoc` (vision_pi defaults).
+    act, assoc = a.act or float(conf), a.assoc or float(conf)
+    every = {}
     for r in rows:
-        frames.setdefault(int(r[0]), []).append(tuple(r[1:]))
+        every.setdefault(int(r[0]), []).append(tuple(r[1:]))
+    frames = {i: [b for b in bs if b[4] >= assoc] for i, bs in every.items()}
+    acting = {i: [b for b in bs if b[4] >= act] for i, bs in every.items()}
+    print(f'  acting bar {act:.2f}, association floor {assoc:.2f}')
     print(f'\n  {n} frames @ {fps:.0f} fps, {len(rows)} boxes cached at '
           f'conf={conf:.2f}\n')
 
@@ -201,7 +207,7 @@ def compare(a):
     def _wrapped(ttype, min_hits=3, max_predict_s=None):
         def make():
             tr = RoboflowTracker(tracker_type=ttype, track_buffer=150,
-                                 min_hits=min_hits,
+                                 min_hits=min_hits, detector_conf=act,
                                  iou_threshold=0.2,
                                  track_activation_threshold=0.40)
 
@@ -242,7 +248,7 @@ def compare(a):
     ]
     reports = []
     for name, mk in arms:
-        obs = (_obs_from(frames, w, h, fps, start, n, ts=ts) if mk is None
+        obs = (_obs_from(acting, w, h, fps, start, n, ts=ts) if mk is None
                else _track(frames, w, h, fps, start, n, mk, ts=ts))
         r = analyse(obs, name)
         r.truth = score_truth(obs, a.truth) if a.truth else None
@@ -309,6 +315,10 @@ def main():
     ap.add_argument('--fps', type=float, default=0.0)
     ap.add_argument('--cache', required=True)
     ap.add_argument('--compare', action='store_true')
+    ap.add_argument('--act', type=float, default=0.0,
+                    help='acting bar (vision_pi conf, 0.45); default: the cache conf')
+    ap.add_argument('--assoc', type=float, default=0.0,
+                    help='association floor (vision_pi assoc_conf, 0.10)')
     ap.add_argument('--truth', default='',
                     help='hand-labelled absent intervals (see score_truth)')
     a = ap.parse_args()
