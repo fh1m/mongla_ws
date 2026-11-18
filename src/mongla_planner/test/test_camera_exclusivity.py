@@ -2,7 +2,7 @@
 
 _activate_camera must pause EVERY other known detector (not just the previously
 live one) so a stray `paused:=false` launch (both inferring from t=0) is
-corrected on the first switch -- the concurrent-inference OOM fix. No ROS: the
+corrected on the first switch. No ROS: the
 real method runs against a fake self with mocked detector-param calls.
 """
 
@@ -14,6 +14,7 @@ from mongla_planner.mongla_dsl import MonglaMission
 def _fake(live=None, present=True):
     m = MagicMock()
     m._live_camera = live
+    m._both_live = False
     m._KNOWN_CAMERAS = MonglaMission._KNOWN_CAMERAS
     m._CAM_SWITCH_SETTLE_S = 0.0
     m.cam_switch_settle_s = 0.0
@@ -81,6 +82,7 @@ def test_absent_counterpart_is_skipped_without_pause_call():
 def _pump_fake(live=None):
     m = MagicMock()
     m._live_camera = live
+    m._both_live = False
     m._resume_probed = set()
     m._det_cache = {}      # no frames yet -> the probe is the only evidence
     m._DISCOVERY_SETTLE_S = 0.0
@@ -214,3 +216,32 @@ def test_camera_available_defaults_to_the_sticky_camera():
     MonglaMission.camera_available(fake)
     fake._detector_present.assert_called_once()
     assert fake._detector_present.call_args.args[0] == 'forward'
+
+
+def test_both_camera_mode_keeps_the_other_detector_live():
+    """A task that needs a gate ahead and a bin below: a verb on one camera
+    must not pause the other while both-camera mode is on."""
+    fake = _fake(live='forward')
+    fake._both_live = True
+    _activate(fake, 'downward')
+    fake.pause_detector.assert_not_called()
+    assert fake._live_camera == 'downward'
+
+
+def test_use_both_cameras_resumes_every_present_detector():
+    fake = _fake(live=None)
+    fake.camera = 'forward'
+    MonglaMission.use_both_cameras(fake)
+    resumed = sorted(c.args[0] for c in fake.resume_detector.call_args_list)
+    assert resumed == sorted(MonglaMission._KNOWN_CAMERAS)
+    assert fake._both_live is True
+
+
+def test_use_camera_after_both_pauses_the_other_again():
+    """Leaving both-camera mode on the camera that was already "live" must
+    still pause the other one, or both keep inferring for the rest of the run."""
+    fake = _fake(live='downward')
+    fake._both_live = True
+    fake._activate_camera = lambda n: _activate(fake, n)
+    MonglaMission.use_camera(fake, 'downward')
+    fake.pause_detector.assert_called_once_with('forward')
