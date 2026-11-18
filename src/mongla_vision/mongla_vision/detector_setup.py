@@ -297,6 +297,10 @@ class DetectorSetupMixin:
         if a > 0.0 and hasattr(det, 'update_assoc_conf'):
             det.update_assoc_conf(a)
         self._apply_nms(det)
+        # `masks` was read only by the live-set callback, so `masks: false`
+        # in bringup.yaml left every segmentation model decoding masks.
+        if hasattr(det, 'set_masks'):
+            det.set_masks(bool(self.get_parameter('masks').value))
 
     def _apply_nms(self, det) -> None:
         """Push `nms_floor` / `nms_iou` onto a freshly built detector.
