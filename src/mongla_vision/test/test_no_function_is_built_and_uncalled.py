@@ -97,18 +97,6 @@ DEFERRED_FUNCTIONS = {
     'src/mongla_planner/mongla_planner/resilience.py:retry':
         'mission-author API: missions live in ~/missions, deliberately out of '
         'git, so an in-repo caller is not expected',
-    'src/mongla_vision/mongla_vision/anchor/bank.py:wants_refresh':
-        'decay-triggered enrolment; lock_node enrols on scale coverage '
-        '(covers_scale) instead, and this costs a full locate() per ask',
-    'src/mongla_vision/mongla_vision/anchor/bank_lookup.py:corroborate':
-        'XFeat arbitration of weak detections; blocked by the reason in its own '
-        'commit (be051dec): the bank cannot yet arbitrate, and the fix is named there',
-    'src/mongla_vision/mongla_vision/qos.py:is_compatible':
-        'QoS compatibility rule; waits for a check that compares each '
-        'subscriber with its publisher at launch',
-    'src/mongla_vision/mongla_vision/tracking/confidence.py:degrading':
-        'ConfidenceTrend, measured as an early warning (0.891 -> 0.357 before the '
-        'box wandered); waits for the control loop to read a trend, not a floor',
 }
 
 

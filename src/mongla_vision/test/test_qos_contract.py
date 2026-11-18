@@ -38,22 +38,55 @@ SRC = Path(__file__).resolve().parents[2]          # .../src
 # --------------------------------------------------------------------------- #
 #  The compatibility rule itself
 # --------------------------------------------------------------------------- #
+
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy  # noqa: E402
+
+
+# The rule the middleware applies, kept here because only the guard needs it:
+# the publisher must offer at least what the subscriber requests.
+# Weakest-to-strongest. A publisher satisfies a subscriber when it offers a
+# policy at least as strong as the one requested.
+_RELIABILITY_RANK = {ReliabilityPolicy.BEST_EFFORT: 0,
+                     ReliabilityPolicy.RELIABLE:    1}
+_DURABILITY_RANK  = {DurabilityPolicy.VOLATILE:        0,
+                     DurabilityPolicy.TRANSIENT_LOCAL: 1}
+
+
+def is_compatible(pub: QoSProfile, sub: QoSProfile) -> bool:
+    """True when a subscriber with `sub` will receive from a publisher `pub`.
+
+    Depth plays no part -- it is a local queue size, not a contract, and a
+    mismatch there costs latency rather than delivery.
+    """
+    try:
+        return (_RELIABILITY_RANK[pub.reliability]
+                >= _RELIABILITY_RANK[sub.reliability]
+                and _DURABILITY_RANK[pub.durability]
+                >= _DURABILITY_RANK[sub.durability])
+    except KeyError:
+        # SYSTEM_DEFAULT / UNKNOWN resolve in the middleware, not here. Say so
+        # rather than answering True and being believed.
+        raise ValueError(
+            f'cannot compare non-concrete QoS: pub={pub.reliability}/'
+            f'{pub.durability} sub={sub.reliability}/{sub.durability}')
+
+
 def test_best_effort_publisher_cannot_feed_a_reliable_subscriber():
     """THE bug, stated as an assertion. If this ever returns True, every other
     test in this file is meaningless."""
-    assert not qos.is_compatible(qos.IMAGE, qos.DETECTIONS)
+    assert not is_compatible(qos.IMAGE, qos.DETECTIONS)
 
 
 def test_a_reliable_publisher_does_feed_a_best_effort_subscriber():
     """The other direction is fine -- the publisher offers more than asked."""
-    assert qos.is_compatible(qos.DETECTIONS, qos.IMAGE)
+    assert is_compatible(qos.DETECTIONS, qos.IMAGE)
 
 
 def test_a_volatile_publisher_cannot_feed_a_transient_local_subscriber():
     """Durability is the second axis, and it is the one that silently cost the
     console its class chips."""
-    assert not qos.is_compatible(qos.DETECTIONS, qos.LATCHED)
-    assert qos.is_compatible(qos.LATCHED, qos.DETECTIONS)
+    assert not is_compatible(qos.DETECTIONS, qos.LATCHED)
+    assert is_compatible(qos.LATCHED, qos.DETECTIONS)
 
 
 def test_an_unresolved_policy_raises_rather_than_answering_true():
@@ -62,7 +95,7 @@ def test_an_unresolved_policy_raises_rather_than_answering_true():
     from rclpy.qos import QoSProfile, ReliabilityPolicy
     bad = QoSProfile(depth=1, reliability=ReliabilityPolicy.SYSTEM_DEFAULT)
     with pytest.raises(ValueError):
-        qos.is_compatible(bad, qos.IMAGE)
+        is_compatible(bad, qos.IMAGE)
 
 
 # --------------------------------------------------------------------------- #
@@ -82,7 +115,7 @@ _LINKS = [
 @pytest.mark.parametrize('topic,pub,subs', _LINKS, ids=[l[0] for l in _LINKS])
 def test_every_declared_link_delivers(topic, pub, subs):
     for sub in subs:
-        assert qos.is_compatible(pub, sub), (
+        assert is_compatible(pub, sub), (
             f'{topic}: publisher {pub.reliability}/{pub.durability} cannot '
             f'feed subscriber {sub.reliability}/{sub.durability}')
 

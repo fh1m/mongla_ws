@@ -45,7 +45,7 @@ prove the guard is real.
 
 The files: `bank.py` holds the references and enrolment (`enrol`, eviction,
 refresh); `bank_lookup.py` answers from them (`locate`, `recognise`,
-`corroborate`, `verify`) and defines `BankPose`; `bank_store.py` saves and
+`verify`) and defines `BankPose`; `bank_store.py` saves and
 loads a bank.
 
 Eviction is by yield, not age. The table above says what decays is usefulness;
@@ -556,17 +556,6 @@ class CheckpointBank(LookupMixin, StoreMixin):
     def scales(self) -> list[float]:
         return list(self._scale)
 
-    def wants_refresh(self, gray: np.ndarray) -> bool:
-        """Is the best reference decaying toward uselessness?
-
-        Asked against `refresh_inliers`, not `min_inliers`: a bank that waits
-        for the trust bar has waited until the rung already failed. An empty
-        bank always wants a reference.
-        """
-        if not self._refs:
-            return True
-        return self.locate(gray).inliers < self._refresh
-
     # -- persistence: the bank can be built before the run ------------------ #
     #
     # Why this exists. On the run there may be no confident detection to
@@ -585,4 +574,3 @@ class CheckpointBank(LookupMixin, StoreMixin):
     # the octagon result a visible refusal instead of a confident wrong lock.
 
     SAVE_VERSION = 1
-

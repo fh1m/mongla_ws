@@ -162,7 +162,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `live_params.py` | Which of a node's parameters change while it runs, and a refusal for the rest. |
 | `lock_anchor.py` | The anchor rung: enrol a reference or locate against the bank, and box what it found. |
 | `lock_frames.py` | LockNode's image and detection inputs: by topic, or by reference when composed. |
-| `lock_inputs.py` | LockNode's inputs besides images and detections: attitude, odometry, |
+| `lock_inputs.py` | LockNode's inputs besides images and detections: odometry, floor |
 | `lock_node.py` | run the ladder, publish one target position. |
 | `lock_publish.py` | LockNode's outputs: the /lock box, its decomposition, the pose |
 | `lock_setup.py` | LockNode's setup: parameters, the anchor and the bank, and live retuning. |
@@ -180,7 +180,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `vision_node.py` | single-process diagnostic for camera + detector. |
 | `anchor/anchor.py` | Hold a target with NO detection at all. |
 | `anchor/bank.py` | Several references instead of one, and a policy for when to add another. |
-| `anchor/bank_lookup.py` | Asking the bank where the vehicle is: locate, recognise, corroborate, verify. |
+| `anchor/bank_lookup.py` | Asking the bank where the vehicle is: locate, recognise, verify. |
 | `anchor/bank_store.py` | Saving the bank to disk and loading it back (a practice bank, or the last run). |
 | `anchor/geometry.py` | The half of the homography we were throwing away. |
 | `anchor/health.py` | A fouled lens and a changed world look identical, and need opposite answers. |

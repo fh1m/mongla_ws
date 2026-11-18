@@ -46,18 +46,11 @@ The policies, and the reasoning behind each
 ``LATCHED`` -- RELIABLE, TRANSIENT_LOCAL, depth 1.
     For announcements a late joiner must still see (`active_camera`,
     `classes_filter`).
-
-COMPATIBILITY
--------------
-`is_compatible(pub, sub)` encodes the rule the middleware applies, so a test
-can assert a pairing rather than a human re-deriving it: the publisher must
-offer at least what the subscriber requests, on reliability and on durability.
 """
 from rclpy.qos import (QoSProfile, HistoryPolicy, ReliabilityPolicy,
                        DurabilityPolicy)
 
-__all__ = ['IMAGE', 'CAMERA_INFO', 'DETECTIONS', 'DEBUG_IMAGE', 'LATCHED',
-           'is_compatible']
+__all__ = ['IMAGE', 'CAMERA_INFO', 'DETECTIONS', 'DEBUG_IMAGE', 'LATCHED']
 
 
 IMAGE = QoSProfile(
@@ -86,28 +79,3 @@ LATCHED = QoSProfile(
     durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
 
-# Weakest-to-strongest. A publisher satisfies a subscriber when it offers a
-# policy at least as strong as the one requested.
-_RELIABILITY_RANK = {ReliabilityPolicy.BEST_EFFORT: 0,
-                     ReliabilityPolicy.RELIABLE:    1}
-_DURABILITY_RANK  = {DurabilityPolicy.VOLATILE:        0,
-                     DurabilityPolicy.TRANSIENT_LOCAL: 1}
-
-
-def is_compatible(pub: QoSProfile, sub: QoSProfile) -> bool:
-    """True when a subscriber with `sub` will receive from a publisher `pub`.
-
-    Depth plays no part -- it is a local queue size, not a contract, and a
-    mismatch there costs latency rather than delivery.
-    """
-    try:
-        return (_RELIABILITY_RANK[pub.reliability]
-                >= _RELIABILITY_RANK[sub.reliability]
-                and _DURABILITY_RANK[pub.durability]
-                >= _DURABILITY_RANK[sub.durability])
-    except KeyError:
-        # SYSTEM_DEFAULT / UNKNOWN resolve in the middleware, not here. Say so
-        # rather than answering True and being believed.
-        raise ValueError(
-            f'cannot compare non-concrete QoS: pub={pub.reliability}/'
-            f'{pub.durability} sub={sub.reliability}/{sub.durability}')
