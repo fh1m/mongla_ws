@@ -67,7 +67,9 @@ def test_the_switch_defaults_to_what_the_node_ships(arg):
 def test_the_switch_reaches_its_node(arg):
     _rel, param, where = SWITCHES[arg]
     src = open(where).read()
-    assert re.search(rf"'{re.escape(param)}'\s*:\s*(ParameterValue\(\s*)?"
+    # `flow_` is the prefix the vision process strips before handing a value
+    # to the flow node composed inside it (`detector_dual_node.flow_overrides`).
+    assert re.search(rf"'(flow_)?{re.escape(param)}'\s*:\s*(ParameterValue\(\s*)?"
                      rf"LaunchConfiguration\('{arg}'\)", src), \
         f'{arg} is declared but never passed to {param!r} in {os.path.basename(where)}'
     if where == _VISION_PI:

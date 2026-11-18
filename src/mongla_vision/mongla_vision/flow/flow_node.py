@@ -55,6 +55,8 @@ from collections import deque
 
 from typing import Optional
 
+import cv2
+
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -78,8 +80,10 @@ from .flow_frame import FlowFrameMixin
 
 class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloorMixin,
                        FlowPublishMixin, Node):
-    def __init__(self):
-        super().__init__('mongla_flow_velocity')
+    def __init__(self, node_name: str = 'mongla_flow_velocity', *,
+                 parameter_overrides=None):
+        super().__init__(node_name,
+                         parameter_overrides=list(parameter_overrides or []))
 
         self._declare_parameters()
 
@@ -186,8 +190,13 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         ns = f'/mongla/vision/{cam}'
         img_qos = QoSProfile(depth=1,
                              reliability=QoSReliabilityPolicy.BEST_EFFORT)
-        self.create_subscription(Image, f'{ns}/image_raw', self._on_image,
-                                 img_qos)
+        # `direct_feed`: composed beside the downward camera, which hands every
+        # frame over by reference (`submit_frame`). The topic path stays for a
+        # standalone node and for replay, where a bag is the camera.
+        self._direct = bool(self.get_parameter('direct_feed').value)
+        if not self._direct:
+            self.create_subscription(Image, f'{ns}/image_raw', self._on_image,
+                                     img_qos)
         self.create_subscription(Vector3Stamped, '/mongla/imu_rates',
                                  self._on_rates, 50)
         self.create_subscription(MonglaState, '/mongla/state', self._on_state,
@@ -324,8 +333,17 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
                 self._slot_evt.clear()
             if item is None:
                 continue
+            frame, t, seq = item
             try:
-                self._process(*item)
+                # Grey and the size gate here, on this thread, so a frame the
+                # worker would have dropped is never converted, and the
+                # camera's capture thread never pays for flow.
+                gray = (cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        if frame.ndim == 3 else frame)
+                if not self._admit_frame_size((int(gray.shape[1]),
+                                               int(gray.shape[0]))):
+                    continue
+                self._process(gray, t, seq)
             except Exception as exc:            # never let the thread die
                 self.get_logger().error(f'[FLOW ] worker: {exc!r}')
 

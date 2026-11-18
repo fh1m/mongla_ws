@@ -462,7 +462,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `invert_depth` | `True` |
 | `use_tracks` | `False` |
 
-**`mongla_vision/detector_dual_node.py`** — 4 parameters
+**`mongla_vision/detector_dual_node.py`** — 5 parameters
 
 | parameter | default |
 |---|---|
@@ -470,6 +470,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `replay` | `False` |
 | `cameras` | `'forward` |
 | `lock` | `False` |
+| `flow` | `False` |
 
 **`mongla_vision/detector_node.py`** — 27 parameters
 
@@ -503,11 +504,12 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `range_crop` | `-1` |
 | `vision_profile` | `''` |
 
-**`mongla_vision/flow/flow_node.py`** — 40 parameters
+**`mongla_vision/flow/flow_node.py`** — 41 parameters
 
 | parameter | default |
 |---|---|
 | `camera` | `'downward'` |
+| `direct_feed` | `False` |
 | `pool_depth_m` | `float('nan'` |
 | `pool_depth_min_m` | `float('nan'` |
 | `pool_depth_max_m` | `float('nan'` |

@@ -126,17 +126,17 @@ def test_the_flow_node_is_actually_LAUNCHABLE():
     passing them from two places is how they came to disagree in the first
     place (see the module docstring)."""
     src = code_of_file(_LAUNCH)
-    assert "executable='flow_node'" in src, (
-        'flow_node is in no launch file -- the DVL cannot be brought up with '
+    # Composed into the downward camera's process (`detector_dual_node`), so
+    # its values travel with a `flow_` prefix and the switch is a parameter.
+    assert "'flow':" in src and "LaunchConfiguration('flow')" in src, (
+        'flow is in no launch file -- the DVL cannot be brought up with '
         'the rest of the vision stack.')
-    assert "'pool_depth_m'" in src, (
-        'flow_node is launched without pool_depth_m. It refuses to publish '
+    assert "'flow_pool_depth_m'" in src, (
+        'flow is launched without pool_depth_m. It refuses to publish '
         'velocity without it, so the node would come up and stay silent.')
     # The calibration must be the downward one, by reference not by literal.
-    flow = src[src.index("executable='flow_node'"):]
-    flow = flow[:flow.index('condition=')]
-    assert "LaunchConfiguration('dwn_calibration')" in flow, (
-        'flow_node must take the SAME dwn_calibration the downward camera '
+    assert re.search(r"'flow_calibration':\s*LaunchConfiguration\('dwn_calibration'\)", src), (
+        'flow must take the SAME dwn_calibration the downward camera '
         'takes, not its own copy of the path.')
 
 

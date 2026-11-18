@@ -192,6 +192,14 @@ class _Launcher(Node):
         for name, p in list(self._parameter_overrides.items()):
             if name.startswith(('fwd_lock_', 'dwn_lock_', 'lock_')):
                 self.declare_parameter(name, p.value)
+        # Optical flow on the downward camera, in this process for the same
+        # reason as the lock: as its own node it took ~210 raw frames a second
+        # off DDS, 44 % of its samples (measured-bars 87). `flow_*` values are
+        # forwarded with the prefix stripped; flow_node keeps its own defaults.
+        self.declare_parameter('flow', False)
+        for name, p in list(self._parameter_overrides.items()):
+            if name.startswith('flow_'):
+                self.declare_parameter(name, p.value)
 
     def lock_overrides(self, cam: str, camera: str):
         out = [Parameter('camera', value=camera)]
@@ -200,6 +208,15 @@ class _Launcher(Node):
                 if name.startswith(prefix):
                     out.append(Parameter(name[len(prefix):],
                                          value=self.get_parameter(name).value))
+        return out
+
+    def flow_overrides(self, direct: bool):
+        out = [Parameter('camera', value='downward'),
+               Parameter('direct_feed', value=direct)]
+        for name in sorted(self._parameters):
+            if name.startswith('flow_'):
+                out.append(Parameter(name[len('flow_'):],
+                                     value=self.get_parameter(name).value))
         return out
 
     def camera_overrides(self, cam: str, camera: str):
@@ -256,7 +273,8 @@ def _make_failure_hook(launcher, live: list, failed: list, state: dict):
 
 
 class _Tee:
-    """One camera, two in-process consumers: the detector and the lock.
+    """One camera, several in-process consumers: the detector, and the lock
+    and flow when they run.
 
     `CameraNode` hands frames to ONE sink. The lock takes every decoded frame
     (its stamp history must hold the frame each detection was computed on),
@@ -272,18 +290,21 @@ class _Tee:
     frames were decoded for the lock, not wasted on the detector.
     """
 
-    def __init__(self, detector, lock):
-        self._det, self._lock = detector, lock
+    def __init__(self, detector, *others):
+        self._det, self._others = detector, others
 
     def wants_frame(self) -> bool:
-        return True                 # the lock wants every frame
+        return True                 # the lock and flow want every frame
 
     def submit_frame(self, frame_bgr, header) -> None:
         self._det.submit_frame(frame_bgr, header, spare=True)
-        self._lock.submit_frame(frame_bgr, header)
+        for o in self._others:
+            o.submit_frame(frame_bgr, header)
 
     def submit_info(self, info) -> None:
-        self._lock.submit_info(info)
+        for o in self._others:
+            if hasattr(o, 'submit_info'):
+                o.submit_info(info)
 
 
 def _compose_lock(launcher, nodes: list, cam: str, camera: str,
@@ -305,6 +326,23 @@ def _compose_lock(launcher, nodes: list, cam: str, camera: str,
     launcher.get_logger().info(
         f'[COMP ] {camera}: lock ladder COMPOSED -- one process, one Hailo '
         f'VDevice shared with the detector'
+        + (', frames by reference' if direct else ''))
+    return node
+
+
+def _compose_flow(launcher, nodes: list, camera: str, direct: bool):
+    """Build optical flow in-process on the downward camera, when `flow` is set.
+
+    `direct` as for the lock: by reference from the camera here, or off the
+    topic under replay.
+    """
+    if camera != 'downward' or not bool(launcher.get_parameter('flow').value):
+        return None
+    from mongla_vision.flow.flow_node import FlowVelocityNode
+    node = FlowVelocityNode(parameter_overrides=launcher.flow_overrides(direct))
+    nodes.append(node)
+    launcher.get_logger().info(
+        '[COMP ] downward: optical flow COMPOSED'
         + (', frames by reference' if direct else ''))
     return node
 
@@ -370,20 +408,23 @@ def main():
                     f'[COMP ] {camera}: REPLAY -- no camera; consuming '
                     f'/mongla/vision/{camera}/image_raw from a bag.')
                 _compose_lock(launcher, nodes, cam, camera, direct=False)
+                _compose_flow(launcher, nodes, camera, direct=False)
                 continue
             # The lock BEFORE the camera, so the camera's first frame already
             # has both consumers to go to.
             lock = _compose_lock(launcher, nodes, cam, camera, direct=True)
+            flow = _compose_flow(launcher, nodes, camera, direct=True)
+            extra = [n for n in (lock, flow) if n is not None]
             try:
                 cam_node = CameraNode(
                     f'mongla_camera_{camera}',
                     parameter_overrides=launcher.camera_overrides(cam, camera),
-                    frame_sink=det if lock is None else _Tee(det, lock))
+                    frame_sink=_Tee(det, *extra) if extra else det)
             except Exception as exc:      # noqa: BLE001 -- any open failure
                 det.destroy_node()
-                if lock is not None:
-                    nodes.remove(lock)
-                    lock.destroy_node()
+                for n in extra:
+                    nodes.remove(n)
+                    n.destroy_node()
                 launcher.get_logger().error(
                     f'[COMP ] {camera} camera did NOT come up: {exc}')
                 launcher.get_logger().error(

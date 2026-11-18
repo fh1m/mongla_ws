@@ -84,7 +84,9 @@ IMU, state, odometry and floor-height callbacks, each with its freshness check),
 health log). To find where a `self._x` is defined, grep them together:
 `grep -n "def _x" lock_*.py`.
 
-`flow_node` is split the same way, under `flow/`: `flow_node.py` (the per-frame pipeline),
+Under `vision_pi`, flow runs inside the vision process beside the downward camera and takes its
+frames by reference (`direct_feed`, measured-bars section 89); `vision` and `vision_dual` still
+start it as `flow_node` on the topic. It is split the same way, under `flow/`: `flow_node.py` (the per-frame pipeline),
 `flow_setup.py` (parameters, intrinsics, input callbacks), `flow_checks.py` (every check that
 may refuse a frame), `flow_floor.py` (tile-grid heading and lane lines), `flow_publish.py`
 (topics and the log) and `flow_constants.py` (the measured constants, each in

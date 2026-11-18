@@ -16,7 +16,8 @@ import pytest
 from mongla_vision import detector_dual_node as dn
 
 
-def _run(camera_factory, replay=False, lock=False, cameras='forward,downward'):
+def _run(camera_factory, replay=False, lock=False, cameras='forward,downward',
+         flow=False, flow_cls=None):
     """Drive main() with fake nodes; return (launcher, built camera names).
 
     `replay` must be set explicitly. A bare MagicMock returns a truthy
@@ -36,9 +37,11 @@ def _run(camera_factory, replay=False, lock=False, cameras='forward,downward'):
     launcher = MagicMock()
     launcher.get_logger.return_value = MagicMock()
     launcher.get_parameter.side_effect = lambda name: MagicMock(
-        value={'replay': replay, 'lock': lock,
+        value={'replay': replay, 'lock': lock, 'flow': flow,
                'cameras': cameras}.get(name, MagicMock()))
-    with patch.object(dn, 'rclpy'), \
+    flow_cls = flow_cls or MagicMock()
+    with patch('mongla_vision.flow.flow_node.FlowVelocityNode', flow_cls), \
+         patch.object(dn, 'rclpy'), \
          patch.object(dn, '_Launcher', return_value=launcher), \
          patch.object(dn, 'DetectorNode', MagicMock()), \
          patch.object(dn, 'CameraNode', side_effect=_camera), \
@@ -160,6 +163,69 @@ def test_only_the_lock_values_the_launch_sets_are_forwarded():
             rclpy.shutdown()
     assert fwd == {'camera': 'forward', 'act_conf': 0.6, 'target_class': 'gate'}
     assert dwn == {'camera': 'downward', 'act_conf': 0.6, 'target_class': 'bin'}
+
+
+def test_flow_values_reach_the_composed_flow_node_with_the_prefix_stripped():
+    """`flow_*` values reach flow_node under its own names, on the downward
+    camera, fed by reference unless replaying; nothing else is forwarded."""
+    rclpy = pytest.importorskip('rclpy')
+    from rclpy.parameter import Parameter
+    started = not rclpy.ok()
+    if started:
+        rclpy.init()
+    try:
+        orig = dn.Node.__init__
+
+        def patched(self, name, **kw):
+            kw['parameter_overrides'] = [
+                Parameter('flow', value=True),
+                Parameter('flow_pool_depth_m', value=1.6),
+                Parameter('flow_medium', value='water'),
+                Parameter('lock_act_conf', value=0.6)]
+            orig(self, name, **kw)
+        with patch.object(dn.Node, '__init__', patched):
+            launcher = dn._Launcher()
+        live = {p.name: p.value for p in launcher.flow_overrides(True)}
+        replay = {p.name: p.value for p in launcher.flow_overrides(False)}
+        launcher.destroy_node()
+    finally:
+        if started:
+            rclpy.shutdown()
+    assert live == {'camera': 'downward', 'direct_feed': True,
+                    'pool_depth_m': 1.6, 'medium': 'water'}
+    assert replay['direct_feed'] is False
+
+
+def test_flow_rides_the_downward_camera_and_dies_with_it():
+    """Flow is built beside the downward camera and fed through its tee; a
+    downward camera that does not open takes flow down with it rather than
+    leaving a node waiting for frames that will never come."""
+    flow_cls = MagicMock()
+    _run(lambda role: MagicMock(), flow=True, flow_cls=flow_cls)
+    assert flow_cls.call_count == 1, 'flow is built once, for downward only'
+
+    flow_cls = MagicMock()
+
+    def no_downward(role):
+        if role == 'downward':
+            raise RuntimeError('no downward device')
+        return MagicMock()
+    _run(no_downward, flow=True, flow_cls=flow_cls)
+    flow_cls.return_value.destroy_node.assert_called_once()
+
+
+def test_the_tee_hands_every_frame_to_every_consumer():
+    """The detector is offered each frame as a spare; the lock and flow take
+    every one, and intrinsics go to whoever reads them."""
+    det, lock, flow = MagicMock(), MagicMock(), MagicMock(spec=['submit_frame'])
+    tee = dn._Tee(det, lock, flow)
+    assert tee.wants_frame()
+    tee.submit_frame('f', 'h')
+    tee.submit_info('i')
+    det.submit_frame.assert_called_once_with('f', 'h', spare=True)
+    lock.submit_frame.assert_called_once_with('f', 'h')
+    flow.submit_frame.assert_called_once_with('f', 'h')
+    lock.submit_info.assert_called_once_with('i')
 
 
 def test_a_process_per_camera_builds_only_its_own_camera():
