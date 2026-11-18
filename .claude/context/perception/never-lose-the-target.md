@@ -587,8 +587,8 @@ evaluation:**
    which turns it into a check on a commanded axis instead.
 
 **Caution: Neither is wired here, and neither should be on this evidence.** `scale` is
-metric only if the reference patch's true width is known (`target_width_m`,
-which is why that parameter now reaches the node), and `theta` is in-plane
+metric only if the reference patch's true width is known (the locked class's
+entry in `target_geometry.yaml`), and `theta` is in-plane
 camera rotation which is only hull roll for the DOWNWARD camera. Both are
 real signals with a named consumer and a named precondition -- which is the
 standard §9 asks for, and is more than they had.

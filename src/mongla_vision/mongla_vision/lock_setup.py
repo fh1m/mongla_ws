@@ -16,8 +16,8 @@ class LockSetupMixin:
     def _declare_parameters(self) -> None:
         """The ROS parameters this node reads, with their defaults.
 
-        Three more are declared where they are read, beside the reasoning about
-        them: `target_width_m`, `medium` and `direct_feed` (in lock_wiring.py).
+        Two more are declared where they are read, beside the reasoning about
+        them: `medium` and `direct_feed` (in lock_wiring.py).
         """
         self.declare_parameter('camera', 'forward')
         self.declare_parameter('target_class', '')
@@ -399,11 +399,8 @@ class LockSetupMixin:
         """Re-resolve the committed width for the class we now follow.
 
         Without this the 6-DoF pose keeps the FIRST class's width and reports a
-        confident range for the wrong object -- worse than refusing. An
-        explicit `target_width_m` still wins, exactly as at startup.
+        confident range for the wrong object -- worse than refusing.
         """
-        if float(self.get_parameter('target_width_m').value or 0.0) > 0.0:
-            return
         try:
             from mongla_vision.target_geometry import width_for
         except ImportError:

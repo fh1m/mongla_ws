@@ -80,8 +80,7 @@ VISION_PI_PASSTHROUGH = (
     'dwn_active', 'contours', 'assoc_conf', 'preprocess', 'range_crop', 'preprocess_clip',
     'tracking', 'tracker_type', 'kalman_adaptive_noise',
     'dwn_calibration', 'fwd_calibration', 'act_conf',
-    'anchor_xfeat_hef', 'anchor_semi_dense', 'target_width_m_forward',
-    'target_width_m_downward', 'dwn_lock_class', 'bank_forward', 'bank_downward',
+    'anchor_xfeat_hef', 'anchor_semi_dense', 'dwn_lock_class', 'bank_forward', 'bank_downward',
     'fwd_fps', 'dwn_fps', 'fwd_publish_hz', 'dwn_publish_hz', 'replay',
     'split', 'fwd_device_path', 'dwn_device_path',
 )
@@ -245,8 +244,8 @@ def generate_launch_description():
                                           'one value, one argument. `air` for a bench '
                                           'run, or the scale is off by ~1.33.'),
         # An empty lock_class means the ladder follows ANY detected class and
-        # `/target_pose` refuses with 'target_width_m unset', because the
-        # committed geometry table is keyed by class. `lock:=true` without this
+        # `/target_pose` refuses for want of a width, because the committed
+        # geometry table is keyed by class. `lock:=true` without this
         # is a ladder you switched on and cannot aim -- measured on the vehicle:
         # "[LOCK ] no committed width for 'person'... the 6-DoF pose will refuse".
         DeclareLaunchArgument('lock_class',  default_value='',

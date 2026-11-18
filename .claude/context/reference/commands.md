@@ -161,8 +161,6 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `act_conf` | `0.45` | (passed to vision_pi.launch.py, which sets the default) ladder ACTING bar: below this a detection may be associated by the tracker but is not acted on (B-59; measured knee 0.60, shipped 0.45) |
 | `anchor_xfeat_hef` | `true` | (passed to vision_pi.launch.py, which sets the default) run XFeat on the Hailo-8 rather than the Pi CPU (B-62); safe because the lock is composed with the detector |
 | `anchor_semi_dense` | `false` | (passed to vision_pi.launch.py, which sets the default) semi-dense matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-reference is measured |
-| `target_width_m_forward` | `0.0` | (passed to vision_pi.launch.py, which sets the default) measured TRUE width of the forward target in metres; 0 = use the rulebook nominal. A measured prop beats a nominal, which is what SAUVC +/-5 % allows for |
-| `target_width_m_downward` | `0.0` | (passed to vision_pi.launch.py, which sets the default) measured true width of the downward target, metres |
 | `dwn_lock_class` | `` | (passed to vision_pi.launch.py, which sets the default) Class the DOWNWARD ladder follows. Empty = any class, and no 6-DoF pose (the geometry table is keyed by class). |
 | `bank_forward` | `` | (passed to vision_pi.launch.py, which sets the default) checkpoint bank (.npz) preloaded into the FORWARD lock node, from tools/pool/build_practice_bank.py. Empty learns live. A preloaded reference is trusted exactly like a live one -- it clears MIN_INLIERS or it does not answer. |
 | `bank_downward` | `` | (passed to vision_pi.launch.py, which sets the default) checkpoint bank (.npz) preloaded into the DOWNWARD lock node -- places rather than props. |
@@ -299,8 +297,6 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `act_conf` | `0.45` | ladder ACTING bar: below this a detection may be associated by the tracker but is not acted on (B-59; measured knee 0.60, shipped 0.45) |
 | `anchor_xfeat_hef` | `true` | run XFeat on the Hailo-8 rather than the Pi CPU (B-62); safe because the lock is composed with the detector |
 | `anchor_semi_dense` | `false` | semi-dense matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-reference is measured |
-| `target_width_m_forward` | `0.0` | measured TRUE width of the forward target in metres; 0 = use the rulebook nominal. A measured prop beats a nominal, which is what SAUVC +/-5 % allows for |
-| `target_width_m_downward` | `0.0` | measured true width of the downward target, metres |
 | `lock_class` | `` | Class the ladder locks onto. Empty = whatever the detector is publishing. |
 | `dwn_lock_class` | `` | Class the DOWNWARD ladder follows. Empty = any class, and no 6-DoF pose (the geometry table is keyed by class). |
 | `pool_depth_m` | `nan` | Water depth in metres. REQUIRED with flow:=true -- the node refuses to publish velocity without it. |
@@ -550,7 +546,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `lane_lines` | `False` |
 | `caustic_suppression` | `True` |
 
-**`mongla_vision/lock_node.py`** — 20 parameters
+**`mongla_vision/lock_node.py`** — 19 parameters
 
 | parameter | default |
 |---|---|
@@ -571,7 +567,6 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `anchor_hz` | `4.5` |
 | `full_authority_s` | `FULL_AUTHORITY_S` |
 | `zero_authority_s` | `ZERO_AUTHORITY_S` |
-| `target_width_m` | `0.0` |
 | `medium` | `'water'` |
 | `direct_feed` | `False` |
 
