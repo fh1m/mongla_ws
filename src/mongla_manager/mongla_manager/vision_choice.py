@@ -29,7 +29,6 @@ class Sample:
     age_s:    float    # time since the last REAL detection of this target (s)
     class_id: str
     score:     float
-    vis_range: float = 0.0         # monocular depth estimate from depth_estimation_node (0=far, 1=close)
     track_id:  int   = -1          # tracker id of this target (-1 = unknown / coast off)
     coasted:   bool  = False       # True = not a live detection: a tracker prediction or a ladder box
     # What produced the box, because the three are different evidence (#78):
@@ -86,7 +85,7 @@ class ChoiceMixin:
             w_frac=float(b.size_x) / max(image_width, 1.0),
             age_s=max(0.0, time.monotonic() - stamp) if stamp else 0.0,
             class_id=d.id or _hypothesis_class_id(d), score=score,
-            vis_range=0.0, track_id=-1, coasted=True, source='ladder')
+            track_id=-1, coasted=True, source='ladder')
 
     def bbox_error(self, class_name: str = '', *,
                    near: Optional[Tuple[float, float]] = None,
@@ -126,7 +125,6 @@ class ChoiceMixin:
             detections_array     = self._latest_array
             image_width, image_height = self._image_size
             sampled_at_monotonic = self._latest_stamp
-            vis_range_vals       = self._vis_range_vals
             tracks_array         = self._latest_tracks
 
         if detections_array is None:
@@ -139,12 +137,10 @@ class ChoiceMixin:
         use_near = near is not None and gate_norm > 0.0
 
         # One pass: per candidate compute a selection metric -- nearest-to-`near`
-        # (continuity lock) or largest-area (default). Track the winner's index
-        # for the parallel vis_range lookup.
+        # (continuity lock) or largest-area (default).
         best_detection: Optional[Detection2D] = None
         best_metric:    Optional[float] = None
-        best_index:     int   = 0
-        for idx, det in enumerate(detections_array.detections):
+        for det in detections_array.detections:
             if class_name and not _hypothesis_matches(det, class_name):
                 continue
             if min_score > 0.0 and _hypothesis_score(det) < min_score:
@@ -162,7 +158,6 @@ class ChoiceMixin:
             if best_metric is None or metric > best_metric:
                 best_metric    = metric
                 best_detection = det
-                best_index     = idx
         if best_detection is None:
             # No live detection this tick. Coast the locked target's predicted
             # box (opt-in) before declaring a loss -- the gap-bridging path.
@@ -188,9 +183,6 @@ class ChoiceMixin:
             if lock_s > 0.0:
                 return self._lock_sample(image_width, image_height, class_name)
             return None
-
-        vis_range = (float(vis_range_vals[best_index])
-                     if best_index < len(vis_range_vals) else 0.0)
 
         detection = best_detection
         center_x, center_y = _bbox_center(detection.bbox)
@@ -236,7 +228,7 @@ class ChoiceMixin:
         return Sample(ex=horizontal_error, ey=vertical_error,
                       h_frac=bbox_height_frac, w_frac=bbox_width_frac,
                       age_s=time.monotonic() - sampled_at_monotonic,
-                      class_id=class_id, score=score, vis_range=vis_range,
+                      class_id=class_id, score=score,
                       track_id=track_id, coasted=False)
 
     # ------------------------------------------------------------------ #
@@ -338,7 +330,7 @@ class ChoiceMixin:
                 age_s=age,                     # true time since last real detection
                 class_id=class_name or _hypothesis_class_id(det),
                 score=last_score,              # last real score (conf-exempt for the locked id)
-                vis_range=0.0, track_id=locked_id, coasted=True,
+                track_id=locked_id, coasted=True,
                 source='tracker')
         return None
 

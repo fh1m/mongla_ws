@@ -226,8 +226,6 @@ def vision(v: View):
                              series(f'{dwn}/anchor_decomposition.vector.z', 'range m')))),
         (2, v('align', align('align x px', 'align y px',
                              series(f'{fwd}/target_pose_fused.reproj_px', 'reproj px')))))
-    # No range-map strip: the vehicle never starts depth_estimation_node
-    # (NOT_SHOWN says why).
     return row((55, col(*cams)), (45, right))
 
 
@@ -355,10 +353,6 @@ NOT_SHOWN = {
     'video_seek_frame': "a replay command from the display node",
     'video_seek_rel': "a replay command from the display node",
     'video_speed': "a replay command from the display node",
-    'vis_range': 'depth_estimation_node: only vision.launch (vision_stack:=generic, the dev '
-                 'box) starts it; vision_pi, the vehicle, does not, so a tile only read '
-                 '"topic does not exist"',
-    'vis_range_map': 'the same node as vis_range, the same reason',
 }
 
 VIEWS = {f.__name__: f for f in (cockpit, vision, flow, localization, thrust, board_health,

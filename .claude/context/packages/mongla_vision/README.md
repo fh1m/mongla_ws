@@ -72,7 +72,6 @@ a confident zero.
 | `tracker_node` | `tracks` | stable ids, and a predicted box across a short gap |
 | `lock_node` | `lock`, `correspondences` | the continuity ladder and the feature anchor |
 | `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled`, `flow_calibration`, `flow_tracks` | everything the downward camera can tell us. `flow_tracks` is the point pairs each accepted interval measured, only while someone watches: Batighor's `flow` layout draws them over the downward picture beside velocity, distance and quality. A measured slide is `tools/bench/flow_launch_check.py` |
-| `depth_estimation_node` | `vis_range` | monocular proximity, off by default |
 
 `lock_node` is one class in seven files. `lock_node.py` holds the per-frame loop (detection
 in, rung chosen, anchor run) and the list of files. The other six are mixins of the same class,
@@ -116,8 +115,10 @@ ros2 run mongla_vision vision_thrust_check   # detection → thrust, disarmed an
 
 **Image enhancement.** Contrast equalisation before the detector was measured in 17
 configurations across four props and three venues and was never positive — on the gate it
-destroyed 95 % of detections. It ships off in every profile, and a test keeps it off. The
-instinct is strong; the data says no.
+destroyed 95 % of detections. The preprocessor is deleted, and
+`tools/studies/recall_matrix.py --clahe` re-runs the measurement. The instinct is strong;
+the data says no. What else was removed, and whether any of it was helping, is in the
+[audit](audit.md).
 
 ## Testing
 
@@ -131,7 +132,8 @@ value.
 
 ---
 
-Related: [`mongla_localization`](../mongla_localization/README.md) (what consumes the
+Related: [the audit, every file](audit.md) ·
+[`mongla_localization`](../mongla_localization/README.md) (what consumes the
 velocity) · [Capability Map](../../capability-map.md) ·
 [`measured-bars.md`](../../measured-bars.md)
 
@@ -153,14 +155,13 @@ with no summary line shows as *(no summary)* until it gets one.
 | `detector_params.py` | How the detector's parameters are read. |
 | `detector_publish.py` | DetectorNode, part 3 of 4: every topic the node writes, and its logs. |
 | `detector_setup.py` | DetectorNode, part 1 of 4: parameters, model loading, and live parameter changes. |
-| `draw.py` | thin dispatcher for the mission-control HUD. |
+| `draw.py` | the detector's debug image and the display node's HUD frame. |
 | `draw_strip.py` | mission-control UI strip below the video frame. |
 | `draw_video.py` | video section overlays for the mission-control HUD. |
 | `draw_widgets.py` | reusable HUD micro-widgets for the mission-control strip. |
 | `factory.py` | Single dispatch point: source-name -> Camera instance. |
 | `identity.py` | Take GEOMETRY from the structure, IDENTITY from the symbol on it. |
 | `image_msg.py` | `sensor_msgs/Image` to a NumPy array and back, with no `cv_bridge`. |
-| `ladder_config.py` | One deck file for the ladder's switches, read by the node itself. |
 | `live_params.py` | Which of a node's parameters change while it runs, and a refusal for the rest. |
 | `lock_anchor.py` | The anchor rung: enrol a reference or locate against the bank, and box what it found. |
 | `lock_frames.py` | LockNode's image and detection inputs: by topic, or by reference when composed. |
@@ -179,7 +180,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `tracker_node.py` | subscribe to detections, publish stable tracks. |
 | `trigger_stamps.py` | Which trigger made this frame: pairing camera frames with the board's pulses. |
 | `underwater.py` | Underwater image statistics, and what they predict about detection. |
-| `vision_node.py` | single-process diagnostic for camera + detector. |
 | `anchor/anchor.py` | Hold a target with NO detection at all. |
 | `anchor/bank.py` | Several references instead of one, and a policy for when to add another. |
 | `anchor/bank_lookup.py` | Asking the bank where the vehicle is: locate, recognise, verify. |
@@ -202,7 +202,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `cameras/v4l2_mailbox.py` | A mailbox, not a queue: always the newest frame, with the kernel's timestamp. |
 | `cameras/video_file.py` | run the vision pipeline on a pre-recorded video file. |
 | `cameras/webcam.py` | local USB / built-in webcam via cv2.VideoCapture. |
-| `depth/depth_estimation_node.py` | monocular depth estimation for detected objects. |
 | `detection/contours.py` | Detections -> outlines. A box and a mask become the same thing here. |
 | `detection/detector.py` | Abstract Detector — every detection backend implements this. |
 | `detection/factory.py` | Pick a detector backend from the resolved model path. One seam, three callers. |
@@ -212,8 +211,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `detection/hailo_seg.py` | `HailoSegDetector`: a raw segmentation HEF behind the same `Detector` API. |
 | `detection/hef_file.py` | What a `.hef` and its sidecar say about themselves, read without a device. |
 | `detection/messages.py` | Convert internal Detection objects to vision_msgs. |
-| `detection/preprocess.py` | Contrast preprocessing for underwater frames, measured on real footage. |
-| `detection/profiles.py` | ONE WORD instead of five knobs, because competition day is not the time. |
 | `detection/rangecrop.py` | Trade field of view for range, automatically, when the target is far. |
 | `detection/seg_decode.py` | Host-side decode of a RAW YOLOv8/v11-seg head, in the QUANTISED domain. |
 | `detection/yolo.py` | Ultralytics YOLO11 (or any compatible model file). |

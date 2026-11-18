@@ -12,6 +12,9 @@ from mongla_vision.anchor import health as _health
 class LockInputsMixin:
     """Methods of `LockNode`; see `lock_node.py` for the node."""
 
+    # A floor height older than this is not this vehicle's altitude any more.
+    _FLOOR_H_MAX_AGE_S = 2.0
+
     def _on_odom(self, msg) -> None:
         """The filter's own estimate: where it thinks it is, and how sure.
 
@@ -109,6 +112,7 @@ class LockInputsMixin:
         if not self._closer_on or gray is None or self._anchor is None:
             return
         xy = self._odom_xy
+        self._places.step(xy)
 
         # ---- recognise ---------------------------------------------------
         if self._anchor.size:
@@ -121,18 +125,19 @@ class LockInputsMixin:
             bp = self._anchor.locate(gray, label=_lc.PLACE_LABEL,
                                      near=xy if radius > 0.0 else None,
                                      radius_m=radius)
+            # Age, travel and sigma of the place the bank MATCHED, as it was
+            # when that place was taken: a closure is only as good as the
+            # position the reference carries, and the self-closure guards ask
+            # whether the vehicle has been away from THAT place.
+            ref_age, ref_travel, ref_sigma = self._places.since(
+                getattr(bp, 'ref_position', None), now)
             c = _lc.consider(
                 bp,
-                ref_age_s=(now - (self._places._last_t or now)),
-                travel_m=self._places.travel_since(xy),
-                ref_sigma_m=(self._odom_sigma
-                             if self._odom_sigma == self._odom_sigma else 1.0),
+                ref_age_s=ref_age,
+                travel_m=ref_travel,
+                ref_sigma_m=ref_sigma,
                 m_per_px=self._m_per_px(),
-                bank_size=self._anchor.size,
-                min_inliers=int(self._closure_cfg['min_inliers']),
-                min_age_s=float(self._closure_cfg['min_age_s']),
-                min_travel_m=float(self._closure_cfg['min_travel_m']),
-                max_offset_m=float(self._closure_cfg['max_offset_m']))
+                bank_size=self._anchor.size)
             if c.ok:
                 self._closures += 1
                 m = PointStamped()
@@ -160,7 +165,10 @@ class LockInputsMixin:
                         f'[LOCK ] no closure in {n} looks: {top}')
 
         # ---- remember ----------------------------------------------------
-        if self._places.should_enrol(now, xy):
+        # A place whose position the filter cannot put a sigma on would make
+        # every closure onto it unsound, so it is not taken.
+        if (self._odom_sigma == self._odom_sigma
+                and self._places.should_enrol(now, xy)):
             # WHOLE FRAME, no ROI. The ~100-inlier bar was derived on
             # whole-frame downward references (section 24); cropping would
             # repeat section 25, where a bar measured on one configuration was
@@ -168,7 +176,7 @@ class LockInputsMixin:
             r = self._anchor.enrol(gray, roi=None, det_conf=1.0,
                                    label=_lc.PLACE_LABEL, position=xy)
             if r.accepted:
-                self._places.note(now, xy)
+                self._places.note(now, xy, self._odom_sigma)
                 self.get_logger().info(
                     f'[LOCK ] place {self._anchor.size}: {r.keypoints} kp '
                     f'at ({xy[0]:.2f}, {xy[1]:.2f})')

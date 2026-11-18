@@ -29,7 +29,6 @@ ENCODINGS = {
     'bgr8': (np.uint8, 3),
     'rgb8': (np.uint8, 3),
     'mono8': (np.uint8, 1),
-    '32FC1': (np.float32, 1),
 }
 
 
@@ -54,11 +53,8 @@ def to_array(msg: Image, want: str | None = None) -> np.ndarray:
     A view on the message's buffer when no conversion is needed, so keep the
     message alive as long as the array, exactly as with `cv_bridge`.
     """
-    dtype, channels = _spec(msg.encoding)
-    dt = np.dtype(dtype)
-    if dt.itemsize > 1:
-        dt = dt.newbyteorder('>' if msg.is_bigendian else '<')
-    row = msg.width * channels * dt.itemsize
+    _dtype, channels = _spec(msg.encoding)
+    row = msg.width * channels           # every encoding here is 8-bit
     step = msg.step or row
     if step < row or len(msg.data) < step * msg.height:
         raise ValueError(f'image {msg.width}x{msg.height} {msg.encoding} needs '
@@ -66,12 +62,7 @@ def to_array(msg: Image, want: str | None = None) -> np.ndarray:
                          f'the message has step {step} and {len(msg.data)}')
     flat = np.frombuffer(msg.data, dtype=np.uint8, count=step * msg.height)
     rows = flat.reshape(msg.height, step)[:, :row]      # drop any row padding
-    if not rows.flags['C_CONTIGUOUS']:
-        rows = np.ascontiguousarray(rows)
-    img = rows.view(dt)
-    if dt.byteorder not in ('=', '|') and dt.byteorder != (
-            '<' if sys.byteorder == 'little' else '>'):
-        img = img.astype(dt.newbyteorder('='))
+    img = rows if rows.flags['C_CONTIGUOUS'] else np.ascontiguousarray(rows)
     img = img.reshape(msg.height, msg.width, channels) if channels > 1 \
         else img.reshape(msg.height, msg.width)
     return img if want in (None, msg.encoding) else _convert(img, msg.encoding, want)

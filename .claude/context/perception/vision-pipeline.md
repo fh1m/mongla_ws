@@ -61,7 +61,9 @@ session has to be known before it can be held out.
 **Warning: image preprocessing stays off**, in the dataset and on the
 vehicle. Measured in 17 configurations across four props and three venues:
 never positive, and on the gate it destroyed 95 % of detections
-(`underwater-vision.md`). A test keeps it off.
+(`underwater-vision.md`). The vehicle has no preprocessor at all: it was
+deleted on 2026-11-18, and `tools/studies/recall_matrix.py --clahe` re-runs the
+measurement.
 
 ### 4. Label
 

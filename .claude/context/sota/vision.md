@@ -14,7 +14,7 @@
 | stage | file:line | what it is |
 |---|---|---|
 | **capture** | `cameras/v4l2_mailbox.py:180-216` | raw V4L2 ioctl + mmap **mailbox**, one deep, newest wins. Measured: plain `read()` 396.1 ms stale → mailbox **16.9 ms**, blocking 0 ms. `FrameMeta.fresh=False` rather than repeating a frame |
-| **preprocess** | `detection/preprocess.py:21-41` | present and **off everywhere**. The file's own header retracts the original claim: 17 configurations, 4 props, 3 venues, never meaningfully positive; on the gate **30.4 % → 1.2 %** |
+| **preprocess** | none (deleted 2026-11-18) | the retraction stands and the code is gone; `tools/studies/recall_matrix.py --clahe` re-runs it. The measurement: 17 configurations, 4 props, 3 venues, never meaningfully positive; on the gate **30.4 % → 1.2 %** |
 | **detect** | `detection/hailo.py`, with `hailo_device.py` and `hef_file.py` | Hailo-8, one process-wide `VDevice` under HailoRT's ROUND_ROBIN scheduler (`hailo_device.py`: two detectors 46.1 + 46.1 Hz, no Python lock around an inference); async `run_async` chosen because it releases the GIL (another thread woke 9.21 ms late on the blocking API, 0.05 ms on async) |
 | **decode** | `detection/seg_decode.py:12-32` | raw seg heads decoded **in the quantised domain** — the class head is `zp=0, scale=1/255`, so thresholding bytes is bit-exact with thresholding floats. **31.5 ms → 0.93 ms** |
 | **range crop** | `detection/rangecrop.py:1-56` | hysteresis crop because `imgsz` is baked into the HEF. Measured recall: apparent size 0.25 → **65.9 % full frame / 100 % cropped** |
@@ -118,8 +118,8 @@ The one place gains are reported is **per-image oracle selection** (CUPDD, mAP 0
 fact*, not deployable without a selector nobody has built. The other is **joint
 enhancement-plus-detection training**, which is a second training pipeline, not a filter.
 
-**Our retraction stands, and it is now the better-evidenced position.** `preprocess.py` shipping
-off is not conservatism; it is what 98–133 retrained models say.
+**Our retraction stands, and it is now the better-evidenced position.** Shipping no
+preprocessor is not conservatism; it is what 98–133 retrained models say.
 
 ### 2.2 Sim-to-real detection: expect about half
 

@@ -89,8 +89,6 @@ def _handle_camera_keys(node: VisionDisplayNode, key: int) -> None:
         node._pending_sub_action = 'forward'
     elif key == ord('d'):
         node._pending_sub_action = 'downward'
-    elif key == ord('D'):
-        node._show_depth_map = not node._show_depth_map
 
 
 def _handle_video_keys(node: VisionDisplayNode, key: int) -> None:

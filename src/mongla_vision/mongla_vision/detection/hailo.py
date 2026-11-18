@@ -492,9 +492,6 @@ class HailoDetector(Detector):
     def update_max_det(self, max_det: int) -> None:
         self._max_det = int(max_det)
 
-    def class_names(self) -> Dict[int, str]:
-        return dict(self._names)
-
     def is_ready(self) -> bool:
         return bool(self._ready)
 

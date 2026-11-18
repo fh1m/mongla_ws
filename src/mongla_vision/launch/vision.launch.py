@@ -174,10 +174,6 @@ def generate_launch_description():
         # node defaults, not launch arguments: one value, seconds on capture
         # time, ordered against the coast ladder by
         # test_coast_ladder_ordering.py. A deck sets them under `nodes:`.
-        DeclareLaunchArgument('depth',         default_value='false',
-                              description='Start depth_estimation_node (monocular vis_range)'),
-        DeclareLaunchArgument('depth_model',   default_value='',
-                              description='DA V2-Small ONNX path; empty = bbox-area fallback'),
         # The downward camera as a velocity sensor (flow_node, the same node
         # vision_pi starts). flow:=true is what makes calc_distance('start' /
         # 'stop') answer: it publishes distance_traveled from GATED velocity.
@@ -280,20 +276,6 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('tracking')),
     )
 
-    depth_node = partial(
-        Node,
-        package='mongla_vision', executable='depth_estimation_node',
-        name=['mongla_depth_', cam], output='screen', ros_arguments=_QUIET,
-        additional_env=_QUIET_ENV,
-        parameters=[{
-            'camera':            cam,
-            'model_path':        LaunchConfiguration('depth_model'),
-            'use_tracks':        LaunchConfiguration('tracking'),
-            'publish_depth_map': True,
-        }],
-        condition=IfCondition(LaunchConfiguration('depth')),
-    )
-
     flow_node = partial(
         Node,
         package='mongla_vision', executable='flow_node',
@@ -358,7 +340,6 @@ def generate_launch_description():
             *respawning(detector_node, 'the detector'),
             *respawning(tracker_node, 'the tracker'),
             *respawning(lock_node, 'the lock ladder'),
-            *respawning(depth_node, 'the depth estimator'),
             *respawning(flow_node, 'the flow node'),
             image_viewer, shutdown_on_viewer_exit]
     )

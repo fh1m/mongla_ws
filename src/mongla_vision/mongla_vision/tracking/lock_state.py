@@ -194,7 +194,7 @@ def arbitrate(*, now: float, last_detection_t: float,
         # it holds full authority. Its age is REPORTED, never zeroed: absence
         # is not zero, and neither is 40 ms (issue #33).
         #
-        # `age <= full_s` IS LOad-BEARING, and its absence was measured on
+        # `age <= full_s` IS LOAD-BEARING, and its absence was measured on
         # the vehicle. The caller hands in its LAST detection box, and it only
         # clears that cache when a message arrives carrying no match --
         # `lock_node._on_det` cannot run at all during a TOTAL detector

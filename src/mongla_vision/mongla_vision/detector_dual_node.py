@@ -54,8 +54,8 @@ what they saw before.
 What is deliberately unchanged
 ------------------------------
 The node NAMES (`mongla_detector_forward` / `mongla_detector_downward`), every
-topic, and every parameter. Missions, `ClassRef`, `vision_state`, the mission
-console's `SetParameters` calls and the `active_camera` latch all address the
+topic, and every parameter. Missions, `ClassRef`, `vision_state`, the helm's
+`SetParameters` calls and the `active_camera` latch all address the
 detector by node name, so collapsing the two into one node would have been a
 much larger change for no benefit. Two nodes in one process is the smaller
 edit and the invisible one.
@@ -93,9 +93,7 @@ _PER_CAMERA = ('model_path', 'models', 'active_model', 'classes', 'conf',
 _SHARED = ('device', 'half', 'iou', 'nms_floor', 'nms_iou', 'imgsz', 'max_det',
            'publish_contours',
            'publish_debug_image',
-           'debug_image_hz', 'alignment_deadband', 'paused',
-           'preprocess', 'preprocess_clip', 'vision_profile',
-           'range_crop')
+           'debug_image_hz', 'alignment_deadband', 'paused', 'range_crop')
 
 # The camera half. Same prefixing scheme, same reason: launch cannot address
 # two nodes in one process.
@@ -137,15 +135,10 @@ _DEFAULTS = {
     'max_det': 100, 'publish_contours': True,
     'publish_debug_image': True, 'debug_image_hz': 5.0,
     'alignment_deadband': 0.05, 'paused': False,
-    # Underwater contrast enhancement -- see detection/preprocess.py.
-    # Off by default: 3.78 ms on the Pi is a real trade.
-    'preprocess': 'off', 'preprocess_clip': 3.0,
-    # One word for the water -- see detection/profiles.py.
-    # -1 = not set (an INT, so a profile can turn it on -- a bool has no
-    # third state). The type must match `detector_node.declare_parameter`
-    # exactly or rclpy raises InvalidParameterTypeException and the whole
-    # composed process dies at startup, which is how this was found.
-    'vision_profile': '', 'range_crop': -1,
+    # The type must match `detector_setup.declare_parameter` exactly or rclpy
+    # raises InvalidParameterTypeException and the whole composed process
+    # dies at startup.
+    'range_crop': False,
 }
 
 

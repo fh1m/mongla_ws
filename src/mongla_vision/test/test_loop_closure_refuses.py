@@ -239,3 +239,70 @@ def test_a_rotation_about_the_centre_is_not_a_displacement():
     assert np.hypot(R[0, 2], R[1, 2]) > 10.0, (
         'the fixture needs a large H[:,2], or it cannot tell the two readings '
         'apart and proves nothing')
+
+
+# --------------------------------------------------------------------------- #
+#  The guards are about the MATCHED place (truth known by construction)
+# --------------------------------------------------------------------------- #
+def _swim(log, path, dt=0.5):
+    """Drive a PlaceLog the way `_place_tick` does: step, then maybe take a
+    place. Returns {position: index} for the places taken."""
+    taken = {}
+    for i, xy in enumerate(path):
+        t = i * dt
+        log.step(xy)
+        if log.should_enrol(t, xy):
+            log.note(t, xy, 0.25)
+            taken[xy] = len(taken)
+    return taken, (len(path) - 1) * dt
+
+
+def _loop():
+    """Out 4 m along x, across 4 m, back, and home to 0.1 m short of the
+    start, 80 s later. Short, because the node asks before it enrols: a place
+    taken on the very spot first would be the newest, and a tie resolves to
+    the newest place, which refuses."""
+    out = [(0.1 * i, 0.0) for i in range(40)]
+    across = [(4.0, 0.1 * i) for i in range(40)]
+    back = [(4.0 - 0.1 * i, 4.0) for i in range(40)]
+    home = [(0.0, 4.0 - 0.1 * i) for i in range(40)]
+    return out + across + back + home
+
+
+def test_a_revisit_of_an_old_place_closes():
+    """The case the whole path exists for. With the guards reading the
+    NEWEST place instead (age <= 5 s, travel < 1 m) this refused every time:
+    measured by putting the old expression back, which fails here."""
+    log = lc.PlaceLog()
+    taken, now = _swim(log, _loop())
+    first = next(iter(taken))
+    age, travel, sigma = log.since(first, now)
+    assert age == pytest.approx(79.5)
+    assert travel == pytest.approx(4.0 * 2 ** 0.5, rel=0.05)
+    assert sigma == 0.25
+    c = lc.consider(_Match(ref_position=first, index=taken[first]),
+                    ref_age_s=age, travel_m=travel, ref_sigma_m=sigma,
+                    m_per_px=0.002, bank_size=len(taken))
+    assert c.ok, c.reason
+
+
+def test_holding_station_over_an_old_place_still_cannot_close():
+    """Old but never away: the jitter of a filter at rest is not travel."""
+    log = lc.PlaceLog()
+    rng = np.random.default_rng(3)
+    path = [tuple(rng.normal(0.0, 0.05, 2)) for _ in range(200)]
+    _swim(log, path)
+    age, travel, _sigma = log.since(log._taken[0][1:3], 99.5)
+    assert age > lc.MIN_REF_AGE_S
+    assert travel < lc.MIN_TRAVEL_M
+
+
+def test_a_place_this_run_did_not_take_has_no_history():
+    """A bank loaded from disk: no age, no travel, no sigma, so it refuses."""
+    log = lc.PlaceLog()
+    age, travel, sigma = log.since((7.0, 7.0), 10.0)
+    assert age != age and travel != travel and sigma != sigma
+    c = lc.consider(_Match(ref_position=(7.0, 7.0)), ref_age_s=age,
+                    travel_m=travel, ref_sigma_m=sigma, m_per_px=0.002,
+                    bank_size=32)
+    assert not c.ok

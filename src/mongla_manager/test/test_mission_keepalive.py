@@ -422,7 +422,9 @@ def test_bringup_check_says_when_no_floor_is_set(nodes, want):
 
 @pytest.mark.parametrize('top, want', [
     ({}, 'WARN'),                                           # on, no height
-    ({'pool_depth_m': 2.0}, 'PASS'),
+    ({'pool_depth_m': 2.0}, 'WARN'),                         # exact, by assumption
+    ({'pool_depth_m': 2.0, 'pool_depth_min_m': 1.8,
+      'pool_depth_max_m': 2.1}, 'PASS'),
     ({'pool_depth_min_m': 1.2, 'pool_depth_max_m': 2.0}, 'PASS'),
     ({'pool_depth_min_m': 1.2}, 'WARN'),                    # half a range
     ({'tile_m': 0.3}, 'PASS'),

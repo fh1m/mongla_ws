@@ -23,11 +23,10 @@ SRC = Path(__file__).resolve().parents[2]
 RNG = np.random.default_rng(7)
 BGR = RNG.integers(0, 255, (36, 64, 3), dtype=np.uint8)
 MONO = BGR[:, :, 1].copy()
-F32 = RNG.random((36, 64), dtype=np.float32)
 
 
 @pytest.mark.parametrize('arr, enc', [(BGR, 'bgr8'), (BGR, 'rgb8'),
-                                      (MONO, 'mono8'), (F32, '32FC1')])
+                                      (MONO, 'mono8')])
 def test_an_array_survives_the_round_trip(arr, enc):
     msg = im.to_msg(arr, enc)
     assert (msg.height, msg.width, msg.encoding) == (36, 64, enc)
@@ -76,12 +75,6 @@ def test_row_padding_is_dropped():
     assert im.to_array(msg).tolist() == [[1, 2, 3], [4, 5, 6]]
 
 
-def test_a_big_endian_float_image_reads_as_the_same_numbers():
-    msg = Image(height=1, width=2, encoding='32FC1', step=8, is_bigendian=1)
-    msg.data = array.array('B', np.array([1.5, -2.25], '>f4').tobytes())
-    assert im.to_array(msg).tolist() == [[1.5, -2.25]]
-
-
 def test_a_non_contiguous_array_is_sent_whole():
     msg = im.to_msg(BGR[:, ::2], 'bgr8')
     assert (im.to_array(msg) == BGR[:, ::2]).all()
@@ -103,7 +96,7 @@ def test_an_array_that_is_not_that_encoding_is_refused():
     with pytest.raises(ValueError):
         im.to_msg(BGR.astype(np.float32), 'bgr8')  # wrong dtype
     with pytest.raises(ValueError):
-        im.to_array(im.to_msg(F32, '32FC1'), 'bgr8')   # no such conversion
+        im.to_msg(BGR[:, :, 0].astype(np.float32), '32FC1')   # not an encoding we use
 
 
 def test_a_truncated_message_is_refused():
@@ -121,12 +114,11 @@ from mongla_vision import image_msg as im
 rng = np.random.default_rng(7)
 bgr = rng.integers(0, 255, (36, 64, 3), dtype=np.uint8)
 mono = bgr[:, :, 1].copy()
-f32 = rng.random((36, 64), dtype=np.float32)
 b = CvBridge()
-for arr, enc in ((bgr, 'bgr8'), (bgr, 'rgb8'), (mono, 'mono8'), (f32, '32FC1')):
+for arr, enc in ((bgr, 'bgr8'), (bgr, 'rgb8'), (mono, 'mono8')):
     theirs, ours = b.cv2_to_imgmsg(arr, encoding=enc), im.to_msg(arr, enc)
     assert bytes(theirs.data) == bytes(ours.data) and theirs.step == ours.step, enc
-    for want in ((enc,) if enc == '32FC1' else ('bgr8', 'rgb8', 'mono8')):
+    for want in ('bgr8', 'rgb8', 'mono8'):
         assert (b.imgmsg_to_cv2(theirs, want) == im.to_array(ours, want)).all(), (enc, want)
 print('AGREES')
 """

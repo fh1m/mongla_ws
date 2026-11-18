@@ -32,10 +32,6 @@
 #   generic = single camera, no calibration (vision.launch.py, dev box).
 # vision_stack: pi
 
-#   vision_stack:=pi -- vision_pi's own profile argument (its `vision:=`).
-#   Renamed here because `vision` is this file's boolean on/off switch.
-# vision_profile: fast
-
 #   vision_stack:=pi -- forward-camera model stem.
 # fwd_model: gate_sharks
 
@@ -192,13 +188,7 @@
 # assoc_conf: 0.10
 
 #   (passed to vision_pi.launch.py, which sets the default)
-# preprocess: auto
-
-#   (passed to vision_pi.launch.py, which sets the default)
-# range_crop: -1
-
-#   (passed to vision_pi.launch.py, which sets the default)
-# preprocess_clip: 0.0
+# range_crop: false
 
 #   (passed to vision_pi.launch.py, which sets the default)
 # tracking: true
@@ -214,21 +204,6 @@
 
 #   (passed to vision_pi.launch.py, which sets the default)
 # fwd_calibration: ''
-
-#   (passed to vision_pi.launch.py, which sets the default) ladder ACTING bar:
-#   below this a detection may be associated by the tracker but is not acted
-#   on (B-59; measured knee 0.60, shipped 0.45)
-# act_conf: 0.45
-
-#   (passed to vision_pi.launch.py, which sets the default) run XFeat on the
-#   Hailo-8 rather than the Pi CPU (B-62); safe because the lock is composed
-#   with the detector
-# anchor_xfeat_hef: true
-
-#   (passed to vision_pi.launch.py, which sets the default) semi-dense
-#   matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-
-#   reference is measured
-# anchor_semi_dense: false
 
 #   (passed to vision_pi.launch.py, which sets the default) Class the DOWNWARD
 #   ladder follows. Empty = any class, and no 6-DoF pose (the geometry table
@@ -335,8 +310,6 @@
 #     viewer: true
 #     tracking: true
 #     tracker_type: ocsort
-#     depth: false
-#     depth_model: ''
 #     flow: false
 #     pool_depth_m: nan
 #     hud_distance: true
@@ -387,10 +360,7 @@
 #     conf: 0.45
 #     assoc_conf: 0.10
 #     max_det: 100
-#     vision: fast
-#     preprocess: auto
-#     range_crop: -1
-#     preprocess_clip: 0.0
+#     range_crop: false
 #     imgsz: 640
 #     paused: true
 #     viewer: false
@@ -401,9 +371,6 @@
 #     fwd_calibration: ''
 #     flow: true
 #     lock: true
-#     act_conf: 0.45
-#     anchor_xfeat_hef: true
-#     anchor_semi_dense: false
 #     lock_class: ''
 #     dwn_lock_class: ''
 #     pool_depth_m: nan

@@ -1,9 +1,8 @@
 """Underwater image statistics, and what they predict about detection.
 
-Why a module and not a script. Three separate things now need the same
-numbers -- the water check an operator runs poolside, the dataset survey that
-tells us which conditions we have data for, and the preprocessing decision
-itself. Three copies of "how blurry is this frame" is how two of them come to
+Why a module and not a script. Several tools need the same numbers -- the
+water check an operator runs poolside, the dataset survey and the footage
+inventory that tell us which conditions we have data for. Three copies of "how blurry is this frame" is how two of them come to
 disagree, which is the defect the camera profile table already had.
 
 What these quantities are, and why these ones
@@ -97,19 +96,6 @@ def analyse_frames(frames: Iterable) -> WaterStats:
     med = [float(np.median(c)) for c in cols]
     return WaterStats(*med, frames=n)
 
-
-# --------------------------------------------------------------------------- #
-#  What the numbers predict
-# --------------------------------------------------------------------------- #
-# From the only two regimes measured end to end so far (RoboSub 2025):
-#
-#                       sharp   contrast   sat     CLAHE effect
-#   gate approach        315      27.7     160     +42 points of presence
-#   bin / torpedo       1241      36.1      28     -64 points
-#
-# Deliberately a WIDE undecided band. Two samples do not make a universal
-# threshold, and a rule that pretends otherwise is the overfit this module
-# exists to avoid. Widening the band is the honest way to hold n=2.
 
 # --------------------------------------------------------------------------- #
 #  There is deliberately NO recommend() here any more

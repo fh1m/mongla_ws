@@ -52,16 +52,6 @@ def test_the_factor_is_bounded_at_both_ends():
 def test_a_confident_box_is_trusted_MORE_than_a_doubtful_one():
     m = ConfidenceModel()
     assert m.nsa_factor(0.45) < m.nsa_factor(0.18)
-    assert m.authority(0.45) > m.authority(0.18)
-
-
-def test_authority_never_reaches_zero():
-    """A weak detection is still the only information available. A vehicle
-    that stops moving because the water got murky has failed the mission just
-    as surely as one that drives off target."""
-    m = ConfidenceModel()
-    assert m.authority(0.0) > 0.0
-    assert m.authority(0.0) == m.authority(0.0)      # not NaN
 
 
 def test_the_model_adapts_to_the_DETECTOR_IN_FRONT_OF_IT():

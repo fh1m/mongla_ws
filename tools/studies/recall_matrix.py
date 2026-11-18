@@ -217,8 +217,16 @@ def main():
     from ultralytics import YOLO
     pre = None
     if a.clahe:
-        from mongla_vision.detection.preprocess import make_clahe
-        pre = make_clahe()
+        # The arm that retired CLAHE from the vehicle: never positive in 17
+        # configurations, and it destroyed 95 % of the gate's detections
+        # (measured-bars). Kept here so the measurement can be re-run.
+        import cv2
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+
+        def pre(img):
+            yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
+            yuv[:, :, 0] = clahe.apply(yuv[:, :, 0])
+            return cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR)
 
     if a.matrix:
         models = [l.strip() for l in open(a.matrix[0]) if l.strip()]

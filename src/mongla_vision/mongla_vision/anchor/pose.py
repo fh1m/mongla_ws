@@ -197,6 +197,21 @@ def target_pose(ref_pts, live_pts, K, *, width_m: float,
                      max_reproj_px=max_reproj_px)
 
 
+def ambiguity_ratio(errs) -> float:
+    """Best branch's error over the second's: 0 is decisive, 1.0 a coin flip.
+
+    IPPE reports the errors best first. Two branches that BOTH fit perfectly
+    (second error 0) cannot be told apart, which is 1.0 -- it was 0.0,
+    "certain", the best possible answer for the worst case. One branch has
+    nothing to compare against, which is unknown (NaN), and every gate
+    downstream refuses NaN.
+    """
+    e = [float(x) for x in errs]
+    if len(e) < 2:
+        return float('nan')
+    return (e[0] / e[1]) if e[1] > 0 else 1.0
+
+
 def solve_pnp(obj_pts, img_pts, K, *, dist=None,
               ambiguity_max: float = AMBIGUITY_MAX,
               max_reproj_px: float = MAX_REPROJ_PX) -> TargetPose:
@@ -236,7 +251,7 @@ def solve_pnp(obj_pts, img_pts, K, *, dist=None,
 
     e = [float(x) for x in np.asarray(errs).ravel()] or [float('nan')]
     best = 0
-    ratio = (e[0] / e[1]) if len(e) > 1 and e[1] > 0 else 0.0
+    ratio = ambiguity_ratio(e)
     # Both branches' angles, so the ambiguity can be REPORTED as a width rather
     # than resolved by luck or refused wholesale. See the module docstring.
     angs = [_angles(np.asarray(rvecs[i], np.float64)) for i in range(n)]

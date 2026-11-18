@@ -77,10 +77,9 @@ MANAGER_SIGTERM_TIMEOUT_S = 12
 # `test_bringup_settings_file` fails if this list and the two files disagree.
 VISION_PI_PASSTHROUGH = (
     'fwd_profile', 'dwn_profile', 'fwd_models', 'dwn_models', 'fwd_active',
-    'dwn_active', 'contours', 'assoc_conf', 'preprocess', 'range_crop', 'preprocess_clip',
+    'dwn_active', 'contours', 'assoc_conf', 'range_crop',
     'tracking', 'tracker_type', 'kalman_adaptive_noise',
-    'dwn_calibration', 'fwd_calibration', 'act_conf',
-    'anchor_xfeat_hef', 'anchor_semi_dense', 'dwn_lock_class', 'bank_forward', 'bank_downward',
+    'dwn_calibration', 'fwd_calibration', 'dwn_lock_class', 'bank_forward', 'bank_downward',
     'fwd_fps', 'dwn_fps', 'fwd_publish_hz', 'dwn_publish_hz', 'replay',
     'split', 'fwd_device_path', 'dwn_device_path',
 )
@@ -160,19 +159,6 @@ def generate_launch_description():
                                           '(vision_pi.launch.py, the vehicle); '
                                           'generic = single camera, no calibration '
                                           '(vision.launch.py, dev box).'),
-        # vision_pi's own `vision` argument is its PROFILE ('fast'|...), while
-        # `vision` HERE is the boolean that decides whether vision starts at
-        # all. Launch forwards configurations into an include, so `vision:=true`
-        # arrived as the profile and killed detector_dual_node with
-        #   InvalidParameterTypeException ... 'True' of type 'BOOL',
-        #   expecting type 'STRING': vision_profile
-        # Exposing it under a distinct name and passing it explicitly is what
-        # actually fixes that -- the passed value wins over the inherited one.
-        DeclareLaunchArgument('vision_profile', default_value='fast',
-                              description="vision_stack:=pi -- vision_pi's own "
-                                          "profile argument (its `vision:=`). "
-                                          "Renamed here because `vision` is this "
-                                          "file's boolean on/off switch."),
         DeclareLaunchArgument('fwd_model',   default_value='gate_sharks',
                               description='vision_stack:=pi -- forward-camera model stem.'),
         DeclareLaunchArgument('dwn_model',   default_value='bin_fire_blood',
@@ -379,13 +365,11 @@ def generate_launch_description():
     # SCOPED, and the scope is load-bearing. `IncludeLaunchDescription` does
     # NOT scope launch configurations: every `name:=value` given to this file
     # leaks into the included one and overrides its default for any argument of
-    # the same name. `vision` is a BOOLEAN here and a PROFILE STRING ('fast')
-    # inside vision_pi, so `vision:=true` set `vision_profile` to the literal
-    # 'true' and detector_dual_node died at startup with
-    #   InvalidParameterTypeException: ... to 'True' of type 'BOOL',
-    #   expecting type 'STRING': vision_profile
-    # -- MEASURED on the vehicle, not reasoned about. Leaving the name out of
-    # the dict below is necessary and NOT sufficient; only the scope stops it.
+    # the same name. When `vision` meant a boolean here and a profile string
+    # inside vision_pi, `vision:=true` killed detector_dual_node at startup with
+    # InvalidParameterTypeException (measured on the vehicle). Leaving a name
+    # out of the dict below is necessary and NOT sufficient; only the scope
+    # stops it.
     # Same defect CLAUDE.md records for the sim, where it silently started
     # nothing for a season.
     _stack_is = lambda want: IfCondition(PythonExpression([
@@ -402,7 +386,6 @@ def generate_launch_description():
             'imgsz':         LaunchConfiguration('imgsz'),
             'max_det':       LaunchConfiguration('max_det'),
             'viewer':        LaunchConfiguration('viewer'),
-            'vision':        LaunchConfiguration('vision_profile'),
             'lock_class':    LaunchConfiguration('lock_class'),
             'flow':          LaunchConfiguration('flow'),
             'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
