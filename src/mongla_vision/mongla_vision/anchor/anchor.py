@@ -208,25 +208,28 @@ class Anchor:
         the lock silently never engages.
         """
         k, d = self._be.detect(gray)
-        if roi is not None and len(k):
+        box = None
+        if roi is not None:
             # The backend works at its own resolution; the ROI arrives in the
-            # caller's. Scale the box, never the keypoints.
+            # caller's. Scale the box, never the keypoints. Scaled even when
+            # nothing was detected, so an empty snap returns 0, not NameError.
             fh, fw = gray.shape[:2]
             sx = self._be.w / float(fw)
             sy = self._be.h / float(fh)
             x1, y1, x2, y2 = (float(v) for v in roi)
             x1, x2 = sorted((x1 * sx, x2 * sx))
             y1, y2 = sorted((y1 * sy, y2 * sy))
-            m = ((k[:, 0] >= x1) & (k[:, 0] <= x2)
-                 & (k[:, 1] >= y1) & (k[:, 1] <= y2))
-            k, d = k[m], d[m]
+            box = (x1, y1, x2, y2)
+            if len(k):
+                m = ((k[:, 0] >= x1) & (k[:, 0] <= x2)
+                     & (k[:, 1] >= y1) & (k[:, 1] <= y2))
+                k, d = k[m], d[m]
         self._ref_kpts, self._ref_desc = k, d
         self._ref_shape = (self._be.h, self._be.w)
         self._ref_gray = gray.copy()
-        # Stored in BACKEND pixels (already scaled above), which is the frame
-        # `locate()` and the homography both work in.
-        self._ref_roi = (float(x1), float(y1), float(x2), float(y2)) \
-            if roi is not None else None
+        # Stored in BACKEND pixels, which is the frame `locate()` and the
+        # homography both work in.
+        self._ref_roi = box
         return int(len(k))
 
     @property
