@@ -1,8 +1,10 @@
 """The process's one Hailo VDevice, shared by every detector and XFeat anchor.
 
-Opened through the HailoRT service when it runs, so several processes share
-the chip; otherwise directly, and then a second VDevice in another process
-fails (`_open` has the order). Within a process every network group on the
+Opened directly when this process is the chip's only user (`MONGLA_HAILO_PREFER
+=direct`, the single vision process), because the service adds a round trip to
+every inference (measured-bars 86). Otherwise through the HailoRT service, so
+several processes share the chip; a second direct VDevice in another process
+fails. `_open` has the order. Within a process every network group on the
 chip is configured on this one, under HailoRT's ROUND_ROBIN scheduler, and
 handed back at exit before the device is.
 `hailo.py` (the detectors) and `anchor/xfeat_hailo.py` (the anchors) both
@@ -25,11 +27,14 @@ import weakref
 #                                      the packaged library, which was built
 #                                      without the service client. Built with
 #                                      HAILO_BUILD_SERVICE (kutum/setup.sh),
-#                                      processes share the chip: +0.012 ms a
-#                                      frame, two at 47.8 Hz each
-#                                      (measured-bars 80). `shared_device`
-#                                      opens through it when it runs; a killed
-#                                      service is back in 0.31 s (83).
+#                                      processes share the chip, two at 44.6 Hz
+#                                      each. But one inference in flight takes
+#                                      16.5 ms through it against 10.4 ms
+#                                      direct (measured-bars 86, which retracts
+#                                      the "+0.012 ms" of 80), so a process
+#                                      that is the chip's only user opens it
+#                                      directly. A killed service is back in
+#                                      0.31 s (83).
 #   ONE process, activation handed back and forth by hand (what shipped until
 #   2026-10-03)                      -> works: 73.8 Hz across two detectors
 #                                      swapping every frame, 4.15 ms a swap.
@@ -157,6 +162,11 @@ SERVICE_WAIT_S = 3.0
 # the downward one 'none': a lost service costs the downward detector, never
 # the forward one.
 FALLBACK_ENV = 'MONGLA_HAILO_FALLBACK'
+# Which path is tried FIRST: 'service' (several vision processes share the
+# chip) or 'direct' (this process is the only user, and saves the service's
+# round trip: 10.4 against 16.5 ms an inference, measured-bars 86). A direct
+# open that fails because another process holds the chip tries the service.
+PREFER_ENV = 'MONGLA_HAILO_PREFER'
 
 # What the last open did, for the start-up log and the health board:
 # 'service', 'direct', or '' before the first open.
@@ -164,9 +174,11 @@ opened_via = ''
 
 
 def _open(*, installed=None, running=None, wait_s=None, sleep=None,
-          make=None, fallback=None):
+          make=None, fallback=None, prefer=None):
     """The VDevice this process uses, in the order the owner chose.
 
+    0. With `MONGLA_HAILO_PREFER=direct`, the chip itself first; if another
+       process holds it, the service, if it runs. Nothing is waited for.
     1. Through the HailoRT service, when it is installed. A process started
        while the service is restarting waits up to `SERVICE_WAIT_S` for it:
        systemd brings it back 200 ms after a crash (hailort.service).
@@ -190,6 +202,20 @@ def _open(*, installed=None, running=None, wait_s=None, sleep=None,
     fallback = fallback or os.environ.get(FALLBACK_ENV, 'direct')
     if fallback not in ('direct', 'none'):
         raise ValueError(f'{FALLBACK_ENV}={fallback!r}: expected direct or none')
+    prefer = prefer or os.environ.get(PREFER_ENV) or 'service'
+    if prefer not in ('service', 'direct'):
+        raise ValueError(f'{PREFER_ENV}={prefer!r}: expected service or direct')
+    if prefer == 'direct':
+        try:
+            dev = make(service=False)
+            opened_via = 'direct'
+            return dev
+        except Exception:                                    # noqa: BLE001
+            if not (installed and running()):
+                raise
+            dev = make(service=True)
+            opened_via = 'service'
+            return dev
     service_error = None
     if installed:
         waited = 0.0

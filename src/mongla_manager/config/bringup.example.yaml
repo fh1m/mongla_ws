@@ -435,6 +435,7 @@
 #     fwd_publish_hz: 40
 #     dwn_publish_hz: 0
 #     replay: false
+#     split: false
 #     fwd_device_path: ''
 #     dwn_device_path: ''
 

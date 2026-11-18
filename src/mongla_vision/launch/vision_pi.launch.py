@@ -33,7 +33,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -438,6 +438,16 @@ def arguments() -> list:
                         'recorded session becomes a regression fixture: the '
                         'detector, tracker, lock ladder and checkpoint bank '
                         'all run for real, on input that never changes.'),
+        # Both cameras in one process that opens the chip directly (the
+        # default), or one process per camera sharing it through the HailoRT
+        # service. The service adds 6 ms to every inference and the split
+        # gave no rate back on Kutum, so one process is the default
+        # (measured-bars 86). `split:=true` is for a third chip user.
+        DeclareLaunchArgument(
+            'split', default_value='false',
+            description='One vision process per camera, through the HailoRT '
+                        'service. Off: one process, the chip opened directly, '
+                        '6 ms faster an inference (measured-bars 86).'),
         DeclareLaunchArgument('fwd_device_path', default_value=''),
         DeclareLaunchArgument('dwn_device_path', default_value=''),
     ]
@@ -457,11 +467,28 @@ def generate_launch_description():
     # to `mongla_detector_dual` and ros2 warned about duplicate names. The
     # launcher's own default name is already `mongla_detector_dual`, and the two
     # detectors name themselves.
-    def detectors() -> Node:
+    def detectors(cameras: str = '', fallback: str = '', condition=None,
+                  prefer: str = '') -> Node:
+        """The vision process. With `cameras`, one of a pair: each camera,
+        its detector and its lock ladder in a process of their own, sharing
+        the chip through the HailoRT service. A node-targeted remap renames
+        only the launcher, so the detector and camera nodes keep their names.
+        `fallback` is MONGLA_HAILO_FALLBACK (hailo_device.py): if the service
+        is lost the forward process opens the chip itself and the downward
+        one stops, so the forward detector is the one that survives.
+        `prefer` is MONGLA_HAILO_PREFER: 'direct' for the single process,
+        which is the chip's only user and skips the service's round trip."""
+        extra = {'cameras': cameras} if cameras else {}
+        remap = (['-r', f'mongla_detector_dual:__node:=mongla_vision_{cameras}']
+                 if cameras else [])
         return Node(
             package='mongla_vision', executable='detector_dual_node',
-            output='screen', ros_arguments=_QUIET,
-            parameters=[{
+            output='screen', ros_arguments=_QUIET + remap,
+            additional_env=({**({'MONGLA_HAILO_FALLBACK': fallback} if fallback else {}),
+                             **({'MONGLA_HAILO_PREFER': prefer} if prefer else {})}
+                            or None),
+            condition=condition,
+            parameters=[extra, {
                 'fwd_model_path': LaunchConfiguration('fwd_model'),
                 'dwn_model_path': LaunchConfiguration('dwn_model'),
                 'fwd_models':     LaunchConfiguration('fwd_models'),
@@ -653,7 +680,13 @@ def generate_launch_description():
         # Every process below restarts 2 s after it dies mid-run, three times,
         # then stays down (`launch_respawn`). The cameras live inside
         # `detectors`, so its restart also reopens a camera that vanished.
-        *respawning(detectors, 'the detectors and cameras'),
+        *respawning(lambda: detectors(condition=UnlessCondition(
+            LaunchConfiguration('split')), prefer='direct'),
+            'the detectors and cameras'),
+        *respawning(lambda: detectors('forward', 'direct', IfCondition(
+            LaunchConfiguration('split'))), 'the forward vision process'),
+        *respawning(lambda: detectors('downward', 'none', IfCondition(
+            LaunchConfiguration('split'))), 'the downward vision process'),
         *respawning(lambda: tracker('forward', 'fwd_frame_rate'), 'the forward tracker'),
         *respawning(lambda: tracker('downward', 'dwn_frame_rate'), 'the downward tracker'),
         *respawning(flow, 'the flow node'),

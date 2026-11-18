@@ -12,13 +12,15 @@ one dies with `HAILO_OUT_OF_PHYSICAL_DEVICES (74)`, so the two-camera path has
 never started on this hardware. Measured, along with the two alternatives that
 look like they should work and do not:
 
-    two processes, multi_process_service + scheduler -> InvalidOperation
-        (the `hailort_service` daemon it needs is not installed)
-    one process, ROUND_ROBIN scheduler, two graphs   -> SIGSEGV
-    one process, one VDevice, both graphs, taking turns -> 98.2 Hz
+    two processes, multi_process_service + scheduler -> works since the
+        service was built and installed (kutum/setup.sh), but each inference
+        pays its ~6 ms round trip (measured-bars 86)
+    one process, one VDevice, ROUND_ROBIN scheduler    -> the default: the
+        SIGSEGV once blamed on it was interpreter teardown (hailo_device.py)
 
-So: one process, two `DetectorNode` objects, the shared device and activation
-arbiter in `detection/hailo.py`.
+So: one process, two `DetectorNode` objects, one VDevice opened directly
+(`detection/hailo_device.py`). `cameras` selects a subset for the split
+launch (`split:=true`), one process per camera through the service.
 
 Why the cameras joined them
 ---------------------------
@@ -160,6 +162,11 @@ class _Launcher(Node):
         # pipeline check require a live camera and a person standing in front
         # of it, which is not a thing a regression test can do.
         self.declare_parameter('replay', False)
+        # Which cameras THIS process holds. Both, or one when the launch runs
+        # a process per camera through the HailoRT service: each then has its
+        # own interpreter and GIL, and the chip is shared by the service
+        # rather than by threads (measured-bars 80, 86).
+        self.declare_parameter('cameras', 'forward,downward')
         for cam in ('fwd', 'dwn'):
             for key in _PER_CAMERA:
                 self.declare_parameter(f'{cam}_{key}', _DEFAULTS[key])
@@ -321,7 +328,14 @@ def main():
     hook = _make_failure_hook(launcher, live, failed, state)
     try:
         replay = bool(launcher.get_parameter('replay').value)
+        wanted = [c.strip() for c in
+                  str(launcher.get_parameter('cameras').value).split(',') if c.strip()]
+        unknown = sorted(set(wanted) - {'forward', 'downward'})
+        if unknown or not wanted:
+            raise ValueError(f"cameras={wanted}: name forward and/or downward")
         for cam, camera in (('fwd', 'forward'), ('dwn', 'downward')):
+            if camera not in wanted:
+                continue
             # Built SEQUENTIALLY on purpose. The second one configures a second
             # network group on the device the first created; doing that from a
             # thread pool is how the registry path already trips over itself.
@@ -377,6 +391,11 @@ def main():
                     f'/mongla/vision/{camera}/* topics this session -- a '
                     f'mission that steers on {camera} will find nothing.')
                 continue
+            # Said, not inferred: the detector used to conclude "no camera
+            # here" from 2 s without a frame, and a detector that starts
+            # paused (the launch default) asks for none -- so every run
+            # moved to the topic path for good (2026-11-18).
+            det.attach_camera()
             nodes.append(det)
             nodes.append(cam_node)
             live.append(camera)
