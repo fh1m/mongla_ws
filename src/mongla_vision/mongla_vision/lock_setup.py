@@ -6,6 +6,10 @@ from mongla_vision.anchor import loop_closure as _lc
 from mongla_vision.tracking.lock_state import FULL_AUTHORITY_S, ZERO_AUTHORITY_S
 
 
+
+LIVE_PARAMS = ('full_authority_s', 'publish_hz', 'target_class',
+                'zero_authority_s')
+
 class LockSetupMixin:
     """Methods of `LockNode`; see `lock_node.py` for the node."""
 
@@ -296,6 +300,8 @@ class LockSetupMixin:
                 f'{type(exc).__name__}: {exc} -- the rung still runs and will '
                 f'learn checkpoints from live detections')
 
+    LIVE_PARAMS = LIVE_PARAMS
+
     def _on_param_change(self, params):
         """Aim (or un-aim) the ladder while a mission is running.
 
@@ -305,8 +311,23 @@ class LockSetupMixin:
         one leg and hand it back, without a relaunch.
         """
         from rcl_interfaces.msg import SetParametersResult
+        fixed = [p.name for p in params if p.name not in LIVE_PARAMS]
+        if fixed:
+            return SetParametersResult(successful=False, reason=(
+                f'{", ".join(fixed)}: read once at startup -- set it under '
+                f'`nodes:` in bringup.yaml and restart. Live here: '
+                f'{", ".join(LIVE_PARAMS)}'))
         for prm in params:
-            if prm.name == 'target_class':
+            if prm.name in ('full_authority_s', 'zero_authority_s'):
+                # Read every tick by the authority taper (lock_node).
+                v = float(prm.value)
+                full = v if prm.name == 'full_authority_s' else self._full
+                zero = v if prm.name == 'zero_authority_s' else self._zero
+                if not 0.0 <= full <= zero:
+                    return SetParametersResult(successful=False, reason=(
+                        f'authority must taper: 0 <= full ({full}) <= zero ({zero})'))
+                self._full, self._zero = full, zero
+            elif prm.name == 'target_class':
                 new = str(prm.value or '').strip()
                 if new == self._cls_pinned:
                     continue

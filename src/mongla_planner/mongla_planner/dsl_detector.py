@@ -358,16 +358,18 @@ class DetectorMixin:
 
         One method, seven subsystems, no new layer::
 
-            mongla.set_node('tracker', coast_s=1.2)      # hold a flickering lock
+            mongla.set_node('tracker', classes='gate')   # track one class
             mongla.set_node('camera',  exposure_us=4000) # kill motion blur
-            mongla.set_node('lock',    full_authority_s=3.0)
+            mongla.set_node('lock',    full_authority_s=1.0)
             mongla.set_node('pnp',     max_reproj_px=15.0)
             mongla.set_node('flow',    max_baseline_s=0.4)
             mongla.set_node('manager', **{'vision.kp_yaw': 70.0})
 
         ``camera`` selects which per-camera instance; ``flow`` and ``manager``
-        are single nodes and ignore it. Raises on a rejected or undeclared
-        parameter, for the same reason ``set_detector`` does: a silent no-op is
+        are single nodes and ignore it. Each node applies only the parameters
+        in its ``LIVE_PARAMS`` while running and refuses the rest with the
+        reason (a value read once at startup cannot change mid-run). Raises on
+        a rejected or undeclared parameter, for the same reason ``set_detector`` does: a silent no-op is
         a mission believing it changed something.
         """
         if not params:

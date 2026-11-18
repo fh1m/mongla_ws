@@ -108,10 +108,11 @@ _SHARED = ('device', 'half', 'iou', 'nms_floor', 'nms_iou', 'imgsz', 'max_det',
 # for identity regardless -- a raw index has already swapped the two cameras
 # across a reboot once.
 _CAM_PER_CAMERA = ('profile', 'device', 'device_path', 'calibration', 'fps',
-                   'publish_rate_hz', 'width', 'height')
+                   'publish_rate_hz', 'width', 'height', 'exposure_us',
+                   'controls')
 _CAM_DEFAULTS = {
     'profile': '', 'device': -1, 'device_path': '', 'calibration': '',
-    'fps': 0,
+    'fps': 0, 'exposure_us': 0, 'controls': '',
     # A composed detector is fed on demand, so this rate now governs only the
     # topic's viewers -- not the control path, which is what it used to gate.
     'publish_rate_hz': 0, 'width': 640, 'height': 480,

@@ -28,6 +28,26 @@ from .node_support import HEARTBEAT_WAIT_S, SEPARATOR, SROT_MESSAGE_RATES, _Hear
 
 
 class SetupMixin:
+    # Read again at every use: `vision.*` at each vision verb (vision_tunables
+    # snapshot), the uplink switches at each tick (node_vision). Every other
+    # parameter is read once here, so a live set of one is refused -- rclpy
+    # reports success for any declared name, and the manager would carry on
+    # with the startup value while the deck believed it had changed.
+    LIVE_PARAMS = ('position_uplink', 'velocity_uplink', 'vision.*',
+                   'vision_uplink_camera', 'vision_uplink_class',
+                   'vision_uplink_medium')
+
+    def _on_set_parameters(self, params):
+        from rcl_interfaces.msg import SetParametersResult
+        fixed = [p.name for p in params
+                 if not p.name.startswith('vision.') and p.name not in self.LIVE_PARAMS]
+        if fixed:
+            return SetParametersResult(successful=False, reason=(
+                f'{", ".join(fixed)}: read once at startup -- set it under '
+                f'`nodes:` in bringup.yaml and restart. Live here: '
+                f'{", ".join(self.LIVE_PARAMS)}'))
+        return SetParametersResult(successful=True)
+
     def _setup_parameters(self) -> None:
         """Declare and read all ROS parameters; resolve the board's serial port."""
         # The board's serial device. '' (default) = find it (/dev/srot, then

@@ -315,6 +315,8 @@ class TrackerNode(Node):
             f"act_thresh={act_thresh:.2f} "
             f"kalman={'on' if self._enable_kal else 'off'}")
 
+    LIVE_PARAMS = ('classes',)
+
     def _on_param_change(self, params):
         """`classes` applies live; everything else is read once at startup.
 
