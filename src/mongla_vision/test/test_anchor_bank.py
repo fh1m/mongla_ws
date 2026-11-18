@@ -712,3 +712,21 @@ def test_scale_is_recorded_in_backend_pixels():
     assert abs(b.scales[0] - 60.0) < 1.0
 
 
+
+
+def test_an_eviction_forgets_the_scores_its_indices_no_longer_name():
+    """`last_lookup_scores` keys by reference index. Evicting reference j
+    moves every later reference down one slot, so scores kept across it
+    paired one reference's current yield with another's best, and the
+    health check judged the camera on that."""
+    b = CheckpointBank(FakeBackend())
+    b._last_scores = {0: 5, 1: 9, 2: 7}
+    b._yields = [10, 3, 8]
+    for name in ('_refs', '_sigs', '_labels', '_att', '_depth', '_ann',
+                 '_pos', '_scale'):
+        setattr(b, name, [None, None, None])
+    b._evict()
+    assert b.last_lookup_scores() == ([], [])
+    b._last_scores = {0: 5}
+    b.clear()
+    assert b.last_lookup_scores() == ([], [])
