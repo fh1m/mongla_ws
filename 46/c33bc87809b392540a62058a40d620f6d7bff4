@@ -1,0 +1,62 @@
+.claude/context/reference/commands.md
+  s_d9cd6692c91d8a::t_515a33b470024c 326,471,477
+README.md
+  s_d9cd6692c91d8a::t_2b25df652acf37 64,798,801
+src/mongla_manager/config/bringup.example.yaml
+  s_d9cd6692c91d8a::t_515a33b470024c 438
+src/mongla_vision/launch/vision_pi.launch.py
+  s_d9cd6692c91d8a::t_f5682e5e976e6b 441-450,470-483,486-491,683-685
+  s_d9cd6692c91d8a::t_fb70df23029ff2 36,686-689
+src/mongla_vision/mongla_vision/detection/hailo_device.py
+  s_d9cd6692c91d8a::t_01416015bd40bb 3-7,30-37,165-169,177,180-181,206-218
+  s_d9cd6692c91d8a::t_95184096bc66d8 205
+src/mongla_vision/mongla_vision/detector_frames.py
+  s_d9cd6692c91d8a::t_efad39e0420f6e 53-66,76-77
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  s_d9cd6692c91d8a::t_efad39e0420f6e 394-398
+  s_d9cd6692c91d8a::t_2b25df652acf37 15-19,21-23
+  s_d9cd6692c91d8a::t_3431907f4de6c2 165-169,331-335,337-338
+src/mongla_vision/test/test_hailo_service_open.py
+  s_d9cd6692c91d8a::t_01416015bd40bb 32,120-150
+  s_d9cd6692c91d8a::t_e5308d80e0af39 151-165
+src/mongla_vision/test/test_composed_vision.py
+  s_d9cd6692c91d8a::t_20254ea803e7d8 355-372
+  s_d9cd6692c91d8a::t_1364ec9172ba22 351-354
+kutum/system/systemd/hailort.service
+  s_d9cd6692c91d8a::t_2b25df652acf37 2-3
+.claude/context/perception/hailo-frontier.md
+  s_d9cd6692c91d8a::t_2b25df652acf37 195
+.claude/context/measured-bars.md
+  s_d9cd6692c91d8a::t_2b25df652acf37 152,7799-7802,7946-8012
+  s_d9cd6692c91d8a::t_70777c1060f120 8013
+.claude/context/sota/sources/vision-never-lose-the-target.md
+  s_d9cd6692c91d8a::t_2b25df652acf37 788
+docs/index.html
+  s_d9cd6692c91d8a::t_2b25df652acf37 1734-1736,1738
+src/mongla_vision/test/test_dual_node_degrades.py
+  s_b4c45e3235679b::t_9a81164602d566 19,39-40,163-170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "46c33bc87809b392540a62058a40d620f6d7bff4",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    },
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
