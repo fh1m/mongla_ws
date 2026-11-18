@@ -381,7 +381,7 @@ class LockSetupMixin:
         if self._follower is not None:
             self._follower.drop()
         self._anchor_pose, self._anchor_header, self._anchor_label = None, None, ''
-        self._anchor_inliers, self._anchor_best = 0, None
+        self._anchor_inliers = 0
 
     def _retarget_width(self):
         """Re-resolve the committed width for the class we now follow.

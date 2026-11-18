@@ -53,7 +53,7 @@ class _Fake:
         self._det_box, self._det_conf, self._det_cls = None, 0.0, ''
         self._det_t, self._det_header = 0.0, None
         self._follower = Follower()
-        self._anchor_pose = self._anchor_header = self._anchor_best = None
+        self._anchor_pose = self._anchor_header = None
         self._anchor_label, self._anchor_inliers = '', 0
         self._world = None
         for name in ('_switch_target', '_forget_target_locked', '_retarget_width'):
