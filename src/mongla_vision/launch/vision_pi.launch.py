@@ -275,14 +275,6 @@ def arguments() -> list:
             description='semi-dense matching: 2.1-2.6x inliers for +37 % '
                         'match cost. OFF until frame-to-reference is measured'),
         DeclareLaunchArgument(
-            'target_width_m_forward', default_value='0.0',
-            description='measured TRUE width of the forward target in metres; '
-                        '0 = use the rulebook nominal. A measured prop beats '
-                        'a nominal, which is what SAUVC +/-5 % allows for'),
-        DeclareLaunchArgument(
-            'target_width_m_downward', default_value='0.0',
-            description='measured true width of the downward target, metres'),
-        DeclareLaunchArgument(
             'lock_class', default_value='',
             description='Class the ladder locks onto. Empty = whatever the '
                         'detector is publishing.'),
@@ -495,8 +487,6 @@ def generate_launch_description():
                 # with XFeat on the chip they raced the detector for it. Composed,
                 # all of them share one VDevice. Why each value is passed:
                 #   act_conf      -- the B-59 acting bar; a pool day must reach it
-                #   target_width  -- the anchor's metric scale; a measured prop
-                #                    beats the rulebook nominal
                 #   medium        -- the lock rectifies its OBJECT points
                 # Place recognition is deliberately NOT plumbed: it configures
                 # itself from ~/.mongla/*.yaml so every launch path behaves alike
@@ -515,10 +505,6 @@ def generate_launch_description():
                 'dwn_lock_target_class':  LaunchConfiguration('dwn_lock_class'),
                 'fwd_lock_anchor_bank':   LaunchConfiguration('bank_forward'),
                 'dwn_lock_anchor_bank':   LaunchConfiguration('bank_downward'),
-                'fwd_lock_target_width_m': ParameterValue(
-                    LaunchConfiguration('target_width_m_forward'), value_type=float),
-                'dwn_lock_target_width_m': ParameterValue(
-                    LaunchConfiguration('target_width_m_downward'), value_type=float),
 
                 # Optical flow on the downward camera, in this process: frames
                 # by reference rather than ~210 raw images a second over DDS

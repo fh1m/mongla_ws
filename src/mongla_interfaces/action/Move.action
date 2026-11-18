@@ -118,7 +118,7 @@ float32 fire_max_tilt_deg  # vision_align: HOLD the payload shot unless the targ
                            # WORSE of the two pose branches must be inside tolerance.
                            # 0 (default) = no gate, byte-identical to before. NO POSE MEANS
                            # NOT SQUARE -- an absent lock_node, an uncalibrated camera or an
-                           # unset target_width_m all HOLD the shot, because for a firing
+                           # class with no width all HOLD the shot, because for a firing
                            # gate the fail-safe direction is do not fire.
 string  tool               # vision_align: WHICH TOOL is being aimed, from config/tool_geometry.yaml
                            #   ('torpedo', 'dropper', 'grabber', 'camera_forward', ...).

@@ -151,8 +151,7 @@ class LockPublishMixin:
         `scale` > 1 means the reference patch appears LARGER than when it was
         stored, i.e. we are CLOSER. It is a range RATIO against the moment of
         enrolment, so it becomes metres only if the reference's true width is
-        known -- which is what `target_width_m` is for, and why that parameter
-        now reaches this node.
+        known: the locked class's entry in `target_geometry.yaml`.
 
         `theta` is in-plane rotation against a FIXED reference, not an
         integrated rate. It is hull ROLL only on the DOWNWARD camera; on the
@@ -176,18 +175,9 @@ class LockPublishMixin:
         m.header.frame_id = self._cam
         m.vector.x = th
         m.vector.y = sc
-        # The per-class table, not the operator parameter.
-        # `target_geometry.yaml` replaced `target_width_m` precisely because
-        # one width for every prop is wrong, and `width_for()` is what the
-        # 6-DoF path already uses. An explicit `target_width_m` still wins --
-        # a measured prop beats a table entry -- but the table is the default.
-        w = float(self._ladder('target_width_m') or 0.0)
-        if w <= 0.0:
-            try:
-                from mongla_vision.target_geometry import width_for
-                w = float(width_for(self._cls) or 0.0)
-            except Exception:                                    # noqa: BLE001
-                w = 0.0
+        # The locked class's width from the per-class table, kept in step
+        # with the class by `_retarget_width`.
+        w = float(self._target_w_m or 0.0)
         m.vector.z = (w / sc) if (w > 0.0 and math.isfinite(sc) and sc > 1e-6) \
             else float('nan')
         self._decomp_pub.publish(m)

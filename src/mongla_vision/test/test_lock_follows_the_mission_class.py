@@ -41,13 +41,12 @@ class _Log:
 class _Fake:
     """Only what the handler touches, with the REAL switch bound in: a fake
     that stubbed the reset would test the stub."""
-    def __init__(self, pinned='', width=0.0, cls=''):
+    def __init__(self, pinned='', cls=''):
         import threading
         from mongla_vision.tracking.follower import Follower
         self._cls_pinned = pinned
         self._cls = cls
         self._target_w_m = 0.0
-        self._width_param = width
         self._log = _Log()
         self._lock = threading.Lock()
         self._gen = 0
@@ -59,9 +58,6 @@ class _Fake:
         self._world = None
         for name in ('_switch_target', '_forget_target_locked', '_retarget_width'):
             setattr(self, name, types.MethodType(getattr(LockNode, name), self))
-    def get_parameter(self, name):
-        assert name == 'target_width_m', name
-        return types.SimpleNamespace(value=self._width_param)
     def get_logger(self):
         return self._log
 
@@ -127,11 +123,25 @@ def test_an_unknown_class_refuses_the_pose_instead_of_keeping_a_stale_width():
     assert any('no committed width' in m for _, m in f._log.lines)
 
 
-def test_an_explicit_width_parameter_still_wins():
-    f = _Fake(width=0.5)
-    f._target_w_m = 0.5
-    _feed(f, 'definitely_not_a_committed_class')
-    assert f._target_w_m == 0.5
+def test_a_measured_width_follows_its_class_through_a_switch():
+    """One width for the whole run scaled the second prop by the first one's
+    width. A measured width belongs to its class in the table, so a switch
+    away from that class must leave it behind."""
+    from mongla_vision.target_geometry import width_for
+    known = next((c for c in ('gate', 'red_pipe', 'drum_blue', 'bin', 'flare')
+                  if width_for(c) > 0.0), None)
+    if known is None:
+        pytest.skip('no class in the committed table to test against')
+    f = _Fake()
+    f._target_w_m = 0.5                        # the previous target's width
+    _feed(f, known)
+    assert f._target_w_m == pytest.approx(width_for(known))
+
+
+def test_no_width_parameter_exists_to_outlive_a_switch():
+    src = code_of_file(pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision'
+                       / 'lock_node.py')
+    assert "'target_width_m'" not in src
 
 
 def test_the_subscription_is_LATCHED():

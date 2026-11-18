@@ -507,6 +507,24 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-115: one target width outlived the class it was measured for `READ 2026-11-18` **FIXED 2026-11-18**
+
+**What.** `target_width_m` (launch arguments `target_width_m_forward` and
+`target_width_m_downward`, and a `ladder.yaml` key) set one width for the
+lock's whole run, and it won over the per-class table. A mission switches
+target class on every vision verb (gate, then a bin), so after the first
+switch the 6-DoF pose scaled the new prop by the old prop's width: a
+confident range off by the ratio of two props, with nothing logged.
+`_retarget_width` re-resolved the table on a switch only when the parameter
+was unset, so the one case an operator had measured was the one that broke.
+
+**Fix.** The parameter, both launch arguments and the ladder key are gone.
+The width is `width_for(class)` for every class the lock follows; a measured
+prop goes in `~/.mongla/target_geometry.yaml` under its class, where it
+cannot outlive a switch. Guarded by
+`test_lock_follows_the_mission_class.py::test_a_measured_width_follows_its_class_through_a_switch`
+(injection-verified: keeping the old width on a switch fails it).
+
 ### B-114: the tracker's coast windows were frame counts, so their length moved with the detection rate `READ 2026-11-18` **FIXED 2026-11-18**
 
 **What.** Both tracker windows were frames. The Roboflow buffer lasts

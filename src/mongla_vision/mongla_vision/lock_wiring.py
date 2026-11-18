@@ -62,21 +62,15 @@ class LockWiringMixin:
         # no metric answer, and guessing one would make every range wrong by a
         # constant nobody could see.
         self._K = None
-        self._target_w_m = float(
-            self.declare_parameter('target_width_m', 0.0).value or 0.0)
-        # An explicit parameter WINS -- a measured prop beats a rulebook
-        # nominal, which is what SAUVC's +/- 5 % tolerance exists to allow for.
-        # Otherwise fall back to the committed table, keyed by the class we are
-        # locking onto. Without this the default is 0.0 and the 6-DoF branch
-        # publishes `ok=false, reason='target_width_m unset'` forever: the
-        # metric path has never once run on the vehicle.
-        # Ungated on purpose: what the table IGNORED must be reported whether
-        # or not this node needs a lookup. Inside the `if` below it would stay
-        # silent exactly when `target_width_m` was passed explicitly -- which is
-        # the case where a broken override matters most, because the operator
-        # believes the file is doing something.
+        # The width comes from the per-class table and nowhere else, so it
+        # follows the class through every switch a mission makes. A measured
+        # prop goes in ~/.mongla/target_geometry.yaml under its class. A
+        # single width parameter used to win here, and after the mission's
+        # first switch it scaled the next prop by the last one's width.
+        self._target_w_m = 0.0
+        # What the table IGNORED is reported before anything is looked up.
         self._report_geometry_problems()
-        if self._target_w_m <= 0.0 and self._cls:
+        if self._cls:
             from mongla_vision.target_geometry import width_for, describe
             w = width_for(self._cls)
             if w > 0.0:
@@ -87,11 +81,10 @@ class LockWiringMixin:
                     f"({d.get('boxes', '?')}; {d.get('source', 'no source')})")
             else:
                 self.get_logger().warn(
-                    f'[LOCK ] no committed width for {self._cls!r}, and '
-                    f'target_width_m is unset -- the 6-DoF pose will refuse. '
-                    f'Fix on the deck without a rebuild: put the width in '
-                    f'~/.mongla/target_geometry.yaml (or set '
-                    f'MONGLA_TARGET_GEOMETRY), or pass target_width_m.')
+                    f'[LOCK ] no committed width for {self._cls!r} -- the '
+                    f'6-DoF pose will refuse. Fix on the deck without a '
+                    f'rebuild: put the width in ~/.mongla/target_geometry.yaml '
+                    f'(or set MONGLA_TARGET_GEOMETRY).')
 
     def _setup_pose_inputs(self, ns) -> None:
         """The medium the camera looks through, the correspondences publisher
@@ -108,8 +101,8 @@ class LockWiringMixin:
         # startup because it silently rescales every range this node publishes.
         #
         # Placed AFTER the width lookup on purpose: `test_target_geometry`
-        # asserts `width_for(self._cls)` lands within 1500 chars of
-        # `target_width_m`, and splitting that block pushed it out of range.
+        # asserts `width_for(self._cls)` lands within 1500 chars of where the
+        # width is decided, and splitting that block pushed it out of range.
         self._medium = str(
             self.declare_parameter('medium', 'water').value or 'water').lower()
         if self._medium not in ('water', 'air'):

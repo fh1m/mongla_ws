@@ -229,15 +229,6 @@
 #   reference is measured
 # anchor_semi_dense: false
 
-#   (passed to vision_pi.launch.py, which sets the default) measured TRUE
-#   width of the forward target in metres; 0 = use the rulebook nominal. A
-#   measured prop beats a nominal, which is what SAUVC +/-5 % allows for
-# target_width_m_forward: 0.0
-
-#   (passed to vision_pi.launch.py, which sets the default) measured true
-#   width of the downward target, metres
-# target_width_m_downward: 0.0
-
 #   (passed to vision_pi.launch.py, which sets the default) Class the DOWNWARD
 #   ladder follows. Empty = any class, and no 6-DoF pose (the geometry table
 #   is keyed by class).
@@ -412,8 +403,6 @@
 #     act_conf: 0.45
 #     anchor_xfeat_hef: true
 #     anchor_semi_dense: false
-#     target_width_m_forward: 0.0
-#     target_width_m_downward: 0.0
 #     lock_class: ''
 #     dwn_lock_class: ''
 #     pool_depth_m: nan
