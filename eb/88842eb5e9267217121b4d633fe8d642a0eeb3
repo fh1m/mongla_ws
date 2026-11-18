@@ -1,0 +1,25 @@
+.claude/context/packages/mongla_batighor/README.md
+  s_d9cd6692c91d8a::t_5ca1a316ceffeb 7,16-17,47
+README.md
+  s_d9cd6692c91d8a::t_b7ef5aec064ad2 64,577-579,798,801
+kutum/deploy.sh
+  s_d9cd6692c91d8a::t_17a741c5c19df5 21-24
+tools/ci/run_repo_integrity.py
+  s_d9cd6692c91d8a::t_2397f79b7c2588 36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "eb88842eb5e9267217121b4d633fe8d642a0eeb3",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
