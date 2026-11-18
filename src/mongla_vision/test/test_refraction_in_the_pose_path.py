@@ -112,7 +112,9 @@ def test_the_rectifier_has_exactly_one_home():
     pose path and the flow path drift into two flat-port models."""
     from mongla_vision.flow import flow_math
     import mongla_vision.optics as optics
-    assert flow_math.RefractiveRectifier is optics.RefractiveRectifier
+    assert not hasattr(flow_math, 'RefractiveRectifier'), (
+        'flow_math re-exports the model again: import it from optics')
+    assert optics.RefractiveRectifier
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision' / 'flow'
            / 'flow_math.py')
     assert 'class RefractiveRectifier' not in src, (

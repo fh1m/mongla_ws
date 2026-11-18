@@ -1,16 +1,14 @@
 """flow_math -- pure functions for downward-camera optical-flow distance.
 
-No ROS, no OpenCV imports here -- just the metric/geometry so it is unit-testable
-in isolation (flow_node.py wires these to LK flow and topics). The method (given, not reinvented):
+No ROS here -- the metric and geometry, unit-testable in isolation
+(flow_node wires them to LK flow and topics):
 
-    height_m         = pool_depth_m + depth_m          # depth_m < 0 below surface
-    flow_rot_px      = f_px * [pitch_rate, roll_rate] * dt
-    flow_trans_px    = flow_measured_px - flow_rot_px
-    d += project(flow_trans_px, axis_dir) * height_m / f_px
+    height_m   = pool_depth_m + depth_m       # depth_m < 0 below the surface
+    velocity   = flow_velocity(...)           # de-rotated, gated, metric
+    d         += projection of the body velocity onto a latched heading
 
-One axis only: we integrate the flow component along a latched world direction
-(axis_yaw). This is deliberately NOT 2D dead reckoning -- that needs an EKF and is
-out of scope. Do not generalize the projection to accumulate both components.
+One axis only: the distance is the gated velocity along the heading latched at
+calc_distance('start'). Not 2D dead reckoning -- that is the localisation EKF.
 """
 
 from __future__ import annotations
@@ -21,13 +19,8 @@ from typing import Optional, Sequence, Tuple
 
 import numpy as np
 
-# RefractiveRectifier MOVED to `optics` (2026-09-10). It is the flat-port
-# model, and `optics` is the module that exists to be "the ONE place the
-# water refractive index lives" -- the same B22 argument that put N_WATER
-# there applies to the model built on it, which the metric pose path also
-# needs. Re-exported so every existing `flow_math.RefractiveRectifier`
-# reader keeps working.
-from ..optics import N_WATER, RefractiveRectifier  # noqa: F401
+# The flat-port model, `RefractiveRectifier`, lives in `optics`, the one place
+# the water's refractive index lives; import it from there.
 
 
 def height_above_floor(pool_depth_m: float, depth_m: float,
@@ -58,25 +51,6 @@ def height_above_floor(pool_depth_m: float, depth_m: float,
     if lens_below_baro_m is not None:
         h -= float(lens_below_baro_m)
     return h if h > 1e-3 else None
-
-
-def axis_unit(axis_yaw_rad: float, lateral: bool = False) -> Tuple[float, float]:
-    """Unit vector of the projection axis in the image plane.
-
-    `axis_yaw_rad` is the latched world heading at calc_distance('start').
-    `lateral=False` -> project along the heading (fore/aft move); True -> along
-    heading+90 deg (left/right move). The downward image is assumed aligned so
-    image +y = vehicle forward at the latch (the node applies its frame/sign
-    config); we return the direction the translational flow is projected onto.
-    """
-    yaw = axis_yaw_rad + (math.pi / 2.0 if lateral else 0.0)
-    # forward (yaw=0) -> +y image; right (yaw=+90) -> +x image.
-    return math.sin(yaw), math.cos(yaw)
-
-
-def project(vec_xy: Tuple[float, float], axis_xy: Tuple[float, float]) -> float:
-    """Scalar projection of a 2D vector onto a unit axis (dot product)."""
-    return float(vec_xy[0] * axis_xy[0] + vec_xy[1] * axis_xy[1])
 
 
 def robust_flow(prev_pts: np.ndarray, next_pts: np.ndarray,
@@ -198,15 +172,15 @@ class Intrinsics:
     @classmethod
     def from_json(cls, path, width: int, height: int) -> "Intrinsics":
         import json
-        d = json.load(open(path))
+        with open(path) as fh:
+            d = json.load(fh)
         k = d.get('camera_matrix') or d.get('K')
         k = np.asarray(k, dtype=np.float64).reshape(3, 3)
         cw = int(d.get('image_width') or width)
         ch = int(d.get('image_height') or height)
-        # Scale to the resolution in use. Separately per axis: cropping and
-        # scaling are not the same operation and only the caller knows which
-        # happened, but a pure resize is by far the common case and getting
-        # the factor wrong is a clean 2x error nobody sees.
+        # Scale to the resolution in use, separately per axis. Right for a
+        # resize and wrong for a crop, so the caller refuses another aspect
+        # ratio first (`flow_setup._aspect_problem`).
         sx, sy = width / float(cw), height / float(ch)
         dist = d.get('distortion_coefficients') or d.get('D')
         if dist is not None:
@@ -487,8 +461,8 @@ class HeightFromDivergence:
 class DistanceAccumulator:
     """Integrate axis-projected metric displacement between start() and stop().
 
-    IDLE -> ACTIVE on start(axis_yaw, lateral): latch the projection axis + zero
-    the accumulator. Each add() folds one frame's translational flow into metres.
+    IDLE -> ACTIVE on start(axis_yaw, lateral): latch the heading and zero the
+    accumulator. Each add_body_velocity() folds one interval into metres.
     stop() freezes and returns the total. The whole point of the bounded segment
     is to keep dead-reckoning drift acceptable (short integrations only).
     """
@@ -496,38 +470,22 @@ class DistanceAccumulator:
     def __init__(self):
         self.active = False
         self.distance_m = 0.0
-        self._axis: Tuple[float, float] = (0.0, 1.0)
         self._axis_yaw = 0.0
         self._lateral = False
 
     def start(self, axis_yaw_rad: float, lateral: bool) -> None:
-        self._axis = axis_unit(axis_yaw_rad, lateral)
         self._axis_yaw = float(axis_yaw_rad)
         self._lateral = bool(lateral)
         self.distance_m = 0.0
         self.active = True
 
-    def add(self, flow_trans_px: Tuple[float, float], height_m: float,
-            f_px: float) -> None:
-        """Fold one frame: project flow onto the latched axis, scale to metres.
-
-        distance += proj(flow_trans_px, axis) * height / f_px. dt already
-        cancelled (per-frame pixel displacement, not velocity). No-op when not
-        active or on a bad height / f_px.
-        """
-        if not self.active or height_m is None or f_px <= 1e-6:
-            return
-        self.distance_m += project(flow_trans_px, self._axis) * height_m / f_px
-
     def add_body_velocity(self, vx: float, vy: float, yaw_rad: float,
                           dt: float) -> None:
         """Fold one interval of BODY-frame velocity onto the latched axis.
 
-        Prefer this over `add()` when you already have metric velocity. The
-        pixel path exists because the old node only ever had pixels; going
-        velocity -> pixels -> metres to reuse it means re-deriving an axis
-        convention on every call, and the first attempt at exactly that
-        Swapped the axes: `flow_velocity` returns `vx` from the image's y
+        Metric velocity, not pixels: `flow_velocity` has already de-rotated,
+        gated and scaled it, so a refused interval never reaches the distance.
+        Beware the axes: `flow_velocity` returns `vx` from the image's y
         component, so the obvious tuple is reversed and the error is a plausible
         number rather than a crash.
 

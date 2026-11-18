@@ -10,7 +10,8 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from geometry_msgs.msg import Vector3Stamped
 from mongla_interfaces.msg import MonglaState
-from mongla_vision.flow.flow_math import Intrinsics, RefractiveRectifier
+from mongla_vision.flow.flow_math import Intrinsics
+from mongla_vision.optics import RefractiveRectifier
 from mongla_vision.stamps import capture_monotonic
 from mongla_vision import image_msg
 from .flow_constants import (  # noqa: F401

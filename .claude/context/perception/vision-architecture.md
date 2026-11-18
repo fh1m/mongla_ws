@@ -83,7 +83,6 @@ src/mongla_vision/mongla_vision/
   tool_geometry.py        # Where each tool is, relative to the camera that aims it.
   tracker_node.py         # tracker_node -- subscribe to detections, publish stable tracks.
   underwater.py           # Underwater image statistics, and what they predict about detection.
-  vision_node.py          # vision_node -- single-process diagnostic for camera + detector.
 ```
 
 Naming rule: every file is named after the thing inside it. No `base.py`,
@@ -327,13 +326,15 @@ tracker tuning, ROS2 service/topic control:
 4. Optionally add a unit test that asserts the source raises a clear
    error when its required kwargs are missing.
 
-That's it. No node code changes — `camera_node` and `vision_node` route
-through the factory.
+That's it. No node code changes — `camera_node` routes through the factory.
 
 ## Adding a new detector backend
 
 1. Subclass `Detector` in a new file under `detection/`.
-2. Implement `infer(frame_bgr) -> list[Detection]` and `class_names()`.
+2. Implement `infer(frame_bgr) -> list[Detection]`, `is_ready()`, `acting_conf()`
+   and the live setters `detector_setup` calls: `update_conf`, `update_assoc_conf`,
+   `update_allowlist`, `update_max_det`, and `update_nms` (raise `ValueError` if the
+   backend cannot).
 3. Give it an extension and a row in `detection/factory.py`: the artifact's extension
    picks the backend (`.hef` → Hailo, `.pt` → YOLO), so there is no `backend:=` param.
 
