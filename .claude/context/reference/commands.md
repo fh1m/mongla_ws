@@ -365,13 +365,12 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `retrodict` | `False` |
 | `retro_horizon_s` | `2.0` |
 
-**`mongla_localization/pnp_node.py`** — 5 parameters
+**`mongla_localization/pnp_node.py`** — 4 parameters
 
 | parameter | default |
 |---|---|
 | `camera` | `'forward'` |
 | `medium` | `'water'` |
-| `ambiguity_max` | `AMBIGUITY_MAX` |
 | `max_reproj_px` | `MAX_REPROJ_PX` |
 | `variant` | `''` |
 

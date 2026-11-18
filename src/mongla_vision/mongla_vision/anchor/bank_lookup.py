@@ -198,8 +198,8 @@ class LookupMixin:
         -- turbidity blinds the detector and the matcher together and moves the
         IMU not at all:
 
-          geometry    inliers >= `identity_inliers` (60, measured to admit 0 %
-                      of the other-prop frames while keeping 57 % of true ones)
+          geometry    inliers >= `identity_inliers` (`IDENTITY_INLIERS` in
+                      `bank.py`, with the sweep that chose it)
           semantics   a detector hypothesis of the SAME class, recently. The
                       detector is the identity authority: it misses things, it
                       does not confuse a gate for a torpedo, so a hypothesis far

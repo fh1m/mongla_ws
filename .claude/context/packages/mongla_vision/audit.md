@@ -62,6 +62,8 @@ measured as no help, was never wired, or duplicated something that runs.
 | empty snap | `Anchor.snap` with a box on a frame with no keypoints raised instead of returning 0, so the bank's `'empty'` refusal was never reached | FIXED, injection-verified |
 | bank scores after eviction | `last_lookup_scores` keyed by reference index survived an eviction, pairing one reference's current yield with another's best for the camera-health verdict | FIXED: eviction and clear reset them |
 | written, never read | a scan of every package for attributes assigned and never loaded: in vision, display_node's `yaw_source` parameter and four HUD fields, ByteTrack's copies of its settings, the lock's `_anchor_best`, and five more | DELETED; subscriptions held for teardown are kept |
+| ambiguity knob | `solve_pnp` took `ambiguity_max` (and `pnp_node` exposed it live, "to re-solve a bag with a different gate") but never compared it: since the first commit the flip is reported and the consumer gates on off-axis plus spread | DELETED, so no operator tunes a knob that does nothing; the reprojection gate stays |
+| plane tilt | `anchor/geometry.plane_geometry` runs only when the bank is given a K, and the lock gives it none, so on the vehicle it never runs (the orphan guards see an import) | recorded, not wired: measured coarse on footage (measured-bars §9), and the shot gate reads the PnP pose |
 | stale odometry | the lock stores the odometry's arrival time and never reads it, so loop closure would search and scale with a position however old | open: loop closure is off (item 5); give it an age bar, measured on the odometry's real rate, before turning it on |
 
 ## Cameras
