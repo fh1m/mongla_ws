@@ -25,6 +25,16 @@
 course: robosub26
 frame: "pool: +x along the course (bearing 0), +y to its right (bearing 90)"
 
+# The floor. `use_course()` hands it to optical flow, which needs the height
+# above the floor to turn pixels into metres. `depth_m` is the depth flow
+# assumes; `depth_min_m`/`depth_max_m` are where a sloping or stepped floor
+# actually lies, and widen flow's uncertainty to match. Unset until measured:
+# flow then keeps the pool_depth_m it was launched with.
+pool:
+  depth_m:
+  depth_min_m:
+  depth_max_m:
+
 props:
   gate:
     detect_class: gate

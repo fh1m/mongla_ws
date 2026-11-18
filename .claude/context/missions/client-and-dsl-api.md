@@ -134,6 +134,21 @@ mongla.absolute_heading()          # ...and read it back
 Course files live in `mongla_localization/courses/`, and your own copy in `~/.mongla/courses`
 wins over the packaged one — so a survey on competition day needs no rebuild.
 
+A course also carries the venue's floor, and `use_course` hands it to optical flow while the
+mission runs, so the depth that scales every flow velocity comes from the venue file rather
+than a launch argument:
+
+```yaml
+pool:
+  depth_m: 1.6        # what flow assumes
+  depth_min_m: 1.2    # where a sloping floor really lies; widens flow's sigma
+  depth_max_m: 1.6
+```
+
+A course with no `depth_m` leaves flow on the `pool_depth_m` it was launched with, and the
+log says so. Prop widths live in one other file, `target_geometry.yaml` (deck copy
+`~/.mongla/target_geometry.yaml`), keyed by class, and follow every target switch.
+
 ## Managing the run
 
 ```python

@@ -205,8 +205,9 @@ def generate_launch_description():
                                           'floor, metres (#35).'),
         DeclareLaunchArgument('pool_depth_m', default_value='nan',
                               description='flow:=true -- metres from the DOWNWARD '
-                                          'camera to the floor. Required: without '
-                                          'it flow_node publishes quality 0 and '
+                                          'camera to the floor, until a mission\'s '
+                                          'use_course() sets the venue\'s own. With '
+                                          'neither, flow publishes quality 0 and '
                                           'refuses, by design.'),
         # --- feature switches: every one defaults to what the node ships, so a
         # plain launch is unchanged; flip one at a time to test it alone. The
