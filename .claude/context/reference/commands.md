@@ -114,7 +114,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `flow` | `true` | vision_stack:=pi -- start flow_node (downward-camera velocity). Pairs with the manager's position_source:=flow. |
 | `pool_depth_min_m` | `nan` | flow:=true -- the venue's shallowest floor, metres (#35). |
 | `pool_depth_max_m` | `nan` | flow:=true -- the venue's deepest floor, metres (#35). |
-| `pool_depth_m` | `nan` | flow:=true -- metres from the DOWNWARD camera to the floor. Required: without it flow_node publishes quality 0 and refuses, by design. |
+| `pool_depth_m` | `nan` | flow:=true -- metres from the DOWNWARD camera to the floor, until a mission's use_course() sets the venue's own. With neither, flow publishes quality 0 and refuses, by design. |
 | `velocity_uplink` | `false` | manager: RIEKF body velocity -> board (VISION_SPEED_ESTIMATE). Needs fw PR #23 to act. |
 | `position_uplink` | `false` | manager: RIEKF pose -> board (VISION_POSITION_ESTIMATE). |
 | `mixer_aware` | `true` | manager: srot vision frames fitted to the mixer yaw-first + saturation-aware anti-windup. |

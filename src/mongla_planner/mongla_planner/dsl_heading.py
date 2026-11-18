@@ -29,6 +29,11 @@ class HeadingMixin:
 
             mongla.use_course('robosub26')
             mongla.anchor_on('gate')          # the course supplies the bearing
+
+        The course's `pool:` depth goes to optical flow, live: it is the
+        venue's floor, so it belongs to the course the mission names rather
+        than to a launch argument typed before the water. A course with no
+        depth leaves flow on what it was started with, and says so.
         """
         from mongla_localization.course_map import load_course
 
@@ -41,7 +46,33 @@ class HeadingMixin:
                 f'[CRSE ] NOT measured for this pool: {", ".join(unmeasured)}. '
                 f'Those props refuse a dead-reckon and the mission must search '
                 f'for them.')
+        self._course_floor_to_flow(course)
         return course
+
+    def _course_floor_to_flow(self, course) -> None:
+        pool = course.pool_depth()
+        if pool is None:
+            self.log.warning(
+                f'[CRSE ] {course.name} gives no pool depth: flow keeps the '
+                f'pool_depth_m it was launched with. Set pool: depth_m in '
+                f'~/.mongla/courses/{course.name}.yaml.')
+            return
+        depth, lo, hi = pool
+        params = {'pool_depth_m': depth}
+        if lo == lo:
+            params['pool_depth_min_m'] = lo
+        if hi == hi:
+            params['pool_depth_max_m'] = hi
+        try:
+            self.set_node('flow', **params)
+        except Exception as exc:                         # noqa: BLE001
+            # Flow off or not up yet: the mission still has its course, and
+            # the operator must know the floor never reached the velocity.
+            self.log.warning(f'[CRSE ] pool depth {depth:.2f} m NOT given to '
+                             f'flow: {exc}')
+            return
+        self.log.info(f'[CRSE ] pool depth {depth:.2f} m from {course.name} '
+                      f'is flow\'s floor now')
 
     def anchor_on(self, prop: str, *, camera: str | None = None,
                   timeout: float = 6.0):

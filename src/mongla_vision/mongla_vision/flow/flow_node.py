@@ -89,18 +89,9 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
-        self._pool_depth = float(self.get_parameter('pool_depth_m').value)
-        lo = float(self.get_parameter('pool_depth_min_m').value)
-        hi = float(self.get_parameter('pool_depth_max_m').value)
-        # The RMS of what the ASSUMED depth gets wrong, for a floor anywhere
-        # in [lo, hi]: with a = lo - d and b = hi - d, uniform gives
-        # sqrt((a^2 + ab + b^2) / 3). Not the range's own spread -- the typed
-        # depth is often measured at one end (the dock), not the middle. Not
-        # a measurement of this venue either: the honest size of "somewhere
-        # in the range the venue states".
-        a, b = lo - self._pool_depth, hi - self._pool_depth
-        self._floor_sigma_m = (math.sqrt(max(0.0, (a * a + a * b + b * b) / 3.0))
-                               if all(map(math.isfinite, (a, b))) else 0.0)
+        self._set_pool(float(self.get_parameter('pool_depth_m').value),
+                       float(self.get_parameter('pool_depth_min_m').value),
+                       float(self.get_parameter('pool_depth_max_m').value))
         # Lens below the baro port, body FRD metres, or None = not measured
         # (issue #27; see `flow_math.height_above_floor`).
         from mongla_localization import frames as _frames
@@ -320,7 +311,39 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         from ..live_params import apply_live
         apply_live(self, {
             'max_baseline_s': lambda v: setattr(self, '_max_baseline', float(v)),
+            # The venue's floor, from the course a mission names
+            # (`mongla.use_course`). Read per frame by `_scale_ready` and the
+            # height, so a new value scales the next interval.
+            'pool_depth_m': lambda v: self._set_pool(float(v), self._pool_lo,
+                                                     self._pool_hi, live=True),
+            'pool_depth_min_m': lambda v: self._set_pool(
+                self._pool_depth, float(v), self._pool_hi, live=True),
+            'pool_depth_max_m': lambda v: self._set_pool(
+                self._pool_depth, self._pool_lo, float(v), live=True),
         })
+
+    def _set_pool(self, depth: float, lo: float, hi: float, *,
+                  live: bool = False) -> None:
+        """The floor depth and the range a sloping floor spans.
+
+        `_floor_sigma_m` is the RMS of what the ASSUMED depth gets wrong for
+        a floor anywhere in [lo, hi]: with a = lo - d and b = hi - d, uniform
+        gives sqrt((a^2 + ab + b^2) / 3). Not the range's own spread -- the
+        typed depth is often measured at one end (the dock), not the middle.
+        Not a measurement of this venue either: the honest size of
+        "somewhere in the range the venue states".
+        """
+        if live and not (math.isfinite(depth) and depth > 0.0):
+            raise ValueError(f'pool_depth_m={depth!r}: a floor depth must be '
+                             f'a positive number of metres')
+        self._pool_depth, self._pool_lo, self._pool_hi = depth, lo, hi
+        a, b = lo - depth, hi - depth
+        self._floor_sigma_m = (math.sqrt(max(0.0, (a * a + a * b + b * b) / 3.0))
+                               if all(map(math.isfinite, (a, b))) else 0.0)
+        if live:
+            self.get_logger().info(
+                f'[FLOW ] pool depth {depth:.2f} m (range {lo:.2f}-{hi:.2f}, '
+                f'floor sigma {self._floor_sigma_m:.2f} m), set live')
 
     # ── worker ──────────────────────────────────────────────────────────────
     def _flow_loop(self) -> None:

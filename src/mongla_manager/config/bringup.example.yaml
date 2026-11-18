@@ -64,8 +64,9 @@
 #   flow:=true -- the venue's deepest floor, metres (#35).
 # pool_depth_max_m: nan
 
-#   flow:=true -- metres from the DOWNWARD camera to the floor. Required:
-#   without it flow_node publishes quality 0 and refuses, by design.
+#   flow:=true -- metres from the DOWNWARD camera to the floor, until a
+#   mission's use_course() sets the venue's own. With neither, flow publishes
+#   quality 0 and refuses, by design.
 # pool_depth_m: nan
 
 #   manager: RIEKF body velocity -> board (VISION_SPEED_ESTIMATE). Needs fw PR
