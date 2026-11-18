@@ -144,12 +144,15 @@ def flow_velocity(dx_px: float, dy_px: float, dt: float, *,
 
     Refuses rather than returning a number it cannot stand behind.
     """
-    if dt <= 0.0:
+    # Written `not (x > 0)` and with isfinite, so a NaN refuses: `NaN <= 0`
+    # is False, and a NaN height once published an ok=True NaN velocity.
+    if not (math.isfinite(dt) and dt > 0.0):
         return FlowVelocity(ok=False, reason='non-positive dt')
-    if f_px <= 0.0:
+    if not (math.isfinite(f_px) and f_px > 0.0):
         return FlowVelocity(ok=False, reason='no focal length (uncalibrated)')
-    fy = float(fy_px) if fy_px and fy_px > 0.0 else float(f_px)
-    if height_m is None or height_m <= 0.0:
+    fy = (float(fy_px) if fy_px and math.isfinite(fy_px) and fy_px > 0.0
+          else float(f_px))
+    if height_m is None or not (math.isfinite(height_m) and height_m > 0.0):
         # A default height would turn an unknown SCALE into a confident wrong
         # speed -- the error would be a clean multiplier, invisible in every
         # plot, and it would be integrated by whatever consumes this.

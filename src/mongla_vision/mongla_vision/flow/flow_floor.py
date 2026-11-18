@@ -46,10 +46,14 @@ class FlowFloorMixin:
             return
         f_px = self._f_px
         if not f_px or f_px <= 0.0:
+            self._tile_height = None
             return
-        self._tile_height = g.height_m(f_px, self._tile_m)
+        h = g.height_m(f_px, self._tile_m)
+        # Only a finite positive height is kept: `_evaluate` prefers this one
+        # over the depth path, so a NaN here would replace a good height.
+        self._tile_height = h if (math.isfinite(h) and h > 0.0) else None
         self._tile_angle = g.heading_deg()
-        if self._tile_height and math.isfinite(self._tile_height):
+        if self._tile_height is not None:
             r = Range()
             r.header.stamp.sec = int(t)
             r.header.stamp.nanosec = int((t - int(t)) * 1e9)
