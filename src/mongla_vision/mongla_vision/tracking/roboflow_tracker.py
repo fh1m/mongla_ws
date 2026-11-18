@@ -25,9 +25,11 @@ Kalman-predicted box lives in `tracker.tracked_objects` (a list of length-1
   2. emit every alive track in `tracked_objects` whose  -> predicted=True,
      id was NOT matched this frame (the coasted boxes)     score=0.0
 
-The library owns the drop: a coasted track leaves `tracked_objects` after
-`int(frame_rate / 30 * lost_track_buffer)` frames, so size `track_buffer`
-(and `frame_rate`) for the wall-time coast window you need.
+The coast window is TIME on the frames' capture stamps: a track coasts for
+`track_buffer / 30` seconds after its last real detection (150 -> 5.0 s),
+whatever the detection rate. The library counts update calls instead, so it
+is given a buffer too large ever to act first (`_LIBRARY_RATE_FLOOR_HZ`) and
+`update` drops a coasted box by time (BUGS.md B-114).
 
 Class names + last real score for a coasted box come from a per-track
 registry (the coasted `Detections` carries no class data), mirroring
@@ -47,6 +49,10 @@ from .tracker import Tracker, TrackedDetection
 
 # tracker_type -> (class_name, accepts_track_activation_threshold)
 _TRACKER_TYPES = ('ocsort', 'bytetrack')
+# The library only uses `frame_rate` to size its frame-count buffer. At this
+# floor the buffer covers the time window at any detection rate up to it, so
+# the window in seconds (`update`) is the one that acts.
+_LIBRARY_RATE_FLOOR_HZ = 240.0
 
 
 class RoboflowTracker(Tracker):
@@ -58,12 +64,8 @@ class RoboflowTracker(Tracker):
         'ocsort' (default, best dropout recovery) or 'bytetrack'.
     track_buffer : int
         `lost_track_buffer` -- frames a track survives with no detection.
-        NOTE the library scales this by frame_rate: the real coast window is
-        ``int(frame_rate / 30 * track_buffer)`` frames. Size it so the coast
-        window in seconds exceeds the control loop's ``coast_s``.
-    frame_rate : float
-        Detection rate (Hz). Used by the library to scale the buffer and by
-        OC-SORT's velocity model. Pass the detector's real publish rate.
+        Written in 30 Hz frames (the library's unit) and enforced as
+        ``track_buffer / 30`` seconds of capture time: 150 -> 5.0 s.
     min_hits : int
         `minimum_consecutive_frames` before a track gets a real id (filters
         one-shot false positives). Lower = faster acquisition, more flicker.
@@ -82,7 +84,6 @@ class RoboflowTracker(Tracker):
     def __init__(self, *,
                  tracker_type: str = 'ocsort',
                  track_buffer: int = 30,
-                 frame_rate: float = 20.0,
                  min_hits: int = 2,
                  iou_threshold: float = 0.3,
                  track_activation_threshold: float = 0.25,
@@ -149,7 +150,7 @@ class RoboflowTracker(Tracker):
             # gates the two-stage split.
             self._t = tr.OCSORTTracker(
                 lost_track_buffer=int(track_buffer),
-                frame_rate=float(frame_rate),
+                frame_rate=_LIBRARY_RATE_FLOOR_HZ,
                 minimum_consecutive_frames=int(min_hits),
                 minimum_iou_threshold=float(iou_threshold),
                 high_conf_det_threshold=float(high_conf_det_threshold),
@@ -157,7 +158,7 @@ class RoboflowTracker(Tracker):
         else:
             self._t = tr.ByteTrackTracker(
                 lost_track_buffer=int(track_buffer),
-                frame_rate=float(frame_rate),
+                frame_rate=_LIBRARY_RATE_FLOOR_HZ,
                 track_activation_threshold=float(track_activation_threshold),
                 minimum_consecutive_frames=int(min_hits),
                 minimum_iou_threshold=float(iou_threshold),
@@ -165,14 +166,17 @@ class RoboflowTracker(Tracker):
             )
 
         self._track_buffer = int(track_buffer)
-        self._frame_rate   = float(frame_rate)
+        # Seconds a track coasts after its last real detection, on capture
+        # time. 150 -> 5.0 s, the window the parameter always described.
+        self.coast_max_s = int(track_buffer) / 30.0
+        self._last_real_t: Dict[int, float] = {}
         # track_id -> (class_id, class_name, last_real_score) from the last
         # frame a real detection confirmed the track. Coasted boxes read it.
         self._meta: Dict[int, Tuple[int, str, float]] = {}
 
     # ------------------------------------------------------------------ #
     def update(self, detections: List[Detection],
-               frame_t: float) -> List[TrackedDetection]:  # noqa: ARG002
+               frame_t: float) -> List[TrackedDetection]:
         sv_dets = self._to_sv(detections)
         out = self._t.update(sv_dets)
 
@@ -193,6 +197,7 @@ class RoboflowTracker(Tracker):
             score = float(out.confidence[i]) if out.confidence is not None else 0.0
             name = str(names[i]) if names is not None else _name_from(cid, detections)
             self._meta[tid] = (cid, name, score)
+            self._last_real_t[tid] = float(frame_t)
             matched.add(tid)
             results.append(TrackedDetection(
                 class_id=cid, class_name=name, score=score,
@@ -213,6 +218,9 @@ class RoboflowTracker(Tracker):
             if meta is None:
                 continue  # never had a real detection -> nothing to coast
             cid, name, _ = meta
+            last = self._last_real_t.get(tid)
+            if last is None or float(frame_t) - last > self.coast_max_s:
+                continue  # coasted past its window, by capture time
             box = tuple(float(v) for v in alive.xyxy[k])
             results.append(TrackedDetection(
                 class_id=cid, class_name=name, score=0.0,
@@ -224,6 +232,7 @@ class RoboflowTracker(Tracker):
     def reset(self) -> None:
         self._t.reset()
         self._meta.clear()
+        self._last_real_t.clear()
 
     # ------------------------------------------------------------------ #
     def _to_sv(self, detections: List[Detection]):
@@ -249,6 +258,7 @@ class RoboflowTracker(Tracker):
                 live.add(int(alive.tracker_id[k]))
         for k in [k for k in self._meta if k not in live]:
             del self._meta[k]
+            self._last_real_t.pop(k, None)
 
 
 def _name_from(class_id: int, detections: List[Detection]) -> str:

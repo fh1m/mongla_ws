@@ -186,49 +186,6 @@ def arguments() -> list:
         # `:=false` read back as True and both arms of the A/B were identical.
         # Third appearance of that trap; the fix is to declare the argument.
         DeclareLaunchArgument('kalman_adaptive_noise', default_value='true'),
-        # PER CAMERA, because they do not run at the same rate. Every coast
-        # window is sized from this, so one shared value guarantees one of the
-        # two trackers has a wrong coast -- and a tracker with a truncated
-        # coast still publishes and looks healthy.
-        #
-        # Full configuration, both cameras live with tracking on, taken from
-        # the TRACKER'S OWN in-process count -- which is the only trustworthy
-        # source on this machine. Two earlier values were wrong for two
-        # different reasons and the check caught both:
-        #
-        #   55  the standalone figure with the other camera paused, which is
-        #       not how the stack runs
-        #   30  what `ros2 topic hz` reported -- and that tool's own subscriber
-        #       load depresses the stream it measures. It read 27.7 det/s on
-        #       the same run the tracker measured 49.
-        #
-        # The 1.8x gap is worth carrying: `ros2 topic hz` UNDER-REPORTS on a
-        # loaded Pi, so every rate quoted from it is a floor, not a figure.
-        # These size the coast window, and both were stale.
-        # `tracker_node` converts its `max_predict_s` (1.5 s) into FRAMES as
-        # ceil(max_predict_s * frame_rate), and that frame count is the
-        # outermost rung of the coast ladder
-        # (_freshness 0.4 < vision.coast_s 0.8 < lost_grace_s 1.0 < THIS).
-        # Under-estimating frame_rate shortens the outer rung until it falls
-        # BELOW an inner one, and the coast then truncates early -- a target
-        # dropped mid-lock, while the tracker still publishes and looks
-        # healthy. The node's own comment records this happening once already,
-        # "made live by perception getting 5x faster".
-        #
-        # It went stale again on 2026-09-09 when pi_forward's fps went 15->60.
-        # Measured live on the vehicle with the full vision_pi stack up, off
-        # the node's own rate check:
-        #
-        #     forward  detections 30 Hz  (arg said 49 -- over, harmless)
-        #     downward detections 32 Hz  (arg said 15 -- UNDER, and 1.5*15/32
-        #                                 = 0.70 s of coast against a 0.8 s
-        #                                 vision.coast_s: truncating)
-        #
-        # Set to the measured rates, so max_predict_s means 1.5 s of real
-        # time. `frame_rate_warn_ratio` (1.5) still catches the next drift at
-        # runtime -- that warning is what surfaced this.
-        DeclareLaunchArgument('fwd_frame_rate', default_value='30.0'),
-        DeclareLaunchArgument('dwn_frame_rate', default_value='32.0'),
         # These were the wrong way round, and both halves were live.
         # The only calibration we hold declares itself, in its own metadata,
         # as `pi_test_global_shutter (Microdia USB)` -- USB vendor 0c45,
@@ -562,7 +519,7 @@ def generate_launch_description():
             }],
         )
 
-    def tracker(camera_name: str, rate_arg: str) -> Node:
+    def tracker(camera_name: str) -> Node:
         return Node(
             package='mongla_vision', executable='tracker_node',
             name=f'mongla_tracker_{camera_name}', output='screen',
@@ -571,7 +528,6 @@ def generate_launch_description():
                          'tracker_type': LaunchConfiguration('tracker_type'),
                          'kalman_adaptive_noise':
                              LaunchConfiguration('kalman_adaptive_noise'),
-                         'frame_rate': LaunchConfiguration(rate_arg),
                          # Clamp the tracker's gates to the detector's
                          # floor: above it NO track is created and
                          # /tracks stays empty while looking healthy.
@@ -689,8 +645,8 @@ def generate_launch_description():
             LaunchConfiguration('split'))), 'the forward vision process'),
         *respawning(lambda: detectors('downward', 'none', IfCondition(
             LaunchConfiguration('split'))), 'the downward vision process'),
-        *respawning(lambda: tracker('forward', 'fwd_frame_rate'), 'the forward tracker'),
-        *respawning(lambda: tracker('downward', 'dwn_frame_rate'), 'the downward tracker'),
+        *respawning(lambda: tracker('forward'), 'the forward tracker'),
+        *respawning(lambda: tracker('downward'), 'the downward tracker'),
         *respawning(flow, 'the flow node'),
         # The ladders are composed into `detectors` above (`lock:=`), not
         # started here: as separate processes they raced it for the Hailo.

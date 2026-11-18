@@ -156,8 +156,6 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `tracking` | `true` | (passed to vision_pi.launch.py, which sets the default) |
 | `tracker_type` | `ocsort` | (passed to vision_pi.launch.py, which sets the default) |
 | `kalman_adaptive_noise` | `true` | (passed to vision_pi.launch.py, which sets the default) |
-| `fwd_frame_rate` | `30.0` | (passed to vision_pi.launch.py, which sets the default) |
-| `dwn_frame_rate` | `32.0` | (passed to vision_pi.launch.py, which sets the default) |
 | `dwn_calibration` | `` | (passed to vision_pi.launch.py, which sets the default) |
 | `fwd_calibration` | `` | (passed to vision_pi.launch.py, which sets the default) |
 | `act_conf` | `0.45` | (passed to vision_pi.launch.py, which sets the default) ladder ACTING bar: below this a detection may be associated by the tracker but is not acted on (B-59; measured knee 0.60, shipped 0.45) |
@@ -224,9 +222,6 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `viewer` | `true` | Open the OpenCV vision_display HUD (viewer:=false = headless) |
 | `tracking` | `true` | Start tracker_node (Roboflow OC-SORT/ByteTrack + Kalman) |
 | `tracker_type` | `ocsort` | Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack |
-| `track_buffer` | `30` |  |
-| `min_hits` | `1` |  |
-| `max_predict_s` | `1.5` |  |
 | `depth` | `false` | Start depth_estimation_node (monocular vis_range) |
 | `depth_model` | `` | DA V2-Small ONNX path; empty = bbox-area fallback |
 | `flow` | `false` | Start flow_node on the downward camera (velocity, and calc_distance start/stop). |
@@ -297,8 +292,6 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `tracking` | `true` |  |
 | `tracker_type` | `ocsort` |  |
 | `kalman_adaptive_noise` | `true` |  |
-| `fwd_frame_rate` | `30.0` |  |
-| `dwn_frame_rate` | `32.0` |  |
 | `dwn_calibration` | `` |  |
 | `fwd_calibration` | `` |  |
 | `flow` | `true` |  |
@@ -580,13 +573,12 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `medium` | `'water'` |
 | `direct_feed` | `False` |
 
-**`mongla_vision/tracker_node.py`** — 16 parameters
+**`mongla_vision/tracker_node.py`** — 14 parameters
 
 | parameter | default |
 |---|---|
 | `camera` | `'laptop'` |
 | `tracker_type` | `'ocsort'` |
-| `frame_rate` | `20.0` |
 | `track_buffer` | `150` |
 | `min_hits` | `1` |
 | `iou_threshold` | `0.2` |
@@ -599,7 +591,6 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `kalman_measurement_noise` | `1.0` |
 | `kalman_adaptive_noise` | `True` |
 | `max_predict_s` | `1.5` |
-| `frame_rate_warn_ratio` | `1.5` |
 
 **`mongla_vision/utils/display_node.py`** — 10 parameters
 

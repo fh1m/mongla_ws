@@ -78,8 +78,8 @@ MANAGER_SIGTERM_TIMEOUT_S = 12
 VISION_PI_PASSTHROUGH = (
     'fwd_profile', 'dwn_profile', 'fwd_models', 'dwn_models', 'fwd_active',
     'dwn_active', 'contours', 'assoc_conf', 'preprocess', 'range_crop', 'preprocess_clip',
-    'tracking', 'tracker_type', 'kalman_adaptive_noise', 'fwd_frame_rate',
-    'dwn_frame_rate', 'dwn_calibration', 'fwd_calibration', 'act_conf',
+    'tracking', 'tracker_type', 'kalman_adaptive_noise',
+    'dwn_calibration', 'fwd_calibration', 'act_conf',
     'anchor_xfeat_hef', 'anchor_semi_dense', 'target_width_m_forward',
     'target_width_m_downward', 'dwn_lock_class', 'bank_forward', 'bank_downward',
     'fwd_fps', 'dwn_fps', 'fwd_publish_hz', 'dwn_publish_hz', 'replay',
