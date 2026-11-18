@@ -152,6 +152,7 @@ is how `recommend()` happened.
 - [86. THE SERVICE COSTS 6 MS AN INFERENCE — one vision process opening the chip directly detects 55 % more than one process per camera (2026-11-18)](#86-the-service-costs-6-ms-an-inference--one-vision-process-opening-the-chip-directly-detects-55--more-than-one-process-per-camera-2026-11-18)
 - [87. THE WHOLE VISION GRAPH AT ONCE — both detectors, the lock ladder and flow live in one process: forward at the camera's rate, downward 32 Hz, 2.7 GB free (2026-11-18)](#87-the-whole-vision-graph-at-once--both-detectors-the-lock-ladder-and-flow-live-in-one-process-forward-at-the-cameras-rate-downward-32-hz-27-gb-free-2026-11-18)
 - [88. TRACKERS AGAINST TRUTH — the shipped OC-SORT more than doubles recall at the vehicle's bars, ByteTrack and track-before-detect are rejected, and the gate model loses 70 % of its recall in another pool (2026-11-18)](#88-trackers-against-truth--the-shipped-oc-sort-more-than-doubles-recall-at-the-vehicles-bars-bytetrack-and-track-before-detect-are-rejected-and-the-gate-model-loses-70--of-its-recall-in-another-pool-2026-11-18)
+- [89. FLOW IN THE CAMERA'S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18)](#89-flow-in-the-cameras-process--the-downward-detector-gains-37--flow-keeps-110-frames-a-second-total-cpu-unchanged-2026-11-18)
 <!-- contents:end -->
 
 ---
@@ -8148,3 +8149,53 @@ follows the locked id only between real detections. `tracking/reid.py` and
 they would have put a frame path and XFeat on the tracker's hot path to fix
 nothing a consumer sees. Section 54's 179 was a person walking in and out of a
 room, counted by largest box.
+
+## 89. FLOW IN THE CAMERA'S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18)
+
+Section 87 found `flow_node` spending 44 % of its samples taking about 210 raw
+frames a second off DDS, and named the fix: compose flow beside the downward
+camera, as the detector and the lock ladder already are. Done: under
+`vision_pi`, `detector_dual_node` builds the flow node in-process
+(`flow:=true`, values forwarded as `flow_*`), the camera's tee hands it every
+frame by reference, and the worker converts to grey and checks the size on
+its own thread. The camera also stops building a 691 kB `image_raw` message
+for every frame nobody subscribes to.
+
+**Bars, written before the run** (Kutum, `vision_pi.launch.py paused:=false
+lock:=true medium:=air pool_depth_m:=1.0`, both real cameras, bench depth and
+gyro stand-in, no board, room light; 30 s windows after 45 s):
+
+| bar | what would falsify it |
+|---|---|
+| flow CPU | not at least halved |
+| downward detections | lower than with flow as its own process |
+| flow frames | skipping more than a few a second |
+
+**Measured.** Downward capture about 204 Hz; the forward camera gave 10 fps in
+this light, in every arm.
+
+| arm | vision process | flow process | downward detections | flow skipped / s |
+|---|---|---|---|---|
+| A: last release, flow its own node | 1.28 cores | 1.34 cores | 38.3 Hz | 17-19 |
+| D: this code, flow its own node | 1.29 cores | 1.32 cores | 36.3 Hz | 9-12 |
+| B: this code, flow composed | 2.50 cores | -- | **50.8 Hz** | 92-98 |
+| C: this code, flow off | 1.13 cores | -- | 70.7 Hz | -- |
+
+**Two of three bars fail, and both were the wrong bars.** Flow is
+work-conserving: it processes the newest frame as soon as it is free, so its
+CPU fills whatever it is offered and is not a cost to halve (section 87 said
+the same of its publish rate). Composed, it shares the process's GIL and takes
+about 110 of the 204 frames a second instead of about 193. The downward
+detector, which shares that GIL too, gains 37 % over the same code with flow
+separate (50.8 against 36.3 Hz), and flow's total cost stays about 1.4 cores.
+
+**What 110 frames a second costs in speed.** Flow re-anchors before 25 px
+between frames, so it follows up to 25 x rate x height / f, with f about
+741 px: 1.1 m/s at 0.3 m above the floor, where a bin approach happens, and
+more higher up. A fixed 60 Hz publish (section 87) gave 0.6 m/s there and
+only 40.1 Hz of downward detection.
+
+**Decision.** Shipped composed. **Reversal:** on the vehicle with the board, a
+mission graph in which composed flow processes under 50 frames a second (the
+rate that follows 0.5 m/s at 0.3 m), or a detector falls under 25 Hz.
+

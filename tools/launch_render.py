@@ -59,8 +59,30 @@ def default_of(name: str, launch: Path = BRINGUP) -> str:
     return ''.join(getattr(s, 'text', '') for s in (a.default_value or []))
 
 
-def render(args: dict, launch: Path = BRINGUP) -> list:
-    """`package/executable` of every node `ros2 launch <launch> <args>` would start."""
+def _node_params(node) -> dict:
+    """The resolved parameters of a rendered Node, read from the files the
+    launch itself writes for them (`--params-file`), so nothing is re-derived."""
+    import yaml
+    out = {}
+    for path, is_file in getattr(node, '_Node__expanded_parameter_arguments', None) or ():
+        if not is_file:
+            continue
+        try:
+            body = yaml.safe_load(open(path)) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        for section in body.values():
+            out.update((section or {}).get('ros__parameters', {}) or {})
+    return out
+
+
+def render(args: dict, launch: Path = BRINGUP, params: bool = False) -> list:
+    """`package/executable` of every node `ros2 launch <launch> <args>` would start.
+
+    With `params`, each entry is `(package/executable, {name: value})`, the
+    parameters the node would be given -- for a capability composed INTO a
+    process, which a switch turns on by a parameter rather than an executable.
+    """
     from launch import LaunchContext
     from launch.actions import ExecuteProcess
     from launch.launch_description_sources import get_launch_description_from_python_launch_file
@@ -76,8 +98,9 @@ def render(args: dict, launch: Path = BRINGUP) -> list:
             if isinstance(e, ExecuteProcess):
                 if hasattr(e, '_perform_substitutions'):
                     e._perform_substitutions(ctx)
-                started.append(f"{getattr(e, 'node_package', '?')}/"
-                               f"{getattr(e, 'node_executable', e.__class__.__name__)}")
+                name = (f"{getattr(e, 'node_package', '?')}/"
+                        f"{getattr(e, 'node_executable', e.__class__.__name__)}")
+                started.append((name, _node_params(e)) if params else name)
                 continue
             walk(e.visit(ctx))
 

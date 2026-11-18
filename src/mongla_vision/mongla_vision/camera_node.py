@@ -637,12 +637,18 @@ class CameraNode(Node):
             self._last_pub = advance_slot(self._last_pub, self._min_period,
                                           time.monotonic())
 
-        try:
-            img_msg = image_msg.to_msg(frame, 'bgr8')
-        except Exception as exc:
-            self.get_logger().warning(f"[CAM  ] image encode failed: {exc!r}")
-            self._dropped += 1
-            return
+        # The raw image only for a reader. The composed consumers take frames
+        # by reference, so on the vehicle `image_raw` is usually unread, and
+        # building a 691 kB message per frame for nobody was paid at camera
+        # rate (210 Hz downward).
+        img_msg = None
+        if self._pub_img.get_subscription_count() > 0:
+            try:
+                img_msg = image_msg.to_msg(frame, 'bgr8')
+            except Exception as exc:
+                self.get_logger().warning(f"[CAM  ] image encode failed: {exc!r}")
+                self._dropped += 1
+                return
 
         # The capture time, not now(). This stamped `now()` at PUBLISH time,
         # which makes the header say the frame is 0 ms old at the instant it
@@ -658,17 +664,19 @@ class CameraNode(Node):
         # by the source from the kernel's monotonic capture stamp. Sources that
         # cannot know better (a video file, a ROS topic) set it at read time,
         # which is the best available answer there and no worse than before.
-        img_msg.header = self._make_header(meta)
+        header = self._make_header(meta)
 
         info = CameraInfo()
-        info.header = img_msg.header
-        info.width  = int(meta.width  or img_msg.width)
-        info.height = int(meta.height or img_msg.height)
+        info.header = header
+        info.width  = int(meta.width  or frame.shape[1])
+        info.height = int(meta.height or frame.shape[0])
         self._fill_calibration(info)
 
-        self._pub_img.publish(img_msg)
+        if img_msg is not None:
+            img_msg.header = header
+            self._pub_img.publish(img_msg)
         self._pub_info.publish(info)
-        self._publish_jpeg(meta, img_msg.header, frame=frame)
+        self._publish_jpeg(meta, header, frame=frame)
         # A composed consumer that wants intrinsics takes them by reference
         # too (the lock ladder, `submit_info`), rather than subscribing to a
         # topic this same process publishes at camera rate.

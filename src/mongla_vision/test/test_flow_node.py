@@ -890,12 +890,13 @@ class TestIntrinsicsFollowTheFrames:
         finally:
             n.destroy_node()
 
-    def test_the_image_callback_asks_before_anything_else(self):
-        """No capability unreachable: `_on_image` must gate on the size."""
+    def test_the_worker_asks_before_anything_else(self):
+        """No capability unreachable: both intakes reach the worker, and the
+        worker gates on the size before it tracks anything."""
         import inspect
         from mongla_vision.flow.flow_node import FlowVelocityNode
-        src = inspect.getsource(FlowVelocityNode._on_image)
-        assert src.index('_admit_frame_size(') < src.index('_slot')
+        src = inspect.getsource(FlowVelocityNode._flow_loop)
+        assert src.index('_admit_frame_size(') < src.index('_process(')
 
 
 # --------------------------------------------------------------------------- #

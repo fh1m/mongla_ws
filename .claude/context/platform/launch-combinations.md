@@ -354,7 +354,7 @@ keeps running. Ctrl-C and a clean exit restart nothing.
 | in the log | what it means |
 |---|---|
 | `WARNING: the forward tracker exited (1); restart 1/3 in 2 s` | it died and is coming back |
-| `ERROR: the flow node exited (1) after 3 restarts; it stays down for this run` | gone until the next launch |
+| `ERROR: the detectors and cameras exited (1) after 3 restarts; it stays down for this run` | gone until the next launch; under `vision_pi` this process also holds the lock ladders and optical flow |
 | `[CAM  ] ERROR: downward: /dev/mongla_cam_downward is GONE` | the lead is out or the hub is re-enumerating; nothing is tried until the device comes back, then it reopens by itself |
 | `[CAM  ] WARNING: downward delivered nothing ...; reopening (1/3)` | the device is there but silent; only that camera is reopened |
 | `[CAM  ] downward reopened (v4l2_mailbox); frames resume` | it is back |

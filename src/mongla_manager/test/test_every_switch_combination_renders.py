@@ -75,7 +75,6 @@ def test_every_pair_of_switches_renders():
 
 @pytest.mark.parametrize('args, executable', [
     ({'vision': 'true'}, 'mongla_vision/detector_dual_node'),
-    ({'vision': 'true', 'flow': 'true'}, 'mongla_vision/flow_node'),
     ({'vision': 'true', 'viewer': 'true'}, 'mongla_vision/vision_display'),
     ({'localization': 'true'}, 'mongla_localization/localization_node'),
 ])
@@ -87,11 +86,22 @@ def test_a_switch_starts_what_it_names(args, executable):
 
 @pytest.mark.parametrize('args, executable', [
     ({'vision': 'false'}, 'mongla_vision/detector_dual_node'),
-    ({'vision': 'true', 'flow': 'false'}, 'mongla_vision/flow_node'),
     ({'localization': 'false'}, 'mongla_localization/localization_node'),
 ])
 def test_a_switch_turned_off_starts_nothing(args, executable):
     assert executable not in render(args)
+
+
+@pytest.mark.parametrize('flow', ['true', 'false'])
+def test_the_flow_switch_reaches_the_vision_process(flow):
+    """Flow runs inside the downward camera's process, so the switch is a
+    parameter of that process, not an executable of its own."""
+    procs = [p for n, p in render({'vision': 'true', 'flow': flow}, params=True)
+             if n == 'mongla_vision/detector_dual_node']
+    assert procs, 'vision:=true started no vision process'
+    assert all(p.get('flow') is (flow == 'true') for p in procs), \
+        [p.get('flow') for p in procs]
+    assert 'mongla_vision/flow_node' not in render({'vision': 'true', 'flow': flow})
 
 
 def _loaded_bringup():

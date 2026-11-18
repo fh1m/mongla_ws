@@ -67,7 +67,10 @@ for _n in ('mongla_detector_dual',
            # says whether XFeat landed on the Hailo-8 or fell back to the CPU.
            # Filtered out, a vehicle running the 4.5x slower path looked
            # identical to one on the chip.
-           'mongla_lock_forward', 'mongla_lock_downward'):
+           'mongla_lock_forward', 'mongla_lock_downward',
+           # Composed flow: its once-a-second line is the only place an
+           # operator sees it refusing, and why.
+           'mongla_flow_velocity'):
     _QUIET += ['--log-level', f'{_n}:=info']
 
 
@@ -516,6 +519,29 @@ def generate_launch_description():
                     LaunchConfiguration('target_width_m_forward'), value_type=float),
                 'dwn_lock_target_width_m': ParameterValue(
                     LaunchConfiguration('target_width_m_downward'), value_type=float),
+
+                # Optical flow on the downward camera, in this process: frames
+                # by reference rather than ~210 raw images a second over DDS
+                # (measured-bars 87). The calibration and profile are the
+                # downward camera's own, so the two cannot disagree.
+                'flow':                ParameterValue(
+                    LaunchConfiguration('flow'), value_type=bool),
+                'flow_medium':         LaunchConfiguration('medium'),
+                'flow_pool_depth_m':   ParameterValue(
+                    LaunchConfiguration('pool_depth_m'), value_type=float),
+                'flow_pool_depth_min_m': ParameterValue(
+                    LaunchConfiguration('pool_depth_min_m'), value_type=float),
+                'flow_pool_depth_max_m': ParameterValue(
+                    LaunchConfiguration('pool_depth_max_m'), value_type=float),
+                'flow_calibration':    LaunchConfiguration('dwn_calibration'),
+                'flow_profile':        LaunchConfiguration('dwn_profile'),
+                # Floor instruments. Both OFF by default; see flow_node.
+                'flow_tile_m':         ParameterValue(
+                    LaunchConfiguration('tile_m'), value_type=float),
+                'flow_lane_lines':     ParameterValue(
+                    LaunchConfiguration('lane_lines'), value_type=bool),
+                'flow_caustic_suppression': ParameterValue(
+                    LaunchConfiguration('caustics'), value_type=bool),
             }],
         )
 
@@ -596,32 +622,6 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('lock')),
         )
 
-    def flow() -> Node:
-        return Node(package='mongla_vision', executable='flow_node',
-               name='mongla_flow_velocity', output='screen',
-               parameters=[{
-                   'camera':       'downward',
-                   'medium':       LaunchConfiguration('medium'),
-                   'pool_depth_m': ParameterValue(
-                       LaunchConfiguration('pool_depth_m'), value_type=float),
-                   'pool_depth_min_m': ParameterValue(
-                       LaunchConfiguration('pool_depth_min_m'), value_type=float),
-                   'pool_depth_max_m': ParameterValue(
-                       LaunchConfiguration('pool_depth_max_m'), value_type=float),
-                   # The SAME calibration the downward camera_node gets. Passing
-                   # them separately is how they came to disagree.
-                   'calibration':  LaunchConfiguration('dwn_calibration'),
-                   'profile':      LaunchConfiguration('dwn_profile'),
-                   # Floor instruments. Both OFF by default; see flow_node.
-                   'tile_m':       ParameterValue(
-                       LaunchConfiguration('tile_m'), value_type=float),
-                   'lane_lines':   ParameterValue(
-                       LaunchConfiguration('lane_lines'), value_type=bool),
-                   'caustic_suppression': ParameterValue(
-                       LaunchConfiguration('caustics'), value_type=bool),
-               }],
-               condition=IfCondition(LaunchConfiguration('flow')))
-
     # `launch: vision_pi:` in ~/.mongla/bringup.yaml re-defaults these, and its
     # `nodes:` reach the nodes below -- only when this file is the one typed.
     args, settings = launch_defaults.for_launch_file(args, __file__)
@@ -647,7 +647,6 @@ def generate_launch_description():
             LaunchConfiguration('split'))), 'the downward vision process'),
         *respawning(lambda: tracker('forward'), 'the forward tracker'),
         *respawning(lambda: tracker('downward'), 'the downward tracker'),
-        *respawning(flow, 'the flow node'),
         # The ladders are composed into `detectors` above (`lock:=`), not
         # started here: as separate processes they raced it for the Hailo.
         *respawning(lambda: solver('forward'), 'the forward pose solver'),

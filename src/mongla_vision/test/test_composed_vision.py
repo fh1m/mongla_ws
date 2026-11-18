@@ -248,7 +248,7 @@ def test_the_composed_launcher_turns_direct_feed_ON():
     assert "direct = not bool(self.get_parameter('replay').value)" in src, (
         'direct_feed is no longer derived from replay')
     assert "Parameter('direct_feed', value=direct)" in src
-    assert 'frame_sink=det' in src
+    assert 'frame_sink=_Tee(det, *extra) if extra else det' in src
 
 
 # --------------------------------------------------------------------------- #
@@ -413,6 +413,10 @@ def test_the_pi_launch_pins_every_node_back_to_info():
     # which is exactly what it did on the first version of this test.
     quiet = mod._QUIET
     assert quiet[:2] == ['--log-level', 'warn'], quiet[:2]
+    # Every node the process composes, flow included: composed on the
+    # vehicle, its refusals printed zero times until it was pinned here.
     for node in ('mongla_detector_forward', 'mongla_detector_downward',
-                 'mongla_camera_forward', 'mongla_camera_downward'):
+                 'mongla_camera_forward', 'mongla_camera_downward',
+                 'mongla_lock_forward', 'mongla_lock_downward',
+                 'mongla_flow_velocity'):
         assert f'{node}:=info' in quiet, f'{node} is not pinned back to info'
