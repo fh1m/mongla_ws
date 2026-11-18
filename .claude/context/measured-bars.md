@@ -8135,3 +8135,16 @@ which is the evidence `presence.py` accumulates; the rung adds 2.9 points on
 top of a detector the tracker already beats by 22. **`presence.py` is
 deleted** rather than wired: it duplicated a shipped capability. ByteTrack
 fails the absent bar again, by 3.4x.
+
+**Identity switches, counted as the vehicle selects a target.** The study used
+to take the largest box every frame, which flips between two live tracks the
+vehicle never jumps between (align holds `locked_id`). Holding the locked id
+while it is published, on the 2025 `final_run/bin.mkv` (592 s, `fire`,
+`bin_fire_blood.pt`, the same two bars): **80 switches by the old count, 20 by
+the vehicle's**, one every 30 s; on `gate.mkv`, **0**. No consumer pays for
+them: align re-locks on the next real detection whatever its id, and the coast
+follows the locked id only between real detections. `tracking/reid.py` and
+`tracking/cascade.py`, built to cut switches and never wired, were **deleted**:
+they would have put a frame path and XFeat on the tracker's hot path to fix
+nothing a consumer sees. Section 54's 179 was a person walking in and out of a
+room, counted by largest box.

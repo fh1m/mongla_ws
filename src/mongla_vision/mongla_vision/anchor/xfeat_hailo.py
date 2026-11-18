@@ -12,10 +12,6 @@ A 23x gap, and the anchor was on the wrong side of it -- spending 32.9 ms per
 call on the CPU that the camera pump and the rclpy executor need, which is the
 exact contention the async detector API exists to avoid.
 
-It also unblocks RE-ID. `tracking/reid.py` is deferred on the premise that
-"XFeat is ALREADY loaded at 701 FPS, so identity is nearly free". That premise
-was false while this ran on the CPU; it becomes true here.
-
 The post-processing is not rewritten. `_pixel_shuffle_scores`, `_nms` and
 `match` are reused from `xfeat_onnx`, because two copies of the descriptor
 maths is how the two backends come to disagree about what a feature is -- and

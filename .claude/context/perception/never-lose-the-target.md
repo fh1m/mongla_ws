@@ -102,8 +102,6 @@ the prior; nothing supplies it yet.
 |---|---|
 | `anchor/health.py` — fouled lens vs changed world | **wired** into `lock_node` |
 | `anchor/bank.py` contamination guard — refuses to remember a view of the fault | **Key point: wired into `enrol()`**, the DAM4SAM principle without a second bank |
-| `tracking/reid.py` — XFeat short-term identity memory, §25's 40-inlier bar, 1.5× margin | built, 13 tests, **deferred**: needs crop descriptors |
-| `tracking/cascade.py` — motion → **measured ego-motion** → appearance, capped at 4 calls | built, 17 tests, **deferred**: touches the association hot path |
 | `detection/confidence_calibration.py` — turbidity-aware, ships OFF | built; DQR-RTDETR validates the idea, our gain is still declared |
 
 ---
@@ -237,7 +235,8 @@ gaps either side of it.
        |          |            |
        |          |            +-- bank, contamination-guarded   (section 5)
        |          +-- LK + forward-backward + RANSAC similarity  (scale!)
-       +-- cascade: motion -> MEASURED ego-motion -> XFeat re-ID  (sections 2,4)
+       +-- OC-SORT + Kalman coast on capture time (re-ID and the cascade:
+           measured unneeded, deleted -- measured-bars section 88)
 ```
 
 Each addition attacks a different half of the same failure:
@@ -250,8 +249,7 @@ coming.
 
 ## 11. THE LAST PIECE: THE VEHICLE IS THE LARGEST CAUSE OF LOSING THE TARGET
 
-Sections 1–10 are all **perception**. Every one of them — the cascade, the
-re-identification, the contamination guard, the anticipation — operates in the
+Sections 1–10 are all **perception**. Every one of them — the contamination guard, the anticipation — operates in the
 **image plane**, downstream of a decision the vehicle has already made about
 where to point.
 
@@ -318,8 +316,7 @@ knowledge), and a test asserts it carries **no `score`, `confidence` or
 |---|---|---|
 | target flickers | ladder + coast | shipped |
 | target changes appearance | bank, contamination-guarded | shipped |
-| identity fragments after a gap | XFeat re-ID + cascade | built |
-| vehicle's own motion moves the box | measured ego-motion stage | built |
+| identity fragments after a gap | align re-locks on the next real detection; re-ID measured unneeded (measured-bars §88) | shipped |
 | the view is about to degrade | falling-trend anticipation | **wired** |
 | target approaches or recedes | similarity fit tracks scale | **wired** |
 | **the controller steers it out of frame** | **visibility guard** | built |

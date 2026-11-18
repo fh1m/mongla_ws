@@ -38,8 +38,6 @@ approach controller reads), replay mode, and — new — the **acting bar** belo
 | module | what it would give | blocked on |
 |---|---|---|
 | **`tracking/visibility.py`** | **the FOV guard. There is no field-of-view constraint anywhere in `mongla_control`, so perception can be perfect and the lock still dies because the vehicle turned away** | a consumer in the vision verbs: yaw/lateral demand scaled by `Visibility.scale`, and only the component making the bearing WORSE. Control change ⇒ needs a pool day |
-| `tracking/cascade.py` | association cascade; expensive appearance stage only on detections motion cannot explain, with a MEASURED ego-motion stage no published tracker has | `tracker_node` calls its tracker library directly; inserting a cascade touches the association hot path, rate must be measured on the vehicle |
-| `tracking/reid.py` | the 179-switch fix, using XFeat already loaded at 701 FPS instead of a 15–25 ms Re-ID net | crop descriptors at track birth/death |
 | `continuity.py` | gap distribution analyser | offline only; its constants are a person in air |
 | `time_to_contact.py` | τ with ego-velocity subtracted | no approach/standoff controller exists |
 | `approach.py` | standoff band, back-off included | the band is measured; the controller that acts on it is not built |
@@ -153,7 +151,7 @@ whose module is already written and measured.
 
 ### Deferred, unchanged
 
-7. `cascade.py` · `reid.py` ·
+7.
    `continuity.py` · `time_to_contact.py` · `approach.py` ·
    `flow/scale_check.py` · `confidence_calibration.py` · `draw_strip.py`
    (delete or revive)
@@ -175,44 +173,17 @@ whose module is already written and measured.
 
 ---
 
-## Re-ID: the blocker was misdiagnosed, and the real one is architectural
+## Re-ID and the association cascade: deleted, nothing needed them
 
-`tracking/reid.py` has been deferred on the note *"XFeat is ALREADY loaded at
-701 FPS … waits on tracker_node supplying crop descriptors at track birth and
-death"*. Fixing B-62 was supposed to unblock it. It does not.
-
-**Warning: `tracker_node` has no images.** It subscribes to exactly two topics —
-`detections` and `camera_info` — and nothing else. It owns track identity and
-has never seen a pixel. Re-ID needs a *crop descriptor*, so the missing
-ingredient was never XFeat's cost; it is that the node holding the identity
-cannot compute an appearance at all.
-
-**Three ways out, and none is free:**
-
-1. **Subscribe images in `tracker_node`.** Puts a second full-resolution
-   subscriber on the hot path and duplicates the camera mailbox the detector
-   already owns. Measured elsewhere in this repo: a queue-bound consumer sees
-   396 ms of staleness against 16.9 ms on the mailbox, so this is the option
-   most likely to be quietly wrong.
-2. **Compute descriptors in the DETECTOR**, which already holds the frame and
-   the boxes, and publish them alongside the detections. Costs a wire format
-   and bandwidth, but the frame is already in hand and correctly stamped.
-3. **Move identity into `lock_node`**, which has frames and XFeat today. But
-   `lock_node` tracks ONE target by design, and re-ID exists for the
-   multi-object case — this would be re-architecting around the tool we happen
-   to have.
-
-**Key point: (2) is the honest one**, and it is the same shape as a decision this repo
-already made: the detector owns the frame, so anything needing pixels and
-boxes together belongs where both already are. It is a wire-format change and
-needs its rate measured before it ships.
-
-**Status: still DEFERRED, with a corrected and more specific blocker.** The
-old note was wrong about what was missing, which is worth more than the fix
-would have been — `track_id` on `/detections` (also outstanding) is a
-prerequisite for any of the three.
-
----
+`tracking/reid.py` and `tracking/cascade.py` were built to cut identity
+switches and deferred because `tracker_node` has no images. Measured against
+how the vehicle actually selects a target (measured-bars section 88), the
+shipped tracker switches identity about once every 30 s on the bins and never
+on the gate, and no consumer pays for it: align re-locks on the next real
+detection whatever its id, and the coast follows the locked id only between
+real detections. Both modules were deleted on 2026-11-18. A consumer that needs
+an identity to survive a long gap is the reason to rebuild them; they are in
+the git history.
 
 ## The ROS-graph sweep — `/target_pose_fused` is produced and nobody reads it
 
