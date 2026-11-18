@@ -2,7 +2,7 @@
 
     ros2 run mongla_batighor serve --port 8000 --bridge-port 8765
 
-`http://mongla.local:8000/` answers with the app already connected to this
+`http://kutum.local:8000/` answers with the app already connected to this
 machine's foxglove_bridge and opened on a layout (`/?layout=board_health` for
 another one). The address in the link is the one the browser used, so the
 same link works over the tether and over Wi-Fi.

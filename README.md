@@ -61,7 +61,7 @@ success while doing nothing.
 > automatic mode every move uses. If you are here to judge whether the software works underwater, the honest answer is
 > that nobody knows yet, and this page will not pretend otherwise.
 
-That is also why there is a [ledger of retractions](#the-ledger): 126 measurement entries, of
+That is also why there is a [ledger of retractions](#the-ledger): 127 measurement entries, of
 which 18 say in their own title that they took an earlier result back, and 10 more measured an idea
 and concluded it should stay switched off.
 
@@ -574,9 +574,9 @@ is a folder, [`kutum/`](kutum/README.md), and the machine can be rebuilt from it
 <p align="center"><img src="docs/imgs/readme/kutum-stack.webp" alt="Kutum, layer by layer: Mongla, Python, ROS 2, the Hailo stack and Ubuntu, each owned by one file in kutum/, on a Raspberry Pi 5 and a Hailo-8 owned by a screwdriver." width="100%"></p>
 
 ```bash
-kutum/deploy.sh fh1m@mongla.local      # sync, check the machine, clean build, gate the vehicle
-kutum/backup.sh fh1m@mongla.local      # pull what only the vehicle has, before the card dies
-ssh fh1m@mongla.local bash -s < kutum/doctor.sh   # is it still Kutum? read-only
+kutum/deploy.sh fh1m@kutum.local      # sync, check the machine, clean build, gate the vehicle
+kutum/backup.sh fh1m@kutum.local      # pull what only the vehicle has, before the card dies
+ssh fh1m@kutum.local bash -s < kutum/doctor.sh   # is it still Kutum? read-only
 ```
 
 What it is, what was wrong with it, and the eight steps from a blank SD card:
@@ -795,10 +795,10 @@ the kind of thing that goes stale — `test_doc_drift.py` fails any doc that sta
 > it's wrong."* — Richard Feynman
 
 [`measured-bars.md`](.claude/context/measured-bars.md) is the file this project is really built
-on: **126 entries, 994 rows of numbers**, each with the method, the conditions and the bar it had
+on: **127 entries, 1,001 rows of numbers**, each with the method, the conditions and the bar it had
 to clear. Tests read it. A constant that drifts from it fails CI.
 
-**18 of those 126 entries say in their own title that they took an earlier result back.** 10
+**18 of those 127 entries say in their own title that they took an earlier result back.** 10
 more measured an idea and concluded it should stay switched off. The retractions live in the
 same file as the results that stand, in the middle rather than in an appendix:
 

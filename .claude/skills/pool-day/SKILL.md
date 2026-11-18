@@ -10,7 +10,7 @@ surface any failure with the specific fix. **Never arm thrusters from this skill
 
 ## Sequence
 
-1. **The gate** — on the Pi (`fh1m@mongla.local`)
+1. **The gate** — on the Pi (`fh1m@kutum.local`)
    ```bash
    ros2 run mongla_manager bringup_check --strict
    ```

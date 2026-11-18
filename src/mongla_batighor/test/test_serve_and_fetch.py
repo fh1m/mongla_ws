@@ -69,8 +69,8 @@ def test_root_opens_the_app_on_this_host_bridge_and_layout(site):
 
 
 def test_the_link_names_the_host_the_browser_used():
-    link = serve.app_link('mongla.local:8000', 9000, 'x')
-    assert 'ws%3A%2F%2Fmongla.local%3A9000' in link
+    link = serve.app_link('kutum.local:8000', 9000, 'x')
+    assert 'ws%3A%2F%2Fkutum.local%3A9000' in link
     assert link.endswith('&layout=x')
     assert 'ws%3A%2F%2F192.168.0.103%3A8765' in serve.app_link('192.168.0.103', 8765, 'x')
 
@@ -88,7 +88,7 @@ def test_a_forged_host_is_refused_not_turned_into_a_bridge_address(site):
         r = c.getresponse()
         assert r.status == 400 and r.getheader('Location') is None, host
         c.close()
-    for ok in ('mongla.local:8000', '192.168.0.103', '[::1]:8000'):
+    for ok in ('kutum.local:8000', '192.168.0.103', '[::1]:8000'):
         assert serve._HOST.match(ok), ok
 
 
@@ -197,9 +197,9 @@ def test_a_3d_layer_url_reaches_the_app_absolute_on_the_host_it_used():
     Kutum 2026-11-12); the org layouts carry the browser's own host."""
     layout = {'configById': {'3D!a': {'layers': {'hull': {'url': '/model/mongla.urdf'},
                                                  'web': {'url': 'http://x/y.urdf'}}}}}
-    out = serve.absolute(layout, 'http://mongla.local:8000')
+    out = serve.absolute(layout, 'http://kutum.local:8000')
     layers = out['configById']['3D!a']['layers']
-    assert layers['hull']['url'] == 'http://mongla.local:8000/model/mongla.urdf'
+    assert layers['hull']['url'] == 'http://kutum.local:8000/model/mongla.urdf'
     assert layers['web']['url'] == 'http://x/y.urdf'
     assert layout['configById']['3D!a']['layers']['hull']['url'] == '/model/mongla.urdf'
 

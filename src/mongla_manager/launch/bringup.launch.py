@@ -16,7 +16,7 @@ The one command for the vehicle (SROT board + Pi 5 + Hailo-8):
     # On the bench, in air: the optics change by ~1.33, so say so.
     ros2 launch mongla_manager bringup.launch.py vision:=true medium:=air
 
-    # Batighor, the operator center: open http://mongla.local:8000/ in any browser.
+    # Batighor, the operator center: open http://kutum.local:8000/ in any browser.
     ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 
     # Single camera, .pt model on a dev box (footage replay; not the vehicle path).

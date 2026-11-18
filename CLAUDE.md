@@ -282,10 +282,10 @@ Verified: the downward camera as a velocity sensor — three 30 cm slides, worst
 # Kutum, the vehicle's Pi 5 + Hailo-8 (kutum/README.md). The machine is made
 # once with `sudo kutum/setup.sh --system` on it; deploy after every change.
 # Deploy stops on a doctor FAIL and exits NON-ZERO if the vehicle's own gate refuses.
-kutum/deploy.sh fh1m@mongla.local              # sync + doctor + build + gate
-kutum/deploy.sh fh1m@mongla.local --check-only # the doctor alone
-kutum/deploy.sh fh1m@mongla.local --rollback   # back to the previous release
-kutum/backup.sh fh1m@mongla.local              # pull what only the vehicle has
+kutum/deploy.sh fh1m@kutum.local              # sync + doctor + build + gate
+kutum/deploy.sh fh1m@kutum.local --check-only # the doctor alone
+kutum/deploy.sh fh1m@kutum.local --rollback   # back to the previous release
+kutum/backup.sh fh1m@kutum.local              # pull what only the vehicle has
 
 ./build_mongla.sh                 # mirrors ~/models and ~/missions in, then builds
 source install/setup.bash
@@ -309,16 +309,16 @@ run; `tools/pool/pool_record.sh` records and replays a bag; scorecards land in `
 ### Kutum, the vehicle's computer
 
 Kutum is the Pi 5 + Hailo-8 AI HAT+ on the vehicle: Ubuntu 24.04, ROS 2 Jazzy, answering as
-**`mongla.local`** on Ethernet and Wi-Fi alike. `kutum/` is that machine as files, and
+**`kutum.local`** on Ethernet and Wi-Fi alike. `kutum/` is that machine as files, and
 [`kutum/README.md`](kutum/README.md) is the runbook (network, clock, rebuilding from a blank
 card). The chapter is [`.claude/context/kutum/`](.claude/context/kutum/README.md).
 
 | script | runs on | what it does |
 |---|---|---|
 | `setup.sh --system` | the Pi, with sudo, **once per machine** | Hailo driver, firmware and runtime from source; udev, systemd, netplan; passwordless sudo for `fh1m`; then the user half and the doctor. The operator runs it, because it asks for the Wi-Fi password |
-| `deploy.sh fh1m@mongla.local` | the dev box, after every change | refuse before writing anything if the stack runs or the board is armed or unreadable; stage a new release beside the live one, run the doctor, build it, switch with one rename, run `bringup_check`. A failed step leaves the active release as it was; `--rollback` returns to the previous one |
+| `deploy.sh fh1m@kutum.local` | the dev box, after every change | refuse before writing anything if the stack runs or the board is armed or unreadable; stage a new release beside the live one, run the doctor, build it, switch with one rename, run `bringup_check`. A failed step leaves the active release as it was; `--rollback` returns to the previous one |
 | `doctor.sh` | either (read-only) | `ok` / `WARNING` / `FAIL` for every assumption the stack makes about the machine; exits 1 on `FAIL` |
-| `backup.sh fh1m@mongla.local` | the dev box | pull what only the vehicle has, into `~/kutum-backup/mongla/` (`--runs` adds runs and footage) |
+| `backup.sh fh1m@kutum.local` | the dev box | pull what only the vehicle has, into `~/kutum-backup/mongla/` (`--runs` adds runs and footage) |
 | `env.sh` | every shell on the Pi | ROS and the workspace, already sourced |
 
 **Caution:** the Pi's Python must keep **NumPy 1.x**. The system `cv2` is
