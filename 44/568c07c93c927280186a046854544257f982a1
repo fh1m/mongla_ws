@@ -1,0 +1,28 @@
+src/mongla_localization/mongla_localization/pnp_node.py
+  s_d9cd6692c91d8a::t_268b777d402eed 61-64,182
+.claude/context/reference/commands.md
+  s_d9cd6692c91d8a::t_268b777d402eed 368
+.claude/context/packages/mongla_vision/audit.md
+  s_d9cd6692c91d8a::t_08fda2fcef2c1e 66
+  s_d9cd6692c91d8a::t_f6d68ae9ea8c12 65
+src/mongla_vision/mongla_vision/anchor/bank_lookup.py
+  s_d9cd6692c91d8a::t_dcabb1c737022b 201-202
+src/mongla_vision/mongla_vision/anchor/pose.py
+  s_d9cd6692c91d8a::t_268b777d402eed 191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "44568c07c93c927280186a046854544257f982a1",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
