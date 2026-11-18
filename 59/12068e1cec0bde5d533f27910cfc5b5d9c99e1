@@ -1,0 +1,21 @@
+src/mongla_vision/mongla_vision/detector_setup.py
+  s_d9cd6692c91d8a::t_5802ab4dd0b4d9 300-303
+src/mongla_vision/test/test_assoc_conf.py
+  s_d9cd6692c91d8a::t_831a4731b05fdd 121-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5912068e1cec0bde5d533f27910cfc5b5d9c99e1",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
