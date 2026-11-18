@@ -18,10 +18,10 @@
 #     gate       bringup_check ran and correctly FAILED on the absent Bar30
 #
 # Usage:
-#     kutum/deploy.sh fh1m@mongla.local
-#     kutum/deploy.sh fh1m@mongla.local --check-only     # the doctor, nothing changed
-#     kutum/deploy.sh fh1m@mongla.local --list           # the releases on the vehicle
-#     kutum/deploy.sh fh1m@mongla.local --rollback       # back to the previous release
+#     kutum/deploy.sh fh1m@kutum.local
+#     kutum/deploy.sh fh1m@kutum.local --check-only     # the doctor, nothing changed
+#     kutum/deploy.sh fh1m@kutum.local --list           # the releases on the vehicle
+#     kutum/deploy.sh fh1m@kutum.local --rollback       # back to the previous release
 #
 # Each deploy is a new release beside the live one (kutum/release.sh, #64):
 # nothing on the vehicle is touched until the stack is confirmed stopped and

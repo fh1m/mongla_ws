@@ -4,7 +4,7 @@
 
 Batighor (বাতিঘর) is a lighthouse: it watches the water and guides the vessel home. This
 package is the operator center. Today it does two things: any browser that opens
-`http://mongla.local:8000/` gets Lichtblick, the open-source fork of Foxglove Studio,
+`http://kutum.local:8000/` gets Lichtblick, the open-source fork of Foxglove Studio,
 already connected to the vehicle's `foxglove_bridge` and opened on our layout. Nothing is
 installed on a laptop, and a second operator costs Kutum only the bytes, because the app
 renders in the browser; and it shows the cameras as they were sent, with what the vehicle
@@ -13,8 +13,8 @@ sees drawn over them.
 ```bash
 ros2 run mongla_batighor fetch      # once per machine: the pinned Lichtblick build, hash-checked
 ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
-# then open http://mongla.local:8000/            (our main layout)
-#           http://mongla.local:8000/?layout=board_health
+# then open http://kutum.local:8000/            (our main layout)
+#           http://kutum.local:8000/?layout=board_health
 ```
 
 `kutum/setup.sh` runs `fetch` for you. On a bench with no board, the same center runs beside
@@ -44,7 +44,7 @@ the camera itself, at 1280x720):
 
 ```bash
 ros2 launch mongla_batighor calibrate.launch.py device_path:=/dev/mongla_cam_downward applies_to:=pi_downward
-# then open http://mongla.local:8000/?layout=calibrate
+# then open http://kutum.local:8000/?layout=calibrate
 ```
 
 ## How it is built

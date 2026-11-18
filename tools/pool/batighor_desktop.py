@@ -25,7 +25,7 @@ another. A view that changed is named, with how to refresh it. Read from
 Lichtblick 1.27: `loadDefaultLayouts.ts`, `DesktopLayoutLoader.ts`,
 `useLayoutTransfer.tsx` and `CurrentLayoutProvider/index.tsx`.
 
-    python3 tools/pool/batighor_desktop.py                    # mongla.local, every view
+    python3 tools/pool/batighor_desktop.py                    # kutum.local, every view
     python3 tools/pool/batighor_desktop.py 192.168.0.103 --view localization
     python3 tools/pool/batighor_desktop.py --list             # the views Kutum serves
 
@@ -172,7 +172,7 @@ def link(host: str, bridge: int) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description='Open Batighor in the Lichtblick desktop app.')
-    ap.add_argument('host', nargs='?', default='mongla.local', help="Kutum's name or address")
+    ap.add_argument('host', nargs='?', default='kutum.local', help="Kutum's name or address")
     ap.add_argument('--port', type=int, default=8000, help="Batighor's web port")
     ap.add_argument('--bridge', type=int, default=8765, help="foxglove_bridge's port")
     ap.add_argument('--view', help='open on this view (default: the cockpit, mongla_layout)')

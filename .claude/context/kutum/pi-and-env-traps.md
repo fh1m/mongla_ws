@@ -91,7 +91,7 @@
   Not in the committed `.vscode/settings.json`: a hard-coded `DISPLAY` breaks a
   teammate's local VSCode.
 - **Better on the vehicle:** don't open a window at all. The annotated
-  cameras are in Batighor (`batighor:=true`, then `http://mongla.local:8000/`), in any
+  cameras are in Batighor (`batighor:=true`, then `http://kutum.local:8000/`), in any
   browser ([`foxglove-and-bags.md`](../platform/foxglove-and-bags.md)).
 
 ### E5. The SROT board has no `/dev/ttyUSB*` — `brltty` or a missing `ch341`

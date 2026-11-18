@@ -58,7 +58,7 @@ def test_the_app_is_served_with_the_api_on_under_a_new_name(kutum):
     status, headers, js = _get(kutum + '/app/main.0123456789abcdef01.api.js')
     assert status == 200 and b'apiUrl:"/api",version:"1.30.0"' in js
     assert b'apiUrl:void 0' not in js and 'immutable' in headers['Cache-Control']
-    assert 'workspace=mongla' in serve.app_link('mongla.local:8000', 8765, 'x')
+    assert 'workspace=mongla' in serve.app_link('kutum.local:8000', 8765, 'x')
 
 
 def test_a_release_that_moved_the_switch_is_refused_not_half_served(tmp_path):

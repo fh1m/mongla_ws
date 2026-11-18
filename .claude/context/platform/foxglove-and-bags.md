@@ -49,7 +49,7 @@ ros2 run mongla_planner mission sauvc_qualification
 #   or hand-fly:  ros2 run mongla_planner mongla arm ; ... ; mongla disarm
 ```
 
-**Topside laptop — watch live:** open `http://mongla.local:8000/` in any browser. Batighor
+**Topside laptop — watch live:** open `http://kutum.local:8000/` in any browser. Batighor
 serves Lichtblick already connected to `ws://<the same host>:8765` and opened on
 `src/mongla_batighor/layouts/mongla_layout.json`; `/?layout=board_health` opens another.
 
@@ -99,12 +99,12 @@ by hand if rosdep isn't set up. (`foxglove_bridge` = live telemetry;
 ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 # custom ports: batighor_port:=8001 foxglove_port:=8766
 ```
-Then open **`http://mongla.local:8000/`** in any browser: `mongla_batighor` serves the
+Then open **`http://kutum.local:8000/`** in any browser: `mongla_batighor` serves the
 Lichtblick web app (the pinned build in `LICHTBLICK.json`, installed once with
 `ros2 run mongla_batighor fetch`, which checks its hash), connected to the bridge and opened
 on `src/mongla_batighor/layouts/mongla_layout.json`, so the whole team sees the same view.
 A desktop app connects the same way: *Open connection → Foxglove WebSocket →*
-`ws://mongla.local:8765`.
+`ws://kutum.local:8765`.
 The bridge is launched with `include_hidden:=true` so the `/mongla/move/_action/feedback`
 plot (err_x_px/err_y_px) isn't silently empty. **The layout is a starting point** — its
 panel-config schema is Foxglove-version-sensitive; if a panel loads blank, add it manually
@@ -123,8 +123,8 @@ drawn by the browser: Batighor's `overlay` node turns detections, track ids and 
 | `/mongla/vision/<cam>/preview/compressed` | `preview_rate_hz` (5) | a weak link: `/?layout=weak_link`, about 1.7 Mbit/s a camera at 640x360 |
 | `/mongla/vision/<cam>/annotations` | one per detector frame | drawn over either |
 
-Pick by link, in the address: `http://mongla.local:8000/` on the tether,
-`http://mongla.local:8000/?layout=weak_link` on anything slower. A topic nobody watches is
+Pick by link, in the address: `http://kutum.local:8000/` on the tether,
+`http://kutum.local:8000/?layout=weak_link` on anything slower. A topic nobody watches is
 never built. `image_debug` (boxes burned in on Kutum) remains for a recorder that wants them.
 
 ### Gate A — prove FPS is unperturbed (mandatory before trusting it in-water)
@@ -150,7 +150,7 @@ very useful, near-zero cost.
 A team abroad on venue Wi-Fi cannot depend on a cloud login. We resolved this by
 standardizing on **Lichtblick** (the offline-safe fork — see §4), which has no account
 wall at all. **Still prove it before run day**, on the actual competition laptop: connect
-to `ws://mongla.local:8765` with **internet OFF** and confirm it connects and the layout
+to `ws://kutum.local:8765` with **internet OFF** and confirm it connects and the layout
 loads. (If you instead use the official Foxglove desktop app, this gate is where its
 login prompt would bite you — hence the Lichtblick choice.)
 
@@ -277,7 +277,7 @@ ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765   # terminal 2
 without the pool). Bags live in `~/mongla_runs` on the Pi; copy the whole run folder
 so the bag, scorecard, and logs come together:
 ```bash
-rsync -av fh1m@mongla.local:~/mongla_runs/  ~/mongla_runs/     # or scp -r
+rsync -av fh1m@kutum.local:~/mongla_runs/  ~/mongla_runs/     # or scp -r
 # replay locally (needs the MCAP plugin above + mongla_interfaces built here):
 tools/pool/pool_record.sh replay ~/mongla_runs/bag_gate_run_<ts>
 # then Lichtblick → ws://localhost:8765 sees the replayed topics.

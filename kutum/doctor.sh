@@ -2,7 +2,7 @@
 # Kutum's health check: is this machine the compute module Kutum declares?
 #
 #   kutum/doctor.sh                      # on the vehicle
-#   ssh fh1m@mongla.local bash -s < kutum/doctor.sh     # from the dev box
+#   ssh fh1m@kutum.local bash -s < kutum/doctor.sh     # from the dev box
 #
 # Read-only. It changes nothing and never needs sudo. Every line is one of
 #   ok        as declared
@@ -202,8 +202,24 @@ for a in $(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1); do
 done
 systemctl is-active networkd-dispatcher >/dev/null 2>&1 && ok "networkd-dispatcher: reply routes follow every new address" \
   || warn "networkd-dispatcher not running -- a new DHCP address gets no reply route"
-systemctl is-active avahi-daemon >/dev/null 2>&1 && ok "avahi-daemon: answers as $(hostname).local" \
-  || fail "avahi-daemon not running -- $(hostname).local will not resolve from the laptop"
+[ "$(hostname)" = kutum ] && ok "hostname kutum" \
+  || fail "hostname is $(hostname), not kutum -- the laptop looks for kutum.local (kutum/setup.sh --system)"
+[ -f /etc/cloud/cloud.cfg.d/99-kutum-hostname.cfg ] && ok "cloud-init keeps the hostname" \
+  || warn "cloud-init may put the imaged hostname back at the next boot (kutum/setup.sh --system)"
+# avahi reads the hostname when it starts: renamed under a running avahi, the
+# Pi itself resolves the new name while the network is still told the old one
+# (2026-11-18). Its own startup line says which name it publishes.
+published=$(journalctl -u avahi-daemon -b --no-pager 2>/dev/null \
+  | sed -n 's/.*Host name is \([^ ]*\)\.local\..*/\1/p' | tail -1)
+if ! systemctl is-active avahi-daemon >/dev/null 2>&1; then
+  fail "avahi-daemon not running -- $(hostname).local will not resolve from the laptop"
+elif [ -z "$published" ]; then
+  warn "avahi-daemon running; its published name is not readable here (journal access)"
+elif [ "$published" = "$(hostname)" ]; then
+  ok "avahi-daemon: answers as $published.local"
+else
+  fail "avahi publishes $published.local, the hostname is $(hostname) -- sudo systemctl restart avahi-daemon"
+fi
 installed() { [ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" = "install ok installed" ]; }
 installed wpasupplicant && ok "wpasupplicant installed" \
   || warn "wpasupplicant missing -- Wi-Fi cannot join anything"
