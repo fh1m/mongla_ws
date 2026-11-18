@@ -64,10 +64,10 @@ one capability at a time.
 
 | what you want | command |
 |---|---|
-| control only (board + `/mongla/move`) | `ros2 launch mongla_manager bringup.launch.py` |
-| + both cameras and detectors | `ros2 launch mongla_manager bringup.launch.py vision:=true` |
-| + a different forward model | `ros2 launch mongla_manager bringup.launch.py vision:=true fwd_model:=sauvc_sim` |
-| + the downward camera's velocity | `ros2 launch mongla_manager bringup.launch.py vision:=true flow:=true pool_depth_m:=1.6` |
+| the vehicle: board, both cameras, detectors, lock ladder, flow | `ros2 launch mongla_manager bringup.launch.py pool_depth_m:=1.6` |
+| control only (board + `/mongla/move`), a bench session | `ros2 launch mongla_manager bringup.launch.py vision:=false` |
+| + a different forward model | `ros2 launch mongla_manager bringup.launch.py fwd_model:=<stem>` |
+| without the downward camera's velocity | `ros2 launch mongla_manager bringup.launch.py flow:=false` |
 | + the lock ladder on one class | `ros2 launch mongla_manager bringup.launch.py vision:=true lock_class:=gate` |
 | no localization | `ros2 launch mongla_manager bringup.launch.py localization:=false` |
 | + Batighor on http://\<pi\>:8000 | `ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true` |
@@ -195,8 +195,8 @@ starts this launch file against a fake board with `vision:=false` and requires
 every subscription to have a publisher, or a row naming the file that
 publishes it and the switch or mission that starts it. Those rows are the
 edges vision, flow and a mission add: prop fixes and the heading anchor come
-from a mission, the downward velocity, grid and lane headings from `flow:=true`
-(with `tile_m` and `lane_lines`), and `mission_alive` from a running mission.
+from a mission, the downward velocity, grid and lane headings from flow (on by
+default; grid with `tile_m`, lanes with `lane_lines`), and `mission_alive` from a running mission.
 
 ---
 

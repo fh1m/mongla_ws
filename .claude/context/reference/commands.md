@@ -103,7 +103,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `mav_device` | `` | SROT serial device, '' = autodetect. A path (/dev/serial/by-id/...) or any pymavlink connection string |
 | `payload_channels` | `` | OPTIONAL labels for the log, "<board_channel>:<name>", e.g. "9:torpedo_1, 11:dropper_1". Labels ONLY -- fire(N) always addresses board channel N; nothing here routes a shot |
 | `allow_fw_behaviour_mismatch` | `false` | Arm against firmware older than FW_BEHAVIOUR_REV_REQUIRED. Accepts an un-braked stop -- leave false |
-| `vision` | `false` | Start camera + detector alongside manager |
+| `vision` | `true` | The vision stack: both cameras, detectors, lock ladder, flow. vision:=false for a board-only bench session. |
 | `vision_stack` | `pi` | pi = both cameras + calibration (vision_pi.launch.py, the vehicle); generic = single camera, no calibration (vision.launch.py, dev box). |
 | `vision_profile` | `fast` | vision_stack:=pi -- vision_pi's own profile argument (its `vision:=`). Renamed here because `vision` is this file's boolean on/off switch. |
 | `fwd_model` | `gate_sharks` | vision_stack:=pi -- forward-camera model stem. |
@@ -111,7 +111,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `fwd_classes` | `` | vision_stack:=pi -- forward class allowlist (empty = the model sidecar's full set). |
 | `dwn_classes` | `` | vision_stack:=pi -- downward class allowlist. |
 | `localization` | `true` | Run the invariant filter (mongla_localization). Read-only: it publishes /mongla/odom and commands nothing, so it is on by default. Set false to take it off the graph. |
-| `flow` | `false` | vision_stack:=pi -- start flow_node (downward-camera velocity). Pairs with the manager's position_source:=flow. |
+| `flow` | `true` | vision_stack:=pi -- start flow_node (downward-camera velocity). Pairs with the manager's position_source:=flow. |
 | `pool_depth_min_m` | `nan` | flow:=true -- the venue's shallowest floor, metres (#35). |
 | `pool_depth_max_m` | `nan` | flow:=true -- the venue's deepest floor, metres (#35). |
 | `pool_depth_m` | `nan` | flow:=true -- metres from the DOWNWARD camera to the floor. Required: without it flow_node publishes quality 0 and refuses, by design. |
@@ -173,6 +173,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `fwd_publish_hz` | `40` | (passed to vision_pi.launch.py, which sets the default) |
 | `dwn_publish_hz` | `0` | (passed to vision_pi.launch.py, which sets the default) |
 | `replay` | `false` | (passed to vision_pi.launch.py, which sets the default) Consume image_raw from a RECORDED BAG instead of a camera. Build no camera, keep every detector, and let `ros2 bag play` drive the graph. This is how a recorded session becomes a regression fixture: the detector, tracker, lock ladder and checkpoint bank all run for real, on input that never changes. |
+| `split` | `false` | (passed to vision_pi.launch.py, which sets the default) One vision process per camera, through the HailoRT service. Off: one process, the chip opened directly, 6 ms faster an inference (measured-bars 86). |
 | `fwd_device_path` | `` | (passed to vision_pi.launch.py, which sets the default) |
 | `dwn_device_path` | `` | (passed to vision_pi.launch.py, which sets the default) |
 
@@ -300,8 +301,8 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `dwn_frame_rate` | `32.0` |  |
 | `dwn_calibration` | `` |  |
 | `fwd_calibration` | `` |  |
-| `flow` | `false` |  |
-| `lock` | `false` | Run the lock ladder (follower + XFeat anchor) on the forward camera, publishing <ns>/lock. Control ignores it until vision.lock_s > 0. |
+| `flow` | `true` |  |
+| `lock` | `true` | Run the lock ladder (follower + XFeat anchor), publishing <ns>/lock and loop-closure fixes. The manager steers on it when detection drops out (vision.lock_s). |
 | `act_conf` | `0.45` | ladder ACTING bar: below this a detection may be associated by the tracker but is not acted on (B-59; measured knee 0.60, shipped 0.45) |
 | `anchor_xfeat_hef` | `true` | run XFeat on the Hailo-8 rather than the Pi CPU (B-62); safe because the lock is composed with the detector |
 | `anchor_semi_dense` | `false` | semi-dense matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-reference is measured |

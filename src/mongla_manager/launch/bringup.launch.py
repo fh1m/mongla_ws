@@ -5,13 +5,13 @@ The one command for the vehicle (SROT board + Pi 5 + Hailo-8):
     # Control only. Talks to the board over USB-C; no cameras.
     ros2 launch mongla_manager bringup.launch.py
 
-    # The vehicle with both cameras, the Hailo models and the lock ladder.
-    ros2 launch mongla_manager bringup.launch.py vision:=true
+    # The vehicle: both cameras, the Hailo models, the lock ladder and flow.
+    # pool_depth_m gives flow its scale: without it flow_node refuses and
+    # publishes quality 0 rather than guess (bringup_check says so).
+    ros2 launch mongla_manager bringup.launch.py pool_depth_m:=1.2
 
-    # ...plus downward-camera velocity. pool_depth_m is REQUIRED: without it
-    # flow_node refuses and publishes quality 0 rather than guess the scale.
-    ros2 launch mongla_manager bringup.launch.py vision:=true flow:=true \\
-        pool_depth_m:=1.2
+    # The board alone, for a bench session.
+    ros2 launch mongla_manager bringup.launch.py vision:=false
 
     # On the bench, in air: the optics change by ~1.33, so say so.
     ros2 launch mongla_manager bringup.launch.py vision:=true medium:=air
@@ -83,19 +83,20 @@ VISION_PI_PASSTHROUGH = (
     'anchor_xfeat_hef', 'anchor_semi_dense', 'target_width_m_forward',
     'target_width_m_downward', 'dwn_lock_class', 'bank_forward', 'bank_downward',
     'fwd_fps', 'dwn_fps', 'fwd_publish_hz', 'dwn_publish_hz', 'replay',
-    'fwd_device_path', 'dwn_device_path',
+    'split', 'fwd_device_path', 'dwn_device_path',
 )
 
 
 # Switches that START something inside the vision stack, so they do nothing
-# while `vision` is false. Typed alone they used to be accepted without a word:
-# `flow:=true` gave a vehicle with no velocity and no message.
-VISION_ONLY = {'flow': 'true', 'viewer': 'true', 'replay': 'true'}
+# while `vision` is false. Typed alone they used to be accepted without a word.
+# `flow` is not here: it is on by default, so typing it starts nothing new,
+# and `vision:=false` then says itself that the cameras are off.
+VISION_ONLY = {'viewer': 'true', 'replay': 'true'}
 
 
 def vision_only_ignored(cfg: dict) -> list:
     """The vision-only switches that are on while `vision` is off."""
-    if str(cfg.get('vision', 'false')).lower() in ('true', '1'):
+    if str(cfg.get('vision', 'true')).lower() in ('true', '1'):
         return []
     on = [f'{k}:={v}' for k, v in VISION_ONLY.items() if str(cfg.get(k, '')).lower() == v]
     if str(cfg.get('lock_class', '')).strip():
@@ -144,8 +145,10 @@ def generate_launch_description():
                               description='Arm against firmware older than '
                                           'FW_BEHAVIOUR_REV_REQUIRED. Accepts an '
                                           'un-braked stop -- leave false'),
-        DeclareLaunchArgument('vision',     default_value='false',
-                              description='Start camera + detector alongside manager'),
+        DeclareLaunchArgument('vision',     default_value='true',
+                              description='The vision stack: both cameras, detectors, '
+                                          'lock ladder, flow. vision:=false for a '
+                                          'board-only bench session.'),
         # WHICH vision stack. `pi` is the VEHICLE path: vision_pi.launch.py runs
         # BOTH cameras through detector_dual_node, wires the measured calibration
         # JSONs by name, and can start flow_node. `generic` is the single-camera
@@ -186,7 +189,7 @@ def generate_launch_description():
                                           'publishes /mongla/odom and commands '
                                           'nothing, so it is on by default. '
                                           'Set false to take it off the graph.'),
-        DeclareLaunchArgument('flow',        default_value='false',
+        DeclareLaunchArgument('flow',        default_value='true',
                               description='vision_stack:=pi -- start flow_node '
                                           '(downward-camera velocity). Pairs with the '
                                           'manager\'s position_source:=flow.'),

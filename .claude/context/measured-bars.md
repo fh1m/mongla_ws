@@ -150,6 +150,7 @@ is how `recommend()` happened.
 - [84. THE OPERATOR'S VIDEO IS THE CAMERA'S OWN JPEG — 0.062 ms a frame, boxes drawn by the browser (2026-11-12)](#84-the-operators-video-is-the-cameras-own-jpeg--0062-ms-a-frame-boxes-drawn-by-the-browser-2026-11-12)
 - [85. GLOBAL-SHUTTER EXPOSURE AT SPEED — dynamic framerate on keeps 210 fps and a picture; off is black (2026-11-18)](#85-global-shutter-exposure-at-speed--dynamic-framerate-on-keeps-210-fps-and-a-picture-off-is-black-2026-11-18)
 - [86. THE SERVICE COSTS 6 MS AN INFERENCE — one vision process opening the chip directly detects 55 % more than one process per camera (2026-11-18)](#86-the-service-costs-6-ms-an-inference--one-vision-process-opening-the-chip-directly-detects-55--more-than-one-process-per-camera-2026-11-18)
+- [87. THE WHOLE VISION GRAPH AT ONCE — both detectors, the lock ladder and flow live in one process: forward at the camera's rate, downward 32 Hz, 2.7 GB free (2026-11-18)](#87-the-whole-vision-graph-at-once--both-detectors-the-lock-ladder-and-flow-live-in-one-process-forward-at-the-cameras-rate-downward-32-hz-27-gb-free-2026-11-18)
 <!-- contents:end -->
 
 ---
@@ -8010,4 +8011,68 @@ remove. The composed launcher now tells it (`attach_camera`). And the
 downward process spends 42 % of its samples decoding 210 frames a second and
 14 % publishing `image_raw` at 205 Hz while its detector takes 43: that is
 the next cost to cut.
+
+## 87. THE WHOLE VISION GRAPH AT ONCE — both detectors, the lock ladder and flow live in one process: forward at the camera's rate, downward 32 Hz, 2.7 GB free (2026-11-18)
+
+A mission uses every sensor at once, so the question is not what one detector
+does alone but whether the whole graph holds together: both cameras
+detecting, the lock ladder with XFeat on the chip, the trackers, and flow.
+The mission language allowed one live detector at a time, citing "the OOM
+config" and a chip that holds one model; the lock ladder and flow were off in
+the vision launch to save CPU. None of those had been measured on this
+arrangement.
+
+**Bars, written before the run** (Kutum, `vision_pi.launch.py paused:=false
+lock:=true flow:=true medium:=air pool_depth_m:=1.0`, one process opening the
+chip directly, both real cameras; the board's depth and gyro stood in by a
+bench publisher, depth 0 m and a stationary gyro, because no board was
+attached):
+
+| bar | what would falsify it |
+|---|---|
+| forward | detections under 25 Hz |
+| downward | detections under 25 Hz |
+| memory | free memory under 1 GB, or the vision processes growing 50 MB in 3 min |
+| alive | any process dies |
+| flow | flow publishing under 20 Hz |
+
+**Measured**, three windows of 50 s after 40 s of start-up:
+
+| | window 1 | window 2 | window 3 |
+|---|---|---|---|
+| forward detections | 29.8 Hz | 29.8 Hz | 29.7 Hz |
+| downward detections | 32.4 Hz | 32.7 Hz | 33.1 Hz |
+| MemAvailable | 2742 MB | 2727 MB | 2705 MB |
+
+Forward runs at the camera's own 30 fps. Vision RSS grew 23 MB in one
+process and not in the others; nothing died. **The four first bars hold. The
+flow bar is the wrong bar**: flow emits one interval per 8 px of floor
+displacement or per 0.75 s, so a stationary camera publishes about 1.3 a
+second and refuses each ("0.07 px total, below the 0.5 px noise floor"). Its
+rate is a measurement of motion, not of health. Without the bench gyro it
+refused every interval for "no gyro sample", which is what it should do with
+no board.
+
+**What it costs.** `flow_node` used 1.5 to 1.7 cores. py-spy: 44 % of its
+samples in the executor taking 210 raw frames a second off DDS (about
+145 MB/s), 26 % in the estimator. Publishing `image_raw` at 60 Hz instead of
+210 cut flow to 0.9 cores and raised the downward detector to 40.1 Hz; at
+100 Hz the gain was small. **Not shipped**: flow tracks frame to anchor and
+re-anchors before 25 px between frames, so the publish rate caps the speed it
+can follow at 25 x rate / f x height, with f about 741 px. At 60 Hz that is
+0.6 m/s at 0.3 m above the floor, where a bin approach happens. The fix that
+costs no speed is composing flow into the camera process, as the detector and
+the ladder already are.
+
+**Decisions.** The lock ladder and flow are on by default in both launches.
+`use_both_cameras()` lets a mission run both detectors when a task needs both
+views, and one detector stays the default because one model alone gets the
+downward rate to 58.6 Hz (section 86). **Reversal:** a mission graph on the
+vehicle, with the board, in which either detector falls under 25 Hz or free
+memory under 1 GB; rerun this table.
+
+**Not settled.** This is the bench: no board, no motion, room light. The
+fused graph (IMU, depth, flow velocity and fixes into localization) needs the
+board on Kutum, and flow's accuracy at speed needs a moving truth (the
+downward-mode test).
 
