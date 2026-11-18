@@ -60,7 +60,7 @@ src/mongla_vision/mongla_vision/
     roboflow_tracker.py   # Roboflow `trackers` backend (OC-SORT / ByteTrack) behind the Tracker ABC.
     tracker.py            # Tracker ABC and TrackedDetection dataclass.
   utils/
-    check_pipeline.py     # vision_check -- standalone health probe for the perception pipeline.
+    check_pipeline.py     # vision_check -- grade the vision graph a mission runs on, before it runs.
     check_thrust.py       # vision_thrust_check -- end-to-end smoke test: detection -> the demand the loop would send.
     check_tracker.py      # tracker_check -- health probe for the tracking pipeline.
     display_node.py       # vision_display -- smooth OpenCV viewer for the perception pipeline.
@@ -456,7 +456,7 @@ The camera name must match a running `camera_node` profile — verify with
 Verifying the chain before pool day:
 
 ```
-ros2 run mongla_vision vision_check                 # detector publishing?
+ros2 run mongla_vision vision_check                 # the whole mission graph graded
 ros2 run mongla_vision vision_thrust_check          # detection -> demand, disarmed?
 ros2 run mongla_planner mission demo_find_person    # full mission rehearsal
 ```
