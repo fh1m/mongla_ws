@@ -352,6 +352,28 @@ def test_a_detector_that_WAS_fed_directly_does_not_subscribe():
     assert det._direct is True
 
 
+def test_a_PAUSED_detector_with_a_composed_camera_never_falls_back():
+    """The vehicle launch starts detectors paused, and a paused detector asks
+    for no frames -- so silence is not evidence of a missing camera. The
+    composed launcher says so explicitly (`attach_camera`); before it did,
+    every paused start moved to the topic path for good (2026-11-18)."""
+    calls = {'subscribed': 0}
+    det = object.__new__(DN.DetectorNode)
+    det._direct = True
+    det._fed_direct = False         # paused: nothing handed over yet
+    det._sub = None
+    det._ns_in = '/x'
+    det._fallback_timer = type('T', (), {'cancel': lambda self: None})()
+    det.create_subscription = lambda *_a, **_k: calls.__setitem__(
+        'subscribed', calls['subscribed'] + 1)
+    det.get_logger = lambda: type('L', (), {'warn': lambda _s, m: None})()
+
+    det.attach_camera()
+    det._check_direct_feed()
+    assert calls['subscribed'] == 0
+    assert det._direct is True
+
+
 def test_submit_frame_records_that_the_direct_path_is_alive():
     """The flag the fallback reads. If `submit_frame` did not set it, a
     perfectly healthy composed detector would add a second, redundant

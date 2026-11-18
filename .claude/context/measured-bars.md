@@ -149,6 +149,7 @@ is how `recommend()` happened.
 - [81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11)](#81-the-rtc-is-not-a-control-clock--one-second-steps-read-with-tens-of-milliseconds-of-jitter-2026-11-11)
 - [84. THE OPERATOR'S VIDEO IS THE CAMERA'S OWN JPEG — 0.062 ms a frame, boxes drawn by the browser (2026-11-12)](#84-the-operators-video-is-the-cameras-own-jpeg--0062-ms-a-frame-boxes-drawn-by-the-browser-2026-11-12)
 - [85. GLOBAL-SHUTTER EXPOSURE AT SPEED — dynamic framerate on keeps 210 fps and a picture; off is black (2026-11-18)](#85-global-shutter-exposure-at-speed--dynamic-framerate-on-keeps-210-fps-and-a-picture-off-is-black-2026-11-18)
+- [86. THE SERVICE COSTS 6 MS AN INFERENCE — one vision process opening the chip directly detects 55 % more than one process per camera (2026-11-18)](#86-the-service-costs-6-ms-an-inference--one-vision-process-opening-the-chip-directly-detects-55--more-than-one-process-per-camera-2026-11-18)
 <!-- contents:end -->
 
 ---
@@ -7795,6 +7796,10 @@ directory, and run from there.
 | through the service, two processes at once | 20.928 ms each | 20.995 ms | 47.8 Hz each |
 | direct, two processes at once | the second fails with error 74 | | |
 
+**RETRACTED 2026-11-18 (section 86):** on the installed service one
+inference in flight takes 16.5 ms against 10.4 ms direct; the row above is
+not reproducible and its script is not in the repository.
+
 Both bars hold: **+0.012 ms** a frame at the median, +0.04 ms at p99, and two
 processes split the chip evenly with a sum of 95.6 Hz. An idle service does
 not hold the chip: a direct process ran at full rate beside it. The daemon's
@@ -7937,4 +7942,72 @@ dynamic-framerate control and no UVC trigger (`bTriggerSupport` 0).
 **Not settled.** Pool light, not room light. Underwater the downward camera
 looks at a floor 1 to 3 m away; whether gain alone keeps texture above the
 noise floor for flow is a water-day measurement.
+
+## 86. THE SERVICE COSTS 6 MS AN INFERENCE — one vision process opening the chip directly detects 55 % more than one process per camera (2026-11-18)
+
+The owner's direction was to use the chip's ability to serve several
+processes, and section 80 said it was free: "+0.012 ms a frame". So the vision
+stack was split into one process per camera, each opening the chip through
+`hailort_service`. Measured here on Kutum, with the real cameras and models,
+it is not free, and section 80's cost row is **retracted**.
+
+**Bars, written before the runs:**
+
+| bar | what would falsify it |
+|---|---|
+| split | one process per camera lowers the combined detection rate of the two detectors below one process |
+| direct | one process opening the chip directly does not raise the downward rate over the service, with forward paused or with both live |
+
+**The chip alone** (`gate_sharks`, one inference in flight, 200 timed after
+20 discarded, the vision stack stopped; `hailortcli` cannot reach the service
+because the packaged CLI has no client, so the bench is the stack's own
+`HailoDetector` and the raw `InferModel` API):
+
+| in flight | through the service | direct |
+|---|---|---|
+| 1 | 59.9 Hz, submit to result 16.48 ms | 95.6 Hz, 10.44 ms |
+| 2 | 88.4 Hz, 22.48 ms | 95.4 Hz, 20.90 ms |
+| 3 | 92.9 Hz, 31.95 ms | 95.2 Hz, 31.35 ms |
+
+The service adds a round trip of about 6 ms to each request. Only queueing
+hides it, and queueing ages the box a controller steers on, so a detector
+(one frame in flight, the newest) pays all of it. The same happens with the
+daemon run by hand, unconfined, on another socket (16.43 ms), so it is the
+service, not the systemd confinement. Both models at once share the chip
+evenly either way: 44.2 + 44.2 Hz in one process, 44.6 + 44.6 Hz in two.
+Section 80's script is not in the repository, so how it measured 10.464 ms
+through the service cannot be rechecked; `tools/bench/hailo_latency.py`
+opens a plain `VDevice` and never used it.
+
+**The vision stack** (`vision_pi.launch.py paused:=false`, both cameras: the
+Fantech forward at 30 fps, the global-shutter downward at 210 fps; 15 s
+counted after 3 s of discovery, two runs each):
+
+| arrangement | forward | downward | combined | forward paused: downward |
+|---|---|---|---|---|
+| one process, through the service | 16.4 Hz | 30.8 Hz | 47.2 Hz | not run |
+| one process per camera, through the service | 16.4 Hz | 30.2 Hz | 46.6 Hz | 39.2 Hz |
+| one process, chip opened directly | 30.1 Hz | 42.5 Hz | 72.6 Hz | 58.6 Hz |
+
+The first two rows are means of three runs each (single 47.1, 47.0, 47.5;
+split 46.5, 46.2, 46.7). **Split fails its bar**, narrowly but in every run.
+**Direct passes**: +55 % combined, +50 % in the mission case where one
+detector runs, and the forward detector now takes every frame the camera
+makes. At 16 Hz it had been taking every second frame: a cycle just over the
+camera's 33 ms period misses each frame by a little.
+
+**Decision.** `split` defaults to false, and the single process opens the
+chip directly (`MONGLA_HAILO_PREFER=direct`, set by the launch); a direct open
+that another process has taken goes through the service instead.
+`split:=true` stays for the day a third process needs the chip. **Reversal:**
+a HailoRT release whose service round trip is under 1 ms at one in flight,
+or a vision process the single one cannot hold; rerun both tables.
+
+**Also found on the way.** A detector started paused never asked for a
+frame, so after 2 s the composed detector concluded it had no camera and
+subscribed to the image topic for good, paying the hop composition exists to
+remove. The composed launcher now tells it (`attach_camera`). And the
+downward process spends 42 % of its samples decoding 210 frames a second and
+14 % publishing `image_raw` at 205 Hz while its detector takes 43: that is
+the next cost to cut.
 

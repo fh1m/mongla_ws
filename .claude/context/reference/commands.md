@@ -323,6 +323,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `fwd_publish_hz` | `40` |  |
 | `dwn_publish_hz` | `0` |  |
 | `replay` | `false` | Consume image_raw from a RECORDED BAG instead of a camera. Build no camera, keep every detector, and let `ros2 bag play` drive the graph. This is how a recorded session becomes a regression fixture: the detector, tracker, lock ladder and checkpoint bank all run for real, on input that never changes. |
+| `split` | `false` | One vision process per camera, through the HailoRT service. Off: one process, the chip opened directly, 6 ms faster an inference (measured-bars 86). |
 | `fwd_device_path` | `` |  |
 | `dwn_device_path` | `` |  |
 
@@ -467,12 +468,13 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `invert_depth` | `True` |
 | `use_tracks` | `False` |
 
-**`mongla_vision/detector_dual_node.py`** — 3 parameters
+**`mongla_vision/detector_dual_node.py`** — 4 parameters
 
 | parameter | default |
 |---|---|
 | `device` | `-1` |
 | `replay` | `False` |
+| `cameras` | `'forward` |
 | `lock` | `False` |
 
 **`mongla_vision/detector_node.py`** — 27 parameters

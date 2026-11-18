@@ -16,7 +16,7 @@ import pytest
 from mongla_vision import detector_dual_node as dn
 
 
-def _run(camera_factory, replay=False, lock=False):
+def _run(camera_factory, replay=False, lock=False, cameras='forward,downward'):
     """Drive main() with fake nodes; return (launcher, built camera names).
 
     `replay` must be set explicitly. A bare MagicMock returns a truthy
@@ -36,7 +36,8 @@ def _run(camera_factory, replay=False, lock=False):
     launcher = MagicMock()
     launcher.get_logger.return_value = MagicMock()
     launcher.get_parameter.side_effect = lambda name: MagicMock(
-        value={'replay': replay, 'lock': lock}.get(name, MagicMock()))
+        value={'replay': replay, 'lock': lock,
+               'cameras': cameras}.get(name, MagicMock()))
     with patch.object(dn, 'rclpy'), \
          patch.object(dn, '_Launcher', return_value=launcher), \
          patch.object(dn, 'DetectorNode', MagicMock()), \
@@ -159,3 +160,11 @@ def test_only_the_lock_values_the_launch_sets_are_forwarded():
             rclpy.shutdown()
     assert fwd == {'camera': 'forward', 'act_conf': 0.6, 'target_class': 'gate'}
     assert dwn == {'camera': 'downward', 'act_conf': 0.6, 'target_class': 'bin'}
+
+
+def test_a_process_per_camera_builds_only_its_own_camera():
+    """`cameras` selects what this process holds, so the launch can run one
+    process per camera through the HailoRT service."""
+    launcher, built, code = _run(lambda role: MagicMock(), cameras='downward')
+    assert built == ['downward'], built
+    assert code is None

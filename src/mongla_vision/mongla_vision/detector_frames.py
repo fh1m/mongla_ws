@@ -50,6 +50,20 @@ class DetectorFramesMixin:
         return (self._want.is_set()
                 and not self.get_parameter('paused').value)
 
+    def attach_camera(self) -> None:
+        """A camera in this process feeds this detector by reference.
+
+        The composed launcher calls it when it builds the camera, so the
+        fallback below never has to guess from silence. A paused detector
+        asks for no frames, and silence then read as "no camera": every run
+        that started paused (the vehicle launch's default) subscribed to the
+        image topic for good and paid the hop this composition removes.
+        """
+        self._camera_attached = True
+        timer = getattr(self, '_fallback_timer', None)
+        if timer is not None:
+            timer.cancel()
+
     def _check_direct_feed(self) -> None:
         """Subscribe after all, if nothing was handed to us by reference.
 
@@ -59,7 +73,8 @@ class DetectorFramesMixin:
         cheap enough that a slow-starting camera does not trip it.
         """
         self._fallback_timer.cancel()
-        if self._fed_direct or self._sub is not None:
+        if (self._fed_direct or getattr(self, '_camera_attached', False)
+                or self._sub is not None):
             return
         self.get_logger().warn(
             f'[DET  ] direct_feed is ON but no frame arrived by reference in '

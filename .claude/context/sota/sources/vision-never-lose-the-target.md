@@ -785,7 +785,7 @@ direct Python reference." Anyone reading the ROS 2 composition literature will r
 and both detectors in one process, because the chip allows **one VDevice per process** — the
 alternatives were measured and each fails: two processes →
 `HAILO_OUT_OF_PHYSICAL_DEVICES (74)`; `multi_process_service` + scheduler → `InvalidOperation`
-(the `hailort_service` daemon is not installed); one process with a ROUND_ROBIN scheduler and two
+(the `hailort_service` daemon was not installed then; it is now, and costs ~6 ms an inference, measured-bars 86); one process with a ROUND_ROBIN scheduler and two
 graphs → **SIGSEGV**. One process, one VDevice, both graphs taking turns → **98.2 Hz**, and
 **37.5 Hz per pair** when both models alternate every frame.
 
