@@ -50,7 +50,8 @@ replaces set `CAP_PROP_BUFFERSIZE = 1` with the comment "avoid stale frames".
 Measured under this class at 2/3/4/6/8 buffers: 26.4-26.6 ms median and
 35.3-35.5 ms p95, flat within noise, 1 dropped frame in ~400 at every setting.
 The pump is what fixes staleness; the buffer count only decides how much slack
-there is before the driver starts dropping. Four is plenty.
+there is before the driver starts dropping -- which matters once the pump
+shares a process with a detector (`_NBUF`).
 
 The timestamp is the other half
 -------------------------------
@@ -270,8 +271,6 @@ class V4L2MailboxCamera(Camera):
 
     source_kind = 'v4l2_mailbox'
 
-    # Four buffers. Measured flat from 2 to 8 under this design (26.4-26.6 ms
-    # median), so this is slack for a scheduling hiccup, not a tuning knob.
     # Buffers are slack for the pump, and 4 was not enough.
     #
     # Round 30 measured buffer count as irrelevant to latency (26.4-26.6 ms
