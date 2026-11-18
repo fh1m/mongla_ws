@@ -192,6 +192,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `rung_independence.py` | Do the ladder's two carried rungs fail TOGETHER? Redundancy of two, or of one? The question nobody asked. |
 | `tau_from_scale.py` | Rank the four scale sources against a KNOWN-CONSTANT-SPEED approach. |
 | `tracker_ab.py` | Which tracker closes more gaps on REAL competition footage? The question this settles, with numbers rather than an argument: the coast layer exists to bridge detection gaps, and nobody has ever ... |
+| `truth/` | Hand-labelled truth for the studies: when a target is really in view, labelled by eye from the frames and independently of any model, so a tracker or detector can be scored rather than compared with ... |
 | `weak_box_locality.py` | Are the weak boxes inside a gap WHERE THE TARGET WAS, or scattered noise? `gap_recovery_potential.py` showed every gap contains weak detections. |
 | `weak_box_persistence.py` | Does sub-threshold evidence persist WHILE THE TARGET IS STILL IN SIGHT? Track-before-detect postpones the threshold: a target too dim to clear a per-frame bar is accumulated across frames until the ... |
 | `xfeat_finetune_score.py` | Did fine-tuning on our water actually help? Scored on a HELD-OUT venue. |

@@ -151,6 +151,7 @@ is how `recommend()` happened.
 - [85. GLOBAL-SHUTTER EXPOSURE AT SPEED — dynamic framerate on keeps 210 fps and a picture; off is black (2026-11-18)](#85-global-shutter-exposure-at-speed--dynamic-framerate-on-keeps-210-fps-and-a-picture-off-is-black-2026-11-18)
 - [86. THE SERVICE COSTS 6 MS AN INFERENCE — one vision process opening the chip directly detects 55 % more than one process per camera (2026-11-18)](#86-the-service-costs-6-ms-an-inference--one-vision-process-opening-the-chip-directly-detects-55--more-than-one-process-per-camera-2026-11-18)
 - [87. THE WHOLE VISION GRAPH AT ONCE — both detectors, the lock ladder and flow live in one process: forward at the camera's rate, downward 32 Hz, 2.7 GB free (2026-11-18)](#87-the-whole-vision-graph-at-once--both-detectors-the-lock-ladder-and-flow-live-in-one-process-forward-at-the-cameras-rate-downward-32-hz-27-gb-free-2026-11-18)
+- [88. TRACKERS AGAINST TRUTH — the shipped OC-SORT adds 2.5 points of recall and halves boxes on an absent gate; the gate model loses 70 % of its recall in another pool (2026-11-18)](#88-trackers-against-truth--the-shipped-oc-sort-adds-25-points-of-recall-and-halves-boxes-on-an-absent-gate-the-gate-model-loses-70--of-its-recall-in-another-pool-2026-11-18)
 <!-- contents:end -->
 
 ---
@@ -8076,3 +8077,45 @@ fused graph (IMU, depth, flow velocity and fixes into localization) needs the
 board on Kutum, and flow's accuracy at speed needs a moving truth (the
 downward-mode test).
 
+
+## 88. TRACKERS AGAINST TRUTH — the shipped OC-SORT adds 2.5 points of recall and halves boxes on an absent gate; the gate model loses 70 % of its recall in another pool (2026-11-18)
+
+Tracker presence (frames with a box) cannot rank trackers: a coasted box
+counts, so a tracker that keeps guessing after the target leaves scores
+higher without being more right. And until B-114 the study ran every
+Cockpit clip on its container's nominal 1000 fps, 31x the real rate.
+
+**Bars, written before the run.** A tracker is worth changing to only if, at
+the windows `tracker_node` publishes (min_hits 1, a predicted box dropped
+1.5 s after its last real one), it raises recall on frames where the gate is
+truly in view by 10 points or more while keeping boxes on absent frames at or
+below the detector's own rate. Truth is hand-labelled from 1 s contact sheets
+by eye, independently of any model: `tools/studies/truth/gate_mkv.json`
+(the gate's bar or a post visible; the sign alone does not count; six absent
+spans, 0.5 s margin unscored).
+
+**Method.** `tools/studies/tracker_ab.py --compare --truth
+tools/studies/truth/gate_mkv.json`, on `~/Downloads/gate.mkv` (Cockpit
+recording, 6142 frames over 191.8 s at 32 fps), `gate_sharks.pt` at conf
+0.15, 4915 in-view and 839 absent frames scored.
+
+| arm | recall in view | box while absent |
+|---|---|---|
+| detector only | 29.6 % | 6.4 % |
+| **OC-SORT as `tracker_node` publishes (shipped)** | **32.1 %** | **3.7 %** |
+| ByteTrack at the same windows | 45.5 % | 21.6 % |
+| OC-SORT, 5 s coast unfiltered | 51.0 % | 21.0 % |
+| ByteTrack, 5 s coast unfiltered | 61.9 % | 48.7 % |
+
+**Verdict.** OC-SORT stays. ByteTrack clears the recall bar (+15.9) and fails
+the absent bar by 3.4x: on a fifth of the frames with no gate it hands control
+a box. The ranking by presence alone would have chosen it.
+
+**The lever is the detector, not the tracker.** The gate is in view on 85 % of
+this clip and the model finds it on 30 %, in 12 s windows from 0 % to 65 %.
+The same model on the 2025 Mirpur `gate.mkv` (640x480, the clip its other
+ledger figures come from, including the 900 of 900 frames cited for
+`presence.py`) finds it on **900 of 900** frames at p50 **0.92**. Two clips
+share the name `gate.mkv`; a figure citing it must say which. A model trained
+on one pool does not carry to another, which is the case for choosing and
+checking models on the day against that day's water (CLAUDE.md §9).
