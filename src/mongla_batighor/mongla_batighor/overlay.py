@@ -153,6 +153,52 @@ def _text(stamp, x, y, words, rgba, size=LABEL_PX):
         text=words, font_size=size, text_color=_color(rgba), background_color=_TEXT_BG)
 
 
+# Lichtblick draws annotation text monospace; one character is about 0.6 of
+# the font size wide (measured off a cockpit shot: 14 characters, 145 px at 18).
+CHAR_EM = 0.6
+
+
+class _Labels:
+    """Places each label in the first free slot so no two cover each other.
+
+    A label's position is its baseline's left end. `want` is the slots in
+    order of preference; the first that overlaps nothing placed and stays on
+    the picture wins, else the first, clamped. Placing nothing would hide a
+    detection, which is worse than a touch."""
+
+    def __init__(self, stamp, size):
+        self.stamp, self.size, self.taken = stamp, size, []
+
+    def _rect(self, x, y, words, px):
+        w = len(words) * px * CHAR_EM
+        if self.size:
+            x = min(x, self.size[0] - w)
+        x = max(x, 0.0)
+        y = max(y, px)
+        if self.size:
+            y = min(y, float(self.size[1]))
+        return (x, y - px, x + w, y)
+
+    def _free(self, r):
+        return all(r[2] <= o[0] or o[2] <= r[0] or r[3] <= o[1] or o[3] <= r[1]
+                   for o in self.taken)
+
+    def place(self, want, words, rgba, px=LABEL_PX):
+        rects = [self._rect(x, y, words, px) for x, y in want]
+        r = next((r for r in rects if self._free(r)), rects[0])
+        self.taken.append(r)
+        return _text(self.stamp, r[0], r[3], words, rgba, px)
+
+
+def _slots(b, px):
+    """Above the box and higher, then below and lower, then just inside."""
+    x1, y1, _, y2 = b[:4]
+    step = px + 2
+    return ([(x1, y1 - 2 - k * step) for k in range(3)]
+            + [(x1, y2 + px + 2 + k * step) for k in range(3)]
+            + [(x1 + 3, y1 + px + 3)])
+
+
 def hud(cam, model, size, arrivals, latency_s):
     """What the camera and detector are doing, in two lines over the picture.
 
@@ -191,6 +237,12 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     the matcher's pixels and are scaled by `size`, the camera's (width, height).
     """
     out = ImageAnnotations(timestamp=stamp)
+    labels = _Labels(stamp, size)
+    # Bottom left, under the labels a box near the top carries; top left
+    # until the camera has said its size. Placed first so no label covers it.
+    base = (size[1] - 8 - (len(hud) - 1) * (LABEL_PX + 6)) if size else LABEL_PX + 6
+    hud_texts = [labels.place([(8.0, base + k * (LABEL_PX + 6))], line, GLASS)
+                 for k, line in enumerate(hud)]
     dets = [_box(d) for d in (detections.detections if detections else [])]
     # `candidates` carries the detections too (detector_node); drawn again
     # beneath them each box showed twice.
@@ -221,41 +273,47 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
             timestamp=stamp, type=PointsAnnotation.POINTS,
             points=[Point2(x=p[2 * i] * sx, y=p[2 * i + 1] * sy) for i in range(len(p) // 2)],
             outline_color=_color(rgba), thickness=th))
-    # Below the floor first, so the detections are drawn over them.
+    # Boxes below the floor are drawn first, so the detections lie over them.
+    # Labels are placed in order of importance (detections, then the lock, then
+    # the weak and coasting ones), so the most important get their first slot.
+    small = LABEL_PX * 0.8
+    texts = []
+    for b in dets:
+        rgba = class_colour(b[4])
+        ids = ' '.join(f'#{t}' for t in carried(b))
+        words = ' '.join(filter(None, (b[4], f'{b[5]:.2f}' if b[5] is not None else '', ids)))
+        texts.append(labels.place(_slots(b, LABEL_PX), words, rgba))
+    if lock is not None:
+        for det in lock.detections:
+            x1, y1, x2, y2, label, score = _box(det)
+            rgba = RUNG.get(label, LOCK[0])
+            # What it holds, which rung holds it, and its authority; inside the
+            # box first, where the detector's label above it is not.
+            auth = f'{score:.2f}' if score is not None and det.id else ''
+            words = ' '.join(filter(None, ('LOCK', det.id, label, auth)))
+            texts.append(labels.place([(x1 + 3, y1 + LABEL_PX + 3)] + _slots(_box(det), LABEL_PX),
+                                      words, rgba))
     for b in weak:
         rgba = class_colour(b[4], 0.55)
         out.points.append(_loop(stamp, _corners(b), rgba, CANDIDATE[1]))
         ids = ' '.join(f'#{t}' for t in carried(b))
         words = ' '.join(filter(None, (ids, b[4], 'weak', f'{b[5]:.2f}' if b[5] is not None else '')))
-        out.texts.append(_text(stamp, b[0], b[3] + LABEL_PX + 2, words, rgba, LABEL_PX * 0.8))
+        texts.append(labels.place(_slots(b, small)[3:] + _slots(b, small)[:3], words, rgba, small))
     for b in dets:
-        rgba = class_colour(b[4])
-        out.points.append(_loop(stamp, _corners(b), rgba, 2.5))
-        ids = ' '.join(f'#{t}' for t in carried(b))
-        words = ' '.join(filter(None, (b[4], f'{b[5]:.2f}' if b[5] is not None else '', ids)))
-        out.texts.append(_text(stamp, b[0], b[1] - 2, words, rgba))
+        out.points.append(_loop(stamp, _corners(b), class_colour(b[4]), 2.5))
     for tid, t in trks:
         if any(iou(t, b) >= SAME_THING_IOU for b in dets + weak):
             continue                          # named on the box it carries
         rgba, th = COASTING
         out.points.append(_loop(stamp, _corners(t), rgba, th))
         words = ' '.join(filter(None, (f'#{tid}' if tid else '', t[4], 'coasting')))
-        out.texts.append(_text(stamp, t[0], t[3] + LABEL_PX + 2, words, rgba, LABEL_PX * 0.8))
+        texts.append(labels.place(_slots(t, small)[3:] + _slots(t, small)[:3], words, rgba, small))
     if lock is not None:
         for det in lock.detections:
-            x1, y1, x2, y2, label, score = _box(det)
-            rgba = RUNG.get(label, LOCK[0])
-            out.points.append(_loop(stamp, _corners((x1, y1, x2, y2)), rgba, LOCK[1]))
-            # What it holds, which rung holds it, and its authority; inside the
-            # box, so it never covers the detector's label above it.
-            auth = f'{score:.2f}' if score is not None and det.id else ''
-            words = ' '.join(filter(None, ('LOCK', det.id, label, auth)))
-            out.texts.append(_text(stamp, x1 + 3, y1 + LABEL_PX + 3, words, rgba))
-    # Bottom left, under the labels a box near the top carries; top left
-    # until the camera has said its size.
-    base = (size[1] - 8 - (len(hud) - 1) * (LABEL_PX + 6)) if size else LABEL_PX + 6
-    for k, line in enumerate(hud):
-        out.texts.append(_text(stamp, 8.0, base + k * (LABEL_PX + 6), line, GLASS))
+            x1, y1, x2, y2, label, _ = _box(det)
+            out.points.append(_loop(stamp, _corners((x1, y1, x2, y2)),
+                                    RUNG.get(label, LOCK[0]), LOCK[1]))
+    out.texts.extend(texts + hud_texts)
     return out
 
 

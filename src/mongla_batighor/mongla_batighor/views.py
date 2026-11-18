@@ -41,6 +41,15 @@ def series(path: str, label: str, receive: bool = False) -> dict:
 
 
 LEGEND_PX = 190
+# A legend label beyond this is cut by the legend (desktop app, 2026-11-13);
+# the panel's title carries what the plot is, the label only which line.
+LABEL_CHARS = 13
+# A plot's or state panel's title, where its view name is not one.
+TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'anchor (XFeat)',
+          'align': 'pixel error', 'ladder': 'lock ladder', 'calibration': 'velocity scale',
+          'quality': 'flow quality and heights', 'vel': 'velocity',
+          'floor': 'heights (depth negative down)', 'power': 'battery', 'rates': 'body rates',
+          'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops'}
 # The last minute, following the newest sample. Unset, the axis spans the whole
 # connection, and a panel opened later drew its data in the right-hand sliver
 # (desktop app, 2026-11-12).
@@ -139,6 +148,12 @@ class View:
         kind, cfg = panel
         pid = f'{kind}!{name}'
         assert pid not in self.config, pid
+        if kind in ('Plot', 'StateTransitions'):
+            # Untitled, every one read "Plot", and the legend had to say what
+            # the plot was: "forward authority" cut to "forward author". The
+            # key is Lichtblick's own: Foxglove's `foxglovePanelTitle` is
+            # ignored by this build (read off its bundle, 2026-11-18).
+            cfg = {**cfg, 'lichtblickPanelTitle': TITLES.get(name, name.replace('_', ' '))}
         self.config[pid] = cfg
         return pid
 
@@ -194,27 +209,26 @@ def vision(v: View):
     """Detection and tracking in depth: every rung, its authority, the pose solved."""
     cams = [(3, v(c, camera(c, synced=True))) for c in CAMERAS]
     fwd, dwn = f'{V}/forward', f'{V}/downward'
-    # How far each detection is, when depth_estimation runs (off by default).
-    depth = row(v('range_map', image(f'{fwd}/vis_range_map')), v('range', raw(f'{fwd}/vis_range')))
     # Both cameras' rungs and stages, side by side: at a sixth of the column
     # the instrument scrolled and hid the downward camera.
     right = col(
         (6, v('vision', instrument('Vision'))),
         (3, v('ladder', states(*_ladder_lines(True)))),
-        (2, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', f'{c} authority')
+        (2, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c)
                                   for c in CAMERAS)))),
         # One unit per plot (test_views): metres, degrees and pixels on one
         # axis flattened all but the largest.
         (2, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
                 v('pose', plot(series(f'{fwd}/target_pose_fused.bearing_deg', 'bearing deg'),
-                               series(f'{fwd}/target_pose_fused.yaw_deg', 'target yaw deg'))))),
-        (2, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'anchor rotation'),
-                             series(f'{dwn}/anchor_decomposition.vector.y', 'anchor scale'),
-                             series(f'{dwn}/anchor_decomposition.vector.z', 'anchor range m')))),
-        (2, v('align', align('align err x px', 'align err y px',
-                             series(f'{fwd}/target_pose_fused.reproj_px', 'reprojection px')))))
-    # A strip, not a third of the column: depth_estimation is off by default.
-    return row((55, col(*cams, (1, depth))), (45, right))
+                               series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),
+        (2, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'rotation'),
+                             series(f'{dwn}/anchor_decomposition.vector.y', 'scale'),
+                             series(f'{dwn}/anchor_decomposition.vector.z', 'range m')))),
+        (2, v('align', align('align x px', 'align y px',
+                             series(f'{fwd}/target_pose_fused.reproj_px', 'reproj px')))))
+    # No range-map strip: the vehicle never starts depth_estimation_node
+    # (NOT_SHOWN says why).
+    return row((55, col(*cams)), (45, right))
 
 
 def flow(v: View):
@@ -228,13 +242,13 @@ def flow(v: View):
                                series('/mongla/odom.twist.twist.linear.x', 'filter vx m/s'),
                                series('/mongla/odom.twist.twist.linear.y', 'filter vy m/s'))),
             v('distance', plot(series(f'{d}/distance_traveled.data', 'distance m', True))),
-            v('calibration', states(series(f'{d}/flow_calibration.data', 'velocity scale from',
+            v('calibration', states(series(f'{d}/flow_calibration.data', 'scale from',
                                            True))),
             # Quality and heights read 0 to a few; the track count reads to
             # ~160, and on one axis it flattened them onto the floor.
             v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
                               series(f'{d}/distance_debug.data[1]', 'height m', True),
-                              series(f'{d}/floor_height.range', 'floor height m'))),
+                              series(f'{d}/floor_height.range', 'floor m'))),
             v('tracks', plot(series(f'{d}/distance_debug.data[2]', 'tracks', True))))))
 
 
@@ -261,17 +275,19 @@ def localization(v: View):
                                          True),
                                   series(f'{d}/floor_grid_deg.heading_deg', 'floor grid'),
                                   series(f'{d}/lane_heading_deg.heading_deg', 'lane line')))),
-            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor height m'),
-                                series('/mongla/state.depth_m', 'depth m (negative down)')))))))
+            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor m'),
+                                series('/mongla/state.depth_m', 'depth m')))))))
 
 
 def thrust(v: View):
     """The chain's far end: what was demanded, what the ESCs turned, what it cost."""
     # The ESC rpm is the Thrust instrument's bars, one per ESC the board reports.
     return row(
-        (50, col((3, v('thrust', instrument('Thrust'))),
-                 (2, v('demand', plot(series('/mongla/demand.vector.x', 'demand surge'),
-                                      series('/mongla/demand.vector.y', 'demand sway')))))),
+        # The instrument is a few lines until the board announces its ESCs;
+        # at three fifths it was mostly empty above a squeezed demand plot.
+        (50, col((2, v('thrust', instrument('Thrust'))),
+                 (3, v('demand', plot(series('/mongla/demand.vector.x', 'surge'),
+                                      series('/mongla/demand.vector.y', 'sway')))))),
         (50, col(v('power', plot(series('/mongla/state.battery_voltage', 'PM1 V'))),
                  v('rates', plot(series('/mongla/imu.angular_velocity.x', 'roll rate'),
                                  series('/mongla/imu.angular_velocity.y', 'pitch rate'),
@@ -300,9 +316,9 @@ def board_link(v: View):
     return row(
         (55, col(v('bytes', plot(series('/mongla/board_link.bytes_per_s', 'bytes/s'),
                                  series('/mongla/board_link.capacity_bytes_per_s',
-                                        'the line, 115200 8N1'))),
-                 v('drops', plot(series('/mongla/board_link.board_drop_pct', 'board drop %'),
-                                 series('/mongla/board_link.board_errors', 'board errors'))))),
+                                        'capacity'))),
+                 v('drops', plot(series('/mongla/board_link.board_drop_pct', 'drop %'),
+                                 series('/mongla/board_link.board_errors', 'errors'))))),
         (45, v('link', instrument('Link'))))
 
 
@@ -310,7 +326,7 @@ def bins_downward(v: View):
     """Aligning over a target below: the floor with boxes, the detections, the error."""
     return row((60, v('down', camera('downward', synced=True))),
                (40, col(v('dets', raw(f'{V}/downward/detections')),
-                        v('align', align('err_x_px', 'err_y_px')))))
+                        v('align', align('align x px', 'align y px')))))
 
 
 def calibrate(v: View):
@@ -339,6 +355,10 @@ NOT_SHOWN = {
     'video_seek_frame': "a replay command from the display node",
     'video_seek_rel': "a replay command from the display node",
     'video_speed': "a replay command from the display node",
+    'vis_range': 'depth_estimation_node: only vision.launch (vision_stack:=generic, the dev '
+                 'box) starts it; vision_pi, the vehicle, does not, so a tile only read '
+                 '"topic does not exist"',
+    'vis_range_map': 'the same node as vis_range, the same reason',
 }
 
 VIEWS = {f.__name__: f for f in (cockpit, vision, flow, localization, thrust, board_health,

@@ -9,7 +9,7 @@
         },
         {
           "value": "/mongla/board_link.capacity_bytes_per_s",
-          "label": "the line, 115200 8N1",
+          "label": "capacity",
           "enabled": true
         }
       ],
@@ -18,18 +18,19 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "bytes per second"
     },
     "Plot!drops": {
       "paths": [
         {
           "value": "/mongla/board_link.board_drop_pct",
-          "label": "board drop %",
+          "label": "drop %",
           "enabled": true
         },
         {
           "value": "/mongla/board_link.board_errors",
-          "label": "board errors",
+          "label": "errors",
           "enabled": true
         }
       ],
@@ -38,7 +39,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "board drops"
     },
     "mongla.batighor.Link!link": {}
   },

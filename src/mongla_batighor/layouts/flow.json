@@ -40,7 +40,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "velocity"
     },
     "Plot!distance": {
       "paths": [
@@ -56,17 +57,19 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "distance"
     },
     "StateTransitions!calibration": {
       "paths": [
         {
           "value": "/mongla/vision/downward/flow_calibration.data",
-          "label": "velocity scale from",
+          "label": "scale from",
           "timestampMethod": "receiveTime"
         }
       ],
-      "isSynced": false
+      "isSynced": false,
+      "lichtblickPanelTitle": "velocity scale"
     },
     "Plot!quality": {
       "paths": [
@@ -84,7 +87,7 @@
         },
         {
           "value": "/mongla/vision/downward/floor_height.range",
-          "label": "floor height m",
+          "label": "floor m",
           "enabled": true
         }
       ],
@@ -93,7 +96,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "flow quality and heights"
     },
     "Plot!tracks": {
       "paths": [
@@ -109,7 +113,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "tracks"
     }
   },
   "globalVariables": {},

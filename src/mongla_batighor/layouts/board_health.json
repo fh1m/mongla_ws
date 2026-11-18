@@ -13,7 +13,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "depth"
     },
     "Plot!battery": {
       "paths": [
@@ -28,7 +29,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "battery"
     },
     "Plot!gyro": {
       "paths": [
@@ -53,7 +55,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "gyro"
     },
     "mongla.batighor.Health!health": {},
     "mongla.batighor.Kutum!kutum": {}

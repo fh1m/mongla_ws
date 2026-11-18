@@ -138,3 +138,16 @@ def test_no_plot_mixes_units():
             if k.startswith('Plot!'):
                 units = {u for p in c['paths'] for u in unit.findall(p.get('label', ''))}
                 assert len(units) <= 1, (name, k, units)
+
+
+def test_every_plot_says_what_it_is_and_its_legend_fits():
+    """Untitled, every plot read "Plot", so its legend had to name it and was
+    cut: "forward author", "bearing de" (desktop app, 2026-11-13). The title
+    names the plot; a label names one line, short enough for the legend."""
+    for name in views.VIEWS:
+        for k, c in views.build(name)['configById'].items():
+            if k.startswith(('Plot!', 'StateTransitions!')):
+                assert c.get('lichtblickPanelTitle'), (name, k)
+            if k.startswith('Plot!'):
+                for p in c['paths']:
+                    assert len(p.get('label', '')) <= views.LABEL_CHARS, (name, k, p['label'])

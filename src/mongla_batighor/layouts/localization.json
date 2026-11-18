@@ -71,7 +71,8 @@
           "label": "mode"
         }
       ],
-      "isSynced": false
+      "isSynced": false,
+      "lichtblickPanelTitle": "aiding"
     },
     "Plot!pos": {
       "paths": [
@@ -106,7 +107,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "pos"
     },
     "Plot!vel": {
       "paths": [
@@ -136,7 +138,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "velocity"
     },
     "Plot!heading": {
       "paths": [
@@ -167,18 +170,19 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "heading"
     },
     "Plot!floor": {
       "paths": [
         {
           "value": "/mongla/vision/downward/floor_height.range",
-          "label": "floor height m",
+          "label": "floor m",
           "enabled": true
         },
         {
           "value": "/mongla/state.depth_m",
-          "label": "depth m (negative down)",
+          "label": "depth m",
           "enabled": true
         }
       ],
@@ -187,7 +191,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "heights (depth negative down)"
     }
   },
   "globalVariables": {},
