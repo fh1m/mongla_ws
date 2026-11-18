@@ -198,7 +198,7 @@ def compare(a):
     from mongla_vision.tracking.roboflow_tracker import RoboflowTracker
     from mongla_vision.detection.detector import Detection
 
-    def _wrapped(ttype, min_hits=3):
+    def _wrapped(ttype, min_hits=3, max_predict_s=None):
         def make():
             tr = RoboflowTracker(tracker_type=ttype, track_buffer=150,
                                  min_hits=min_hits,
@@ -211,7 +211,14 @@ def compare(a):
                                     score=float(dets.confidence[i]),
                                     xyxy=tuple(float(v) for v in dets.xyxy[i]))
                           for i in range(len(dets.xyxy))]
-                    return tr.update(ds, _Shim.t)
+                    out = tr.update(ds, _Shim.t)
+                    if max_predict_s is None:
+                        return out
+                    # What tracker_node publishes: the smoother drops a
+                    # predicted box max_predict_s after its last real one.
+                    return [td for td in out if not td.predicted
+                            or _Shim.t - tr._last_real_t.get(td.track_id, -1e9)
+                            <= max_predict_s]
             return _Shim()
         return make
 
@@ -220,6 +227,8 @@ def compare(a):
         ('detector only (no tracking)', None),
         ('OC-SORT wrapper (SHIPPING)', _wrapped('ocsort')),
         ('OC-SORT wrapper min_hits=1', _wrapped('ocsort', min_hits=1)),
+        ('OC-SORT as tracker_node publishes', _wrapped('ocsort', 1, 1.5)),
+        ('ByteTrack as tracker_node would', _wrapped('bytetrack', 1, 1.5)),
         ('ByteTrack wrapper', _wrapped('bytetrack')),
         ('ByteTrack wrapper min_hits=1', _wrapped('bytetrack', min_hits=1)),
         ('raw OC-SORT (no coast rows)',
@@ -236,6 +245,7 @@ def compare(a):
         obs = (_obs_from(frames, w, h, fps, start, n, ts=ts) if mk is None
                else _track(frames, w, h, fps, start, n, mk, ts=ts))
         r = analyse(obs, name)
+        r.truth = score_truth(obs, a.truth) if a.truth else None
         reports.append(r)
         print(r.text())
 
@@ -248,7 +258,44 @@ def compare(a):
         print(f'    {r.label:<32} {100 * r.presence:8.1f}% '
               f'{1000 * _pct(d, 50):8.0f}ms {1000 * _pct(d, 90):8.0f}ms '
               f'{r.over(0.80):7d} {r.over(1.00):6d} {r.switches:7d}')
+    if a.truth:
+        print(f'\n  === AGAINST TRUTH ({a.truth}) ===')
+        print(f'    {"arm":<32} {"recall in view":>15} {"box while absent":>17}')
+        for r in reports:
+            rec, fp, n_in, n_out = r.truth
+            print(f'    {r.label:<32} {100 * rec:14.1f}% {100 * fp:16.1f}%'
+                  f'   ({n_in} in view, {n_out} absent frames)')
     print()
+
+
+def score_truth(obs, path):
+    """Recall where the target is truly in view, and boxes where it is not.
+
+    Presence alone ranks nothing: a coasted box counts as presence, so a tracker
+    that keeps guessing after the target has left scores higher without being
+    more right. The truth file is a hand-labelled JSON
+    `{"absent": [[t0, t1], ...], "margin_s": 0.5}` in clip seconds, labelled
+    from the frames by eye, independently of any model; frames within
+    `margin_s` of a boundary are not scored.
+    """
+    import json
+    with open(path) as fh:
+        spec = json.load(fh)
+    absent = spec['absent']
+    m = float(spec.get('margin_s', 0.5))
+    hit = n_in = fp = n_out = 0
+    for o in obs:
+        if any(t0 - m <= o.t <= t1 + m for t0, t1 in absent) and not any(
+                t0 + m <= o.t <= t1 - m for t0, t1 in absent):
+            continue                         # too close to a boundary
+        if any(t0 <= o.t <= t1 for t0, t1 in absent):
+            n_out += 1
+            fp += o.seen
+        else:
+            n_in += 1
+            hit += o.seen
+    return (hit / n_in if n_in else float('nan'),
+            fp / n_out if n_out else float('nan'), n_in, n_out)
 
 
 def main():
@@ -262,6 +309,8 @@ def main():
     ap.add_argument('--fps', type=float, default=0.0)
     ap.add_argument('--cache', required=True)
     ap.add_argument('--compare', action='store_true')
+    ap.add_argument('--truth', default='',
+                    help='hand-labelled absent intervals (see score_truth)')
     a = ap.parse_args()
     if a.compare:
         compare(a)

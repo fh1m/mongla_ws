@@ -1,0 +1,8 @@
+{
+  "clip": "gate.mkv (Cockpit recording, 6142 frames, 191.8 s)",
+  "target": "gate: the bar or a post visible; the sign alone does not count",
+  "labelled": "by eye from 1 s contact sheets, independently of any model",
+  "absent": [[47.5, 62.5], [88.5, 97.5], [116.5, 118.5], [123.5, 125.5],
+             [161.5, 163.5], [166.5, 169.5]],
+  "margin_s": 0.5
+}
