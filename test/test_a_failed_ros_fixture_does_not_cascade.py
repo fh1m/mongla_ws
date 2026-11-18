@@ -12,13 +12,20 @@ import pytest
 
 rclpy = pytest.importorskip('rclpy')
 
-import conftest  # noqa: E402  the repository root's
+import importlib.util  # noqa: E402
+import pathlib  # noqa: E402
+
+# The repository root's conftest, by PATH. `import conftest` returns whichever
+# conftest the one-process run imported first -- `mongla_control`'s on the
+# Jazzy runner, which has no such hook.
+_spec = importlib.util.spec_from_file_location(
+    '_root_conftest', pathlib.Path(__file__).resolve().parents[1] / 'conftest.py')
+conftest = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(conftest)
 
 
 def _drive(setup_inits: bool, setup_fails: bool):
-    gen = conftest.pytest_runtest_setup.__wrapped__(None) \
-        if hasattr(conftest.pytest_runtest_setup, '__wrapped__') \
-        else conftest.pytest_runtest_setup(None)
+    gen = conftest.pytest_runtest_setup(None)
     next(gen)
     if setup_inits:
         rclpy.init()
