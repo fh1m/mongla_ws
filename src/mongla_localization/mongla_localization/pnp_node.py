@@ -58,9 +58,10 @@ class PnPNode(Node):
                 f"medium must be 'water' or 'air', got {self._medium!r}")
         # Deliberately exposed: re-solving a bag with a different gate is half
         # the reason the evidence is published at all.
-        from mongla_vision.anchor.pose import AMBIGUITY_MAX, MAX_REPROJ_PX
-        self._ambiguity_max = float(
-            self.declare_parameter('ambiguity_max', AMBIGUITY_MAX).value)
+        # The IPPE flip is reported (ambiguity, spreads, alt yaw), never gated
+        # here: near square both branches agree that it is square, so the
+        # consumer gates on off-axis plus spread (`TargetPose.square_within`).
+        from mongla_vision.anchor.pose import MAX_REPROJ_PX
         self._max_reproj_px = float(
             self.declare_parameter('max_reproj_px', MAX_REPROJ_PX).value)
 
@@ -97,7 +98,6 @@ class PnPNode(Node):
         from mongla_vision.live_params import apply_live
         apply_live(self, {
             'max_reproj_px': lambda v: setattr(self, '_max_reproj_px', _positive(v)),
-            'ambiguity_max': lambda v: setattr(self, '_ambiguity_max', _positive(v)),
         })
 
     def _on_info(self, msg):
@@ -179,8 +179,7 @@ class PnPNode(Node):
         # OPTICS_RECTIFIED: the producer already did it, so rectifying again
         # would apply the map twice -- the reason the field is not a guess.
 
-        tp = solve_pnp(obj, img, K, ambiguity_max=self._ambiguity_max,
-                       max_reproj_px=self._max_reproj_px)
+        tp = solve_pnp(obj, img, K, max_reproj_px=self._max_reproj_px)
         out = to_msg(tp, msg.header)
         out.target_label = msg.target_label     # whose pose this is (#76)
         self._pub.publish(out)
