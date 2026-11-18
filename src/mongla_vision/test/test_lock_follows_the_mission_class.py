@@ -196,15 +196,13 @@ def test_a_negative_publish_hz_is_refused_not_silently_clamped():
 
 def _holding_gate(f):
     """A ladder mid-follow on a gate: a detection, a seeded follower, an
-    anchor pose and label, world memory."""
+    anchor pose and label."""
     import numpy as np
-    from mongla_vision.tracking.visibility import WorldTarget
     f._det_box, f._det_conf, f._det_cls, f._det_t = (100, 100, 200, 200), 0.9, 'gate', 5.0
     g = np.zeros((240, 320), np.uint8)
     g[100:200:4, 100:200:4] = 255                  # texture for the follower
     f._follower.reset(g, (100, 100, 200, 200))
     f._anchor_pose, f._anchor_label, f._anchor_inliers = object(), 'gate', 40
-    f._world = WorldTarget()
 
 
 def test_a_switch_forgets_every_trace_of_the_old_target():

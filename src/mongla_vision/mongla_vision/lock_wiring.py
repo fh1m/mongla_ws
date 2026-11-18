@@ -21,13 +21,6 @@ except ImportError:                    # message not built in this workspace
     # path and nothing else -- the follower and anchor rungs still publish
     # `/lock`, which is what the control loop steers on.
     TargetCorrespondences = None
-# OPTIONAL, like TargetCorrespondences above. A workspace that has not
-# rebuilt mongla_interfaces must still get a working ladder: losing vehicle
-# state costs the object-permanence rung, not the lock.
-try:
-    from mongla_interfaces.msg import MonglaState
-except ImportError:                                              # noqa: BLE001
-    MonglaState = None
 
 from mongla_vision import qos as _qos
 from mongla_vision.anchor import health as _health
@@ -189,19 +182,6 @@ class LockWiringMixin:
 
         self._ladder = _ladder
         self._act_conf = float(_ladder('act_conf'))
-        self._roll_rad = float('nan')
-        self._imu_t = 0.0
-        self._yaw_deg = float('nan')
-        self._depth_m = float('nan')
-        self._armed = False
-        self._state_t = 0.0
-        # OBJECT PERMANENCE, downward camera only -- see `_remember_world`
-        # for why the forward camera cannot have it without a measured range.
-        try:
-            from .tracking.visibility import WorldTarget
-            self._world = WorldTarget()
-        except Exception:                                        # noqa: BLE001
-            self._world = None
         self._reseeds = 0
         self._vis_state = None
         self._vis_last = None
@@ -330,27 +310,6 @@ class LockWiringMixin:
                 # name precisely because it is not one.
                 self.create_subscription(Range, f'{ns}/floor_height',
                                          self._on_floor_height, 10)
-                # The vehicle's own state. The ladder ran without ever
-                # knowing which way the hull was pointing: it had odometry
-                # (where) and floor height (how high) but no yaw, so a target
-                # leaving the frame could not be turned into a world bearing
-                # and `visibility.WorldTarget` -- the object-permanence rung --
-                # was unreachable for want of one number the board already
-                # publishes.
-                #
-                # `yaw_deg` is NaN when the board has no AHRS sample, and
-                # every consumer must gate on that rather than treat NaN as
-                # zero. A heading of "0 because we do not know" points the
-                # memory due north, which is worse than having no memory.
-                if MonglaState is not None:
-                    self._state_sub = self.create_subscription(
-                        MonglaState, '/mongla/state', self._on_state, 10)
-                else:
-                    self.get_logger().warn(
-                        '[LOCK ] mongla_interfaces/MonglaState not built -- '
-                        'the ladder runs without vehicle yaw, so any '
-                        'world-frame target memory stays disabled. Rebuild '
-                        'mongla_interfaces to enable it.')
                 self._fix_pub = self.create_publisher(
                     PointStamped, '/mongla/localization/fix', 10)
                 self.get_logger().info(

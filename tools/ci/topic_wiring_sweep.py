@@ -9,7 +9,7 @@ does not exist.
 
 The case that motivated it. `lock_node` had odometry and floor height but
 never subscribed `/mongla/state`, so vision did not know the hull's HEADING.
-`visibility.WorldTarget` -- object permanence, the thing that turns "target
+`visibility.WorldTarget` (since deleted, never read) -- object permanence, the thing that turns "target
 left the frame" from a perception failure into a navigation problem -- was
 unreachable for want of one number the board already published. No import was
 missing. No test failed. Nothing in the module graph showed it.

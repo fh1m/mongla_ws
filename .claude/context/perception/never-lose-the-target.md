@@ -299,15 +299,10 @@ robot-behaviour patent states it plainly: store target position **"not on a
 sensor coordinate system but on a world coordinate system"**, so it "remains
 identical from the behaviour control perspective" however the vehicle moves.
 
-`WorldTarget` projects a sighting into the pool frame using the localiser's
-pose. Losing sight then stops being a perception failure and becomes a
-**navigation** one — the vehicle still knows the bearing to turn back to.
-
-**Warning:** It stores a **memory, never a sighting**: it refuses a non-finite or absurd
-range rather than storing a guess, it answers `None` once the estimate is
-staler than its horizon (a position from a minute ago is a rumour, not
-knowledge), and a test asserts it carries **no `score`, `confidence` or
-`detected` field** that anything downstream could mistake for a detection.
+A world-frame target memory (`WorldTarget`) was built for this, wired as a
+write from the downward lock, and never read by any consumer; it was deleted on
+2026-11-18. Turning back to a lost target is done by the localiser and the
+course map, which already hold where the props are.
 
 ### Where the golden goal now stands
 
@@ -377,7 +372,7 @@ rendered boxes, and then searching the archive: **208 `.pt` on this box, 96
 unique, 29 with a gate class**, against the 4 that ship. The better model had
 been sitting there the whole time.
 
-### FOV and object permanence — confirmed by others, still half-wired
+### FOV and object permanence — confirmed by others
 
 **VISTA-CBF+ELR (2026)** keeps collision constraints hard while relaxing
 field-of-view ones — independently confirming the `SLACK = True` decision
@@ -387,9 +382,8 @@ after.
 
 **Object permanence** (*Out of Sight, Still in Mind*; RoboStream 2026's causal
 memory) — a target leaving frame should become a navigation problem, not a
-forgotten one. `WorldTarget` implements this and is reached by **tests only**;
-its blocker is two missing signals (yaw, absolute range), named precisely in
-`ladder-register.md`. Do not wire it by inventing a range.
+forgotten one. Here that is the localiser and the course map; the separate
+in-vision memory was deleted unread (see above).
 
 ---
 

@@ -125,25 +125,12 @@ whose module is already written and measured.
 
 ### Wired half-way
 
-5. **`visibility.py`** — `assess()` is wired advisory; **`WorldTarget`,
-   `project_world_target`, `region_conf_bar` are reached by TESTS ONLY.** That
-   is the object-permanence half: what lets a target leaving frame become a
-   navigation problem rather than a forgotten one. The reachability register
-   cannot see this — it checks modules, not capabilities.
-
-   **Warning: The blocker, measured 2026-09-25, is two missing signals — not a
-   missing consumer.** `WorldTarget.observe()` needs `vehicle_xy`, `yaw_deg`,
-   `bearing_deg` and `range_m`. `lock_node` has the first (`_odom_xy`) and can
-   compute the third (`bearing_from_pixel`). It has **neither yaw** (never
-   subscribed; yaw lives on `/mongla/state`) **nor an absolute range** — only
-   a RELATIVE scale from the anchor's reference-patch width, which is metric
-   only if the patch's true width is known.
-   The module refuses a guessed range by design, and it is right to: *"a
-   remembered position built from a guessed range would send the vehicle
-   confidently to the wrong place."* So wiring it means either subscribing
-   `/mongla/state` for yaw plus establishing one metric width per prop, or
-   deriving range from `_altitude_m()` for downward-camera targets only.
-   **Do not wire it by inventing a range.**
+5. **`visibility.py`** — `assess()` is wired advisory and `region_conf_bar`
+   is wired in `lock_frames.py` with the lock's own centre as the prior. The
+   world-frame memory (`WorldTarget`, `project_world_target`) was written by
+   the downward lock and never read; it was deleted on 2026-11-18, with the
+   lock node's `/mongla/state` subscription and its never-subscribed IMU roll
+   handler, which existed only to feed it.
 6. **FOV demand-scaling** — measured and advisory only; scaling waits on water.
 
 ### Deferred, unchanged
