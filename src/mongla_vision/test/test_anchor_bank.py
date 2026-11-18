@@ -730,3 +730,12 @@ def test_an_eviction_forgets_the_scores_its_indices_no_longer_name():
     b._last_scores = {0: 5}
     b.clear()
     assert b.last_lookup_scores() == ([], [])
+
+
+def test_a_lookup_that_searches_nothing_leaves_no_scores():
+    """A label or radius that empties the pool returned before the scores
+    were reset, so the health check judged the previous lookup again."""
+    b = CheckpointBank(FakeBackend())
+    b._last_scores = {0: 5}
+    b.locate(np.zeros((240, 320), np.uint8), label='nothing-has-this')
+    assert b.last_lookup_scores() == ([], [])
