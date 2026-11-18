@@ -107,11 +107,16 @@ r mkdir -p "$REL"
 # `logs/` and two .tlog captures to the vehicle before anyone looked. Anything
 # that is generated, huge, or belongs to the dev box stays here: the vehicle
 # carries the book (.claude/context) for reading at the pool, not agent tooling,
-# CI or editor settings.
+# CI or editor settings. Two folders of docs/ are not documentation:
+# mongla_batighor installs the site's fonts and hull from them, and without
+# them the release does not build (2026-11-18). test_deploy_ships_what_packages_install
+# runs these filters and fails when a package needs a file they drop.
 rsync -az --delete --info=stats1 "${LINK[@]}" \
   --exclude 'build/' --exclude 'install/' --exclude 'log/' --exclude 'logs/' \
   --exclude '.git/' \
-  --exclude 'docs/' --exclude '__pycache__/' --exclude '*.pyc' \
+  --include 'docs/' --include 'docs/assets/' \
+  --include 'docs/assets/fonts/***' --include 'docs/assets/cad/***' \
+  --exclude 'docs/**' --exclude '__pycache__/' --exclude '*.pyc' \
   --exclude '*.tlog' --exclude '*.tlog.raw' --exclude '*.tar.gz' \
   --exclude '.pytest_cache/' --exclude '.kutum-deployed' --exclude 'release.json' \
   --exclude '.build-ok' \
