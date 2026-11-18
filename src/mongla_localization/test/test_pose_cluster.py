@@ -207,3 +207,19 @@ def test_a_producer_with_no_heading_keeps_the_camera_frame_median():
         c.add(PoseSample(t=float(i), yaw_deg=10.0, range_m=3.0))
     got = c.fuse(now=5.0)
     assert got.decided and got.yaw_deg == pytest.approx(10.0)
+
+
+def test_an_unknown_pose_quality_reaches_the_wire_as_a_refusal():
+    """`pnp_node.to_msg` scrubs NaN for consumers that compare without checking
+    `ok`. Scrubbed to 0.0 an unknown ambiguity read as "certain" and an unknown
+    reprojection as "a perfect fit"."""
+    pytest.importorskip('rclpy')
+    from mongla_vision.anchor.pose import TargetPose
+    from mongla_localization.pnp_node import to_msg
+    m = to_msg(TargetPose(ok=True, ambiguity=float('nan'),
+                          reproj_px=float('nan')))
+    assert m.ambiguity == 1.0
+    assert m.reproj_px == float('inf')
+    c = PoseCluster()
+    assert not (m.ambiguity <= c.max_ambiguity)
+    assert not (m.reproj_px <= c.max_reproj_px)

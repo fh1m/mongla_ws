@@ -54,8 +54,6 @@ EXCLUDED = {
     'distance_traveled':
         'an integral of the flow velocity already consumed; the integral '
         'carries no information the rate did not',
-    'vis_range':
-        'a per-target range from the detector, not a vehicle observation',
     'low_quality':
         'a quality FLAG. It belongs in the sigma of the measurement it '
         'describes, not as a measurement of its own',

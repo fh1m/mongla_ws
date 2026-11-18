@@ -328,18 +328,27 @@ def test_eviction_is_a_no_op_below_the_cap():
 def test_close_tears_down_every_subscription():
     """One `try` around all five meant the first failure skipped the rest --
     and it failed every time, on `_sub_img`, a leftover from when this class
-    subscribed to `image_raw`. `_sub_vr` was therefore never destroyed."""
-    destroyed = []
+    subscribed to `image_raw`. A subscription was therefore never destroyed.
+
+    Counted against what was CREATED, not a fixed number: this test pinned 4
+    while the class made 6, so it certified the lock and pose subscriptions
+    leaking on every camera switch."""
+    created, destroyed = [], []
 
     class _Node(_FakeNode):
+        def create_subscription(self, *a, **k):
+            sub = object()
+            created.append(sub)
+            return sub
+
         def destroy_subscription(self, sub):
             destroyed.append(sub)
 
     vs = VisionState(_Node(), camera='t', default_image_size=(640, 480))
     vs.close()
-    assert len(destroyed) == 4, (
-        f'{len(destroyed)} of 4 subscriptions torn down -- teardown is '
-        f'partial again')
+    assert created and sorted(map(id, destroyed)) == sorted(map(id, created)), (
+        f'{len(destroyed)} of {len(created)} subscriptions torn down -- '
+        f'teardown is partial again')
 
 
 def test_the_COAST_gap_is_measured_from_capture_not_from_the_query():

@@ -141,7 +141,7 @@ class LockWiringMixin:
                                      self._on_info, 10)
 
     def _setup_ladder_state(self) -> None:
-        """The ladder's tunables (deck file, then launch), the vehicle state it
+        """The ladder's tunables (node parameters), the vehicle state it
         reads, and the last detection.
         """
         # Set beside the state it guards, not where the other parameters are
@@ -151,30 +151,10 @@ class LockWiringMixin:
         # raised AttributeError inside the callback -- caught by
         # test_stamps.py, but it is a real startup race and not a test
         # artifact.
-        # The deck file wins over the default, and a launch argument wins
-        # Over both. One file (`~/.mongla/ladder.yaml`) changes the ladder
-        # whichever launch started the node -- the pattern `loop_closure`
-        # already proved and has a guard test for. An explicitly-passed launch
-        # parameter still overrides it, so a mission can pin a value without
-        # editing the deck.
-        from .ladder_config import defaults as _ld_defaults, load_config as _ld_load
-        self._ladder_cfg = _ld_load(log=self.get_logger())
-        _ld_def = _ld_defaults()
-
-        # NOT named `_cfg`: a DIFFERENT local `_cfg` exists further down
-        # for the loop-closure block, and two closures with one name in one
-        # __init__ is a shadowing bug waiting to be written.
-        def _ladder(name):
-            """An explicitly-set launch/param value wins; otherwise the deck
-            file's. Equality with the shipped default is how "not explicitly
-            set" is detected -- ROS does not distinguish a default from a
-            value that happens to equal it, so a mission wanting the default
-            AND a deck override of it must edit the deck."""
-            v = self.get_parameter(name).value
-            return v if v != _ld_def[name] else self._ladder_cfg[name]
-
-        self._ladder = _ladder
-        self._act_conf = float(_ladder('act_conf'))
+        # A node parameter, set on the deck under `nodes:` in bringup.yaml
+        # (`mongla_lock_forward: {act_conf: 0.60}`), which reaches this node
+        # whichever launch started it, composed or not.
+        self._act_conf = float(self.get_parameter('act_conf').value)
         self._reseeds = 0
         self._vis_state = None
         self._vis_last = None
@@ -237,37 +217,15 @@ class LockWiringMixin:
         vehicle state in, position fixes out. Refused on the forward camera.
         """
         # ---- loop closure ------------------------------------------------
-        # Configured by the node, not by launch. A switch threaded through
-        # launch has to be declared in every launch file that starts this
-        # node, and this package has already shipped capabilities reachable
-        # from one launch path and not the one `bringup` includes. Loop
-        # closure nearly became the next: it went into vision_pi.launch.py
-        # while bringup includes vision.launch.py.
-        #
-        # Precedence: an explicitly-set ROS parameter wins (so `ros2 param
-        # set` and any launch that does pass one still work), otherwise
-        # ~/.mongla/loop_closure.yaml, otherwise the defaults. The deck file
-        # is the same pattern the course priors already use.
-        cfg = _lc.load_config(log=self.get_logger())
-
-        def _cfg(name, key):
-            p = self.get_parameter(name)
-            if p.type_ != rclpy.parameter.Parameter.Type.NOT_SET:
-                v = p.value
-                # A parameter left at its declared default is not a decision;
-                # the file is. Only a value that DIFFERS from the default
-                # overrides the file, so an operator's edit is not silently
-                # outvoted by a default nobody set.
-                if v != _lc.defaults()[key]:
-                    return v
-            return cfg[key]
-
-        self._closer_on = bool(_cfg('loop_closure', 'enabled'))
+        # Node parameters, set on the deck under `nodes:` in bringup.yaml,
+        # never threaded through a launch file: a launch argument reaches only
+        # the launches that declare it, and loop closure once went into
+        # vision_pi.launch.py while bringup included vision.launch.py.
+        self._closer_on = bool(self.get_parameter('loop_closure').value)
         self._places = _lc.PlaceLog(
-            float(_cfg('place_period_s', 'place_period_s')),
-            float(_cfg('place_travel_m', 'place_travel_m')))
-        self._pool_depth = float(_cfg('pool_depth_m', 'pool_depth_m'))
-        self._closure_cfg = cfg
+            float(self.get_parameter('place_period_s').value),
+            float(self.get_parameter('place_travel_m').value))
+        self._pool_depth = float(self.get_parameter('pool_depth_m').value)
         self._odom_xy = None          # (x, y) m, pool frame
         self._odom_sigma = float('nan')
         self._odom_z = float('nan')   # filter depth, negative below surface

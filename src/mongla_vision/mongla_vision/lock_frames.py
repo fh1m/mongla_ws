@@ -26,7 +26,6 @@ def _stamp_key(header):
     return (int(st.sec), int(st.nanosec))
 
 
-
 # Strong detections a lock needs before a weak box may hold it. One false
 # strong box was what HELD extended on gate-free water (measured-bars section
 # 72); two in one lock is a target that was seen twice.
@@ -127,9 +126,6 @@ class LockFramesMixin:
                 return g if g.ndim == 2 else cv2.cvtColor(
                     g, cv2.COLOR_BGR2GRAY)
         return None
-
-    # A floor height older than this is not this vehicle's altitude any more.
-    _FLOOR_H_MAX_AGE_S = 2.0
 
     def _on_det(self, msg):
         best = None

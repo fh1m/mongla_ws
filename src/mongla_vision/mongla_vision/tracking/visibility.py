@@ -1,7 +1,7 @@
 """Keep the target in frame — and know where it went if it leaves anyway.
 
 The gap this closes, and it is the largest one left. Every rung of the
-ladder, every cue in the cascade, every re-identification — all of it operates
+ladder, every tracker, every anchor match — all of it operates
 in the IMAGE PLANE, and all of it is downstream of a decision the vehicle makes
 about where to point. Grepped: there is **no field-of-view guard anywhere in
 `mongla_control`**. Nothing stops the controller yawing the target out of frame,

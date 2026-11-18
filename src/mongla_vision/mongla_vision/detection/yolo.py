@@ -330,9 +330,6 @@ class YoloDetector(Detector):
     def update_max_det(self, max_det: int) -> None:
         self._max_det = max(int(max_det), 1)
 
-    def class_names(self):
-        return dict(self._names)
-
     def is_ready(self) -> bool:
         return self._ready
 

@@ -174,7 +174,7 @@ tools/pool/pool_record.sh replay ~/mongla_runs/bag_gate_run_20260710_141530
 tools/pool/pool_record.sh list                    # runs + sizes + recent scorecards
 ```
 Default allowlist: `state`, `imu_rates`, `move` action feedback/status, and per-camera
-`detections` / `tracks` / `image_debug` / `vis_range` / `distance`. Ctrl-C stops and
+`detections` / `tracks` / `image_debug` / `distance`. Ctrl-C stops and
 finalizes the bag. Override the parent dir with `MONGLA_RUN_DIR`.
 
 **Replay-to-tune loop:** `replay` a bag → run `vision_display` or Foxglove against it →

@@ -557,7 +557,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
             except Exception:
                 return  # node being destroyed; exit thread cleanly
             self._publish_contours(frame, detections, header)
-            self._publish_debug_image(frame, detections, header, dt, primary)
+            self._publish_debug_image(frame, detections, header, primary)
 
     # ── the steps of one inference pass ─────────────────────────────────────
     # Each was a span of `_infer_loop` until 2026-11-07; code and comments

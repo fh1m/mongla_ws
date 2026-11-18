@@ -35,7 +35,6 @@ setup(
             'detector_dual_node  = mongla_vision.detector_dual_node:main',
             'tracker_node        = mongla_vision.tracker_node:main',
             'lock_node           = mongla_vision.lock_node:main',
-            'vision_node         = mongla_vision.vision_node:main',
             'vision_check        = mongla_vision.utils.check_pipeline:main',
             'water_check         = mongla_vision.utils.water_check:main',
             'vision_thrust_check = mongla_vision.utils.check_thrust:main',
@@ -48,7 +47,6 @@ setup(
             # the DVL's velocity scale is wrong by the same factor.
             'calibrate           = mongla_vision.calibration.calibrate_node:main',
             'calibrate_solve     = mongla_vision.calibration.solver:main',
-            'depth_estimation_node = mongla_vision.depth.depth_estimation_node:main',
             'flow_node = mongla_vision.flow.flow_node:main',
         ],
     },

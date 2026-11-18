@@ -341,10 +341,19 @@ def flow_height_verdict(top: dict) -> tuple[str, str]:
     if str(top.get('flow', 'true')).strip().lower() in ('false', '0', 'no'):
         return WARN, ('flow:=false: the vehicle has no velocity sensor this '
                       'run; localization drifts on the IMU alone')
-    if math.isfinite(num('pool_depth_m')) and num('pool_depth_m') > 0:
-        return PASS, f'flow scales on pool_depth_m {num("pool_depth_m"):.2f} m'
     lo, hi = num('pool_depth_min_m'), num('pool_depth_max_m')
-    if math.isfinite(lo) and math.isfinite(hi) and 0 < lo <= hi:
+    ranged = math.isfinite(lo) and math.isfinite(hi) and 0 < lo <= hi
+    if math.isfinite(num('pool_depth_m')) and num('pool_depth_m') > 0:
+        if ranged:
+            return PASS, (f'flow scales on pool_depth_m {num("pool_depth_m"):.2f} m, '
+                          f'floor {lo:.2f}-{hi:.2f} m')
+        # A depth with no range is scaled on as if it were exact: the
+        # velocity's covariance then carries none of the floor's spread.
+        return WARN, (f'flow scales on pool_depth_m {num("pool_depth_m"):.2f} m '
+                      f'with no floor range, so its covariance treats the depth '
+                      f'as exact. Set pool_depth_min_m and pool_depth_max_m, or '
+                      f'the course\'s pool: range')
+    if ranged:
         return PASS, f'flow scales on a floor between {lo:.2f} and {hi:.2f} m'
     if num('tile_m') > 0:
         return PASS, f'flow reads its height off {num("tile_m"):.3f} m tiles'

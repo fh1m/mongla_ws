@@ -97,17 +97,11 @@ def test_a_forward_camera_is_refused_and_says_so(src):
 
 
 def test_it_is_off_by_default(src):
-    """Checked as a VALUE, not as a literal in the source. The default moved
-    into the module so the node, the config loader and the parameter
-    declaration cannot disagree about it -- and a test reading the literal
-    would fail on that refactor while the behaviour was unchanged."""
-    from mongla_vision.anchor import loop_closure as lc
-    assert lc.defaults()['enabled'] is False, (
-        'loop closure is on by default; it is the only vision path that '
-        'reaches the localisation filter, and a wrong fix is BELIEVED')
-    assert "_lc.defaults()['enabled']" in src, (
-        'the node no longer takes its default from the module, so the two '
-        'can drift apart')
+    """Loop closure is the only vision path that reaches the localisation
+    filter, and a wrong fix is BELIEVED: the filter shrinks its covariance
+    around it."""
+    assert "self.declare_parameter('loop_closure', False)" in src, (
+        'loop closure is no longer declared off by default')
 
 
 def test_altitude_has_no_constant_fallback(src):
@@ -139,56 +133,16 @@ def test_it_is_configured_WITHOUT_launch_plumbing():
     that starts the node, and this package has shipped capabilities reachable
     from one launch path and not the one `bringup` includes. Loop closure was
     briefly wired into vision_pi.launch.py while bringup includes
-    vision.launch.py -- unreachable from the documented mission command, the
-    fifth instance of the same defect.
+    vision.launch.py, the fifth instance of the same defect.
 
-    The node configures itself instead, so it behaves the same whichever
-    launch starts it. This test fails if the plumbing comes back, because two
-    sources of truth for one switch is how they disagree.
-    """
-    from mongla_vision.anchor import loop_closure as lc
-    assert hasattr(lc, 'load_config') and hasattr(lc, 'defaults')
+    It is a node parameter, set on the deck under `nodes:` in bringup.yaml,
+    which reaches the node whichever launch started it."""
     for launch in ('vision_pi.launch.py', 'vision.launch.py'):
         text = (LAUNCH.parent / launch).read_text()
         assert 'loop_closure' not in text, (
-            f'{launch} configures loop closure again. Put it in '
-            f'{lc.CONFIG_PATH} instead -- a launch argument is only read by '
+            f'{launch} configures loop closure again. Set it under `nodes:` '
+            f'in bringup.yaml instead -- a launch argument is only read by '
             f'the launch files that declare it.')
-
-
-def test_a_broken_config_file_does_not_take_vision_down(tmp_path):
-    """On a pool deck a typo must not stop the stack, and must not be silent
-    either -- the operator would watch for a change that never loaded."""
-    from mongla_vision.anchor import loop_closure as lc
-    bad = tmp_path / 'loop_closure.yaml'
-    bad.write_text('enabled: [this is not a bool\n')
-    cfg = lc.load_config(str(bad))
-    assert cfg == lc.defaults(), 'a broken file must fall back to defaults'
-
-
-def test_an_unset_config_file_is_the_defaults(tmp_path):
-    from mongla_vision.anchor import loop_closure as lc
-    assert lc.load_config(str(tmp_path / 'nope.yaml')) == lc.defaults()
-
-
-def test_the_deck_file_actually_changes_the_bars(tmp_path):
-    from mongla_vision.anchor import loop_closure as lc
-    f = tmp_path / 'loop_closure.yaml'
-    f.write_text('enabled: true\nmin_inliers: 140\nplace_travel_m: 2.5\n')
-    cfg = lc.load_config(str(f))
-    assert cfg['enabled'] is True
-    assert cfg['min_inliers'] == 140
-    assert cfg['place_travel_m'] == 2.5
-    assert cfg['min_age_s'] == lc.MIN_REF_AGE_S, 'unset keys must keep defaults'
-
-
-def test_the_configured_bars_reach_consider(src):
-    """A config that is loaded and then not passed is the same as no config."""
-    seg = src[src.index('def _place_tick'):src.index('def _m_per_px')]
-    for key in ('min_inliers', 'min_age_s', 'min_travel_m', 'max_offset_m'):
-        assert f"self._closure_cfg['{key}']" in seg, (
-            f'{key} is configurable but never handed to consider(), so '
-            f'editing it changes nothing')
 
 
 # --------------------------------------------------------------------------- #
@@ -219,3 +173,12 @@ def test_the_typed_constant_fallback_says_what_it_is(src):
     assert 'TYPED' in seg and 'warn' in seg, (
         'the pool_depth fallback is silent again, so a run scaled by a typed '
         'constant is indistinguishable from one scaled by a measurement')
+
+
+def test_the_guards_read_the_matched_place(src):
+    """`consider` must be fed the age, travel and sigma of the place the bank
+    matched. Reading the newest enrolment instead refused every closure."""
+    seg = src[src.index('def _place_tick'):src.index('def _m_per_px')]
+    assert 'self._places.since(' in seg and 'ref_position' in seg
+    assert '_places._last_t' not in seg and 'travel_since' not in seg
+    assert 'self._places.step(' in seg, 'excursions are never updated'

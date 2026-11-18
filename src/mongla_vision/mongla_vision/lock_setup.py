@@ -69,16 +69,12 @@ class LockSetupMixin:
         # FILTER, and a wrong position fix is not merely wrong -- the filter
         # shrinks its covariance around it and becomes confident. Off until a
         # pool day says otherwise.
-        self.declare_parameter('loop_closure',
-                               _lc.defaults()['enabled'])
-        self.declare_parameter('place_period_s',
-                               _lc.defaults()['place_period_s'])
-        self.declare_parameter('place_travel_m',
-                               _lc.defaults()['place_travel_m'])
+        self.declare_parameter('loop_closure', False)
+        self.declare_parameter('place_period_s', _lc.PLACE_PERIOD_S)
+        self.declare_parameter('place_travel_m', _lc.PLACE_TRAVEL_M)
         # Height above the floor = pool_depth_m - |depth|. Without it pixels
         # cannot become metres and every closure is refused, by design.
-        self.declare_parameter('pool_depth_m',
-                               _lc.defaults()['pool_depth_m'])
+        self.declare_parameter('pool_depth_m', 0.0)
         # 3 Hz, not 8. Measured on the Pi with the full stack live, and the
         # cost is LATENCY rather than throughput -- detection rate is unchanged
         # at every setting, but the anchor's 33 ms bursts delay the image
@@ -191,26 +187,17 @@ class LockSetupMixin:
                 # and no error.
                 roots = [d for d in (os.environ.get('MONGLA_HEF_DIR', '').strip(),
                                      '~/hailo_models') if d]
-                # `.hef` FIRST (B-62). This globbed `xfeat_*.onnx` only, so
-                # the compiled HEF sitting in the SAME directory was never a
-                # candidate and the anchor ran on the Pi's CPU: measured
-                # 32.9 ms per call (30.4 FPS) against 1.43 ms (701 FPS) on the
-                # accelerator. A 23x gap, spent on the cores the camera pump
-                # and the rclpy executor need.
-                #
-                # The ONNX stays as the fallback, and it is a real one: the
-                # dev box has no chip, and a vehicle whose HEF is missing must
-                # still get an anchor rung rather than lose it to a
-                # FileNotFoundError.
-                # `.hef` FIRST (B-62). It took three attempts to earn this
-                # default: an own VDevice gave HAILO_OUT_OF_PHYSICAL_DEVICES,
-                # a shared VDevice with a lock gave "Cant activate network
-                # because a network is already activated"; the device now runs
-                # HailoRT's scheduler, which owns activation, so the anchor and
-                # the detectors simply coexist. The ONNX remains the fallback
-                # for a box with no chip.
+                # Which artifact is tried first follows `anchor_xfeat_hef`: the
+                # HEF when the lock shares the detector's process (vision_pi
+                # sets it true), the ONNX otherwise, so a standalone lock_node
+                # never races the detector for the chip. Both are globbed
+                # (B-62: this once looked for `xfeat_*.onnx` only, so the HEF
+                # beside it was never a candidate -- 32.9 ms per call on the
+                # Pi's CPU against 1.43 ms on the accelerator). The other one
+                # is the fallback: a vehicle whose preferred artifact is
+                # missing still gets an anchor rung.
                 exts = (('*.hef', '*.onnx')
-                        if bool(self._ladder('anchor_xfeat_hef'))
+                        if bool(self.get_parameter('anchor_xfeat_hef').value)
                         else ('*.onnx', '*.hef'))
                 c = []
                 for r in roots:
@@ -246,7 +233,7 @@ class LockSetupMixin:
                     from mongla_vision.anchor.xfeat_hailo import XFeatHailo
                     backend = XFeatHailo(
                         p, top_k=1024,
-                        semi_dense=bool(self._ladder('anchor_semi_dense')))
+                        semi_dense=bool(self.get_parameter('anchor_semi_dense').value))
                     self.get_logger().info(
                         f'[LOCK ] anchor on the Hailo-8: {os.path.basename(p)}')
                 except Exception as exc:                         # noqa: BLE001

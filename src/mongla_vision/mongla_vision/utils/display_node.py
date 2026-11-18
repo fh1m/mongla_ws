@@ -35,7 +35,6 @@ Camera / display keyboard shortcuts (always active)
 ---------------------------------------------------
   f            → switch to forward camera
   d            → switch to downward camera
-  D            → toggle depth map overlay
 
 Only ONE camera is ever subscribed/streamed at a time (USB bus +
 memory budget); the old 'b' side-by-side view was removed because it
@@ -152,7 +151,6 @@ def _build_health(node: 'VisionDisplayNode') -> dict[str, bool]:
         'detector': (now - node._last_det_t)        < 3.0,
         'tracker':  (now - node._last_track_t)      < 3.0,
         'state':    (now - node._last_state_t)      < 5.0,
-        'depth':    (now - node._last_vis_range_t)  < 3.0,
     }
 
 
@@ -259,16 +257,6 @@ class VisionDisplayNode(Node):
         self._depth_history: deque[tuple[float, float]] = deque(maxlen=10)
         self._depth_rate: float = 0.0
 
-        # vis_range (monocular proximity estimate, 0=far 1=close)
-        self._vis_range_values: list[float] = []
-        self._vis_range_lock   = threading.Lock()
-        self._last_vis_range_t = 0.0
-
-        # depth map (colorized BGR, cached from vis_range_map topic)
-        self._depth_map_bgr: np.ndarray | None = None
-        self._depth_map_lock = threading.Lock()
-        self._show_depth_map: bool = False   # toggled by 'D' keypress
-
         # Video file state.
         self._is_paused:        bool            = False
         self._video_position:   tuple[int, int] = (0, 0)
@@ -346,8 +334,6 @@ class VisionDisplayNode(Node):
         det_topic  = f'/mongla/vision/{camera}/detections'
         cls_topic  = f'/mongla/vision/{camera}/classes_filter'
         trk_topic  = f'/mongla/vision/{camera}/tracks'
-        vr_topic   = f'/mongla/vision/{camera}/vis_range'
-        vmap_topic = f'/mongla/vision/{camera}/vis_range_map'
         return [
             self.create_subscription(Image,             raw_topic,  self._on_image,          qos.IMAGE),
             self.create_subscription(Detection2DArray,  det_topic,  self._on_detections,     qos.DETECTIONS),
@@ -356,8 +342,6 @@ class VisionDisplayNode(Node):
             # allowlist immediately instead of blank class chips until the
             # operator happens to change it.
             self.create_subscription(String,            cls_topic,  self._on_classes_filter, qos.LATCHED),
-            self.create_subscription(Float32MultiArray, vr_topic,   self._on_vis_range,      10),
-            self.create_subscription(Image,             vmap_topic, self._on_depth_map,      2),
         ]
 
     def _switch_camera(self, name: str) -> None:
@@ -373,8 +357,6 @@ class VisionDisplayNode(Node):
         with self._tracks_lock:
             self._tracked_dets.clear()
             self._track_ids.clear()
-        with self._vis_range_lock:
-            self._vis_range_values.clear()
         # flush frame queue
         while not self._frame_q.empty():
             try:
@@ -427,24 +409,9 @@ class VisionDisplayNode(Node):
     def _on_classes_filter(self, msg: String) -> None:
         self._configured_classes = [c.strip() for c in msg.data.split(',') if c.strip()]
 
-    def _on_vis_range(self, msg: Float32MultiArray) -> None:
-        with self._vis_range_lock:
-            self._vis_range_values = list(msg.data)
-            self._last_vis_range_t = time.monotonic()
-
     def _on_distance_dbg(self, msg: Float32MultiArray) -> None:
         # [dist_m, height_m, n_tracks, active]; cache latest for the panel.
         self._distance_dbg = list(msg.data)
-
-    def _on_depth_map(self, msg: Image) -> None:
-        try:
-            raw  = image_msg.to_array(msg, '32FC1')
-            norm = np.clip(raw, 0.0, 1.0)
-            colorized = cv2.applyColorMap((norm * 255).astype(np.uint8), cv2.COLORMAP_TURBO)
-            with self._depth_map_lock:
-                self._depth_map_bgr = colorized
-        except Exception:
-            pass
 
     def _on_image(self, msg: Image) -> None:
         self._frames_received += 1
@@ -612,13 +579,6 @@ def main(args=None):
             display_ids  = track_ids if tracked_dets else None
             primary      = largest(display_dets)
 
-            with node._vis_range_lock:
-                vis_range_vals = list(node._vis_range_values)
-            with node._depth_map_lock:
-                depth_map_bgr = (node._depth_map_bgr.copy()
-                                 if node._show_depth_map and node._depth_map_bgr is not None
-                                 else None)
-
             native_h, native_w = frame.shape[:2]
             video_h      = int(native_h * _RENDER_W / native_w)
             render_frame = cv2.resize(frame, (_RENDER_W, video_h),
@@ -636,8 +596,6 @@ def main(args=None):
                 healthy=pipeline_health['camera'],
                 deadband=0.05,
                 track_ids=display_ids,
-                vis_range_values=vis_range_vals,
-                depth_map_bgr=depth_map_bgr,
             )
 
             # 1 Hz terminal stats (FPS, detection, vehicle state, pipeline health)

@@ -31,9 +31,6 @@ src/mongla_vision/mongla_vision/
     v4l2_mailbox.py       # A mailbox, not a queue: always the newest frame, with the kernel's timestamp.
     video_file.py         # VideoFileCamera — run the vision pipeline on a pre-recorded video file.
     webcam.py             # WebcamCamera — local USB / built-in webcam via cv2.VideoCapture.
-  depth/
-    models/
-    depth_estimation_node.py # depth_estimation_node -- monocular depth estimation for detected objects.
   detection/
     contours.py           # Detections -> outlines. A box and a mask become the same thing here.
     detector.py           # Abstract Detector — every detection backend implements this.
@@ -100,8 +97,6 @@ no `to_ros.py`, no `nodes/` or `viz/` subfolders.
 /mongla/vision/<cam>/detections       vision_msgs/Detection2DArray (detector_node)
 /mongla/vision/<cam>/classes_filter   std_msgs/String              (detector_node, CSV class list)
 /mongla/vision/<cam>/tracks           vision_msgs/Detection2DArray (tracker_node, optional)
-/mongla/vision/<cam>/vis_range        std_msgs/Float32MultiArray   (depth_estimation_node, one float per detection, 0=far 1=close)
-/mongla/vision/<cam>/vis_range_map    sensor_msgs/Image            (depth_estimation_node, float32 depth map, debug only)
 /mongla/vision/<cam>/image_debug      sensor_msgs/Image            (detector_node, rate-limited)
 ```
 
@@ -143,8 +138,6 @@ before** — a live box always overrides a coast, and a coasted box is conf-exem
 only for the locked id. There is **no** `--tracking` flag and **no**
 `vision.use_tracks` param: outside the opt-in coast, `/tracks` (Roboflow OC-SORT
 ids + Kalman smoothing) feeds `vision_display` / analysis for the HUD only.
-(`depth_estimation_node` has its own independent `use_tracks` param that merely
-selects which topic *it* reads for detection ordering.)
 
 ## Dataflow (with tracker_node)
 

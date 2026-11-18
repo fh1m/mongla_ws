@@ -229,29 +229,6 @@ def arguments() -> list:
                         'publishing <ns>/lock and loop-closure fixes. The '
                         'manager steers on it when detection drops out '
                         '(vision.lock_s).'),
-        # The ladder's own bars, reachable from the command line. Defaults
-        # mirror `lock_node`'s declarations exactly -- two copies of a default
-        # is how they drift, so if one moves the other must.
-        DeclareLaunchArgument(
-            'act_conf', default_value='0.45',
-            description='ladder ACTING bar: below this a detection may be '
-                        'associated by the tracker but is not acted on '
-                        '(B-59; measured knee 0.60, shipped 0.45)'),
-        # ON, and safe, because the lock ladder is COMPOSED into the detector
-        # process below: one process, one VDevice, XFeat and the detectors
-        # sharing it under HailoRT's scheduler (B-62; in-graph 17.65 ms p50
-        # against 32.9 ms on the CPU, tools/studies/composed_lock_harness.py).
-        # As a SEPARATE lock_node it raced the detector for the chip and, on
-        # 2026-10-03, left the vehicle with no detection at all.
-        DeclareLaunchArgument(
-            'anchor_xfeat_hef', default_value='true',
-            description='run XFeat on the Hailo-8 rather than the Pi CPU '
-                        '(B-62); safe because the lock is composed with '
-                        'the detector'),
-        DeclareLaunchArgument(
-            'anchor_semi_dense', default_value='false',
-            description='semi-dense matching: 2.1-2.6x inliers for +37 % '
-                        'match cost. OFF until frame-to-reference is measured'),
         DeclareLaunchArgument(
             'lock_class', default_value='',
             description='Class the ladder locks onto. Empty = whatever the '
@@ -462,20 +439,20 @@ def generate_launch_description():
                 # lock_node processes; the Hailo allows one VDevice per process, so
                 # with XFeat on the chip they raced the detector for it. Composed,
                 # all of them share one VDevice. Why each value is passed:
-                #   act_conf      -- the B-59 acting bar; a pool day must reach it
+                #   anchor_xfeat_hef -- XFeat on the Hailo-8 (B-62, 17.65 ms p50
+                #                       against 32.9 ms on the CPU), safe only
+                #                       because the lock shares this process's
+                #                       VDevice
                 #   medium        -- the lock rectifies its OBJECT points
-                # Place recognition is deliberately NOT plumbed: it configures
-                # itself from ~/.mongla/*.yaml so every launch path behaves alike
-                # (a guard test fails if the plumbing comes back).
+                # The ladder's bars (act_conf, anchor_semi_dense) and place
+                # recognition are NOT plumbed: they are node parameters, set on
+                # the deck under `nodes:` (mongla_lock_forward / _downward), so
+                # every launch path behaves alike.
                 'lock':                   ParameterValue(
                     LaunchConfiguration('lock'), value_type=bool),
                 'lock_follow':            True,
                 'lock_anchor':            True,
-                'lock_act_conf':          LaunchConfiguration('act_conf'),
-                'lock_anchor_xfeat_hef':  ParameterValue(
-                    LaunchConfiguration('anchor_xfeat_hef'), value_type=bool),
-                'lock_anchor_semi_dense': ParameterValue(
-                    LaunchConfiguration('anchor_semi_dense'), value_type=bool),
+                'lock_anchor_xfeat_hef':  True,
                 'lock_medium':            LaunchConfiguration('medium'),
                 'fwd_lock_target_class':  LaunchConfiguration('lock_class'),
                 'dwn_lock_target_class':  LaunchConfiguration('dwn_lock_class'),

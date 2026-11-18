@@ -1,8 +1,8 @@
 """Take GEOMETRY from the structure, IDENTITY from the symbol on it.
 
 The mistake this replaces, and it is one line of mission code. "Pass under
-the side showing our animal" is usually written as `where('rescue')` -- is the
-symbol left or right OF THE FRAME. That is the wrong reference. The frame
+the side showing our symbol" is usually written as `where('<symbol>')` -- is
+the symbol left or right OF THE FRAME. That is the wrong reference. The frame
 centre is where the CAMERA is pointing, not where the gate's divider is, so the
 answer flips the moment the vehicle is off-axis: a hull sitting left of the
 gate reads a centred symbol as "right" and drives under the wrong side. The
@@ -12,8 +12,10 @@ gate's own midline.
 The second half is BumblebeeAS's bin insight, which they state in config: every
 structure detection is PnP'd, and the symbol topic NEVER is. Bin walls occlude
 a symbol from oblique views, so a symbol's box is a poor geometric object and a
-fine identity one. Ours is the same shape: `gate` is the structure whose
-geometry we trust, `rescue`/`repair` are identity only.
+fine identity one. Ours is the same shape: the structure class (a gate) is
+the one whose geometry we trust, the symbol classes on it are identity only.
+Which classes those are is the model's business (`set_model`), never this
+file's.
 
 So a symbol contributes exactly two things here: WHICH structure it belongs to
 (by overlap, not by proximity) and WHICH SIDE of that structure it sits on.
