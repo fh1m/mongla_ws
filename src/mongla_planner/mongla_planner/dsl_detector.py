@@ -512,7 +512,8 @@ class DetectorMixin:
         node = self._detector_node(camera, node)
         self._set_detector_param(node, 'paused', False)
         # This camera is now the live detector. Recording it means a later switch
-        # to a DIFFERENT camera pauses THIS one (never two detectors on the Hailo),
+        # to a DIFFERENT camera pauses THIS one (one detector at a time unless
+        # `use_both_cameras` is on),
         # even when a mission resumed it manually rather than via _activate_camera.
         self._live_camera = cam
         self.log.info(f"[DSL  ] {node} resumed")

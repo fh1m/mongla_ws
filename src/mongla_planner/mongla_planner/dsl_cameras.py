@@ -95,27 +95,71 @@ class CameraMixin:
             mongla.use_camera('forward')             # back to forward
         """
         self.log.info(f'[MISSION] camera → {name!r}')
+        if self._both_live:
+            # Leaving both-camera mode: forget which one was "live", so the
+            # activation below runs in full and pauses the other.
+            self._both_live = False
+            self._live_camera = None
         self.camera = name
         # Eager-subscribe so discovery warms before the first detected()/where()
         # on the new camera (otherwise that first query false-negates).
         self._subscribe_detections(name)
         self._activate_camera(name)
 
+    def use_both_cameras(self) -> None:
+        """Both detectors infer at once, until the next ``use_camera``.
+
+        For a task that needs both views together: a gate ahead while the
+        floor or a bin passes underneath. A vision verb on either camera then
+        steers on that camera WITHOUT pausing the other. Measured on Kutum
+        with the lock ladder and flow also live: forward 29.8 Hz (the
+        camera's rate), downward 32 to 33 Hz, 2.7 GB free (measured-bars 87);
+        one camera alone runs the downward detector at 58.6 Hz, so use this
+        when the task needs both, not by default.
+
+        Example::
+
+            mongla.use_both_cameras()
+            while not (mongla.detected('gate', camera='forward')
+                       and mongla.detected('bin', camera='downward')):
+                ...
+            mongla.use_camera('downward')     # back to one live detector
+        """
+        self.log.info('[MISSION] cameras → forward + downward, both live')
+        self._both_live = True
+        for cam in self._KNOWN_CAMERAS:
+            if not self._detector_present(cam):
+                self.log.warning(f'[CAM  ] {cam} detector is not on the graph; '
+                                 f'both-camera mode runs without it')
+                continue
+            self._subscribe_detections(cam)
+            try:
+                self.resume_detector(cam)
+            except Exception as exc:          # noqa: BLE001 -- best-effort
+                self.log.warning(f'[CAM  ] resume {cam!r} skipped: {exc}')
+        self._live_camera = self.camera
+
     def _activate_camera(self, name: str) -> None:
         """Make ``name`` the ONLY live detector + point the HUD at it. Idempotent.
 
+        In both-camera mode (``use_both_cameras``) it only points the HUD:
+        the other detector stays live, which is what the mode is for.
+
         Called by ``use_camera`` and automatically by a vision verb whose camera
         differs from the live one, so ``camera='downward'`` in a verb "just works"
-        (never two detectors at once on the Hailo). Best-effort on the detector
+        (one detector at a time unless `use_both_cameras` is on). Best-effort on the detector
         params: a missing node warns, doesn't raise -- a run without vision has
         no detectors and must not crash here."""
         if name == self._live_camera:
             return
         self._publish_active_camera(name)   # HUD follows (latched topic; always safe)
+        if self._both_live:
+            self._live_camera = name
+            return
         # Pause EVERY known detector except the target -- not just the previously
         # live one. This makes the invariant "exactly one detector infers" hold
         # from the first switch regardless of the launch `paused` state, so a
-        # stray `paused:=false` (both inferring, the OOM config) is corrected the
+        # stray `paused:=false` (both inferring) is corrected the
         # moment the mission calls use_camera. Gated on a FAST graph existence
         # check (get_node_names) so an absent counterpart is skipped instantly --
         # otherwise pause_detector -> _ensure_detector would eat its 5 s
