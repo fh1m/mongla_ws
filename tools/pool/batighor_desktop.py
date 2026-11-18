@@ -43,6 +43,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -71,18 +72,26 @@ def install(base: str, into: Path = EXTENSIONS) -> list[str]:
         if not stem.startswith(OURS):
             raise SystemExit(f'ERROR: {stem} is not a Batighor panel; refusing to install it')
         target = into / f'{stem}-{pkg["version"]}'
+        # Complete means its code is there. A run that died between the two
+        # files left a directory the app shows as "Unknown panel type", and
+        # skipping on the directory alone kept it so (BUGS B-116).
+        complete = (target / 'dist' / 'extension.js').is_file()
         for old in into.glob(f'{stem}-*'):
-            if old != target:
+            if old != target or not complete:
                 attic.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(old), attic / old.name)
-        if target.is_dir():
+                shutil.move(str(old), attic / f'{old.name}-{time.time_ns()}')
+        if complete:
             continue
+        # Built beside it and renamed in whole, so a failure leaves nothing.
+        stage = into / f'.{target.name}.part'
+        shutil.rmtree(stage, ignore_errors=True)
         for name in ('package.json', 'dist/extension.js'):
             data = z.read(name)
             if name.endswith('.js'):
                 data = embed_fonts(data, base)
-            (target / name).parent.mkdir(parents=True, exist_ok=True)
-            (target / name).write_bytes(data)
+            (stage / name).parent.mkdir(parents=True, exist_ok=True)
+            (stage / name).write_bytes(data)
+        stage.rename(target)
         wrote.append(target.name)
     return wrote
 

@@ -73,15 +73,38 @@ def index(base: Path) -> dict[str, Path]:
 
     A request is a lookup in this, so no path is ever built from a URL
     (py/path-injection): `..`, an absolute path and a symlink out are simply
-    not keys. A file whose real path leaves `base` is left out here.
+    not keys. A file whose real path leaves `base` is left out here, unless
+    it lands in the workspace the package was built from (`workspace_of`).
     """
-    root = os.path.realpath(base) + os.sep
+    roots = tuple(r + os.sep for r in {os.path.realpath(base), *workspace_of(base)})
     out = {}
     for p in Path(base).rglob('*') if Path(base).is_dir() else ():
         real = os.path.realpath(p)
-        if p.is_file() and real.startswith(root):
+        if p.is_file() and real.startswith(roots):
             out[p.relative_to(base).as_posix()] = Path(real)
     return out
+
+
+def workspace_of(base: Path) -> tuple:
+    """The colcon workspace a `--symlink-install` share tree points into.
+
+    Kutum builds with `--symlink-install`, so every installed layout and theme
+    file is a link back into the workspace: layouts into
+    `src/mongla_batighor/`, the fonts into `docs/assets/fonts/`. Excluding
+    them served the vehicle no layout and no font (2026-11-18, BUGS B-116).
+    The package's own `package.xml` is linked the same way, and the workspace
+    is the directory holding the `src/` it lands in; a link out of that
+    workspace stays out.
+    """
+    for d in (Path(base), Path(base).parent):         # layouts/ and theme/ sit one down
+        xml = d / 'package.xml'
+        if xml.is_symlink():
+            real = Path(os.path.realpath(xml))
+            for up in real.parents:
+                if up.name == 'src':
+                    return (str(up.parent),)
+            return (str(real.parent),)
+    return ()
 
 
 def app_link(host: str, bridge_port: int, layout: str) -> str:

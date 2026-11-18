@@ -255,6 +255,31 @@ def test_a_path_that_leaves_the_web_root_is_refused_however_it_is_spelt(tmp_path
         assert bad not in files, bad
 
 
+def test_a_symlink_install_serves_its_layouts_and_nothing_else(tmp_path):
+    """Kutum builds with --symlink-install: every installed layout is a link
+    into src/mongla_batighor/, and each font into docs/assets/fonts/.
+    Excluding those served the vehicle no layout and no font (B-116). A link
+    out of the workspace still stays out."""
+    ws = tmp_path / 'ws'
+    pkg, share = ws / 'src' / 'pkg', ws / 'install' / 'pkg' / 'share' / 'pkg'
+    (pkg / 'layouts').mkdir(parents=True)
+    (ws / 'docs' / 'fonts').mkdir(parents=True)
+    (share / 'layouts').mkdir(parents=True)
+    (share / 'theme' / 'fonts').mkdir(parents=True)
+    (pkg / 'package.xml').write_text('<package/>')
+    (pkg / 'layouts' / 'vision.json').write_text('{}')
+    (ws / 'docs' / 'fonts' / 'a.woff2').write_text('f')
+    (share / 'package.xml').symlink_to(pkg / 'package.xml')
+    (share / 'layouts' / 'vision.json').symlink_to(pkg / 'layouts' / 'vision.json')
+    (share / 'theme' / 'fonts' / 'a.woff2').symlink_to(ws / 'docs' / 'fonts' / 'a.woff2')
+    (tmp_path / 'secret').write_text('s')
+    (share / 'layouts' / 'out.json').symlink_to(tmp_path / 'secret')
+    assert serve.index(share / 'layouts') == {
+        'vision.json': (pkg / 'layouts' / 'vision.json').resolve()}
+    assert serve.index(share / 'theme') == {
+        'fonts/a.woff2': (ws / 'docs' / 'fonts' / 'a.woff2').resolve()}
+
+
 def test_every_kind_of_file_lichtblick_ships_has_its_type():
     """The types come from a fixed table now. Lichtblick 1.30.0 ships these
     kinds (seen on Kutum); WebAssembly must be application/wasm or the
