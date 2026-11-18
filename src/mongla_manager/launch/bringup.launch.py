@@ -79,8 +79,7 @@ VISION_PI_PASSTHROUGH = (
     'fwd_profile', 'dwn_profile', 'fwd_models', 'dwn_models', 'fwd_active',
     'dwn_active', 'contours', 'assoc_conf', 'range_crop',
     'tracking', 'tracker_type', 'kalman_adaptive_noise',
-    'dwn_calibration', 'fwd_calibration', 'act_conf',
-    'anchor_xfeat_hef', 'anchor_semi_dense', 'dwn_lock_class', 'bank_forward', 'bank_downward',
+    'dwn_calibration', 'fwd_calibration', 'dwn_lock_class', 'bank_forward', 'bank_downward',
     'fwd_fps', 'dwn_fps', 'fwd_publish_hz', 'dwn_publish_hz', 'replay',
     'split', 'fwd_device_path', 'dwn_device_path',
 )

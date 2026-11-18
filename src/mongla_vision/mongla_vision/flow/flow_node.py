@@ -340,6 +340,13 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         a, b = lo - depth, hi - depth
         self._floor_sigma_m = (math.sqrt(max(0.0, (a * a + a * b + b * b) / 3.0))
                                if all(map(math.isfinite, (a, b))) else 0.0)
+        if depth > 0.0 and self._floor_sigma_m == 0.0 and not (lo == lo and hi == hi):
+            # Not invented: no spread is added, and the operator is told the
+            # velocity's covariance treats the typed depth as exact.
+            self.get_logger().warn(
+                f'[FLOW ] pool depth {depth:.2f} m with no floor range: the '
+                f'velocity covariance carries none of the floor\'s spread. Set '
+                f'pool_depth_min_m / pool_depth_max_m or the course\'s pool range.')
         if live:
             self.get_logger().info(
                 f'[FLOW ] pool depth {depth:.2f} m (range {lo:.2f}-{hi:.2f}, '

@@ -194,6 +194,11 @@ def to_msg(tp, header=None) -> TargetPose:
     `range_m < tol` reads as out of tolerance while a caller testing the other
     way round reads as in it. `pose.py` refuses non-finite poses for the same
     reason at the other end of the pipeline.
+
+    The two QUALITY fields are scrubbed to the value that refuses, not to 0.0:
+    an ambiguity of 0.0 is "certain" and a reprojection of 0.0 is "a perfect
+    fit", so an unknown one became the best possible answer. Unknown ambiguity
+    is 1.0, the coin flip; unknown reprojection is infinite.
     """
     m = TargetPose()
     if header is not None:
@@ -206,7 +211,12 @@ def to_msg(tp, header=None) -> TargetPose:
         v = float(v)
         return v if v == v else 0.0
 
-    m.reproj_px, m.ambiguity = f(tp.reproj_px), f(tp.ambiguity)
+    def worst(v, refuse):
+        v = float(v)
+        return v if v == v else refuse
+
+    m.reproj_px = worst(tp.reproj_px, float('inf'))
+    m.ambiguity = worst(tp.ambiguity, 1.0)
     if tp.ok:
         m.yaw_deg, m.pitch_deg, m.roll_deg = (f(tp.yaw_deg), f(tp.pitch_deg),
                                               f(tp.roll_deg))

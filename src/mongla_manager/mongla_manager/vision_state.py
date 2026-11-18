@@ -16,7 +16,6 @@ Topics consumed (one camera example, `camera='laptop'`):
   /mongla/vision/laptop/detections   vision_msgs/Detection2DArray
   /mongla/vision/laptop/tracks       vision_msgs/Detection2DArray  (coast only)
   /mongla/vision/laptop/camera_info  sensor_msgs/CameraInfo
-  /mongla/vision/laptop/vis_range    std_msgs/Float32MultiArray
 
 NOT consumed: `image_raw`. The control host does not decode pixels, and a
 subscription costs a full-frame deserialisation per message on the machine
@@ -49,7 +48,6 @@ from typing import List, Optional
 
 from rclpy.node import Node
 
-from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import CameraInfo
 
 from mongla_vision import qos
@@ -89,7 +87,6 @@ class VisionState(ChoiceMixin):
         # CameraInfo K/D, kept rather than discarded -- see _on_info.
         self._K = None
         self._D = None
-        self._vis_range_vals: list = []            # parallel to _latest_array.detections
         self._info_seen:   bool   = False
         # Detection message counter. This used to count `image_raw`, which
         # meant the CONTROL HOST subscribed to the full 691 kB frame stream
@@ -142,12 +139,10 @@ class VisionState(ChoiceMixin):
         self._sub_info  = node.create_subscription(
             CameraInfo,       f'{ns}/camera_info',   self._on_info,
             qos.CAMERA_INFO)
-        self._sub_vr    = node.create_subscription(
-            Float32MultiArray, f'{ns}/vis_range',    self._on_vis_range,  10)
 
         self._log.info(
             f"[VST  ] subscribed camera={camera!r} -> "
-            f"{ns}/detections (+tracks, +camera_info, +vis_range). "
+            f"{ns}/detections (+tracks, +camera_info). "
             f"NOT image_raw -- the control host has no use for pixels.")
 
     # ------------------------------------------------------------------ #
@@ -243,10 +238,6 @@ class VisionState(ChoiceMixin):
         if not K or not (K[0] > 0.0) or not callable(n_fn):
             return None
         return float(K[0]) * float(n_fn())
-
-    def _on_vis_range(self, msg: Float32MultiArray) -> None:
-        with self._lock:
-            self._vis_range_vals = list(msg.data)
 
     # ------------------------------------------------------------------ #
     #  Read API used by the control loop                                 #
@@ -453,10 +444,14 @@ class VisionState(ChoiceMixin):
         One `try` around all five meant the first failure skipped the rest --
         and it was failing every time: `_sub_img` is a leftover from when this
         class subscribed to `image_raw`, the attribute no longer exists, and
-        the AttributeError landed in the bare `except`. So `_sub_vr` was never
-        destroyed and nothing said so.
+        the AttributeError landed in the bare `except`. So a subscription was
+        never destroyed and nothing said so.
+
+        Every `_sub_*` attribute, not a list: the list missed `_sub_lock` and
+        `_sub_pose` when they were added, so each camera switch left two live
+        subscriptions behind.
         """
-        for name in ('_sub_det', '_sub_trk', '_sub_info', '_sub_vr'):
+        for name in sorted(k for k in vars(self) if k.startswith('_sub_')):
             sub = getattr(self, name, None)
             if sub is None:
                 continue

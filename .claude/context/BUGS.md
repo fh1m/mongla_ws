@@ -507,6 +507,52 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-118: the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame `READ 2026-11-18` **FIXED 2026-11-18**
+
+**What.** The anchor resizes every frame to its backend grid (XFeat, 320x240)
+before it finds features, and `Anchor.snap` scales the detector's box into that
+grid. `lock_anchor._anchor_box` built the anchor rung's box from the warped
+corners and never scaled it back. The ladder, the follower and `/lock` work in
+camera pixels (640x360 on the vehicle, a different scale and aspect), so on the
+vehicle the anchor rung published a target at x=600 as x=300, its disagreement
+check against the follower compared boxes in two grids (so it tripped and cut
+authority whenever both ran), and its reseed restarted the follower on the
+wrong patch. `tools/studies/pipeline_visual_check.py` scaled the corners
+correctly, so every offline anchor measurement was right and the node was not.
+No test fed the node's box path a frame of a size other than the backend's.
+
+**Fix.** `_anchor_box` multiplies the corners by frame size over backend size.
+Guarded by `test_anchor_box_is_in_camera_pixels.py` (a real `Anchor`, a
+stand-in backend with XFeat's resize contract, enrolled and located on one
+640x360 frame; with the scaling removed the box enrolled at x 440-600 comes
+back at 220-300). Same pass: the lock's field-of-view warning fed `assess` the
+backend `K` beside full-frame pixels, so its bearing angles were off by the
+same ratio (`test_lock_visibility_bearing.py`). Still BUILT, NEVER FLOWN.
+
+### B-117: every loop closure was refused as a self-closure, because the guards read the newest place, not the matched one `READ 2026-11-18` **FIXED 2026-11-18**
+
+**What.** `lock_inputs._place_tick` fed `loop_closure.consider` the age of the
+most recent enrolment (`now - _places._last_t`) and the distance from it
+(`travel_since`). Places are taken every 5 s or 1 m, so at recognition time the
+age was at most about 5 s against a 30 s bar and the travel under 1 m against
+1.5 m: every closure was refused as "would close on itself", whatever the
+vehicle swam. The reference sigma was the filter's current one, with a typed
+1.0 when the covariance was missing. Nothing ever exercised the node's
+arguments, only `consider` with hand-picked ones, so the path looked complete
+and could not fire ("never fired, not once" in first-pool-verification section 6).
+
+**Fix.** `PlaceLog` keeps every place it took with its time, position and
+sigma, and tracks the furthest the vehicle has been from each (not the path
+length, which grows with the filter's jitter while holding station). The node
+asks `since(ref_position)` for the place the bank matched, and takes no place
+while the filter publishes no sigma. A bank loaded from disk has no history and
+refuses. Guarded by `test_loop_closure_refuses.py::test_a_revisit_of_an_old_place_closes`
+(an 80 s loop with truth known by construction; the old expressions refuse it
+with "reference is 4.5s old") and
+`test_loop_closure_is_actually_wired.py::test_the_guards_read_the_matched_place`
+(fails with the old line put back). Still BUILT, NEVER FLOWN: a closure needs
+water, a working barometer and the floor height.
+
 ### B-116: Batighor on Kutum served no layout and no font, and a panel half-installed stayed so `READ 2026-11-18` **FIXED 2026-11-18**
 
 **What.** Kutum builds with `--symlink-install`, so every installed layout and

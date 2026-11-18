@@ -12,9 +12,8 @@ from mongla_vision.anchor import health as _health
 # The bar for healing the follower from the anchor. Deliberately ABOVE the
 # anchor's own trust bar (100): a box good enough to report is not
 # automatically good enough to restart the fast rung on, because a reseeded
-# follower then carries FULL authority for the rest of the gap. Set at the
-# identity bar the re-ID work uses for "this is the same object", which is the
-# strictest claim any rung in this package makes.
+# follower then carries FULL authority for the rest of the gap. 120 is a fifth
+# above the trust bar; it is a margin, not a measurement.
 _ANCHOR_RESEED_INLIERS = 120
 
 
@@ -200,10 +199,19 @@ class AnchorMixin:
         # the signal exactly when the box is least trustworthy.
         if anchor_ran:
             self._publish_decomposition(p, self._anchor_header)
-        if p is not None and p.ok and p.corners is not None:
+        if p is not None and p.ok and p.corners is not None and gray is not None:
+            # The corners are in the BACKEND's pixels (320x240): the anchor
+            # resizes every frame before it finds features, and `enrol` scales
+            # the detector's box INTO that grid. The ladder, the follower and
+            # /lock work in the camera's own pixels, so the box goes back here.
+            # Unscaled, a target at x=600 on a 640-wide frame was published at
+            # x=300, compared against the follower in the wrong grid, and used
+            # to reseed it on the wrong patch (BUGS B-118).
             q = np.asarray(p.corners, np.float32)
-            ab = (float(q[:, 0].min()), float(q[:, 1].min()),
-                  float(q[:, 0].max()), float(q[:, 1].max()))
+            sx = gray.shape[1] / float(self._anchor._be.w)
+            sy = gray.shape[0] / float(self._anchor._be.h)
+            ab = (float(q[:, 0].min()) * sx, float(q[:, 1].min()) * sy,
+                  float(q[:, 0].max()) * sx, float(q[:, 1].max()) * sy)
             ac = p.confidence
             # The ladder heals upward, not only downward.
             #

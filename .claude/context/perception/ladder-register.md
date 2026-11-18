@@ -182,7 +182,6 @@ Five rows; four resolve cleanly and **one is real**:
 |---|---|
 | `/mongla/esc_rpm` | diagnostic, CLI and Foxglove read it |
 | `/mongla/localization/aiding` | diagnostic |
-| `/vis_range_map` | "debug only" by its own docstring; `display_node` reads it |
 | `/target_pose` | false alarm — `pnp_node` builds the name in a VARIABLE, invisible to a source scan |
 | **`/target_pose_fused`** | **Warning: published by `pose_fuse_node`, read by nothing** |
 

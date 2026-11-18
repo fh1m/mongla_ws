@@ -284,9 +284,9 @@ top of that. Our own anchor data point is that a **2.7 MB** conv net costs 88 ms
 **Single-digit FPS at best, and that is without the detector running.**
 
 **Caution: We have a nearby model and have never timed its encoder.**
-`mongla_vision/depth/models/depth_anything_v2_small.onnx` (see
-[`perception/depth-estimation.md`](../../perception/depth-estimation.md)) **is a
-DINOv2 ViT-S/14 encoder** with a DPT head. It is in the repo, it runs through onnxruntime, and
+`depth_anything_v2_small.onnx` (the model of the monocular depth node deleted on
+2026-11-18; never tracked, kept off the repo) **is a
+DINOv2 ViT-S/14 encoder** with a DPT head. It was in the tree, it runs through onnxruntime, and
 **nobody has recorded its Pi 5 latency** — not in `measured-bars.md`, not in the depth doc.
 That single measurement would replace every estimate in this section with a number.
 `sota-vo-depth.md` already calls ViT-S "the plausible Hailo candidate" for depth; if that
@@ -894,5 +894,5 @@ different budgets. The offline use is genuinely attractive and is an
   CosPlace-aliasing quote comes from a search summary rather than a fetch of the paper body.
   **Caution:** Note that §4's verdict does **not** rest on it — it rests on the geometric argument in
   §4.1, which needs no citation.
-- **Pi 5 latency of `depth_anything_v2_small.onnx`** — a DINOv2 ViT-S/14 encoder sitting in
+- **Pi 5 latency of `depth_anything_v2_small.onnx`** — a DINOv2 ViT-S/14 encoder that sat in
   our own tree, never timed. The cheapest possible way to replace every estimate in §2.

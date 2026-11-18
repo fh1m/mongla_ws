@@ -1,7 +1,7 @@
 """Named camera profiles. THIS DICT IS THE ONE THE CODE READS.
 
 `config/cameras.yaml` is the operator-facing copy with the full rationale, and
-Nothing loads it -- `get_profile` resolves against this dict. That is a trap
+nothing loads it -- `get_profile` resolves against this dict. That is a trap
 worth stating plainly, because it has already been walked into: switching the
 Pi profiles to the low-latency source by editing only the YAML changed nothing
 at all, and the launch came up on the old source with no error anywhere.
@@ -51,9 +51,12 @@ CAMERA_PROFILES = {
     # the builder hardcoded MJPG, so a camera that is faster in another format
     # was unconfigurable.
     'pi_forward': {
-        # The FANTECH, a rolling-shutter webcam.
+        # The FANTECH, a rolling-shutter webcam, forward because it is the
+        # colour camera (measured-bars "Forward camera rate").
         #
-        # It delivers 15.0 fps. On Kutum on 2026-11-10, raw `v4l2-ctl
+        # Its rate follows the scene's light and the host cannot set it:
+        # 10.0 fps at mean grey 28, 15.0 at 125, 30 in afternoon light. On
+        # Kutum on 2026-11-10, raw `v4l2-ctl
         # --stream-mmap` (no OpenCV) gave 14.97-15.06 fps at MJPG 640x360,
         # requested at 30 or 60, in auto exposure and in manual 5, 30 and
         # 100 ms. The driver accepts the request and reports 30/1 back, so

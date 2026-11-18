@@ -254,8 +254,10 @@ times on different builds. One day, and it can close lower rows outright.
    clips being easy. `measured-bars.md` §19.1.
 2. **Key point: A held-out-VENUE reliability diagram** — see §6b. An afternoon, no
    hardware, and no published underwater equivalent exists.
-3. **Key point: Time `depth_anything_v2_small.onnx` on the Pi.** It is **already in our
-   tree**, it *is* a DINOv2 ViT-S/14 encoder, and it has **never been timed**.
+3. **Key point: Time `depth_anything_v2_small.onnx` on the Pi.** It was in our tree
+   until 2026-11-18 (deleted with the unused depth node; the file was never
+   tracked and is kept off the repo), it *is* a DINOv2 ViT-S/14 encoder, and it
+   has **never been timed**.
    One measurement replaces every estimate in the DINO section — including the
    verdict that DINO is out of reach.
 

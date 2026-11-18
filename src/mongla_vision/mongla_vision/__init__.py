@@ -6,13 +6,10 @@ Public exports:
   make_camera_from_profile  factory: CAMERA_PROFILES dict -> Camera
   CAMERA_PROFILES           named profile dict (forward, downward, laptop, ...)
   Detector, Detection       detection ABC + plain dataclass result
-  YoloDetector              Ultralytics YOLO11 wrapper (yolov11n default)
-  draw                      module of pure-function visual overlays
+  wait_vision_state_ready   the readiness gate a mission waits on (preflight)
 
-Tracking (ByteTrack + Kalman smoother) ships as tracker_node.py and the
-tracking/ sub-package. Node entry points (`camera_node`, `detector_node`,
-`tracker_node`, `vision_node`) are package-level scripts -- import the
-modules to wire them in tests.
+The nodes (`camera_node`, `detector_node`, `detector_dual_node`,
+`tracker_node`, `lock_node`, `flow/flow_node`) are entry points, not exports.
 """
 
 from .cameras.camera   import Camera, FrameMeta

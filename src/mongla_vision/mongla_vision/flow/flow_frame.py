@@ -416,7 +416,8 @@ class FlowFrameMixin:
         # is displacement this never sees -- which is the point: the old path
         # accumulated whatever LK returned, including a covered lens.
         if self._acc.active:
-            yaw = math.radians(self._yaw_deg if self._yaw_deg is not None
-                               else 0.0)
+            yaw = math.radians(self._yaw_deg
+                               if getattr(self, '_acc_heading', False)
+                               and self._yaw_deg is not None else 0.0)
             self._acc.add_body_velocity(v.vx, v.vy, yaw, dt)
         self._publish_distance(self._acc.distance_m)

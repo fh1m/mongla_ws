@@ -81,8 +81,8 @@ def wait_vision_state_ready(vision_state, *,
     ALWAYS burned its full timeout -- 10 s added to the first vision verb of
     every mission, reported as "did not pass within 10s", which reads as a
     slow pipeline rather than a QoS mismatch. The same hazard is called out
-    by name in `assert_vision_ready` above and in `check_pipeline`, and was
-    fixed in five subscribers and missed in the one the control loop uses.
+    by name in `check_pipeline`, and was fixed in five subscribers and missed
+    in the one the control loop uses.
 
     Detections are also the better gate on the merits: they cannot flow
     without frames, and they are what the loop actually steers on.

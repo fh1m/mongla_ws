@@ -1,6 +1,6 @@
 """Single dispatch point: source-name -> Camera instance.
 
-Used by `camera_node` and `vision_node` at startup. Adding a new camera
+Used by `camera_node` at startup. Adding a new camera
 source = one line in `BUILDERS` plus the source class itself; nothing else
 changes.
 """

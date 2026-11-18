@@ -86,7 +86,9 @@ class ConfidenceModel:
     """Tracks what this detector's scores look like, and scores a detection.
 
     One instance per camera. Feed it every accepted detection's score; ask it
-    for a trust factor or a trend.
+    for the measurement-noise factor (`nsa_factor`). A control-side twin that
+    eased the loop off a doubtful box was written and never called: the loop
+    scales by the lock ladder's authority instead.
     """
 
     def __init__(self, window: int = WINDOW,
@@ -128,19 +130,3 @@ class ConfidenceModel:
         n = self.normalise(conf)
         f = NSA_MAX_FACTOR - n * (NSA_MAX_FACTOR - NSA_MIN_FACTOR)
         return max(NSA_MIN_FACTOR, min(NSA_MAX_FACTOR, f))
-
-    def authority(self, conf: float, floor: float = 0.25) -> float:
-        """Control-authority multiplier in [floor, 1.0] for this detection.
-
-        The control-side twin of `nsa_factor`, and the knob the round's
-        measurement actually supports -- the loop should ease off a box it does
-        not trust, at ANY range, rather than easing off every close box the way
-        a range ramp would.
-
-        Floored rather than allowed to reach zero: a weak detection is still
-        the only information available, and a vehicle that stops moving because
-        the water got murky has failed the mission just as surely as one that
-        drives off target.
-        """
-        n = self.normalise(conf)
-        return floor + n * (1.0 - floor)

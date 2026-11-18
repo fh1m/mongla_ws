@@ -172,7 +172,7 @@ def remint_class_ids(detections):
     mint for the same label.
 
     Not applied on the single-model path: there the integers are the model's
-    own and are already consistent with its `class_names()`.
+    own and already consistent with the labels it emits.
     """
     for d in detections:
         d.class_id = class_index(d.class_name or str(d.class_id))

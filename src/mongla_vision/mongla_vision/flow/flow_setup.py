@@ -376,7 +376,16 @@ class FlowSetupMixin:
         cmd = str(msg.data or '').strip().lower()
         if cmd.startswith('start'):
             lateral = cmd.endswith('lateral')
-            yaw = self._yaw_deg if self._yaw_deg is not None else 0.0
+            # With no heading at the start, the whole run integrates in the
+            # BODY frame (axis 0, yaw 0 throughout): mixing a heading that
+            # arrives later against an axis that was never measured would
+            # rotate the distance by a number nobody saw. Said, not hidden.
+            self._acc_heading = self._yaw_deg is not None
+            yaw = self._yaw_deg if self._acc_heading else 0.0
+            if not self._acc_heading:
+                self.get_logger().warn(
+                    '[FLOW ] distance started with no heading: it is measured '
+                    'along the BODY axis, so a turn during it is not removed')
             self._acc.start(math.radians(yaw), lateral)
             self._reset_lk()
             self.get_logger().info(

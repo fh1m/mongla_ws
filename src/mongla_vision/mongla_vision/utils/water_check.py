@@ -37,12 +37,6 @@ import sys
 
 import cv2
 
-# From the two measured clips. Deliberately a WIDE band in the middle where
-# the honest answer is "measure it both ways" -- a threshold that pretends to
-# separate two samples into a universal rule would be the overfit this file
-# exists to warn about.
-
-
 # The statistics live in `mongla_vision.underwater`, imported by the footage
 # inventory as well. Three copies of "how blurry is this frame" is how two of
 # them come to disagree. There is no `recommend` to import -- see the header.
