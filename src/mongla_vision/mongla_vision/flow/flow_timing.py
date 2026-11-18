@@ -22,8 +22,8 @@ cannot. Three deterministic errors, then one estimator for the remainder.
 
   1. `ClockMap`      board time -> host time, without TIMESYNC (the board does
                      not implement it -- 0 of 12 replies, measured).
-  2. exposure/2      the image timestamp convention is MID-EXPOSURE, and ours
-                     runs on AUTO exposure, so this term MOVES with the light.
+  2. exposure/2      the image timestamp convention is MID-EXPOSURE. Applied
+                     only when flow's `exposure_us` is set; no launch sets it.
   3. interval mid    an adaptive-baseline flow velocity is an AVERAGE over its
                      interval and belongs at the midpoint, not the end.
   4. `TimeOffset`    trace correlation + parabolic fit for what is left.
