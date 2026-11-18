@@ -78,3 +78,45 @@ def test_a_dense_screen_starts_the_app_at_a_scale_it_can_be_read_at(desk):
     assert not any(a.startswith('--force-device-scale-factor') for a in desk.launches[0])
     assert desk.main(['h', '--scale', '2']) == 0
     assert '--force-device-scale-factor=2' in desk.launches[1]
+
+
+def _panel_zip():
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w') as z:
+        z.writestr('package.json', json.dumps(
+            {'publisher': 'mongla', 'name': 'batighor-calibrate', 'version': '1.0.1'}))
+        z.writestr('dist/extension.js', 'registerPanel({name: "Calibrate"})')
+    return buf.getvalue()
+
+
+def test_a_panel_is_whole_or_absent_and_a_half_one_is_repaired(tmp_path, monkeypatch):
+    """Seen 2026-11-18: a run died fetching a font between package.json and
+    extension.js, and every later run skipped the directory, so the calibrate
+    view read "Unknown panel type" for good (B-116)."""
+    spec = importlib.util.spec_from_file_location(
+        '_desk2', ROOT / 'tools' / 'pool' / 'batighor_desktop.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    monkeypatch.setattr(mod.Path, 'home', staticmethod(lambda: tmp_path))
+    into = tmp_path / 'ext'
+    listed = json.dumps({'data': [{'id': 'mongla.batighor-calibrate'}]}).encode()
+    monkeypatch.setattr(mod, 'get', lambda url: listed if url.endswith('/extensions')
+                        else _panel_zip())
+
+    def dies(data, base):
+        raise OSError('font 404')
+    monkeypatch.setattr(mod, 'embed_fonts', dies)
+    with pytest.raises(OSError):
+        mod.install('http://k', into)
+    assert not (into / 'mongla.batighor-calibrate-1.0.1').exists(), \
+        'a failed install must leave no directory to be skipped later'
+
+    half = into / 'mongla.batighor-calibrate-1.0.1'
+    half.mkdir(parents=True)
+    (half / 'package.json').write_text('{}')               # what the old code left
+    monkeypatch.setattr(mod, 'embed_fonts', lambda data, base: data)
+    assert mod.install('http://k', into) == ['mongla.batighor-calibrate-1.0.1']
+    assert (half / 'dist' / 'extension.js').is_file()
+    assert mod.install('http://k', into) == [], 'a whole panel is left alone'

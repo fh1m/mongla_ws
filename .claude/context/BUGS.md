@@ -507,6 +507,30 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-116: Batighor on Kutum served no layout and no font, and a panel half-installed stayed so `READ 2026-11-18` **FIXED 2026-11-18**
+
+**What.** Kutum builds with `--symlink-install`, so every installed layout and
+theme file is a link back into the workspace (`src/mongla_batighor/`, and the
+fonts into `docs/assets/fonts/`). `serve.index()` drops any file whose real path
+leaves the directory it serves, so on the vehicle every `/layouts/<view>.json`
+and every font answered 404: an operator's browser and the desktop app got no
+view. The bench never saw it, because the tests built a plain tree. Then
+`tools/pool/batighor_desktop.py` died on the font 404 between a panel's
+`package.json` and its `extension.js`, and every later run skipped the
+directory because it existed, so the calibrate view read "Unknown panel type"
+for good.
+
+**Fix.** A link may land in the colcon workspace the package was built from
+(found from where its own `package.xml` link lands); any link out of that
+workspace still stays out. The desktop tool builds each panel beside its
+target and renames it in whole, and an incomplete directory is moved to the
+attic and rebuilt. Guarded by
+`test_serve_and_fetch.py::test_a_symlink_install_serves_its_layouts_and_nothing_else`
+and
+`test_batighor_desktop_holds_each_view_once.py::test_a_panel_is_whole_or_absent_and_a_half_one_is_repaired`
+(both injection-verified). Seen and verified on Kutum: 404, then 200 for the
+layouts and fonts, and all ten views shot from the desktop app.
+
 ### B-115: one target width outlived the class it was measured for `READ 2026-11-18` **FIXED 2026-11-18**
 
 **What.** `target_width_m` (launch arguments `target_width_m_forward` and
