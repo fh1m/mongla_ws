@@ -108,8 +108,7 @@ def bearing_from_pixel(cx: float, cy: float, w: float, h: float,
 
 
 def assess(cx: float, cy: float, w: float, h: float, fx: float, fy: float,
-           *, half_fov_deg: Optional[float] = None,
-           enter: float = MARGIN_ENTER,
+           *, enter: float = MARGIN_ENTER,
            critical: float = MARGIN_CRITICAL) -> Visibility:
     """How close is this box to leaving the frame? **No range required.**
 
