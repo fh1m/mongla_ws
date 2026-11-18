@@ -559,7 +559,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `kalman_adaptive_noise` | `True` |
 | `max_predict_s` | `1.5` |
 
-**`mongla_vision/utils/display_node.py`** — 10 parameters
+**`mongla_vision/utils/display_node.py`** — 9 parameters
 
 | parameter | default |
 |---|---|
@@ -571,7 +571,6 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `classes` | `'person'` |
 | `conf` | `0.35` |
 | `max_display_hz` | `30.0` |
-| `yaw_source` | `'mavlink_ahrs'` |
 | `hud_distance` | `False` |
 
 ## 5. The wire — `fc/srot_protocol.py`

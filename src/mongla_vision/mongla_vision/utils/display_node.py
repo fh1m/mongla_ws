@@ -75,10 +75,8 @@ import queue
 import subprocess
 import threading
 import time
-from collections import deque
 
 import cv2
-import numpy as np
 import rclpy
 from mongla_vision import image_msg
 from rclpy.node import Node
@@ -166,7 +164,6 @@ class VisionDisplayNode(Node):
         self.declare_parameter('classes',         'person')
         self.declare_parameter('conf',            0.35)
         self.declare_parameter('max_display_hz',  30.0)
-        self.declare_parameter('yaw_source', 'mavlink_ahrs')
         self.declare_parameter('hud_distance', False)   # pre-arm distance panel
 
         camera          = self.get_parameter('camera').get_parameter_value().string_value
@@ -186,7 +183,6 @@ class VisionDisplayNode(Node):
         ]
         self._video_mode    = video_file_mode
         self._max_hz        = max_hz
-        self._yaw_source    = self.get_parameter('yaw_source').get_parameter_value().string_value
         self._pipeline_procs: list[subprocess.Popen] = []
 
         # Runtime camera switching state. Exactly ONE camera is subscribed at a
@@ -211,9 +207,7 @@ class VisionDisplayNode(Node):
         self._tracked_dets: list = []
         self._track_ids:    list = []
         self._n_tracks            = 0
-        self._primary_track_id: int | None = None
         self._tracks_lock         = threading.Lock()
-        self._configured_classes: list[str] = []
         self._frames_received = 0
         self._last_wait_log   = self.get_clock().now()
 
@@ -253,13 +247,8 @@ class VisionDisplayNode(Node):
                 Float32MultiArray, '/mongla/vision/downward/distance_debug',
                 self._on_distance_dbg, 10)
 
-        # Depth rate estimation — short window, state-message timestamps
-        self._depth_history: deque[tuple[float, float]] = deque(maxlen=10)
-        self._depth_rate: float = 0.0
-
         # Video file state.
         self._is_paused:        bool            = False
-        self._video_position:   tuple[int, int] = (0, 0)
         self._video_speed:      float           = 1.0  # mirrors VideoFileCamera._speed
         # True until first detection arrives — video stays paused (splash shown) during this window.
         self._auto_paused_start: bool           = video_file_mode
@@ -332,16 +321,11 @@ class VisionDisplayNode(Node):
     def _create_cam_subs(self, camera: str) -> list:
         raw_topic  = f'/mongla/vision/{camera}/image_raw'
         det_topic  = f'/mongla/vision/{camera}/detections'
-        cls_topic  = f'/mongla/vision/{camera}/classes_filter'
         trk_topic  = f'/mongla/vision/{camera}/tracks'
         return [
             self.create_subscription(Image,             raw_topic,  self._on_image,          qos.IMAGE),
             self.create_subscription(Detection2DArray,  det_topic,  self._on_detections,     qos.DETECTIONS),
             self.create_subscription(Detection2DArray,  trk_topic,  self._on_tracks,         qos.DETECTIONS),
-            # LATCHED, so a HUD started after the detector gets the retained
-            # allowlist immediately instead of blank class chips until the
-            # operator happens to change it.
-            self.create_subscription(String,            cls_topic,  self._on_classes_filter, qos.LATCHED),
         ]
 
     def _switch_camera(self, name: str) -> None:
@@ -372,15 +356,7 @@ class VisionDisplayNode(Node):
 
     def _on_state(self, msg: MonglaState) -> None:
         self._state = msg
-        now = time.monotonic()
-        self._last_state_t = now
-        if not np.isnan(msg.depth_m):
-            self._depth_history.append((now, float(msg.depth_m)))
-            if len(self._depth_history) >= 2:
-                t0, d0 = self._depth_history[0]
-                t1, d1 = self._depth_history[-1]
-                dt = t1 - t0
-                self._depth_rate = (d1 - d0) / dt if dt > 0.1 else 0.0
+        self._last_state_t = time.monotonic()
 
     def _on_detections(self, msg: Detection2DArray) -> None:
         dets = array_to_detections(msg)
@@ -403,11 +379,7 @@ class VisionDisplayNode(Node):
             self._tracked_dets      = dets
             self._track_ids         = ids
             self._n_tracks          = len([i for i in ids if i is not None])
-            self._primary_track_id  = next((i for i in ids if i is not None), None)
         self._last_track_t = time.monotonic()
-
-    def _on_classes_filter(self, msg: String) -> None:
-        self._configured_classes = [c.strip() for c in msg.data.split(',') if c.strip()]
 
     def _on_distance_dbg(self, msg: Float32MultiArray) -> None:
         # [dist_m, height_m, n_tracks, active]; cache latest for the panel.

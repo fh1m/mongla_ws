@@ -56,7 +56,6 @@ class WebcamCamera(Camera):
         self.name      = str(name)
         self._device   = device
         self._frame_id = str(frame_id)
-        self._req      = (int(width), int(height), int(fps))
         self._log      = logger
 
         self._cap         = cv2.VideoCapture(device, cv2.CAP_V4L2)

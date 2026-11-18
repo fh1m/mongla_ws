@@ -213,7 +213,6 @@ class HailoDetector(Detector):
             cfg = ConfigureParams.create_from_hef(
                 self._hef, interface=HailoStreamInterface.PCIe)
             self._ng = self._target.configure(self._hef, cfg)[0]
-            self._ngp = self._ng.create_params()
             self._ivp = InputVStreamParams.make(
                 self._ng, format_type=FormatType.UINT8)
             self._ovp = OutputVStreamParams.make(
