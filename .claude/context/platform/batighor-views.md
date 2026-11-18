@@ -2,7 +2,7 @@
 
 Batighor is the operator center: Kutum serves Lichtblick with our panels, our theme
 and one view per aspect of the vehicle, to any browser on the deck
-(`http://mongla.local:8000/`) or to the desktop app
+(`http://kutum.local:8000/`) or to the desktop app
 (`python3 tools/pool/batighor_desktop.py`). This page walks the views as an operator
 meets them. Every picture is the desktop app at its working scale, on Kutum, with the
 stack running against the bench's fake board and two recorded pool clips played
