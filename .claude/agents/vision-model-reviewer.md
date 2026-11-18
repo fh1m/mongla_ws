@@ -30,7 +30,7 @@ You review **YOLO11 training and detection configuration** for the Mongla vision
 ## References
 
 - `models/<stem>.yaml` (sidecars beside each `.hef`/`.pt`), `src/mongla_vision/config/cameras.yaml`
-- `.claude/context/perception/vision-architecture.md`, `ROADMAP.md`, `depth-estimation.md`
+- `.claude/context/perception/vision-architecture.md`, `ROADMAP.md`
 - `src/mongla_vision/mongla_vision/detection/{hailo,yolo,factory}.py`, `tools/bench/hailo_compile.sh`
 
 Report only. Do not edit files.

@@ -3,10 +3,12 @@
 
 The mission DSL's ``use_camera`` already keeps exactly one detector inferring
 (pauses every other known detector, resumes the target). This gives the SAME
-exclusivity from the command line -- so a manual switch can't leave two
-detectors inferring at once, which the Hailo cannot hold
-(two graphs exceed its SRAM). Prefer this over a bare ``ros2 param set <one detector> paused false``,
-which resumes one WITHOUT pausing the other.
+exclusivity from the command line. Two detectors CAN infer at once (the
+Hailo's round-robin scheduler holds both: forward 29.8 Hz, downward 32-33 Hz,
+measured-bars 87), but one alone runs the downward detector at 58.6 Hz, so a
+single live camera is the faster default (`use_both_cameras` is the DSL's way
+to run both). Prefer this over a bare ``ros2 param set <one detector> paused
+false``, which resumes one WITHOUT pausing the other.
 
 Examples
 --------

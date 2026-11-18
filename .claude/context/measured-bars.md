@@ -2218,6 +2218,30 @@ evidence of stillness.
 > Not yet tested against measured light. Until it is, `vision_check` names
 > the camera as the cause when the forward detector is under its bar, and the
 > answer for frames is the Sonix forward or the board-triggered sensor below.
+>
+> **Tested against light, 2026-11-18 evening.** Raw `v4l2-ctl --stream-mmap`
+> on Kutum, nothing else on either camera. The Fantech scene measured mean
+> grey **28.3** (against 124.5 on 2026-11-10, when it gave 15.0 fps). It gave
+> **10.01-10.07 fps** at MJPG 640×360, 640×480 and 1280×720, all negotiated at
+> 30/1, in auto exposure and in manual exposure from 0.5 ms to 200 ms, with
+> power-line 0/50/60 Hz and gain 5 or 100. Manual exposure is ignored: mean
+> grey 28.3-28.7 at every setting. Each camera is on its own USB 2 bus at 480
+> Mbit/s, so bandwidth is not the cap. In the same light the Sonix
+> global-shutter camera delivered **210.99 / 120.72 / 60.42 fps** for 210 /
+> 120 / 60 requested. Brightness 28 → 10 fps, 125 → 15 fps, afternoon → 30:
+> the Fantech's rate is set by its own exposure, which the host cannot set.
+>
+> **Camera assignment, decided on this measurement.** Fantech forward, Sonix
+> downward stays. Forward needs colour: the props are told apart by colour
+> and the models are trained on colour frames. Downward needs rate and a
+> global shutter: optical flow is a velocity sensor, and a rolling-shutter
+> 10 fps camera is the worst flow sensor of the two. The swap
+> (`fwd_profile:=pi_forward_global_shutter`) buys a 210 Hz mono forward view
+> and costs colour and the flow sensor. The forward camera's cost is paid in
+> a dim pool: 10 fps, so the lock coasts across longer gaps. The ask that
+> removes it is hardware, not software: a colour forward camera whose
+> exposure the host can set, ideally global shutter and board-triggered
+> (`upstream/pr-w`).
 
 > **NOT REPRODUCED 2026-11-10.** On Kutum, raw `v4l2-ctl --stream-mmap` (no
 > OpenCV, no ROS) gave the Fantech **14.97-15.06 fps** at MJPG 640×360,
@@ -5575,6 +5599,13 @@ Loop closure was first wired into `vision_pi.launch.py`. **`bringup` includes
 command — the fifth instance of this package's oldest defect (the lock ladder
 in no launch file; `lock_s` held at 0; `position=` never passed; `device_path`
 read and ignored).
+
+> **Superseded 2026-11-18.** The side files `~/.mongla/loop_closure.yaml` and
+> `~/.mongla/ladder.yaml` are gone. Loop closure and the ladder's bars are node
+> parameters set under `nodes:` in `~/.mongla/bringup.yaml`, which reaches the
+> node whichever launch started it and refuses a misspelt key. Neither side
+> file existed on the vehicle or the dev box when they were removed. The
+> no-launch-argument guard below still holds.
 
 The node configures **itself** instead: `~/.mongla/loop_closure.yaml`, the same
 deck-editable pattern the course priors already use, with the constants as

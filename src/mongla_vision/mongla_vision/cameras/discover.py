@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """discover_cameras() -- probe connected USB cameras.
 
-Used by camera_node when discover_on_start:=true to log a device table,
-and by display_node to know which cameras are physically available.
+Used by camera_node when discover_on_start:=true to log a device table.
 """
 import os
 

@@ -51,12 +51,6 @@ _SLH  = 11     # base panel line height (was 12)
 _SPAD = 3      # panel inner padding (was 4)
 
 
-def _vr_label(v: float) -> str:
-    """Qualitative proximity label for a vis_range value (0=far, 1=close)."""
-    if v > 0.65: return 'CLOSE'
-    if v > 0.30: return 'MED'
-    return 'FAR'
-
 
 def render_ui_strip(w: int, frame_h: int, *,
                     detections: List[Detection],
@@ -80,7 +74,6 @@ def render_ui_strip(w: int, frame_h: int, *,
                     video_position: Optional[tuple] = None,
                     pipeline_health: Optional[Dict[str, bool]] = None,
                     depth_rate: float = 0.0,
-                    primary_vis_range: float = 0.0,
                     ) -> np.ndarray:
     """Build and return the UI strip.  Height scales with render width."""
     # Calibrated for 1920px native render (sf=1.0 at 1920). At smaller widths
@@ -115,8 +108,7 @@ def render_ui_strip(w: int, frame_h: int, *,
                      ex_h, ey_h, cf_h, sf, r3_y, r3_h, slh, spad)
     _draw_instruments_row(strip, w, yaw, yaw_source, state,
                           sf, r4_y, r4_h, slh, spad,
-                          depth_rate=depth_rate,
-                          primary_vis_range=primary_vis_range)
+                          depth_rate=depth_rate)
 
     cv2.line(strip, (4, r5_y - 1), (w - 4, r5_y - 1), C_BORDER, 1)
     heading_tape(strip, 4, r5_y, w - 8, r5_h, yaw, show_readout=False, fs_scale=sf)
@@ -318,8 +310,7 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
                           sf: float,
                           r4_y: int, r4_h: int,
                           slh: int, spad: int,
-                          depth_rate: float = 0.0,
-                          primary_vis_range: float = 0.0) -> None:
+                          depth_rate: float = 0.0) -> None:
     cv2.line(strip, (4, r4_y), (w - 4, r4_y), C_BORDER, 1)
 
     _ZA_FRAC = 0.13   # compass zone width fraction
@@ -351,23 +342,21 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
     sfs = _SFS * sf
     if state is not None:
         armed   = bool(state.armed)
-        depth_v = state.depth_m         if not np.isnan(state.depth_m)         else 0.0
-        yaw_v   = state.yaw_deg         if not np.isnan(state.yaw_deg)         else 0.0
-        batt_v  = state.battery_voltage if not np.isnan(state.battery_voltage) else 0.0
-        dep_str = f'{depth_v:+.2f}m'
-        if abs(depth_rate) > 0.02:
+        # Absent renders '--', never 0.0: a depth of +0.00 m is the surface,
+        # and a battery of 0.0 V is a dead pack.
+        depth_v, yaw_v, batt_v = (state.depth_m, state.yaw_deg,
+                                  state.battery_voltage)
+        dep_str = '--' if np.isnan(depth_v) else f'{depth_v:+.2f}m'
+        if not np.isnan(depth_v) and abs(depth_rate) > 0.02:
             arrow = '↑' if depth_rate < 0 else '↓'
             dep_str += f' {arrow}{abs(depth_rate):.2f}'
         st_rows = [
             ('DEPTH', dep_str,                     C_TEXT),
-            ('YAW',   f'{yaw_v:.1f}deg',          C_TEXT),
+            ('YAW',   '--' if np.isnan(yaw_v) else f'{yaw_v:.1f}deg', C_TEXT),
             ('MODE',  state.mode or '?',           C_ACCENT if armed else C_DIM),
             ('ARMED', 'YES' if armed else 'no',    C_OK     if armed else C_DIM),
-            ('BAT',   f'{batt_v:.1f}V',            _bat_color(batt_v)),
-            ('VIS_R', (f'{primary_vis_range:.2f} {_vr_label(primary_vis_range)}'
-                       if primary_vis_range > 0.01 else '---'),
-                      C_OK if primary_vis_range > 0.65 else
-                      C_AMBER if primary_vis_range > 0.30 else C_DIM),
+            ('BAT',   '--' if np.isnan(batt_v) else f'{batt_v:.1f}V',
+             _bat_color(batt_v)),
         ]
         _mc_panel(strip, zb_x + int(5 * sf), r4_y + int(4 * sf), 'STATE', st_rows,
                   border=C_OK if armed else C_BORDER,
@@ -377,31 +366,9 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
     alt_w = max(28, zd_w - 6)
     alt_x = zd_x + (zd_w - alt_w) // 2
 
-    # Proximity bar — top 30% of Zone D height, shifts altimeter down
-    bar_pad = int(3 * sf)
-    bar_h   = max(12, int(r4_h * 0.30))
-    bar_x   = alt_x
-    bar_y   = r4_y + bar_pad
-    bar_w   = alt_w
-    cv2.rectangle(strip, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), C_BG, -1)
-    if primary_vis_range > 0.01:
-        fill_w   = int(bar_w * min(primary_vis_range, 1.0))
-        fill_col = (C_OK if primary_vis_range > 0.65 else
-                    C_AMBER if primary_vis_range > 0.30 else C_ERR)
-        cv2.rectangle(strip, (bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h), fill_col, -1)
-    cv2.rectangle(strip, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h), C_BORDER, 1)
-    # Tick marks at threshold positions (0.30=MED, 0.65=CLOSE)
-    for thresh in (0.30, 0.65):
-        tx = bar_x + int(bar_w * thresh)
-        cv2.line(strip, (tx, bar_y), (tx, bar_y + bar_h), C_BORDER, 1)
-    pil_text(strip, 'PROX', (bar_x + 2, bar_y + 1), 0.22 * sf, C_DIM)
-    if primary_vis_range > 0.01:
-        num_str = f'{primary_vis_range:.2f}'
-        nw, _   = pil_text_size(num_str, 0.22 * sf)
-        pil_text(strip, num_str, (bar_x + bar_w - nw - 2, bar_y + 1), 0.22 * sf, C_DIM)
-
-    alt_y = bar_y + bar_h + bar_pad
-    alt_h = max(int(8 * sf), r4_y + r4_h - alt_y - bar_pad)
+    pad   = int(3 * sf)
+    alt_y = r4_y + pad
+    alt_h = max(int(8 * sf), r4_y + r4_h - alt_y - pad)
     depth = (state.depth_m
              if state is not None and not np.isnan(state.depth_m)
              else float('nan'))

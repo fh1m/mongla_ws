@@ -158,3 +158,13 @@ def test_garbage_correspondences_are_refused_on_REPROJECTION():
 
 def test_a_refused_pose_is_never_SQUARE():
     assert TargetPose(ok=False).square_within(90.0) is False
+
+
+def test_two_perfect_branches_are_a_coin_flip_not_a_certainty():
+    """IPPE's second branch fitting perfectly means the two cannot be told
+    apart. Reported as 0.0 it read as the most decisive pose possible."""
+    from mongla_vision.anchor.pose import ambiguity_ratio
+    assert ambiguity_ratio([0.0, 0.0]) == 1.0
+    assert ambiguity_ratio([0.5, 2.0]) == 0.25
+    r = ambiguity_ratio([0.7])
+    assert r != r, 'one branch has no ratio; it must be unknown, not decisive'

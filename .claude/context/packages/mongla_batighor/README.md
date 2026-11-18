@@ -163,8 +163,7 @@ side; a three.js scene with the hull CAD; the Mongla look; and the five older to
 then deleted. Each is a bead under it. The guided calibration page is one of them: it is
 `calibrate.launch.py`, the `calibrate` layout and panel, and the helm's `calibrate` op. The mission web console is the first deleted: its camera
 switch and detector settings are the helm's, its video is the browser's, and its per-detection
-table (with `vis_range`, when `depth_estimation` runs) is any Raw Messages panel on
-`/mongla/vision/<cam>/detections` or `vis_range`.
+table is any Raw Messages panel on `/mongla/vision/<cam>/detections`.
 
 ## Every module
 

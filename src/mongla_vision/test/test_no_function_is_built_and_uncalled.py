@@ -156,7 +156,7 @@ def test_the_sweep_catches_a_planted_dead_function(tmp_path):
     defect is not a guard.
 
     The plant goes in a copy, and that is not tidiness. The first version
-    wrote into the real `ladder_config.py` and undid it in a `finally` --
+    wrote into a real module and undid it in a `finally` --
     which does not run on SIGTERM, and this suite is run under `timeout`. A
     killed run would have left the plant in the source and failed `--private`
     on every run afterwards. It is also not concurrency-safe: a second sweep
@@ -168,13 +168,13 @@ def test_the_sweep_catches_a_planted_dead_function(tmp_path):
     pkg.mkdir(parents=True)
     (root / 'tools').mkdir()
     real = (_ROOT / 'src' / 'mongla_vision' / 'mongla_vision'
-            / 'ladder_config.py')
-    shutil.copy(real, pkg / 'ladder_config.py')
+            / 'stamps.py')
+    shutil.copy(real, pkg / 'stamps.py')
 
     clean = _run('--private', root=root)
     assert '_planted' not in clean, 'the copied tree is not clean to begin with'
 
-    (pkg / 'ladder_config.py').write_text(
+    (pkg / 'stamps.py').write_text(
         real.read_text()
         + '\n\ndef _planted_and_never_called(x):\n    return x\n')
     out = _run('--private', root=root)

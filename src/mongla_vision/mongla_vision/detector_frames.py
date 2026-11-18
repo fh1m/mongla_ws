@@ -180,17 +180,3 @@ class DetectorFramesMixin:
                 self._stale_max = max(self._stale_max, age)
         except AttributeError:
             pass
-
-    def _preprocess(self, frame):
-        """The optional preprocessor; on a fault, the raw frame and no more preprocessing."""
-        if self._pre is not None:
-            try:
-                frame = self._pre(frame)
-            except Exception as exc:
-                # Never let a preprocessing fault stop detection: a
-                # degraded frame beats no frame.
-                self.get_logger().warning(
-                    f'[DET  ] preprocess failed, using the raw frame: '
-                    f'{exc!r}')
-                self._pre = None
-        return frame

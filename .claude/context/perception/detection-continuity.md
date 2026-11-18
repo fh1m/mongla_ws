@@ -158,9 +158,11 @@ models, separates a 100 % clip from a 1.5 % one.** That still points at motion
 blur. It just says the answers are exposure control and training-time
 augmentation, not a filter in front of the detector.
 
-`preprocess:=clahe` remains selectable for water we have never measured. **No
-profile turns it on** — `test_profiles.py::test_no_profile_enables_preprocessing`
-is the guard, and it was verified to bite.
+The preprocessor and the `vision:=` profiles that bundled it were deleted
+on 2026-11-18: nothing turned it on, and keeping an unmeasured switch for
+water we had never seen was a knob nobody could set correctly under a run
+clock. `tools/studies/recall_matrix.py --clahe` still re-runs the
+measurement.
 
 ## 5. Method notes that cost something to learn
 

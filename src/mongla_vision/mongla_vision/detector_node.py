@@ -79,11 +79,8 @@ from mongla_vision.detection.detector  import largest
 from mongla_vision.detection.factory   import make_detector
 from mongla_vision.detection.detector  import Detector
 from mongla_vision.detection.messages  import detections_to_array
-from mongla_vision.detection.preprocess import make_preprocessor
 from mongla_vision.detection.rangecrop  import RangeCrop
-from mongla_vision.detection.profiles   import resolve as resolve_profile
-from .detector_params import (_UNSET, _is_unset, _model_stem,
-                              _parse_models_param, _split_active)
+from .detector_params import _model_stem, _parse_models_param, _split_active
 from .detector_frames import _DIRECT_FALLBACK_S
 from .detector_setup import DetectorSetupMixin
 from .detector_frames import DetectorFramesMixin
@@ -125,46 +122,6 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         )
 
         device   = str(self.get_parameter('device').value)
-        # Resolve the profile FIRST, then let explicit parameters override it.
-        # `_p()` below returns the operator's value when they set one and the
-        # profile's when they did not, so `vision:=murky preprocess:=off` is
-        # a coherent request rather than a contradiction.
-        prof_name = str(self.get_parameter('vision_profile').value or '').strip()
-        prof = {}
-        if prof_name:
-            try:
-                prof, why = resolve_profile(prof_name)
-                self.get_logger().info(
-                    f"[DET  ] vision profile {prof_name!r}: {why}")
-                self.get_logger().info(f"[DET  ] -> {prof}")
-            except ValueError as exc:
-                self.get_logger().error(f'[DET  ] {exc}')
-                raise
-
-        def _p(name, default):
-            """Explicit parameter wins; else the profile; else the default.
-
-            "explicit" is decided by a sentinel, not by comparing to the
-            DEFAULT, and the difference is not academic. A launch file always
-            passes every parameter -- `preprocess:='none'`, `range_crop:=False`
-            -- so a comparison against the declared default sees the launch's
-            own defaults as deliberate operator choices and the profile never
-            applies. Measured on the vehicle: `vision:=murky` logged that it
-            had applied while `range_crop` read False and `conf` read 0.15.
-
-            So a knob is "unset" when it holds its documented sentinel:
-            `preprocess:'auto'`, `range_crop:-1`, `conf:0.0`. Anything else is
-            a real request and wins.
-            """
-            v = self.get_parameter(name).value
-            sentinel = _UNSET.get(name)
-            if sentinel is not None and _is_unset(name, v):
-                return prof.get(name, default)
-            if not prof:
-                return v
-            return v if not _is_unset(name, v) else prof.get(name, default)
-
-        # NOT routed through `_p`: see the note on `_UNSET`.
         conf     = float(self.get_parameter('conf').value)
         iou      = float(self.get_parameter('iou').value)
         imgsz    = int(self.get_parameter('imgsz').value)
@@ -289,34 +246,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
 
         from vision_msgs.msg import Detection2DArray, VisionInfo
         from std_msgs.msg import String
-        # Depth 1 BEST_EFFORT: the publisher's mailbox is only a mailbox if
-        # the subscriber is one too. A depth-5 RELIABLE queue here (which is
-        # what an int `5` means, and also what `qos_profile_sensor_data` gives)
-        # asks the middleware to hold and retransmit frames for a consumer that
-        # is going to throw all but the newest away in `_on_image` anyway --
-        # buying latency and CPU for nothing.
-        # Direct feed. When a composed process hands frames straight in (see
-        # `vision_stack_node`), subscribing as well would decode and infer the
-        # same picture twice -- and the topic copy is the SLOWER of the two,
-        # so it would also be the one the detector acted on half the time.
-        # Built once. `make_preprocessor` returns None for 'off' so the hot
-        # loop can skip the call entirely rather than paying for an identity.
-        try:
-            self._pre = make_preprocessor(
-                _p('preprocess', 'off'),
-                float(_p('preprocess_clip', 3.0)) or 3.0)
-        except ValueError as exc:
-            self.get_logger().error(f'[DET  ] {exc}')
-            self._pre = None
-        if self._pre is not None:
-            self.get_logger().info(
-                f"[DET  ] preprocessing ON "
-                f"(clahe clip={float(self.get_parameter('preprocess_clip').value)}) "
-                f"-- ~3.8 ms/frame, measured 10.7 % -> 56.2 % presence on "
-                f"blurry footage")
-
-        self._crop = (RangeCrop()
-                      if int(_p('range_crop', 0)) > 0
+        self._crop = (RangeCrop() if bool(self.get_parameter('range_crop').value)
                       else None)
         if self._crop is not None:
             self.get_logger().info(
@@ -591,7 +521,6 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
             self._report_seeing(frame)
             t0 = time.monotonic()
             self._note_frame_age(header)
-            frame = self._preprocess(frame)
             det = self._det  # atomic ref read under CPython GIL
             if det is None:
                 continue  # model still loading — drop frame, keep queue drained
@@ -599,13 +528,6 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
             if out is None:
                 continue
             detections, infer_frame, crop_state = out
-        # AFTER the counter is cleared, and outside this try. The
-        # failure counter escalates to REBUILDING THE PRIMARY DETECTOR,
-        # and the primary just succeeded -- letting a secondary model's
-        # exception land in the same counter would tear down a healthy
-        # model because a different one misbehaved. Caught by
-        # `test_a_SUCCESSFUL_inference_in_the_LOOP_resets_the_counter`,
-        # which went from 0 failures to 5.
             act = det.acting_conf()
             weak = [d for d in detections if d.score < act]
             if weak:
@@ -635,7 +557,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
             except Exception:
                 return  # node being destroyed; exit thread cleanly
             self._publish_contours(frame, detections, header)
-            self._publish_debug_image(frame, detections, header, dt, primary)
+            self._publish_debug_image(frame, detections, header, primary)
 
     # ── the steps of one inference pass ─────────────────────────────────────
     # Each was a span of `_infer_loop` until 2026-11-07; code and comments

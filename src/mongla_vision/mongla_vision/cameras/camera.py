@@ -15,13 +15,14 @@ read() -> (frame: np.ndarray BGR | None, meta: FrameMeta)
 
 is_healthy() -> bool
     True when the source is currently producing usable frames. Used for
-    startup banners and the diag log line, never for runtime fallback —
-    one source per launch is the design.
+    the startup banner, the diag log line and the reopen watchdog
+    (`reopen.py`), which reopens the SAME source -- one source per launch
+    is the design, so there is no fallback to another.
 
 info() -> dict
     Snapshot of the source's view of the world: width, height, fps,
     frame_id, source_kind. Used by camera_node to populate
-    sensor_msgs/CameraInfo and by the debug overlay to print the source.
+    sensor_msgs/CameraInfo.
 
 close()
     Release any underlying resources (cv2 capture, threads, subscriptions).

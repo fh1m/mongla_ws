@@ -9,8 +9,7 @@ this docstring said otherwise and `check_tracker.py` believed it,
 raising AttributeError on the first track of every run.
 
 Topics:
-  in    /mongla/vision/<cam>/detections    vision_msgs/Detection2DArray  (raw)
-  in    /mongla/vision/<cam>/camera_info   sensor_msgs/CameraInfo
+  in    /mongla/vision/<cam>/candidates    vision_msgs/Detection2DArray  (raw)
   out   /mongla/vision/<cam>/tracks        vision_msgs/Detection2DArray  (tracked)
 
 Every tracker setting is a ROS parameter, read ONCE when the node starts (the
@@ -36,13 +35,13 @@ ros2 run mongla_vision tracker_node --ros-args -p camera:=laptop \\
 import os
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
 
+import math
 import sys
 import time
 
 import rclpy
 from rclpy.node import Node
 
-from sensor_msgs.msg import CameraInfo
 from vision_msgs.msg import Detection2DArray
 
 from mongla_vision import qos
@@ -144,11 +143,12 @@ def kalman_pass(kalman, tracked, frame_t):
             # it from THIS observation rather than extrapolating from a track
             # that went cold.
             kalman.drop(td.track_id)
-        # A COASTED box carries the score of the detection it was
-        # extrapolated from, not evidence about this frame. Feeding it to the
-        # confidence model would let one good detection keep voting while the
-        # target is actually absent, so predicted boxes pass NaN -- which the
-        # smoother reads as "no confidence information" and leaves R alone.
+        # A COASTED box carries score 0.0 from both backends, which is a
+        # marker, not evidence about this frame. Fed to the confidence model it
+        # would be learned as a real, very low detector score and drag the
+        # model's p10 down while the target is absent, so predicted boxes pass
+        # NaN -- which the smoother reads as "no confidence information" and
+        # leaves R alone.
         cx_hat, cy_hat = kalman.smooth(
             td.track_id, td.cx, td.cy, frame_t, td.predicted,
             conf=(float('nan') if td.predicted else float(td.score)))
@@ -159,6 +159,38 @@ def kalman_pass(kalman, tracked, frame_t):
                   cx_hat + half_w, cy_hat + half_h),
             track_id=td.track_id, predicted=td.predicted))
     return smoothed
+
+
+# Box SIZE smoothing, on capture time. The retention per 30 Hz frame is 0.7,
+# what it always was at that rate; as a time constant it no longer stretches
+# with a slower camera (the Fantech's 10 fps in dim light made it 0.4 s) or
+# shrinks with a faster one -- the frame-count defect B-114 removed from the
+# coast windows, in its last place.
+SIZE_TAU_S = -(1.0 / 30.0) / math.log(0.7)
+
+
+def smooth_sizes(ema: dict, tracked, frame_t: float) -> list:
+    """Each track's box with its width and height smoothed; `ema` is updated.
+
+    `ema` maps track id -> (width, height, capture time). Ids not in this
+    frame are dropped, so a returning id starts from its own box.
+    """
+    active = {t.track_id for t in tracked}
+    for k in [k for k in ema if k not in active]:
+        del ema[k]
+    out = []
+    for td in tracked:
+        sw, sh, t0 = ema.get(td.track_id, (td.width, td.height, frame_t))
+        keep = math.exp(-max(0.0, frame_t - t0) / SIZE_TAU_S)
+        sw = keep * sw + (1.0 - keep) * td.width
+        sh = keep * sh + (1.0 - keep) * td.height
+        ema[td.track_id] = (sw, sh, frame_t)
+        out.append(TrackedDetection(
+            class_id=td.class_id, class_name=td.class_name, score=td.score,
+            xyxy=(td.cx - sw * 0.5, td.cy - sh * 0.5,
+                  td.cx + sw * 0.5, td.cy + sh * 0.5),
+            track_id=td.track_id, predicted=td.predicted))
+    return out
 
 
 class TrackerNode(Node):
@@ -254,17 +286,12 @@ class TrackerNode(Node):
         self._sub_det  = self.create_subscription(
             Detection2DArray, f'{ns}/candidates',  self._on_detections,
             qos.DETECTIONS)
-        self._sub_info = self.create_subscription(
-            CameraInfo,       f'{ns}/camera_info', self._on_info,
-            qos.CAMERA_INFO)
         # `tracks` mirrors `detections`: same shape, same consumers, and the
         # coast layer treats them as one ladder.
         self._pub      = self.create_publisher(
             Detection2DArray, f'{ns}/tracks', qos.DETECTIONS)
 
-        self._image_size = (640, 480)
-        self._info_seen  = False
-        self._size_ema: dict = {}   # track_id -> (smooth_w, smooth_h)
+        self._size_ema: dict = {}   # track_id -> (width, height, capture time)
 
         # Diagnostics
         self._frames          = 0
@@ -309,11 +336,6 @@ class TrackerNode(Node):
                     f"[TRK  ] classes changed → reset tracker (new classes='{p.value}')")
         return SetParametersResult(successful=True)
 
-    def _on_info(self, msg: CameraInfo) -> None:
-        if msg.width and msg.height:
-            self._image_size = (int(msg.width), int(msg.height))
-            self._info_seen  = True
-
     def _on_detections(self, msg: Detection2DArray) -> None:
         frame_t    = capture_time(msg.header)
         detections = array_to_detections(msg)
@@ -330,27 +352,9 @@ class TrackerNode(Node):
         if self._kalman is not None:
             tracked = kalman_pass(self._kalman, tracked, frame_t)
 
-        # Size EMA pass: smooth width/height per track_id independently.
-        # Kalman only smoothed centre (cx, cy); raw ByteTrack size jitters every
-        # frame and causes visible box shaking. EMA alpha=0.7 damps jitter in
-        # ~4 frames while still following real size changes.
-        active_ids = {t.track_id for t in tracked}
-        self._size_ema = {k: v for k, v in self._size_ema.items() if k in active_ids}
-        size_smoothed = []
-        for td in tracked:
-            sw, sh = self._size_ema.get(td.track_id, (td.width, td.height))
-            sw = 0.7 * sw + 0.3 * td.width
-            sh = 0.7 * sh + 0.3 * td.height
-            self._size_ema[td.track_id] = (sw, sh)
-            half_w = sw * 0.5
-            half_h = sh * 0.5
-            size_smoothed.append(TrackedDetection(
-                class_id=td.class_id, class_name=td.class_name,
-                score=td.score,
-                xyxy=(td.cx - half_w, td.cy - half_h, td.cx + half_w, td.cy + half_h),
-                track_id=td.track_id, predicted=td.predicted,
-            ))
-        tracked = size_smoothed
+        # Size smoothing: the Kalman smooths only the centre, and raw box
+        # size jitters every frame. On capture time; see `smooth_sizes`.
+        tracked = smooth_sizes(self._size_ema, tracked, frame_t)
 
         out = self._build_array(tracked, msg.header)
         self._pub.publish(out)

@@ -189,8 +189,7 @@ class LockPublishMixin:
         The largest remaining gap in the pipeline. There is no field-of-view
         constraint anywhere in `mongla_control`, so perception can be perfect
         and the lock still dies because the vehicle turned away from a target
-        it was tracking successfully. `tracking/visibility.py` has existed,
-        measured and tested, importable by nothing.
+        it was tracking successfully.
 
         Advisory only, and deliberately so. The real fix is to scale the
         yaw/lateral demand by `Visibility.scale` -- and ONLY the component that
@@ -214,8 +213,13 @@ class LockPublishMixin:
         try:
             from .tracking.visibility import assess
             h, w = gray.shape[:2]
+            # K is on the anchor backend's grid (`_on_info`); the box and the
+            # frame are full camera pixels, so K comes back to that grid here
+            # or every bearing in the warning is off by the ratio of the two.
+            sx = float(w) / float(self._anchor._be.w)
+            sy = float(h) / float(self._anchor._be.h)
             v = assess(0.5 * (x1 + x2), 0.5 * (y1 + y2), float(w), float(h),
-                       float(K[0][0]), float(K[1][1]))
+                       float(K[0][0]) * sx, float(K[1][1]) * sy)
         except Exception:                                        # noqa: BLE001
             return
         self._vis_state = v

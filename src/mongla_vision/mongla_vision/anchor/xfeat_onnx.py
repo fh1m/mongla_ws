@@ -140,7 +140,11 @@ class XFeatONNX:
 
     # -- detection ---------------------------------------------------------- #
     def detect(self, gray: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """(H,W) uint8 -> (kpts (N,2) xy in INPUT pixels, desc (N,64) L2-normed)."""
+        """(H,W) uint8 -> (kpts (N,2) xy in BACKEND pixels, desc (N,64) L2-normed).
+
+        The frame is resized to (self.w, self.h) first, so the keypoints are
+        on that grid whatever size came in; a caller in camera pixels scales
+        them back (B-118)."""
         import cv2
         if gray.shape[:2] != (self.h, self.w):
             gray = cv2.resize(gray, (self.w, self.h))

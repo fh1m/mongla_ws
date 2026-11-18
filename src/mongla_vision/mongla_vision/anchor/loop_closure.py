@@ -83,12 +83,22 @@ PLACE_TRAVEL_M = 1.0
 
 
 class PlaceLog:
-    """Decides when the downward camera should remember where it is.
+    """Decides when the downward camera should remember where it is, and
+    remembers, for every place it took, what a closure onto it must know.
 
     Pure, so the policy can be tested without a camera, a pool or a filter.
-    Holds only what the decision needs: when and where the last place was
-    taken, and how far the vehicle has gone since.
+
+    The self-closure guards are about the MATCHED place, never the newest
+    one. They used to read the time and position of the last enrolment, and
+    places are taken every `period_s` or `travel_m` -- 5 s and 1 m against
+    bars of 30 s and 1.5 m -- so every closure was refused as "would close on
+    itself", whatever the vehicle did. `since` answers for the place the bank
+    actually matched.
     """
+
+    # Two positions this close are the same enrolment: the bank hands back the
+    # tuple it was given, rounded at most through float32 on a save and load.
+    _SAME_PLACE_M = 1e-3
 
     def __init__(self, period_s: float = PLACE_PERIOD_S,
                  travel_m: float = PLACE_TRAVEL_M):
@@ -96,6 +106,37 @@ class PlaceLog:
         self.travel_m = float(travel_m)
         self._last_t = None
         self._last_xy = None
+        # One entry per place taken: [t, x, y, sigma, furthest excursion].
+        self._taken = []
+
+    def step(self, xy) -> None:
+        """Track how far the vehicle has gone from every place it took.
+
+        The furthest excursion, not the path length. A path integrated from
+        the filter's position also integrates its jitter, which would satisfy
+        the travel bar while holding station; how far it got from the place
+        does not grow with noise.
+        """
+        if xy is None:
+            return
+        x, y = float(xy[0]), float(xy[1])
+        for e in self._taken:
+            d = ((x - e[1]) ** 2 + (y - e[2]) ** 2) ** 0.5
+            if d > e[4]:
+                e[4] = d
+
+    def since(self, ref_xy, now: float):
+        """(age s, furthest excursion m, sigma m) for the place stored at
+        `ref_xy`, or NaNs when this log did not take it (a bank loaded from
+        disk), which `consider` refuses."""
+        nan = float('nan')
+        if ref_xy is None:
+            return nan, nan, nan
+        x, y = float(ref_xy[0]), float(ref_xy[1])
+        for e in reversed(self._taken):
+            if abs(x - e[1]) <= self._SAME_PLACE_M and abs(y - e[2]) <= self._SAME_PLACE_M:
+                return float(now) - e[0], e[4], e[3]
+        return nan, nan, nan
 
     def should_enrol(self, now: float, xy) -> bool:
         """A place with no position is worthless: it can never be a fix.
@@ -117,16 +158,13 @@ class PlaceLog:
                 return True
         return False
 
-    def note(self, now: float, xy) -> None:
+    def note(self, now: float, xy, sigma_m: float = float('nan')) -> None:
+        """A place was taken at `xy`, with the filter `sigma_m` sure of it."""
         self._last_t = float(now)
         self._last_xy = None if xy is None else (float(xy[0]), float(xy[1]))
-
-    def travel_since(self, xy) -> float:
-        """Distance from the last enrolment, for the closure's travel gate."""
-        if xy is None or self._last_xy is None:
-            return 0.0
-        return float(((float(xy[0]) - self._last_xy[0]) ** 2
-                      + (float(xy[1]) - self._last_xy[1]) ** 2) ** 0.5)
+        if self._last_xy is not None:
+            self._taken.append([self._last_t, self._last_xy[0],
+                                self._last_xy[1], float(sigma_m), 0.0])
 
 
 @dataclass(frozen=True)
@@ -251,87 +289,3 @@ def consider(pose, *, ref_age_s: float, travel_m: float, ref_sigma_m: float,
                          f'ref {ref_age_s:.0f}s / {travel_m:.1f} m ago',
                    xy=tuple(pose.ref_position), sigma=sigma,
                    index=pose.index, inliers=pose.inliers, offset_m=off)
-
-
-# --------------------------------------------------------------------------- #
-#  Configuration, WITHOUT launch plumbing
-# --------------------------------------------------------------------------- #
-# Not a launch argument. Threading a switch through launch means declaring
-# it in every launch file that starts the node, and this package has already
-# shipped four capabilities that were reachable from one launch path and not
-# the one `bringup` actually includes. Loop closure nearly became the fifth:
-# it was wired into `vision_pi.launch.py` while `bringup` includes
-# `vision.launch.py`.
-#
-# So the node configures ITSELF. Settings come from a deck-editable file --
-# the same pattern the course priors already use (`~/.mongla/courses`) -- and
-# fall back to the constants above. An operator changes a pool day's behaviour
-# by editing one file, with no launch argument, no rebuild and no edit to a
-# launch file that some other path does not read.
-CONFIG_PATH = '~/.mongla/loop_closure.yaml'
-
-_KEYS = {
-    'enabled': bool,
-    'min_inliers': int,
-    'min_age_s': float,
-    'min_travel_m': float,
-    'max_offset_m': float,
-    'place_period_s': float,
-    'place_travel_m': float,
-    'pool_depth_m': float,
-}
-
-
-def defaults() -> dict:
-    return {
-        'enabled': False,          # the only vision path into the filter
-        'min_inliers': CLOSURE_INLIERS,
-        'min_age_s': MIN_REF_AGE_S,
-        'min_travel_m': MIN_TRAVEL_M,
-        'max_offset_m': MAX_OFFSET_M,
-        'place_period_s': PLACE_PERIOD_S,
-        'place_travel_m': PLACE_TRAVEL_M,
-        'pool_depth_m': 0.0,
-    }
-
-
-def load_config(path: str = CONFIG_PATH, log=None) -> dict:
-    """Deck settings, merged over the defaults. Never raises.
-
-    A malformed file must not take the vision stack down on a pool deck, so
-    every failure degrades to the defaults AND SAYS SO. Silently ignoring a
-    file the operator just edited is the worse failure: they would watch for a
-    behaviour change that was never loaded.
-    """
-    import os
-
-    out = defaults()
-    full = os.path.expanduser(path)
-    if not os.path.isfile(full):
-        return out
-    try:
-        import yaml
-        with open(full) as fh:
-            raw = yaml.safe_load(fh) or {}
-        if not isinstance(raw, dict):
-            raise ValueError(f'expected a mapping, got {type(raw).__name__}')
-        unknown = [k for k in raw if k not in _KEYS]
-        for k, v in raw.items():
-            if k in _KEYS:
-                out[k] = _KEYS[k](v)
-        if log is not None:
-            log.info(f'[LOCK ] loop closure config from {full}: '
-                     + ', '.join(f'{k}={out[k]}' for k in sorted(raw)
-                                 if k in _KEYS))
-            if unknown:
-                # Named, because a typo'd key is indistinguishable from a
-                # setting that did not take effect.
-                log.warn(f'[LOCK ] ignored unknown key(s) in {full}: '
-                         + ', '.join(sorted(unknown)))
-    except Exception as exc:                       # noqa: BLE001
-        if log is not None:
-            log.error(f'[LOCK ] {full} could not be read ({exc}); using '
-                      f'defaults. Loop closure is '
-                      f'{"ON" if out["enabled"] else "OFF"}.')
-        return defaults()
-    return out

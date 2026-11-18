@@ -84,7 +84,7 @@ def richest(model, files, conf, samples):
     return best
 
 
-def compose(img, dets, primary, fps, vis_range):
+def compose(img, dets, primary, fps):
     h = int(img.shape[0] * W / img.shape[1])
     frame = cv2.resize(img, (W, h), interpolation=cv2.INTER_LANCZOS4)
     sx = W / img.shape[1]
@@ -114,8 +114,7 @@ def compose(img, dets, primary, fps, vis_range):
         err_x_history=[ex * 0.6, ex * 0.8, ex],
         err_y_history=[ey * 0.6, ey * 0.8, ey],
         conf_history=[d.score for d in dets][:8] or [0.0],
-        pipeline_health={"camera": True, "detector": True, "tracker": True, "link": True},
-        primary_vis_range=vis_range)
+        pipeline_health={"camera": True, "detector": True, "tracker": True, "link": True})
     return np.vstack([frame, strip])
 
 
@@ -158,7 +157,7 @@ def main(argv=None):
                 for b in r.boxes]
         dets.sort(key=lambda d: -(d.width * d.height))
         primary = dets[0] if dets else None
-        comp = compose(img, dets, primary, fps=53.9, vis_range=0.42)
+        comp = compose(img, dets, primary, fps=53.9)
         path = OUT / f"{tag}.png"
         cv2.imwrite(str(path), comp)
         rec = {"scene": tag, "venue": venue, "task": task, "model": model_name,

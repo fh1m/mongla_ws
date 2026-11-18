@@ -62,7 +62,7 @@ class DetectorPublishMixin:
                 self.get_logger().warning(
                     f'[DET  ] contour publish failed: {exc!r}', once=True)
 
-    def _publish_debug_image(self, frame, detections, header, dt, primary) -> None:
+    def _publish_debug_image(self, frame, detections, header, primary) -> None:
         # Skip the overlay render + encode + publish entirely when no one is
         # subscribed to image_debug (autonomous runs with viewer:=false). This
         # is pure overhead on the inference thread otherwise -- a free win.
@@ -70,10 +70,8 @@ class DetectorPublishMixin:
                 and self._pub_dbg.get_subscription_count() > 0
                 and (time.monotonic() - self._last_dbg) >= self._dbg_min_dt):
             try:
-                fps = 1.0 / dt if dt > 1e-6 else 0.0
                 overlay = draw.render_all(
                     frame, detections,
-                    source=self._cam_name, fps=fps,
                     healthy=True, deadband=self._deadband, primary=primary)
                 dbg = image_msg.to_msg(overlay, 'bgr8')
                 dbg.header = header
