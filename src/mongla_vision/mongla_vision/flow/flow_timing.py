@@ -220,9 +220,11 @@ def exposure_offset_s(exposure_time_absolute: Optional[float]) -> float:
     Ours is 15.7 ms on auto exposure in this light -- **7.85 ms**, larger than
     the transport jitter and larger than the offset most papers estimate. And
     because it is AUTO, it MOVES: someone measured calibrated offsets shifting
-    by 2 ms as exposure went 1 -> 2 -> 4 ms. So this is read live per frame
-    rather than baked in, and the argument is in V4L2's own units (100 µs),
-    which is what `exposure_time_absolute` reports.
+    by 2 ms as exposure went 1 -> 2 -> 4 ms. The argument is in V4L2's own
+    units (100 µs), which is what `exposure_time_absolute` reports. It is NOT
+    read live: flow_node's `exposure_us` parameter is the only source, it
+    defaults to 0 and no launch sets it, so this term is 0 on the vehicle and
+    `td` absorbs the fixed part of the lag.
     """
     if exposure_time_absolute is None:
         return 0.0
