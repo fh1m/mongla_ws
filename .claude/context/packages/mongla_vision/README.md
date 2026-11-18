@@ -142,7 +142,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | module | what it is |
 |---|---|
 | `_text_engine.py` | TrueType text rendering engine for HUD widgets. |
-| `approach.py` | How close should the vehicle get before it trusts what it sees? |
 | `camera_node.py` | read from a Camera and publish standard ROS image topics. |
 | `config.py` | Named camera profiles. THIS DICT IS THE ONE THE CODE READS. |
 | `continuity.py` | Detection continuity: the statistics the whole lock ladder is tuned on. |
@@ -174,7 +173,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `seeing.py` | Can this camera see at all? A blinded camera and an empty scene look alike. |
 | `stamps.py` | When was this actually SEEN? One implementation, every consumer. |
 | `target_geometry.py` | Committed prop widths, keyed by the class name the detector emits. |
-| `time_to_contact.py` | Seconds until contact, for a MOVING observer. |
 | `tool_geometry.py` | Where each tool is, relative to the camera that aims it. |
 | `tracker_node.py` | subscribe to detections, publish stable tracks. |
 | `trigger_stamps.py` | Which trigger made this frame: pairing camera frames with the board's pulses. |
@@ -203,7 +201,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `cameras/video_file.py` | run the vision pipeline on a pre-recorded video file. |
 | `cameras/webcam.py` | local USB / built-in webcam via cv2.VideoCapture. |
 | `depth/depth_estimation_node.py` | monocular depth estimation for detected objects. |
-| `detection/confidence_calibration.py` | A confidence of 0.5 does not mean the same thing in every pool. |
 | `detection/contours.py` | Detections -> outlines. A box and a mask become the same thing here. |
 | `detection/detector.py` | Abstract Detector — every detection backend implements this. |
 | `detection/factory.py` | Pick a detector backend from the resolved model path. One seam, three callers. |

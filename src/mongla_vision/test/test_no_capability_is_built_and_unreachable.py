@@ -103,42 +103,6 @@ DEFERRED = {
         'vehicle, and a tools-only consumer is a real but different kind of '
         'reachability. WARNING: Nearly deleted on the strength of a sweep that could '
         'not see tools/; the sweep now scans it.'),
-    'mongla_vision/mongla_vision/time_to_contact.py': (
-        'BLOCKER CORRECTED 2026-09-28 (section 62). It was "needs metres we do '
-        'not have"; the literature form `tau = scale / (d scale/dt)` needs '
-        'none -- the metres cancel, and we already compute that scale in THREE '
-        'places and discard all three. The real blocker is noise: measured on '
-        'a 600-frame approach, tau p50 2.5 s with a frame-to-frame swing of '
-        'p50 2.4 s and p90 27.2 s, so it is noise with a unit. Same shape as '
-        'the per-frame plane tilt, where smoothing bought smoothness and NOT '
-        'accuracy. Closes with one pool run at a known constant speed from a '
-        'known start range, which makes true tau a straight line and the '
-        'filter a fit rather than a guess.'),
-    'mongla_vision/mongla_vision/approach.py': (
-        'WARNING: AND ITS BANDS CAME FROM THE RETIRED GRAPH. `tools/studies/approach_band.py` '
-        'was run against `gate_rescue_repair`, whose documented failure mode '
-        'is half-frame boxes over empty water -- so the peaks may be peaks of '
-        'hallucination, and the module\'s own docstring says class bands '
-        'belong to ONE graph and do not transfer. Re-run the tool on '
-        '`gate_sharks` before wiring anything to this. '
-        'the BAND is measured (section 23) but the controller that would act '
-        'on back-off does not exist; vision_verbs closes range only. Wiring '
-        'it means a new verb, which is a mission-surface change.'),
-    'mongla_vision/mongla_vision/detection/confidence_calibration.py': (
-        'ships OFF by design: its gain is DECLARED, not measured, and it '
-        'needs a labelled per-venue set to calibrate. Wiring it before that '
-        'would put an unmeasured constant in the detection path. '
-        'ERROR: STRENGTHENED 2026-09-28 -- the blocker is now EVIDENCE, not just '
-        'absence. This module maps a TURBIDITY statistic onto a confidence '
-        'adjustment, and that family has now failed twice on real data: '
-        '`underwater.recommend()` was deleted for fitting exactly such a rule '
-        'to two clips that a third venue contradicted, and section 60 measured '
-        'a chromatic bar collapsing from a margin of 20.2 to 0.8 between two '
-        'SIM lighting setups -- before sunlight, depth or time of day enter. A '
-        'turbidity-to-confidence gain is not merely unmeasured here, it is the '
-        'shape of thing this stack has twice measured to be unstable. Promote '
-        'it only with a labelled set spanning MULTIPLE venues, and only if the '
-        'gain survives a held-out one.'),
 }
 
 

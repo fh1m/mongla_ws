@@ -39,10 +39,7 @@ approach controller reads), replay mode, and — new — the **acting bar** belo
 |---|---|---|
 | **`tracking/visibility.py`** | **the FOV guard. There is no field-of-view constraint anywhere in `mongla_control`, so perception can be perfect and the lock still dies because the vehicle turned away** | a consumer in the vision verbs: yaw/lateral demand scaled by `Visibility.scale`, and only the component making the bearing WORSE. Control change ⇒ needs a pool day |
 | `continuity.py` | gap distribution analyser | offline only; its constants are a person in air |
-| `time_to_contact.py` | τ with ego-velocity subtracted | no approach/standoff controller exists |
-| `approach.py` | standoff band, back-off included | the band is measured; the controller that acts on it is not built |
 | `flow/scale_check.py` | flow-height vs baro-height cross-check | the barometer reports "not initialised" on this hull — the comparison has one side |
-| `detection/confidence_calibration.py` | turbidity → calibrated confidence | gain is DECLARED, not measured; needs a labelled per-venue set |
 | `draw_strip.py` | — | superseded UI, 471 dead lines. Delete or revive deliberately |
 
 ---
@@ -152,8 +149,8 @@ whose module is already written and measured.
 ### Deferred, unchanged
 
 7.
-   `continuity.py` · `time_to_contact.py` · `approach.py` ·
-   `flow/scale_check.py` · `confidence_calibration.py` · `draw_strip.py`
+   `continuity.py` ·
+   `flow/scale_check.py` · `draw_strip.py`
    (delete or revive)
 8. **Never started:** Round 11 (homography → yaw/altitude/obliquity) ·
    Round 14 / POS_HOLD without DVL · downward place-bank preloading ·
