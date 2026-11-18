@@ -12,7 +12,7 @@ from mongla_vision.flow.flow_features import (
     patch_ncc_median,
     forward_backward_error,
 )
-from .flow_constants import (  # noqa: F401
+from .flow_constants import (
     FLOW_ROT_RESIDUAL_CALIBRATED,
     FLOW_SCALE_SIGMA_FRAC,
     FLOW_UNCALIBRATED_SCALE_SIGMA_FRAC,
@@ -113,6 +113,10 @@ class FlowChecksMixin:
                 self._last_scale_rate = pm.scale_rate
             else:
                 self._n_median_fallback += 1
+                # This interval has no image yaw or divergence. Holding the
+                # last ones paired them with this interval's gyro and baro.
+                self._last_yaw_img = float('nan')
+                self._last_scale_rate = float('nan')
         return flow, n_used, disp
 
     def _cross_check_height(self) -> None:
@@ -128,7 +132,8 @@ class FlowChecksMixin:
         it would be guessing.
         """
         vz = self._vz_down()
-        if vz is None or abs(self._last_scale_rate) < 1e-9:
+        if (vz is None or not math.isfinite(self._last_scale_rate)
+                or abs(self._last_scale_rate) < 1e-9):
             return
         self._h_optical.add(self._last_scale_rate, vz)
         d = self._h_optical.disagreement(self._last_height)
@@ -171,6 +176,8 @@ class FlowChecksMixin:
             return
         gyro_yaw = gy[0]
         img_yaw = self._last_yaw_img
+        if not math.isfinite(img_yaw):
+            return                      # no fit this interval: nothing to pair
         # Only meaningful when something is actually rotating: below the gyro's
         # own noise the ratio of two near-zero numbers is noise, the same trap
         # that made a motionless bench read "rotation-dominated".
