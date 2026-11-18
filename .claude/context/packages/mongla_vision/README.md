@@ -107,7 +107,7 @@ and direct feed), `detector_publish.py` (topics and operator log lines) and
 ## Tools
 
 ```bash
-ros2 run mongla_vision vision_check          # is the pipeline alive and seeing?
+ros2 run mongla_vision vision_check          # grade the whole mission graph; exits 1 on a FAIL
 ros2 launch mongla_batighor calibrate.launch.py device_path:=<camera>   # measure it, air or water
 ros2 run mongla_vision vision_thrust_check   # detection → thrust, disarmed and safe
 ```
@@ -237,7 +237,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `tracking/roboflow_tracker.py` | Roboflow `trackers` backend (OC-SORT / ByteTrack) behind the Tracker ABC. |
 | `tracking/tracker.py` | Tracker ABC and TrackedDetection dataclass. |
 | `tracking/visibility.py` | Keep the target in frame — and know where it went if it leaves anyway. |
-| `utils/check_pipeline.py` | standalone health probe for the perception pipeline. |
+| `utils/check_pipeline.py` | grade the vision graph a mission runs on, before it runs. |
 | `utils/check_thrust.py` | end-to-end smoke test: detection -> a thrust command. |
 | `utils/check_tracker.py` | health probe for the tracking pipeline. |
 | `utils/display_draw.py` | What the vision display draws besides the frame: the splash, the |

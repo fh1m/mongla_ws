@@ -41,10 +41,6 @@ PUBLISHED_UNREAD = {
     '/mongla/esc_rpm':
         'operator telemetry. 958/958 frames read exactly 0 with nothing '
         'attached, so it is watched by a human rather than acted on.',
-    '/flow_quality':
-        'a DIAGNOSTIC. The gate it describes is applied inside flow_node, which '
-        'publishes NO velocity at quality 0, so the filter never needs it. Read '
-        'by tools/bench/flow_launch_check.py and tools/bench/flow_derot_ab.py.',
     '/mongla/board_link':
         'operator telemetry: what the link carries and every named channel '
         'with its age, for a human in Batighor\'s board_link layout. The '

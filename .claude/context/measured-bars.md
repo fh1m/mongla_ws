@@ -2209,6 +2209,16 @@ evidence of stillness.
 
 ## Forward camera rate — `pi_forward.fps` 15 → 60 (2026-09-09)
 
+> **2026-11-18: the rate moves within one day.** The same Fantech on Kutum
+> gave the forward detector **29.8 Hz** in the afternoon (section 87) and
+> **9.5-10.0 fps** of frames that evening under room light, counted by the
+> camera node's own fresh-frame publish (`pub=10.0Hz`) and by `vision_check`
+> from `camera_info`. Three rates from one unit, 30, 15 and 10, fit a camera
+> that lengthens its frame time in low light, which a dim pool would trigger.
+> Not yet tested against measured light. Until it is, `vision_check` names
+> the camera as the cause when the forward detector is under its bar, and the
+> answer for frames is the Sonix forward or the board-triggered sensor below.
+
 > **NOT REPRODUCED 2026-11-10.** On Kutum, raw `v4l2-ctl --stream-mmap` (no
 > OpenCV, no ROS) gave the Fantech **14.97-15.06 fps** at MJPG 640×360,
 > requested at 30 or 60, in auto exposure and in manual 5, 30 and 100 ms, with
