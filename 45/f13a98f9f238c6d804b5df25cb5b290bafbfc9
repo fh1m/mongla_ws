@@ -1,0 +1,25 @@
+tools/ci/dead_function_sweep.py
+  s_d9cd6692c91d8a::t_6a7193fabc39cb 24-30
+  s_d9cd6692c91d8a::t_4794e27b4c00b1 122-129,177,180,185-193,209-210,216,218,312-315,329-337
+  s_d9cd6692c91d8a::t_0cfb0cd3b24093 130,159-167,217
+src/mongla_vision/test/test_anchor_bank.py
+  s_d9cd6692c91d8a::t_786715c4c9901c 260
+src/mongla_vision/test/test_no_function_is_built_and_uncalled.py
+  s_d9cd6692c91d8a::t_b7ee4bfd5d4ef5 193-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "45f13a98f9f238c6d804b5df25cb5b290bafbfc9",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
