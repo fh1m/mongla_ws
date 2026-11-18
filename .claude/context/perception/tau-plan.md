@@ -126,12 +126,10 @@ the cheapest item on `first-pool-verification.md`.
 
 ## What ships after it
 
-`time_to_contact.py` gains the scale-based entry point beside its existing
-metric one, and its deferral in the reachability register closes. The consumer
-is the approach/standoff path — but note that `approach.py` also stays deferred
-for a *different* reason (no controller acts on BACK_OFF yet), so closing tau
-does not by itself put anything on the control path. **Two doors, both need
-opening, and neither is the other.**
+The module that would have consumed it, `time_to_contact.py`, was deleted
+on 2026-11-18 with `approach.py`: neither had a controller to act on it. A
+settled tau is rebuilt together with the approach controller that needs it,
+not ahead of it.
 
 ## What NOT to do
 

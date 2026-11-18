@@ -84,15 +84,6 @@ LEDGER_BOUND = {
                          'a reappeared device waits this long before it is '
                          'opened; a replugged Fantech opened first try'),
     },
-    'mongla_vision.approach': {
-        # The one that was wrong. Each band is a measured peak bin from
-        # tools/studies/approach_band.py, not a chosen range.
-        'BANDS': ({'gate': (0.45, 0.60),
-                   'rescue': (0.10, 0.20),
-                   'repair': (0.80, 1.20)}, '0.45 - 0.60',
-                  'per-class peak bins of box_h/frame_h; a global band '
-                  'matched none of the three'),
-    },
     'mongla_planner.dsl_position': {
         'UNCALIBRATED_BEARING_SIGMA_DEG': (1.264, '**+1.264°**',
                                            'principal-point aiming bias a fix '

@@ -102,7 +102,6 @@ the prior; nothing supplies it yet.
 |---|---|
 | `anchor/health.py` — fouled lens vs changed world | **wired** into `lock_node` |
 | `anchor/bank.py` contamination guard — refuses to remember a view of the fault | **Key point: wired into `enrol()`**, the DAM4SAM principle without a second bank |
-| `detection/confidence_calibration.py` — turbidity-aware, ships OFF | built; DQR-RTDETR validates the idea, our gain is still declared |
 
 ---
 
@@ -585,8 +584,8 @@ evaluation:**
    (section 23) precisely because apparent SIZE is what the approach
    controller reads — and the anchor has been producing a *better* scale all
    along, fitted frame-to-REFERENCE against a stored patch rather than
-   frame-to-frame with LK's drift. `time_to_contact.py` and `approach.py` are
-   both DEFERRED for want of exactly this signal.
+   frame-to-frame with LK's drift. A time-to-contact or standoff controller would read exactly this
+   signal; none exists yet (measured-bars section 62).
 2. **`theta` is an in-plane rotation** measured against a fixed reference. On a
    hull whose roll is unactuated (the five thrusters in the current CAD) that is
    a direct observation of the one attitude the controller cannot command, and
