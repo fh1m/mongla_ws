@@ -1,0 +1,23 @@
+kutum/deploy.sh
+  s_b4c45e3235679b::t_4173b9c2c09c82 110-113,117-119
+test/test_deploy_ships_what_packages_install.py
+  s_b4c45e3235679b::t_5c9b3bdc2e9f54 1-62
+tools/ci/run_repo_integrity.py
+  s_b4c45e3235679b::t_272b74ce5ba2f8 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "114774d60e3cf96803fe2cd7c30ecd2d83a2e7ab",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
