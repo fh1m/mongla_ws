@@ -305,6 +305,14 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
                 f'(3.08 % axis asymmetry measured in this state); the sigma '
                 f'and {self._pub_cal.topic_name} say so.')
 
+        # Last: rclpy runs set-callbacks on declare_parameter too. The
+        # baseline ceiling is read every frame (flow_frame); the other
+        # knobs build the front end once.
+        from ..live_params import apply_live
+        apply_live(self, {
+            'max_baseline_s': lambda v: setattr(self, '_max_baseline', float(v)),
+        })
+
     # ── worker ──────────────────────────────────────────────────────────────
     def _flow_loop(self) -> None:
         while not self._stop.is_set():

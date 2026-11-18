@@ -148,6 +148,7 @@ is how `recommend()` happened.
 - [80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11)](#80-the-hailort-service--two-processes-on-one-chip-at-no-cost-a-frame-built-measured-not-installed-2026-11-11)
 - [81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11)](#81-the-rtc-is-not-a-control-clock--one-second-steps-read-with-tens-of-milliseconds-of-jitter-2026-11-11)
 - [84. THE OPERATOR'S VIDEO IS THE CAMERA'S OWN JPEG — 0.062 ms a frame, boxes drawn by the browser (2026-11-12)](#84-the-operators-video-is-the-cameras-own-jpeg--0062-ms-a-frame-boxes-drawn-by-the-browser-2026-11-12)
+- [85. GLOBAL-SHUTTER EXPOSURE AT SPEED — dynamic framerate on keeps 210 fps and a picture; off is black (2026-11-18)](#85-global-shutter-exposure-at-speed--dynamic-framerate-on-keeps-210-fps-and-a-picture-off-is-black-2026-11-18)
 <!-- contents:end -->
 
 ---
@@ -7887,3 +7888,53 @@ box; the lock's now goes inside the box and a test holds the labels apart.
 means encoding one on Kutum (the Pi 5 has no hardware encoder), which is the
 H.264 path the design names and has not been measured. Reversal of the
 pass-through: a camera whose JPEG a browser cannot decode (none seen).
+
+## 85. GLOBAL-SHUTTER EXPOSURE AT SPEED — dynamic framerate on keeps 210 fps and a picture; off is black (2026-11-18)
+
+**Bar, written before the run.** The Sonix global-shutter camera (OV9281
+behind a Sonix bridge, 0c45:636d) is the downward flow sensor. A setting is
+right for it only if, at the profile's rate, every delivered frame is a new
+exposure (no repeated JPEG payload, no sequence gap), consecutive frames are
+statistically independent (variance of consecutive differences / 2 over the
+per-pixel temporal variance near 1.0; blending pushes it well below), and the
+picture is not black.
+
+**Method.** Kutum, room light, the camera through `V4L2MailboxCamera` with
+`set_controls`, 2.5 s to settle after each change, then 1.5 to 2 s of frames.
+
+| mode | controls | mean | fps | repeats | ratio lag 1 / lag 2 |
+|---|---|---|---|---|---|
+| 640x360 @ 210 | AE, dynamic framerate 0 | 0.0 | 211 | 0 | -- (no signal) |
+| 640x360 @ 210 | AE, dynamic framerate 1 | 86.8 to 89.1 | 211 | 0 of 423 | 1.01 / 1.01 |
+| 1280x720 @ 120 | AE, dynamic framerate 0 | 0.0 | 121 | 0 | -- |
+| 1280x720 @ 120 | AE, dynamic framerate 1 | 82.6 | 121 | 0 of 242 | -- |
+| 640x400 @ 120 | AE, dynamic framerate 1 | 128.6 | 121 | -- | -- |
+| 640x360 @ 30 | AE, dynamic framerate 0 | 142.6 | 30 | -- | 1.01 / 1.01 |
+
+With dynamic framerate 1 the camera still reads `exposure_time_absolute` 40
+(4 ms) and the frame-to-frame noise variance is 22.3 against 16.3 for the
+long exposure at 30 fps: the light comes from gain, not from a longer shutter.
+Manual exposure up to 30 ms with gain 64 stays black at 210 fps; the frame
+period caps it, while the control reads back the asked value. A brightness
+offset of 64 lifts the mean to 58 but the frames are mostly offset (ratio 0.39).
+
+**Decision.** `pi_downward` and `pi_forward_global_shutter` set
+`auto_exposure` 3 and `exposure_dynamic_framerate` 1 at every open. The
+camera keeps the last process's controls (a 30 ms manual exposure from a
+sweep was still set an hour later), so the stack sets them rather than
+inherits them. On this bridge the control does not lower the rate, contrary
+to its name and to the UVC description. **Reversal:** a unit or firmware
+where dynamic framerate 1 produces repeated payloads or a rate below the
+asked one; rerun the table.
+
+**Also measured, the forward Fantech (1d6c:0103).** 30.000 fps at MJPG
+640x360 asked 60, under auto exposure and manual 5 to 60 ms alike; manual
+exposure does not change the picture (mean 98.6 to 101.6 from 0.5 to 33 ms).
+On 2026-11-10 the same camera gave 15.0 fps (see the forward-camera section
+above). Which condition halves it is not measured; the camera exposes no
+dynamic-framerate control and no UVC trigger (`bTriggerSupport` 0).
+
+**Not settled.** Pool light, not room light. Underwater the downward camera
+looks at a floor 1 to 3 m away; whether gain alone keeps texture above the
+noise floor for flow is a water-day measurement.
+
