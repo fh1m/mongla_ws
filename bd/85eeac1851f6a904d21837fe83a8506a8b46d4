@@ -1,0 +1,52 @@
+src/mongla_vision/test/test_rangecrop.py
+  s_d9cd6692c91d8a::t_81613ce7ea3911 185-189
+src/mongla_vision/mongla_vision/detector_node.py
+  s_d9cd6692c91d8a::t_00121d5a33700d 83,249
+src/mongla_vision/test/test_bars.py
+  s_d9cd6692c91d8a::t_c9710f1c83e050 58-60
+.claude/context/perception/detection-continuity.md
+  s_d9cd6692c91d8a::t_88701a84149ac2 161-165
+.claude/context/sota/vision.md
+  s_d9cd6692c91d8a::t_88701a84149ac2 17,121-122
+CLAUDE.md
+  s_d9cd6692c91d8a::t_88701a84149ac2 250-251
+src/mongla_manager/launch/bringup.launch.py
+  s_d9cd6692c91d8a::t_2ff2a88e1d8cb1 80,369-373
+.claude/context/reference/commands.md
+  s_d9cd6692c91d8a::t_c26e7843c4603d 152,280,465,492
+src/mongla_vision/mongla_vision/detector_params.py
+  s_d9cd6692c91d8a::t_56e5d6f45563d5 3
+src/mongla_manager/test/test_launch_argument_passthrough.py
+  s_d9cd6692c91d8a::t_88701a84149ac2 228-229,232
+src/mongla_vision/mongla_vision/detector_setup.py
+  s_d9cd6692c91d8a::t_988ba36ae3f7e5 13,174-176
+  s_d9cd6692c91d8a::t_00121d5a33700d 107-110
+src/mongla_manager/test/test_feature_switches.py
+  s_d9cd6692c91d8a::t_88701a84149ac2 84
+src/mongla_vision/launch/vision_pi.launch.py
+  s_d9cd6692c91d8a::t_56e5d6f45563d5 150-153,439-440
+src/mongla_manager/config/bringup.example.yaml
+  s_d9cd6692c91d8a::t_c26e7843c4603d 191,380
+.claude/context/perception/vision-pipeline.md
+  s_d9cd6692c91d8a::t_88701a84149ac2 64-66
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  s_d9cd6692c91d8a::t_56e5d6f45563d5 57-58,96,138-141
+tools/studies/recall_matrix.py
+  s_d9cd6692c91d8a::t_38e6c3ae9683a1 220-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "bd85eeac1851f6a904d21837fe83a8506a8b46d4",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
