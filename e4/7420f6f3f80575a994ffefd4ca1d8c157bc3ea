@@ -1,0 +1,60 @@
+.claude/context/BUGS.md
+  s_d9cd6692c91d8a::t_528e583b03e24e 510-541
+src/mongla_vision/mongla_vision/tracker_node.py
+  s_d9cd6692c91d8a::t_528e583b03e24e 201
+  s_d9cd6692c91d8a::t_084158af46c010 119
+  s_d9cd6692c91d8a::t_c73739f241f515 56,74,172-176,197-200,224,238,280-281
+.claude/context/perception/detection-continuity.md
+  s_d9cd6692c91d8a::t_084158af46c010 66
+.claude/context/reference/commands.md
+  s_d9cd6692c91d8a::t_cad7f04517c7da 576
+tools/studies/tracker_ab.py
+  s_d9cd6692c91d8a::t_dd0d40cd15c735 204
+  s_d9cd6692c91d8a::t_735e9eeece0e67 74-76,103,109,118,125,142,168,179
+  s_d9cd6692c91d8a::t_d2d4efb4063814 236-237
+  s_d9cd6692c91d8a::t_6de1ad01549501 53-55
+  s_d9cd6692c91d8a::t_98c0ded19387d4 188-192
+  s_d9cd6692c91d8a::t_dfe9446758c314 38-52,56-57,95-102
+src/mongla_vision/test/test_kalman_revival.py
+  s_d9cd6692c91d8a::t_084158af46c010 8
+  s_d9cd6692c91d8a::t_9d577290668084 62
+src/mongla_vision/test/test_roboflow_tracker.py
+  s_d9cd6692c91d8a::t_9d577290668084 103,113
+  s_d9cd6692c91d8a::t_9bdaac925d271b 32,45,68,81,91,111,160
+  s_d9cd6692c91d8a::t_aa653822b59ca9 154-159,161-183
+  s_d9cd6692c91d8a::t_e1a622215f7b5d 61
+src/mongla_vision/launch/vision_pi.launch.py
+  s_d9cd6692c91d8a::t_c360080e9f9225 522,648-649
+src/mongla_vision/test/test_tracker_conf_clamp.py
+  s_d9cd6692c91d8a::t_084158af46c010 29
+  s_d9cd6692c91d8a::t_dd0d40cd15c735 55,96
+src/mongla_vision/mongla_vision/tracking/roboflow_tracker.py
+  s_d9cd6692c91d8a::t_47f2efb55e76e2 28-29,52-55,169-172,179,200,221-223,235,261
+  s_d9cd6692c91d8a::t_fec06dc3b5b204 67-68,153,161
+  s_d9cd6692c91d8a::t_935f4f2dacb6ae 30-32
+src/mongla_vision/launch/vision.launch.py
+  s_d9cd6692c91d8a::t_cad7f04517c7da 173-176
+src/mongla_vision/mongla_vision/tracking/kalman.py
+  s_d9cd6692c91d8a::t_f4da607170b07a 24-26,124,143,145,185-187,195,199,245
+src/mongla_manager/launch/bringup.launch.py
+  s_d9cd6692c91d8a::t_c360080e9f9225 81-82
+src/mongla_vision/test/test_coast_ladder_ordering.py
+  s_d9cd6692c91d8a::t_528e583b03e24e 12
+  s_d9cd6692c91d8a::t_9d577290668084 3-11,13-14,32-34,38-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "e47420f6f3f80575a994ffefd4ca1d8c157bc3ea",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
