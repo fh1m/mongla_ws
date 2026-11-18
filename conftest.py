@@ -140,3 +140,35 @@ def pytest_sessionfinish(session, exitstatus):
     if set(counts) != set(published_counts.SUITE_NAMES):
         return                      # not every suite ran: not a full run
     published_counts.record(counts, session.testscollected)
+
+
+# --------------------------------------------------------------------------- #
+#  A fixture whose setup fails must not take every later ROS test with it.    #
+# --------------------------------------------------------------------------- #
+# The suites run in one process (tools/ci/ci_ros.sh), and a fixture that calls
+# `rclpy.init()` and then fails an assert never reaches its `rclpy.shutdown()`.
+# Every later `rclpy.init()` then raises "Context.init() must only be called
+# once", so one discovery timeout on the Jazzy runner read as dozens of
+# failures across three packages, hiding which one was real. Only a context
+# this test's own setup created is shut down; a module-scoped one that was
+# already up is left alone.
+import pytest  # noqa: E402
+
+
+def _rclpy_up() -> bool:
+    rclpy = sys.modules.get('rclpy')
+    try:
+        return bool(rclpy is not None and rclpy.ok())
+    except Exception:                                    # noqa: BLE001
+        return False
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item):
+    before = _rclpy_up()
+    outcome = yield
+    if outcome.excinfo is not None and not before and _rclpy_up():
+        try:
+            sys.modules['rclpy'].shutdown()
+        except Exception:                                # noqa: BLE001
+            pass
