@@ -1,0 +1,65 @@
+src/mongla_vision/test/test_calibration_binding.py
+  s_d9cd6692c91d8a::t_6fe6c322da4213 138
+  s_d9cd6692c91d8a::t_49162e522e07b1 129-132,134-135,139
+src/mongla_vision/test/test_composed_vision.py
+  s_d9cd6692c91d8a::t_71f95e97f5d7a7 251
+  s_d9cd6692c91d8a::t_18dd0bcd7259c9 416-417,419-421
+src/mongla_vision/test/test_flow_calibration_is_valid_or_refused.py
+  s_d9cd6692c91d8a::t_49162e522e07b1 143-151
+src/mongla_vision/launch/vision_pi.launch.py
+  s_d9cd6692c91d8a::t_56e3a16d950f7b 70-73
+  s_d9cd6692c91d8a::t_7a79c5093d7bcb 522-544
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  s_d9cd6692c91d8a::t_83752d5f8859c8 58-59
+  s_d9cd6692c91d8a::t_ad3cc50923b871 85-86
+  s_d9cd6692c91d8a::t_e45ac177a41655 83-84,193-199,336,338-346
+.claude/context/measured-bars.md
+  s_d9cd6692c91d8a::t_dc65b6b2f6d8cb 155,8152-8201
+tools/launch_render.py
+  s_d9cd6692c91d8a::t_a2f1b43bf8c00a 62-85,101-103
+.claude/context/packages/mongla_vision/README.md
+  s_d9cd6692c91d8a::t_dc65b6b2f6d8cb 87-89
+src/mongla_manager/test/test_every_switch_combination_renders.py
+  s_d9cd6692c91d8a::t_a2f1b43bf8c00a 95-104
+  s_d9cd6692c91d8a::t_970f75f02edabb 105-106
+.claude/context/perception/camera-colour-decision.md
+  s_d9cd6692c91d8a::t_dc65b6b2f6d8cb 62
+.claude/context/platform/launch-combinations.md
+  s_d9cd6692c91d8a::t_dc65b6b2f6d8cb 357
+src/mongla_vision/mongla_vision/camera_node.py
+  s_d9cd6692c91d8a::t_c875e5571f54e6 640-651,667,670-672,675-677,679
+src/mongla_vision/test/test_dual_node_degrades.py
+  s_d9cd6692c91d8a::t_e6312477cfecb1 19-20,40,42-44,197-203,205-214
+  s_d9cd6692c91d8a::t_f292a5dc52f83a 204
+  s_d9cd6692c91d8a::t_3ad2592cdccf9b 168-196,215-230
+README.md
+  s_d9cd6692c91d8a::t_dc65b6b2f6d8cb 64,798,801
+.claude/context/reference/commands.md
+  s_d9cd6692c91d8a::t_b24200a98f6f36 465,473,507,512
+src/mongla_manager/test/test_feature_switches.py
+  s_d9cd6692c91d8a::t_a2f1b43bf8c00a 70-72
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  s_d9cd6692c91d8a::t_54d4f728cef221 195-202,213-221,276-277,293-294,297,301-302,305-307,333-349,411,416-417,422,425-427
+docs/index.html
+  s_d9cd6692c91d8a::t_dc65b6b2f6d8cb 1734-1736,1738
+src/mongla_vision/mongla_vision/flow/flow_setup.py
+  s_d9cd6692c91d8a::t_87b3cc77ff938c 35,398-414,419,426
+src/mongla_vision/test/test_flow_node.py
+  s_d9cd6692c91d8a::t_92276e8b5c0148 893-895,898-899
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c49c71c05f37b4e2835a5c017912484629cca201",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
