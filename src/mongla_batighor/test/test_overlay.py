@@ -59,6 +59,32 @@ def test_every_layer_is_drawn_and_the_lock_stands_out():
     assert len(places) == len(set(places)), places
 
 
+def _rects(out):
+    """Each label's box, as the placer measures it: baseline-left position."""
+    from mongla_batighor.overlay import CHAR_EM
+    return [(t.position.x, t.position.y - t.font_size,
+             t.position.x + len(t.text) * t.font_size * CHAR_EM, t.position.y)
+            for t in out.texts]
+
+
+def test_no_label_covers_another_and_none_leaves_the_picture():
+    # The cockpit shot: a gate at the right edge with a shark box on its top
+    # corner, the shark's label drawn over the gate's and off the picture.
+    size = (640, 480)
+    out = annotate(STAMP, _arr(_det(560, 250, 130, 210, track='13'),
+                               _det(625, 180, 28, 60, label='shark', score=0.72, track='25')),
+                   tracks=_arr(_det(560, 250, 130, 210, track='13'),
+                               _det(625, 180, 28, 60, label='shark', track='25')),
+                   size=size, hud=['forward  gate_sharks  640x480', 'detector 18 Hz  71 ms'])
+    rects = _rects(out)
+    assert len(rects) == 4
+    for i, a in enumerate(rects):
+        assert 0 <= a[0] and a[2] <= size[0] + 1e-6 and 0 <= a[1] and a[3] <= size[1], a
+        for b in rects[i + 1:]:
+            apart = a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1]
+            assert apart, (a, b)
+
+
 def test_a_missing_layer_is_simply_absent():
     out = annotate(STAMP, _arr())
     assert not out.points and not out.texts

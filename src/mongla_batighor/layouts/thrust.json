@@ -5,12 +5,12 @@
       "paths": [
         {
           "value": "/mongla/demand.vector.x",
-          "label": "demand surge",
+          "label": "surge",
           "enabled": true
         },
         {
           "value": "/mongla/demand.vector.y",
-          "label": "demand sway",
+          "label": "sway",
           "enabled": true
         }
       ],
@@ -19,7 +19,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "demand"
     },
     "Plot!power": {
       "paths": [
@@ -34,7 +35,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "battery"
     },
     "Plot!rates": {
       "paths": [
@@ -59,7 +61,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "body rates"
     }
   },
   "globalVariables": {},
@@ -73,7 +76,7 @@
       "direction": "column",
       "first": "mongla.batighor.Thrust!thrust",
       "second": "Plot!demand",
-      "splitPercentage": 60.0
+      "splitPercentage": 40.0
     },
     "second": {
       "direction": "column",

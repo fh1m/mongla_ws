@@ -133,4 +133,7 @@
 .mb .bar{height:4px;background:var(--mb-d3);border-radius:2px;overflow:hidden}
 .mb .bar b{display:block;height:100%;background:var(--mb-sea)}
 .mb .health{display:grid;grid-template-columns:fit-content(45%) minmax(0,1fr);gap:2px 12px}
-.mb .health span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The evidence wraps: cut with an ellipsis, the part of a row that says what
+   is missing and why ("... flow fused without omega") was the part hidden. */
+.mb .health span{overflow-wrap:anywhere}
+.mb .health span:nth-child(odd){white-space:nowrap}

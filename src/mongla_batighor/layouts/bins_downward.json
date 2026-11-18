@@ -18,13 +18,13 @@
       "paths": [
         {
           "value": "/mongla/move/_action/feedback.feedback.err_x_px",
-          "label": "err_x_px",
+          "label": "align x px",
           "enabled": true,
           "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/move/_action/feedback.feedback.err_y_px",
-          "label": "err_y_px",
+          "label": "align y px",
           "enabled": true,
           "timestampMethod": "receiveTime"
         }
@@ -34,7 +34,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "pixel error"
     }
   },
   "globalVariables": {},

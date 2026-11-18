@@ -22,14 +22,6 @@
         "synchronize": true
       }
     },
-    "Image!range_map": {
-      "imageMode": {
-        "imageTopic": "/mongla/vision/forward/vis_range_map"
-      }
-    },
-    "RawMessages!range": {
-      "topicPath": "/mongla/vision/forward/vis_range"
-    },
     "mongla.batighor.Vision!vision": {},
     "StateTransitions!ladder": {
       "paths": [
@@ -65,18 +57,19 @@
           "timestampMethod": "receiveTime"
         }
       ],
-      "isSynced": false
+      "isSynced": false,
+      "lichtblickPanelTitle": "lock ladder"
     },
     "Plot!authority": {
       "paths": [
         {
           "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.score",
-          "label": "forward authority",
+          "label": "forward",
           "enabled": true
         },
         {
           "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.score",
-          "label": "downward authority",
+          "label": "downward",
           "enabled": true
         }
       ],
@@ -85,7 +78,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "lock authority"
     },
     "Plot!target_range": {
       "paths": [
@@ -100,7 +94,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "target range"
     },
     "Plot!pose": {
       "paths": [
@@ -111,7 +106,7 @@
         },
         {
           "value": "/mongla/vision/forward/target_pose_fused.yaw_deg",
-          "label": "target yaw deg",
+          "label": "yaw deg",
           "enabled": true
         }
       ],
@@ -120,23 +115,24 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "target pose"
     },
     "Plot!anchor": {
       "paths": [
         {
           "value": "/mongla/vision/downward/anchor_decomposition.vector.x",
-          "label": "anchor rotation",
+          "label": "rotation",
           "enabled": true
         },
         {
           "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
-          "label": "anchor scale",
+          "label": "scale",
           "enabled": true
         },
         {
           "value": "/mongla/vision/downward/anchor_decomposition.vector.z",
-          "label": "anchor range m",
+          "label": "range m",
           "enabled": true
         }
       ],
@@ -145,25 +141,26 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "anchor (XFeat)"
     },
     "Plot!align": {
       "paths": [
         {
           "value": "/mongla/move/_action/feedback.feedback.err_x_px",
-          "label": "align err x px",
+          "label": "align x px",
           "enabled": true,
           "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/move/_action/feedback.feedback.err_y_px",
-          "label": "align err y px",
+          "label": "align y px",
           "enabled": true,
           "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/vision/forward/target_pose_fused.reproj_px",
-          "label": "reprojection px",
+          "label": "reproj px",
           "enabled": true
         }
       ],
@@ -172,7 +169,8 @@
       "sidebarDimension": 190,
       "followingViewWidth": 60,
       "isSynced": true,
-      "xAxisVal": "timestamp"
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "pixel error"
     }
   },
   "globalVariables": {},
@@ -185,18 +183,8 @@
     "first": {
       "direction": "column",
       "first": "Image!forward",
-      "second": {
-        "direction": "column",
-        "first": "Image!downward",
-        "second": {
-          "direction": "row",
-          "first": "Image!range_map",
-          "second": "RawMessages!range",
-          "splitPercentage": 50.0
-        },
-        "splitPercentage": 75.0
-      },
-      "splitPercentage": 42.9
+      "second": "Image!downward",
+      "splitPercentage": 50.0
     },
     "second": {
       "direction": "column",
