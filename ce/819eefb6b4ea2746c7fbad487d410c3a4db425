@@ -1,0 +1,19 @@
+test/test_a_failed_ros_fixture_does_not_cascade.py
+  s_d9cd6692c91d8a::t_75abcfe1fb7177 15-24,28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "ce819eefb6b4ea2746c7fbad487d410c3a4db425",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
