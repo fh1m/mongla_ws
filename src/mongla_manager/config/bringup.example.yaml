@@ -24,8 +24,9 @@
 #   braked stop -- leave false
 # allow_fw_behaviour_mismatch: false
 
-#   Start camera + detector alongside manager
-# vision: false
+#   The vision stack: both cameras, detectors, lock ladder, flow.
+#   vision:=false for a board-only bench session.
+# vision: true
 
 #   pi = both cameras + calibration (vision_pi.launch.py, the vehicle);
 #   generic = single camera, no calibration (vision.launch.py, dev box).
@@ -55,7 +56,7 @@
 
 #   vision_stack:=pi -- start flow_node (downward-camera velocity). Pairs with
 #   the manager's position_source:=flow.
-# flow: false
+# flow: true
 
 #   flow:=true -- the venue's shallowest floor, metres (#35).
 # pool_depth_min_m: nan
@@ -278,6 +279,11 @@
 #   and checkpoint bank all run for real, on input that never changes.
 # replay: false
 
+#   (passed to vision_pi.launch.py, which sets the default) One vision process
+#   per camera, through the HailoRT service. Off: one process, the chip opened
+#   directly, 6 ms faster an inference (measured-bars 86).
+# split: false
+
 #   (passed to vision_pi.launch.py, which sets the default)
 # fwd_device_path: ''
 
@@ -412,8 +418,8 @@
 #     dwn_frame_rate: 32.0
 #     dwn_calibration: ''
 #     fwd_calibration: ''
-#     flow: false
-#     lock: false
+#     flow: true
+#     lock: true
 #     act_conf: 0.45
 #     anchor_xfeat_hef: true
 #     anchor_semi_dense: false

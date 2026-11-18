@@ -283,29 +283,38 @@ declared but not forwarded (a knob wired to nothing).
 
 ### Launch (`ros2 launch mongla_manager bringup.launch.py <arg>:=<value>`)
 
-| Switch | Default | Gates | Lands on |
-|---|---|---|---|
-| `vision` | `false` | the whole vision stack | include |
-| `vision_stack` | `pi` | `pi` (dual camera + Hailo) or `generic` | include |
-| `localization` | `true` | the RIEKF node | `mongla_localization` |
-| `flow` | `false` | downward-camera velocity (needs `pool_depth_m`) | `flow_node` |
-| `lock` | `true` | XFeat anchor + LK follower ladder | `lock_node` |
-| `paused` | `true` | detectors idle until a mission resumes one | detectors |
-| `medium` | `water` | flat-port rectification in flow, lock, pnp | three nodes |
-| `velocity_uplink` | `false` | RIEKF body velocity → board (103) | manager |
-| `position_uplink` | `false` | RIEKF pose → board (102) | manager |
-| `mixer_aware` | `true` | srot vision frames prioritised yaw-first + saturation-aware anti-windup | manager `vision.mixer_aware` |
-| `zupt` | `true` | zero-velocity updates when still — and only after the thruster demand has been known-centred for max(1 s, 3 τ) (#25) | localization |
-| `demand_aid` | `true` | velocity from commanded demand on a blank floor | localization |
-| `use_yaw` | `false` | fuse the landmark heading anchor | localization |
-| `retrodict` | `false` | apply flow/depth/fixes at their own stamp, replaying later events (dev: 0.8 ms per sample 60 ms late) | localization |
-| `caustics` | `true` | sun-caustic erosion + bare-floor refusal | flow `caustic_suppression` |
-| `lane_lines` | `false` | lane-line heading (mod 180) yaw bound | flow |
-| `tile_m` | `0.0` | tile grating height + yaw bound (0 = off; the venue's tile size = on) | flow |
-| `baro_calibration` | `true` | re-zero the Bar30 in `mission_reset` | manager |
-| `batighor` | `false` | the operator center: foxglove_bridge and Lichtblick on :8000 | include |
-| `viewer` | `false` | on-vehicle HUD | vision |
-| `allow_fw_behaviour_mismatch` | `false` | arm below firmware rev 2 (safety override) | manager |
+A mission runs every sensor and fuses them, so a switch is ON unless the
+**Why** column names a reason it cannot be: a safety interlock, an input only
+the venue can give, a consumer that does not exist yet, or a measurement that
+says off. "It costs CPU" is not a reason by itself; the vision graph runs whole
+on Kutum with room left (measured-bars 87). `test_feature_switches.py` fails a
+switch with no row here, a row whose default is not the launch's, or a row
+with no reason.
+
+| Switch | Default | Gates | Lands on | Why |
+|---|---|---|---|---|
+| `vision` | `true` | the whole vision stack | include | this is the vehicle launch; `vision:=false` is for a board-only bench session |
+| `vision_stack` | `pi` | `pi` (dual camera + Hailo) or `generic` | include | the vehicle is the Pi with the Hailo-8; `generic` is a dev box |
+| `localization` | `true` | the RIEKF node | `mongla_localization` | read-only: it publishes `/mongla/odom` and commands nothing |
+| `flow` | `true` | downward-camera velocity (the DVL role) | `flow_node` | the only velocity sensor; it refuses to publish a speed until it has a height (`pool_depth_m` or tiles) and the board's gyro, and says which is missing |
+| `pool_depth_min_m`, `pool_depth_max_m`, `pool_depth_m` | `nan` | flow's height to the floor | `flow_node` | unknown until the venue is measured; a typed default is a confident wrong speed (#35) |
+| `lock` | `true` | XFeat anchor + LK follower ladder | `lock_node` | holds the target through detection gaps (the manager steers on it, `vision.lock_s` 1.0) and its XFeat bank publishes loop-closure fixes |
+| `paused` | `true` | detectors idle until a mission resumes one | detectors | one model alone has the chip (downward 58.6 Hz against 32 with both); the mission resumes what it needs, `use_both_cameras()` for both |
+| `medium` | `water` | flat-port rectification in flow, lock, pnp | three nodes | the vehicle works in water; `air` is the bench |
+| `velocity_uplink` | `false` | RIEKF body velocity → board (103) | manager | the board drops msgid 103 until firmware PR #23 lands, and the link is 51.8 % full at idle |
+| `position_uplink` | `false` | RIEKF pose → board (102) | manager | no firmware consumes msgid 102 yet |
+| `mixer_aware` | `true` | srot vision frames prioritised yaw-first + saturation-aware anti-windup | manager `vision.mixer_aware` | measured on the board's mixer |
+| `zupt` | `true` | zero-velocity updates when still — and only after the thruster demand has been known-centred for max(1 s, 3 τ) (#25) | localization | bounds drift while holding still |
+| `demand_aid` | `true` | velocity from commanded demand on a blank floor | localization | silent until it has learned the gain against flow, so it cannot inject a guess |
+| `use_yaw` | `false` | fuse the landmark heading anchor | localization | until `anchor_on()` makes heading absolute, fusing it converges to its own construction; the mission turns it on with the anchor |
+| `retrodict` | `false` | apply flow/depth/fixes at their own stamp, replaying later events (dev: 0.8 ms per sample 60 ms late) | localization | its cost on the Pi is not measured yet; measure it, then decide (bead) |
+| `caustics` | `true` | sun-caustic erosion + bare-floor refusal | flow `caustic_suppression` | measured on the real archive: flow tracks the waves without it |
+| `lane_lines` | `false` | lane-line heading (mod 180) yaw bound | flow | a path marker is also a dark band, and the reader cannot tell them apart yet (`_read_the_lane`) |
+| `tile_m` | `0.0` | tile grating height + yaw bound (0 = off; the venue's tile size = on) | flow | the tile size is the venue's; a wrong one is a wrong height, so it is set on the day in `~/.mongla/bringup.yaml` |
+| `baro_calibration` | `true` | re-zero the Bar30 in `mission_reset` | manager | depth is read relative to the surface on the day |
+| `batighor` | `false` | the operator center: foxglove_bridge and Lichtblick on :8000 | include | the deck's viewer, not part of a run; on when a laptop is connected |
+| `viewer` | `false` | on-vehicle HUD | vision | the vehicle has no display |
+| `allow_fw_behaviour_mismatch` | `false` | arm below firmware rev 2 (safety override) | manager | a hull-safety interlock: a board below the floor turns backwards |
 
 ### Live (`ros2 param set /mongla_manager vision.<name> <value>`, next goal)
 

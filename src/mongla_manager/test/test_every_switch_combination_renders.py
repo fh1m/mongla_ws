@@ -103,25 +103,32 @@ def _loaded_bringup():
 
 
 @pytest.mark.parametrize('cfg, named', [
-    ({'vision': 'false', 'flow': 'true'}, 'flow:=true'),
+    ({'vision': 'false', 'replay': 'true'}, 'replay:=true'),
     ({'vision': 'false', 'viewer': 'true'}, 'viewer:=true'),
     ({'vision': 'false', 'lock_class': 'gate'}, 'lock_class:=gate'),
 ])
 def test_a_vision_only_switch_without_vision_is_named(cfg, named):
-    """`flow:=true` alone starts nothing; the launch now says so."""
+    """`viewer:=true` with vision off starts nothing; the launch says so."""
     assert named in _loaded_bringup().vision_only_ignored(cfg)
 
 
 def test_with_vision_on_nothing_is_flagged():
     assert _loaded_bringup().vision_only_ignored(
-        {'vision': 'true', 'flow': 'true', 'lock_class': 'gate'}) == []
+        {'vision': 'true', 'viewer': 'true', 'lock_class': 'gate'}) == []
+
+
+def test_flow_on_by_default_does_not_warn_a_bench_launch():
+    """Flow is on by default; `vision:=false` must not then warn about a
+    switch nobody typed."""
+    assert _loaded_bringup().vision_only_ignored(
+        {'vision': 'false', 'flow': 'true'}) == []
 
 
 def test_the_warning_is_in_the_rendered_launch():
-    """And it is wired: rendering `flow:=true` alone emits the LogInfo."""
+    """And it is wired: rendering `viewer:=true` with vision off emits the LogInfo."""
     from launch.actions import LogInfo
     ctx = LaunchContext()
-    ctx.launch_configurations.update({'flow': 'true'})
+    ctx.launch_configurations.update({'vision': 'false', 'viewer': 'true'})
     seen = []
 
     def walk(entities):
@@ -136,4 +143,4 @@ def test_the_warning_is_in_the_rendered_launch():
                 continue
             walk(e.visit(ctx))
     walk([get_launch_description_from_python_launch_file(str(BRINGUP))])
-    assert any('flow:=true has no effect' in m for m in seen), seen
+    assert any('viewer:=true has no effect' in m for m in seen), seen

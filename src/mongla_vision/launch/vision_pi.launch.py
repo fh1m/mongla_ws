@@ -264,31 +264,33 @@ def arguments() -> list:
         # THE DVL. flow_node existed only as a setup.py entry point -- in no
         # launch file at all -- so the bottom-camera velocity sensor had to be
         # started by hand, which on a pool deck means it does not get started.
-        # OFF by default because it needs `pool_depth_m`, which it REFUSES to
-        # guess: height is a clean multiplier on every velocity it emits.
-        DeclareLaunchArgument('flow', default_value='false'),
+        # ON: it is the vehicle's only velocity sensor, and localization
+        # drifts without it. It still REFUSES to publish a speed until it has
+        # a height (`pool_depth_m`, or the floor tiles) and the board's gyro:
+        # height is a clean multiplier on every velocity, and an underived one
+        # is a confident wrong speed. Refusing is loud (quality 0 and a reason
+        # in the log), and bringup_check says which input is missing.
+        DeclareLaunchArgument('flow', default_value='true'),
         # The lock ladder: the follower and the XFeat anchor. It publishes `<ns>/lock`, NEVER `/detections`: a followed or anchored
         # box on the detector's topic is indistinguishable from something the
         # detector saw, and every consumer including the HUD would report a
         # detection that never happened.
         #
-        # Starting it does not steer the vehicle. The control loop consults
-        # the ladder only when `vision.lock_s > 0`, and that stays 0. This
-        # publishes the evidence so it can be watched on the deck before
-        # anything acts on it -- the same staging the firmware vision uplink
-        # uses (echo the numbers, confirm they match, THEN actuate).
-        # Default off, deliberately. Measured A/B on the vehicle: the ladder
-        # costs 23 % of the forward detection rate (30.23 -> 23.14 Hz) and
-        # 30 % of the downward (42.71 -> 29.82). `vision.lock_s` is 0, so the
-        # control loop does not read `/lock` -- paying a quarter of perception
-        # for evidence nothing consumes is the wrong trade. Turn BOTH on
-        # together: `lock:=true` plus `vision.lock_s > 0`, once the deck has
-        # watched /lock and the rungs agree with what the operator sees.
+        # ON. The manager consults it whenever detection drops out
+        # (`vision.lock_s` 1.0, vision_tunables.py), and its XFeat bank is
+        # what publishes loop-closure fixes to localization. A target lost for
+        # want of the rung that holds it through a gap costs the task, so the
+        # ladder is not a place to save CPU. Measured with both detectors,
+        # the ladder and flow live in one direct process: forward 29.8 Hz (the
+        # camera's rate), downward 32.4 to 33.1 Hz, 2.7 GB free (measured-bars
+        # 87). Its old A/B (23 to 30 % of the detection rate) was taken
+        # through the service, before measured-bars 86.
         DeclareLaunchArgument(
-            'lock', default_value='false',
-            description='Run the lock ladder (follower + XFeat anchor) on the '
-                        'forward camera, publishing <ns>/lock. Control ignores '
-                        'it until vision.lock_s > 0.'),
+            'lock', default_value='true',
+            description='Run the lock ladder (follower + XFeat anchor), '
+                        'publishing <ns>/lock and loop-closure fixes. The '
+                        'manager steers on it when detection drops out '
+                        '(vision.lock_s).'),
         # The ladder's own bars, reachable from the command line. Defaults
         # mirror `lock_node`'s declarations exactly -- two copies of a default
         # is how they drift, so if one moves the other must.

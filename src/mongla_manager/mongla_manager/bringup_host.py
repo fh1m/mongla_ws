@@ -321,6 +321,51 @@ def depth_floor_verdict(nodes: dict) -> tuple[str, str]:
                   'the hull must never pass in this venue')
 
 
+def flow_height_verdict(top: dict) -> tuple[str, str]:
+    """PASS / WARN for the velocity sensor, from the deck file's bringup values.
+
+    Flow is on by default and refuses to publish a speed until it has a
+    height: the venue depth (`pool_depth_m`, or the min/max pair) or the floor
+    tiles (`tile_m`). Without one it refuses every interval and localization
+    drifts on the IMU alone -- the run looks healthy and has no velocity.
+    """
+    import math
+
+    def num(key):
+        try:
+            v = float(top.get(key, 'nan'))
+        except (TypeError, ValueError):
+            return float('nan')
+        return v
+
+    if str(top.get('flow', 'true')).strip().lower() in ('false', '0', 'no'):
+        return WARN, ('flow:=false: the vehicle has no velocity sensor this '
+                      'run; localization drifts on the IMU alone')
+    if math.isfinite(num('pool_depth_m')) and num('pool_depth_m') > 0:
+        return PASS, f'flow scales on pool_depth_m {num("pool_depth_m"):.2f} m'
+    lo, hi = num('pool_depth_min_m'), num('pool_depth_max_m')
+    if math.isfinite(lo) and math.isfinite(hi) and 0 < lo <= hi:
+        return PASS, f'flow scales on a floor between {lo:.2f} and {hi:.2f} m'
+    if num('tile_m') > 0:
+        return PASS, f'flow reads its height off {num("tile_m"):.3f} m tiles'
+    return WARN, ('flow has no height: it will refuse every interval. Set '
+                  'pool_depth_m (or pool_depth_min_m and pool_depth_max_m), or '
+                  'tile_m, in ~/.mongla/bringup.yaml for this venue')
+
+
+def _check_flow_height() -> tuple[str, str]:
+    """Will the velocity sensor measure anything? Warn, never fail: a bench
+    has no floor, and a missing height is a refusal, not a wrong number."""
+    try:
+        import yaml
+        from mongla_localization import launch_defaults as ld
+        path = ld.config_path()
+        body = (yaml.safe_load(path.read_text()) or {}) if path is not None else {}
+    except Exception as exc:                        # noqa: BLE001
+        return WARN, f'bringup.yaml unreadable: {exc!r}'
+    return flow_height_verdict(body if isinstance(body, dict) else {})
+
+
 def _check_depth_floor() -> tuple[str, str]:
     """Is there a depth floor below the mission? (#52)
 
