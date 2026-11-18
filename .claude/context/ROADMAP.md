@@ -307,7 +307,7 @@ with no reason.
 | `zupt` | `true` | zero-velocity updates when still — and only after the thruster demand has been known-centred for max(1 s, 3 τ) (#25) | localization | bounds drift while holding still |
 | `demand_aid` | `true` | velocity from commanded demand on a blank floor | localization | silent until it has learned the gain against flow, so it cannot inject a guess |
 | `use_yaw` | `false` | fuse the landmark heading anchor | localization | until `anchor_on()` makes heading absolute, fusing it converges to its own construction; the mission turns it on with the anchor |
-| `retrodict` | `false` | apply flow/depth/fixes at their own stamp, replaying later events (dev: 0.8 ms per sample 60 ms late) | localization | its cost on the Pi is not measured yet; measure it, then decide (bead) |
+| `retrodict` | `false` | apply flow/depth/fixes at their own stamp, replaying later events | localization | measured on Kutum (measured-bars 90): +3.9 to +6.1 % of a core while moving, over the 5 % bar, for an accuracy gain not yet measured. Reversal: a moving-truth run that shows on-arrival flow costs position |
 | `caustics` | `true` | sun-caustic erosion + bare-floor refusal | flow `caustic_suppression` | measured on the real archive: flow tracks the waves without it |
 | `lane_lines` | `false` | lane-line heading (mod 180) yaw bound | flow | a path marker is also a dark band, and the reader cannot tell them apart yet (`_read_the_lane`) |
 | `tile_m` | `0.0` | tile grating height + yaw bound (0 = off; the venue's tile size = on) | flow | the tile size is the venue's; a wrong one is a wrong height, so it is set on the day in `~/.mongla/bringup.yaml` |
