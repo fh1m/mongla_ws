@@ -74,7 +74,7 @@ Two details in that picture are deliberate.
 On the dev box, with Kutum on the network:
 
 ```bash
-kutum/deploy.sh fh1m@mongla.local              # sync + doctor + build + gate
+kutum/deploy.sh fh1m@kutum.local              # sync + doctor + build + gate
 ```
 
 Deploy stops on a doctor FAIL. The doctor also reads the RTC: once the tether

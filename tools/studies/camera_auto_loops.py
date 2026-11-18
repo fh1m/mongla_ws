@@ -11,9 +11,11 @@ with the scene, and every downstream number inherits it:
     appearance change to a bank reference that never moved;
   * the turbidity proxy would be measuring the CAMERA's decisions rather than
     the water;
-  * `exposure_dynamic_framerate` lets the camera silently drop frame rate in
-    dim water -- and the lock ladder's rungs are sized in SECONDS, so a
-    halved rate halves how many detections fit inside coast_s.
+  * `exposure_dynamic_framerate` is assumed by its name to let the camera
+    drop frame rate in dim water. On the Sonix global-shutter unit it does
+    not: it keeps 211 fps and raises gain, and turning it OFF is what blacks
+    the picture out at 120 and 210 fps (measured-bars section 85). Measure
+    a new camera; do not read the control's name.
 
 Read live from the vehicle on 2026-09-25: white_balance_automatic=1,
 auto_exposure=3 (Aperture Priority), exposure_dynamic_framerate=1.

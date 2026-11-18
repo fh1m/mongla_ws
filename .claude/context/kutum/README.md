@@ -42,7 +42,7 @@ working, and nobody could have rebuilt it:
 | `~/mongla_ws` was a hand-rsynced copy | it still carried a deleted package, old tools and agent tooling; nothing said which commit it was | `deploy.sh` is the only way in: a new release per deploy, built from clean beside the live one, switched atomically, with a manifest naming the commit, models and packages (#64) |
 | HailoRT, its driver and its firmware were built by hand | from public source at v4.24.0, but nothing recorded how | `setup.sh --system` step 2, one version pinned in one place |
 | The compiled XFeat artifacts existed only on the vehicle | one dead card and they were gone | `backup.sh` pulls them, and everything else made on the vehicle, to the dev box |
-| `wpasupplicant` had been removed | Wi-Fi could not join anything | `setup.sh --system` installs it and writes the network you name; `mongla.local` answers on Wi-Fi and Ethernet |
+| `wpasupplicant` had been removed | Wi-Fi could not join anything | `setup.sh --system` installs it and writes the network you name; `kutum.local` answers on Wi-Fi and Ethernet |
 | The RTC battery was fitted but its charging was off | a rechargeable cell runs flat, and then the clock forgets the date at every power-off | `setup.sh --system` turns charging on at 3.0 V; the doctor reads it back |
 | Scripts in `~` from the retired workspace, two HailoRT logs, three stale repo clones | each one a wrong answer waiting to be run | moved to `~/attic/2026-11-07/home/`, nothing deleted |
 
@@ -54,9 +54,9 @@ Everything Kutum does is one of five files. Each one is safe to run again.
 |---|---|---|
 | `sudo kutum/setup.sh --system` | on the vehicle, once per machine | the machine: apt packages, the Hailo driver, firmware and runtime, udev and systemd files, passwordless sudo, then the user half |
 | `kutum/setup.sh` | on the vehicle | your account only: pinned Python packages, the HailoRT bindings, the rc-file line. No sudo |
-| `kutum/deploy.sh fh1m@mongla.local` | on the dev box, after every change | the workspace: refuse if the stack runs or the board is armed, stage a release, doctor, build, switch, then the vehicle's own gate. `--rollback`, `--list` |
-| `kutum/doctor.sh` | either (`ssh fh1m@mongla.local bash -s < kutum/doctor.sh`) | nothing. It reads every layer back and exits 1 on a FAIL |
-| `kutum/backup.sh fh1m@mongla.local` | on the dev box | nothing on the vehicle. Pulls what only the vehicle has |
+| `kutum/deploy.sh fh1m@kutum.local` | on the dev box, after every change | the workspace: refuse if the stack runs or the board is armed, stage a release, doctor, build, switch, then the vehicle's own gate. `--rollback`, `--list` |
+| `kutum/doctor.sh` | either (`ssh fh1m@kutum.local bash -s < kutum/doctor.sh`) | nothing. It reads every layer back and exits 1 on a FAIL |
+| `kutum/backup.sh fh1m@kutum.local` | on the dev box | nothing on the vehicle. Pulls what only the vehicle has |
 
 `kutum/env.sh` is the sixth file, and it is not a verb: it is what every terminal on the
 vehicle sources. Usage, flags and the rebuild checklist are in
@@ -82,7 +82,7 @@ Read by the doctor, `lscpu` and `hailortcli` on 2026-11-07.
 | Hailo | driver `hailo_pci` 4.24.0 (DKMS), firmware 4.24.0, HailoRT 4.24.0, `hailo_platform` 4.24.0 |
 | Python | numpy 1.26.4 and cv2 from apt, OpenBLAS; pip: pymavlink 2.4.49, filterpy 1.4.5, scipy 1.17.1, onnxruntime 1.29.0, supervision 0.26.1, trackers 2.4.0 |
 | Clock | Pi 5 RTC on the official battery, charging at 3.0 V; network time when there is a network |
-| Network | Ethernet (DHCP, link-local fallback) and Wi-Fi, both as `mongla.local` |
+| Network | Ethernet (DHCP, link-local fallback) and Wi-Fi, both as `kutum.local` |
 | Health | never throttled since boot, 38–51 °C |
 | Build | 6 packages, clean `colcon build` in **44.4 s** |
 
@@ -103,7 +103,7 @@ are marked; moving one of those is a code change.
 ~/mongla_runs/        one folder per run: bags, logs, scorecards        (MONGLA_RUN_DIR default)
 ~/hailo_models/       compiled artifacts kept outside the workspace,
                       so a clean build cannot delete them               (MONGLA_HEF_DIR)
-~/calib_<camera>[_water]/  calibration captures; the guide resumes here (calibration/guide.py)
+~/calib_<camera>[_water]/  calibration captures; a capture resumes here (calibration/calibrate_node.py)
 ~/.mongla/            the deck's own config: bringup.yaml, courses      (created when needed)
 ~/.hailo/hailort/     HailoRT's log, in one place                       (HAILORT_LOGGER_PATH)
 ~/hailort_src/        HailoRT v4.24.0, the source the runtime and the

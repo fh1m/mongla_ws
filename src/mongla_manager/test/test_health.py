@@ -264,6 +264,15 @@ def test_a_HEALTHY_detector_does_not_trip_it():
     assert m._health.get('detector').state is State.OK
 
 
+def test_an_unwatched_detector_is_unknown_and_does_not_claim_its_topic_is_gone():
+    """Before a vision verb runs nothing here counts detections; the health
+    board said "no detections topic" while both detectors published (seen in
+    Batighor on the bench, 2026-11-12)."""
+    h = R.detector(None)
+    assert h.state is State.UNKNOWN
+    assert 'topic' not in h.evidence and 'vision verb' in h.evidence
+
+
 def test_the_gyro_is_actually_REQUESTED_from_the_board():
     """Flow de-rotation needs raw gyro, and SCALED_IMU2 was missing from the
     srot rate table entirely -- so it ran at the board's 10 Hz default while

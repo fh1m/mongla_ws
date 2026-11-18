@@ -38,6 +38,13 @@ from sensor_msgs.msg import CameraInfo
 from mongla_interfaces.msg import TargetCorrespondences, TargetPose
 
 
+def _positive(v) -> float:
+    v = float(v)
+    if v <= 0.0:
+        raise ValueError(f'{v} is not a gate; it must be > 0')
+    return v
+
+
 class PnPNode(Node):
     def __init__(self, **kw):
         super().__init__('mongla_pnp', **kw)
@@ -86,6 +93,12 @@ class PnPNode(Node):
             f'[PNP  ] {cam}: medium={self._medium} '
             f'reproj<={self._max_reproj_px:.1f}px  {ns}/correspondences -> '
             f'{topic}')
+        # Last: rclpy runs set-callbacks on declare_parameter too.
+        from mongla_vision.live_params import apply_live
+        apply_live(self, {
+            'max_reproj_px': lambda v: setattr(self, '_max_reproj_px', _positive(v)),
+            'ambiguity_max': lambda v: setattr(self, '_ambiguity_max', _positive(v)),
+        })
 
     def _on_info(self, msg):
         k = list(msg.k)

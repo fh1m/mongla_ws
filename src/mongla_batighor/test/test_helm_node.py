@@ -246,3 +246,38 @@ def test_the_pilot_switches_the_camera_as_use_camera_does(rig):
     assert r.ok, r.message
     assert _until(lambda: _param(fwd, 'paused') is True and _param(dwn, 'paused') is False)
     assert _until(lambda: states and states[-1].get('camera') == 'downward')
+
+
+def test_a_calibration_op_reaches_the_calibration_node_by_the_tuning_rule(rig):
+    """Any named operator, never during a mission, and only a known op; the
+    op and its settings arrive at the calibration node unchanged."""
+    call, _, mgr, _, log = rig
+    assert 'no calibration' in call('raf', 'calibrate', cmd='solve').message
+    got = []
+    cal = Node('fake_calibration')
+
+    def serve(req, res):
+        got.append((req.who, req.op, json.loads(req.fields_json)))
+        res.ok, res.message = True, 'solving'
+        return res
+    cal.create_service(Helm, '/mongla/vision/calibration/op', serve)
+    ex = MultiThreadedExecutor(num_threads=2)
+    ex.add_node(cal)
+    threading.Thread(target=ex.spin, daemon=True).start()
+    try:
+        assert _until(lambda: call('raf', 'calibrate', cmd='configure',
+                                   fields_json='{"medium": "water"}').ok)
+        assert _until(lambda: got and got[-1] == ('raf', 'configure', {'medium': 'water'}))
+        assert _until(lambda: 'calibration configure: solving' in log.read_text())
+        assert not call('raf', 'calibrate', cmd='rm -rf').ok
+        assert not call('', 'calibrate', cmd='solve').ok
+        beat = mgr.create_publisher(String, '/mongla/mission_alive', 10)
+        for _ in range(5):
+            beat.publish(String(data='qualify'))
+            time.sleep(0.05)
+        r = call('raf', 'calibrate', cmd='solve')
+        assert not r.ok and 'qualify' in r.message
+        assert [g[1] for g in got] == ['configure']
+    finally:
+        ex.shutdown()
+        cal.destroy_node()

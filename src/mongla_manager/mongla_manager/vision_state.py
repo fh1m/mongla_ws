@@ -351,7 +351,7 @@ class VisionState(ChoiceMixin):
         this whole path exists to prevent.
 
         No pose means not square. An absent `lock_node`, an uncalibrated
-        camera, an unset `target_width_m` or a refused decomposition all return
+        camera, a class with no width or a refused decomposition all return
         False. For a firing gate the fail-safe direction is "do not fire", and
         this is the only place that choice is made.
         """

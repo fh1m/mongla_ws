@@ -33,7 +33,6 @@ ros2 run mongla_vision tracker_node --ros-args -p camera:=laptop \\
     -p track_buffer:=60
 """
 
-import math
 import os
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
 
@@ -46,25 +45,6 @@ from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo
 from vision_msgs.msg import Detection2DArray
 
-# Detections to average the arrival rate over before judging it. Long enough
-# that a startup hiccup or one slow frame does not decide it, short enough that
-# the warning arrives while the operator is still watching the launch.
-_RATE_SAMPLES = 60
-
-# Detections to THROW AWAY before measuring. The first live run warned that a
-# 55 Hz camera was arriving at 15 -- and it was, for the first two seconds,
-# while both detectors were still contending for the chip's activation and the
-# cameras were still ramping. Measuring across that transient gave a number
-# that was true of the startup and false of the run. This project has the same
-# lesson recorded on the loop sweep ("a mean folds in the startup transient");
-# it applies to any rate measured from t=0.
-_RATE_WARMUP = 120
-
-# And take the MEDIAN inter-arrival, not the mean over the span. One long gap
-# -- a detector pause, a model switch, a scheduler hiccup -- drags a span-based
-# mean far more than it shifts the rate the coast windows actually see.
-_RATE_MIN_HZ = 0.1
-
 from mongla_vision import qos
 from mongla_vision.detection.messages import array_to_detections
 from mongla_vision.tracking.bytetrack       import ByteTrackWrapper
@@ -73,7 +53,7 @@ from mongla_vision.tracking.kalman    import TrackKalmanSmoother
 from mongla_vision.tracking.tracker   import TrackedDetection
 
 
-def _build_tracker(tracker_type, *, track_buffer, frame_rate, min_hits,
+def _build_tracker(tracker_type, *, track_buffer, min_hits,
                    iou_threshold, track_activation_threshold,
                    high_conf_det_threshold, detector_conf=0.0, log=None):
     """Build the tracker backend by name.
@@ -91,7 +71,7 @@ def _build_tracker(tracker_type, *, track_buffer, frame_rate, min_hits,
             track_activation_threshold=track_activation_threshold)
     try:
         return RoboflowTracker(
-            tracker_type=ttype, track_buffer=track_buffer, frame_rate=frame_rate,
+            tracker_type=ttype, track_buffer=track_buffer,
             min_hits=min_hits, iou_threshold=iou_threshold,
             track_activation_threshold=track_activation_threshold,
             high_conf_det_threshold=high_conf_det_threshold,
@@ -104,6 +84,22 @@ def _build_tracker(tracker_type, *, track_buffer, frame_rate, min_hits,
             track_buffer=track_buffer, min_hits=min_hits,
             iou_threshold=iou_threshold,
             track_activation_threshold=track_activation_threshold)
+
+
+def capture_time(header) -> float:
+    """The instant the frame was taken, in seconds, from the camera's stamp.
+
+    Not the arrival time. The Kalman's transition and process noise are built
+    from the interval between two calls, and at the Hailo path's ~99 Hz a
+    frame interval is 10 ms -- so a few milliseconds of DDS delivery jitter
+    was a 30 % error in the interval, and the same error in every velocity
+    the filter carried. The detector copies the camera's capture stamp
+    (kernel start-of-exposure) into the header, so the interval between two
+    headers is the interval between two exposures. A header with no stamp
+    (a hand-built test message) falls back to arrival time.
+    """
+    t = header.stamp.sec + header.stamp.nanosec * 1e-9
+    return t if t > 0.0 else time.monotonic()
 
 
 def kalman_pass(kalman, tracked, frame_t):
@@ -120,7 +116,7 @@ def kalman_pass(kalman, tracked, frame_t):
         if kalman.is_expired(td.track_id):
             continue
 
-    `is_expired()` reads `predict_streak`, which resets ONLY inside `smooth()`
+    `is_expired()` reads `predict_s`, which resets ONLY inside `smooth()`
     (`kalman.py:83`) -- which the `continue` skipped. And `prune()` only drops
     filters whose id is ABSENT from `tracked`. So once a filter expired while
     the backend still held the id, a returning target with that id was
@@ -173,13 +169,11 @@ class TrackerNode(Node):
         # tracker engine: ocsort (Roboflow, default — best dropout recovery) |
         # bytetrack (Roboflow two-stage) | legacy_bytetrack (supervision fallback)
         self.declare_parameter('tracker_type',                'ocsort')
-        self.declare_parameter('frame_rate',                  20.0)
-        # Frames a lost track survives, IN 30 Hz FRAMES: Roboflow keeps it for
-        # int(frame_rate/30 * track_buffer) frames, so 150 is 5.0 s at any
-        # rate. Bar: >= the p99 detection gap, 2.418 s (measured-bars.md, the
-        # lock ladder), so a re-acquisition keeps its id. Until 2026-11-06 this
-        # shipped 60 (2.0 s, BELOW the bar) while the ledger quoted 150 from a
-        # config file nothing loaded.
+        # Seconds a lost track survives, written as 30 Hz frames because that
+        # is the library's unit: 150 -> 5.0 s. The wrapper enforces it on
+        # capture time, so it is 5.0 s at any detection rate. Bar: >= the p99
+        # detection gap, 2.418 s (measured-bars.md, the lock ladder), so a
+        # re-acquisition keeps its id.
         self.declare_parameter('track_buffer',                150)
         self.declare_parameter('min_hits',                    1)
         self.declare_parameter('iou_threshold',               0.2)
@@ -200,30 +194,14 @@ class TrackerNode(Node):
         # ones, and on two of those clips the fixed-R filter was following BAD
         # boxes more closely than good ones (selectivity 0.96 and 0.64).
         self.declare_parameter('kalman_adaptive_noise',       True)
-        # SECONDS, not frames. It was `max_predict_frames: 30`, and 30 frames
-        # is 1.5 s at the 20 Hz this was tuned at and 0.31 s at the Hailo
-        # path's 98 Hz -- BELOW the control loop's typical `vision.coast_s` of
-        # 0.8 s, so a coasted target vanished off /tracks before the coast
-        # elapsed and the coast truncated early. That is the exact failure the
-        # constant's own comment warned about, made live by perception getting
-        # 5x faster, and nothing raised anything: the rung is the 4th of the
-        # coast ladder (_freshness < coast_s < lost_grace_s < THIS) and it is
-        # the only one that was expressed in frames.
-        #
-        # Note the asymmetry that hid it: Roboflow's own buffer IS frame-rate
-        # aware (`int(frame_rate/30 * lost_track_buffer)`, verified in the
-        # installed library), so the config's frame_rate scaled one rung and
-        # not the other.
+        # Seconds of capture time a track may coast before the smoother drops
+        # it: the outermost rung of the coast ladder
+        # (_freshness < vision.coast_s < lost_grace_s < THIS). Both tracker
+        # windows are seconds on the frames' own stamps, so no detection rate
+        # can shorten one below an inner rung (BUGS.md B-114).
         self.declare_parameter('max_predict_s',               1.5)
-        # How far the measured detection rate may drift from `frame_rate`
-        # before saying so. Both rungs are sized from `frame_rate`, so a wrong
-        # value makes the whole ladder wrong -- silently, since a tracker with
-        # a truncated coast still publishes tracks and looks healthy.
-        self.declare_parameter('frame_rate_warn_ratio',       1.5)
-
         cam              = str(self.get_parameter('camera').value).strip() or 'cam'
         tracker_type     = str(self.get_parameter('tracker_type').value).strip().lower()
-        frame_rate       = float(self.get_parameter('frame_rate').value)
         track_buffer     = int(self.get_parameter('track_buffer').value)
         min_hits         = int(self.get_parameter('min_hits').value)
         iou_threshold    = float(self.get_parameter('iou_threshold').value)
@@ -234,11 +212,6 @@ class TrackerNode(Node):
         meas_noise       = float(self.get_parameter('kalman_measurement_noise').value)
         adaptive_noise   = bool(self.get_parameter('kalman_adaptive_noise').value)
         max_pred_s       = float(self.get_parameter('max_predict_s').value)
-        self._rate_tol   = float(self.get_parameter('frame_rate_warn_ratio').value)
-        self._frame_rate = frame_rate
-        # ceil, so a sub-frame remainder rounds UP: rounding a coast window
-        # down is the failure being fixed.
-        max_pred         = max(1, math.ceil(max_pred_s * frame_rate))
         self._last_classes = str(self.get_parameter('classes').value)
 
         # The DETECTOR's floor, so the tracker's confidence gates can be
@@ -248,7 +221,7 @@ class TrackerNode(Node):
         # leaves the old behaviour rather than guessing.
         detector_conf = float(self.get_parameter('detector_conf').value)
         self._tracker = _build_tracker(
-            tracker_type, track_buffer=track_buffer, frame_rate=frame_rate,
+            tracker_type, track_buffer=track_buffer,
             min_hits=min_hits, iou_threshold=iou_threshold,
             track_activation_threshold=act_thresh, high_conf_det_threshold=high_conf,
             detector_conf=detector_conf, log=self.get_logger())
@@ -262,7 +235,7 @@ class TrackerNode(Node):
             adaptive_noise=adaptive_noise,
             process_noise=proc_noise,
             measurement_noise=meas_noise,
-            max_predict_frames=max_pred,
+            max_predict_s=max_pred_s,
         ) if self._enable_kal else None
         if self._enable_kal and adaptive_noise:
             self.get_logger().info(
@@ -293,12 +266,6 @@ class TrackerNode(Node):
         self._info_seen  = False
         self._size_ema: dict = {}   # track_id -> (smooth_w, smooth_h)
 
-        # Rate check -- see _check_rate.
-        self._rate_t: list = []
-        self._rate_seen    = 0
-        self._rate_warned  = False
-        self._kal_frames   = max_pred
-
         # Diagnostics
         self._frames          = 0
         self._active_tracks   = 0
@@ -309,11 +276,13 @@ class TrackerNode(Node):
         self.add_on_set_parameters_callback(self._on_param_change)
 
         self.get_logger().info(
-            f"[TRK  ] subscribed {ns}/detections  engine={self._tracker.name} "
-            f"track_buffer={track_buffer}@{frame_rate:.0f}Hz min_hits={min_hits} "
-            f"coast={max_pred_s:.1f}s({max_pred}f) "
+            f"[TRK  ] subscribed {ns}/candidates  engine={self._tracker.name} "
+            f"track_buffer={track_buffer / 30.0:.1f}s min_hits={min_hits} "
+            f"coast={max_pred_s:.1f}s "
             f"act_thresh={act_thresh:.2f} "
             f"kalman={'on' if self._enable_kal else 'off'}")
+
+    LIVE_PARAMS = ('classes',)
 
     def _on_param_change(self, params):
         """`classes` applies live; everything else is read once at startup.
@@ -345,61 +314,8 @@ class TrackerNode(Node):
             self._image_size = (int(msg.width), int(msg.height))
             self._info_seen  = True
 
-    def _check_rate(self, frame_t: float) -> None:
-        """Is the detector running at the rate every coast window was sized for?
-
-        Measured over a window rather than asserted, because the answer is a
-        property of the machine: the same launch gives 98 Hz on the Pi's Hailo
-        path and 3-4 Hz on a raw .pt --
-        and the vehicle's two cameras do not even match each other (55 Hz
-        forward against 15 Hz downward, measured). One `frame_rate` cannot be
-        right for all of them, so the node says which one it is actually
-        seeing instead of trusting the parameter.
-
-        Warns ONCE. A rate mismatch is a configuration fact, not an event, and
-        repeating it every window buries the log it is competing with.
-        """
-        if self._rate_warned:
-            return
-        self._rate_seen += 1
-        if self._rate_seen <= _RATE_WARMUP:
-            return
-        self._rate_t.append(frame_t)
-        if len(self._rate_t) < _RATE_SAMPLES:
-            return
-        gaps = sorted(b - a for a, b in zip(self._rate_t, self._rate_t[1:]))
-        self._rate_t = []
-        mid = gaps[len(gaps) // 2]
-        if mid <= 0.0:
-            return
-        measured = 1.0 / mid
-        if measured < _RATE_MIN_HZ:
-            return
-        self._rate_warned = True
-        lo, hi = self._frame_rate / self._rate_tol, self._frame_rate * self._rate_tol
-        coast_s = self._kal_frames / measured if measured else float('inf')
-        if lo <= measured <= hi:
-            # Report it EVEN WHEN IT IS RIGHT. Silence here is indistinguishable
-            # from the check not running, and I could not tell those apart on
-            # the vehicle: no warning appeared at a rate I had measured as out
-            # of band with `ros2 topic hz` -- whose own subscriber load was
-            # depressing the reading. The number the coast windows are actually
-            # sized from is worth one line whatever it says.
-            self.get_logger().warning(
-                f"[TRK  ] detections {measured:.0f} Hz (frame_rate "
-                f"{self._frame_rate:.0f}), coast {coast_s:.2f}s")
-            return
-        self.get_logger().warning(
-            f"[TRK  ] detections arrive at {measured:.0f} Hz but frame_rate is "
-            f"{self._frame_rate:.0f} -- every coast window is sized from that "
-            f"number, so the Kalman coast is really {coast_s:.2f}s, not "
-            f"{self._kal_frames / self._frame_rate:.2f}s. If that is under the "
-            f"control loop's vision.coast_s the coast truncates early and a "
-            f"target is dropped mid-lock. Set frame_rate:={measured:.0f}.")
-
     def _on_detections(self, msg: Detection2DArray) -> None:
-        frame_t    = time.monotonic()
-        self._check_rate(frame_t)
+        frame_t    = capture_time(msg.header)
         detections = array_to_detections(msg)
 
         try:

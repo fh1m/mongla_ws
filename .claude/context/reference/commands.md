@@ -43,6 +43,7 @@
 | `ros2 run mongla_batighor overlay` | `mongla_batighor.overlay:main` |
 | `ros2 run mongla_batighor helm` | `mongla_batighor.helm:main` |
 | `ros2 run mongla_batighor deck` | `mongla_batighor.deck:main` |
+| `ros2 run mongla_batighor views` | `mongla_batighor.views:main` |
 | `ros2 run mongla_localization localization_node` | `mongla_localization.localization_node:main` |
 | `ros2 run mongla_localization pnp_node` | `mongla_localization.pnp_node:main` |
 | `ros2 run mongla_localization pose_fuse_node` | `mongla_localization.pose_fuse_node:main` |
@@ -66,7 +67,7 @@
 | `ros2 run mongla_vision tracker_check` | `mongla_vision.utils.check_tracker:main` |
 | `ros2 run mongla_vision vision_display` | `mongla_vision.utils.display_node:main` |
 | `ros2 run mongla_vision switch_camera` | `mongla_vision.utils.switch_camera:main` |
-| `ros2 run mongla_vision calibrate` | `mongla_vision.calibration.guide:main` |
+| `ros2 run mongla_vision calibrate` | `mongla_vision.calibration.calibrate_node:main` |
 | `ros2 run mongla_vision calibrate_solve` | `mongla_vision.calibration.solver:main` |
 | `ros2 run mongla_vision depth_estimation_node` | `mongla_vision.depth.depth_estimation_node:main` |
 | `ros2 run mongla_vision flow_node` | `mongla_vision.flow.flow_node:main` |
@@ -82,6 +83,19 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `batighor_port` | `8000` | Batighor web port |
 | `foxglove_port` | `8765` | foxglove_bridge WebSocket port |
 
+### `mongla_batighor/calibrate.launch.py`
+
+| argument | default | what it does |
+|---|---|---|
+| `device_path` | `/dev/mongla_cam_downward` | the camera to calibrate |
+| `applies_to` | `pi_downward` | the camera profile the result is for |
+| `medium` | `air` | air | water: what the board is seen through |
+| `grid` | `8x6` | the board's INNER corners |
+| `square` | `0.025` | the board's square, metres |
+| `width` | `1280` |  |
+| `height` | `720` |  |
+| `batighor` | `true` | start Batighor too |
+
 ### `mongla_manager/bringup.launch.py`
 
 | argument | default | what it does |
@@ -89,7 +103,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `mav_device` | `` | SROT serial device, '' = autodetect. A path (/dev/serial/by-id/...) or any pymavlink connection string |
 | `payload_channels` | `` | OPTIONAL labels for the log, "<board_channel>:<name>", e.g. "9:torpedo_1, 11:dropper_1". Labels ONLY -- fire(N) always addresses board channel N; nothing here routes a shot |
 | `allow_fw_behaviour_mismatch` | `false` | Arm against firmware older than FW_BEHAVIOUR_REV_REQUIRED. Accepts an un-braked stop -- leave false |
-| `vision` | `false` | Start camera + detector alongside manager |
+| `vision` | `true` | The vision stack: both cameras, detectors, lock ladder, flow. vision:=false for a board-only bench session. |
 | `vision_stack` | `pi` | pi = both cameras + calibration (vision_pi.launch.py, the vehicle); generic = single camera, no calibration (vision.launch.py, dev box). |
 | `vision_profile` | `fast` | vision_stack:=pi -- vision_pi's own profile argument (its `vision:=`). Renamed here because `vision` is this file's boolean on/off switch. |
 | `fwd_model` | `gate_sharks` | vision_stack:=pi -- forward-camera model stem. |
@@ -97,10 +111,10 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `fwd_classes` | `` | vision_stack:=pi -- forward class allowlist (empty = the model sidecar's full set). |
 | `dwn_classes` | `` | vision_stack:=pi -- downward class allowlist. |
 | `localization` | `true` | Run the invariant filter (mongla_localization). Read-only: it publishes /mongla/odom and commands nothing, so it is on by default. Set false to take it off the graph. |
-| `flow` | `false` | vision_stack:=pi -- start flow_node (downward-camera velocity). Pairs with the manager's position_source:=flow. |
+| `flow` | `true` | vision_stack:=pi -- start flow_node (downward-camera velocity). Pairs with the manager's position_source:=flow. |
 | `pool_depth_min_m` | `nan` | flow:=true -- the venue's shallowest floor, metres (#35). |
 | `pool_depth_max_m` | `nan` | flow:=true -- the venue's deepest floor, metres (#35). |
-| `pool_depth_m` | `nan` | flow:=true -- metres from the DOWNWARD camera to the floor. Required: without it flow_node publishes quality 0 and refuses, by design. |
+| `pool_depth_m` | `nan` | flow:=true -- metres from the DOWNWARD camera to the floor, until a mission's use_course() sets the venue's own. With neither, flow publishes quality 0 and refuses, by design. |
 | `velocity_uplink` | `false` | manager: RIEKF body velocity -> board (VISION_SPEED_ESTIMATE). Needs fw PR #23 to act. |
 | `position_uplink` | `false` | manager: RIEKF pose -> board (VISION_POSITION_ESTIMATE). |
 | `mixer_aware` | `true` | manager: srot vision frames fitted to the mixer yaw-first + saturation-aware anti-windup. |
@@ -142,15 +156,11 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `tracking` | `true` | (passed to vision_pi.launch.py, which sets the default) |
 | `tracker_type` | `ocsort` | (passed to vision_pi.launch.py, which sets the default) |
 | `kalman_adaptive_noise` | `true` | (passed to vision_pi.launch.py, which sets the default) |
-| `fwd_frame_rate` | `30.0` | (passed to vision_pi.launch.py, which sets the default) |
-| `dwn_frame_rate` | `32.0` | (passed to vision_pi.launch.py, which sets the default) |
 | `dwn_calibration` | `` | (passed to vision_pi.launch.py, which sets the default) |
 | `fwd_calibration` | `` | (passed to vision_pi.launch.py, which sets the default) |
 | `act_conf` | `0.45` | (passed to vision_pi.launch.py, which sets the default) ladder ACTING bar: below this a detection may be associated by the tracker but is not acted on (B-59; measured knee 0.60, shipped 0.45) |
 | `anchor_xfeat_hef` | `true` | (passed to vision_pi.launch.py, which sets the default) run XFeat on the Hailo-8 rather than the Pi CPU (B-62); safe because the lock is composed with the detector |
 | `anchor_semi_dense` | `false` | (passed to vision_pi.launch.py, which sets the default) semi-dense matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-reference is measured |
-| `target_width_m_forward` | `0.0` | (passed to vision_pi.launch.py, which sets the default) measured TRUE width of the forward target in metres; 0 = use the rulebook nominal. A measured prop beats a nominal, which is what SAUVC +/-5 % allows for |
-| `target_width_m_downward` | `0.0` | (passed to vision_pi.launch.py, which sets the default) measured true width of the downward target, metres |
 | `dwn_lock_class` | `` | (passed to vision_pi.launch.py, which sets the default) Class the DOWNWARD ladder follows. Empty = any class, and no 6-DoF pose (the geometry table is keyed by class). |
 | `bank_forward` | `` | (passed to vision_pi.launch.py, which sets the default) checkpoint bank (.npz) preloaded into the FORWARD lock node, from tools/pool/build_practice_bank.py. Empty learns live. A preloaded reference is trusted exactly like a live one -- it clears MIN_INLIERS or it does not answer. |
 | `bank_downward` | `` | (passed to vision_pi.launch.py, which sets the default) checkpoint bank (.npz) preloaded into the DOWNWARD lock node -- places rather than props. |
@@ -159,6 +169,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `fwd_publish_hz` | `40` | (passed to vision_pi.launch.py, which sets the default) |
 | `dwn_publish_hz` | `0` | (passed to vision_pi.launch.py, which sets the default) |
 | `replay` | `false` | (passed to vision_pi.launch.py, which sets the default) Consume image_raw from a RECORDED BAG instead of a camera. Build no camera, keep every detector, and let `ros2 bag play` drive the graph. This is how a recorded session becomes a regression fixture: the detector, tracker, lock ladder and checkpoint bank all run for real, on input that never changes. |
+| `split` | `false` | (passed to vision_pi.launch.py, which sets the default) One vision process per camera, through the HailoRT service. Off: one process, the chip opened directly, 6 ms faster an inference (measured-bars 86). |
 | `fwd_device_path` | `` | (passed to vision_pi.launch.py, which sets the default) |
 | `dwn_device_path` | `` | (passed to vision_pi.launch.py, which sets the default) |
 
@@ -209,9 +220,6 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `viewer` | `true` | Open the OpenCV vision_display HUD (viewer:=false = headless) |
 | `tracking` | `true` | Start tracker_node (Roboflow OC-SORT/ByteTrack + Kalman) |
 | `tracker_type` | `ocsort` | Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack |
-| `track_buffer` | `30` |  |
-| `min_hits` | `1` |  |
-| `max_predict_s` | `1.5` |  |
 | `depth` | `false` | Start depth_estimation_node (monocular vis_range) |
 | `depth_model` | `` | DA V2-Small ONNX path; empty = bbox-area fallback |
 | `flow` | `false` | Start flow_node on the downward camera (velocity, and calc_distance start/stop). |
@@ -282,17 +290,13 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `tracking` | `true` |  |
 | `tracker_type` | `ocsort` |  |
 | `kalman_adaptive_noise` | `true` |  |
-| `fwd_frame_rate` | `30.0` |  |
-| `dwn_frame_rate` | `32.0` |  |
 | `dwn_calibration` | `` |  |
 | `fwd_calibration` | `` |  |
-| `flow` | `false` |  |
-| `lock` | `false` | Run the lock ladder (follower + XFeat anchor) on the forward camera, publishing <ns>/lock. Control ignores it until vision.lock_s > 0. |
+| `flow` | `true` |  |
+| `lock` | `true` | Run the lock ladder (follower + XFeat anchor), publishing <ns>/lock and loop-closure fixes. The manager steers on it when detection drops out (vision.lock_s). |
 | `act_conf` | `0.45` | ladder ACTING bar: below this a detection may be associated by the tracker but is not acted on (B-59; measured knee 0.60, shipped 0.45) |
 | `anchor_xfeat_hef` | `true` | run XFeat on the Hailo-8 rather than the Pi CPU (B-62); safe because the lock is composed with the detector |
 | `anchor_semi_dense` | `false` | semi-dense matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-reference is measured |
-| `target_width_m_forward` | `0.0` | measured TRUE width of the forward target in metres; 0 = use the rulebook nominal. A measured prop beats a nominal, which is what SAUVC +/-5 % allows for |
-| `target_width_m_downward` | `0.0` | measured true width of the downward target, metres |
 | `lock_class` | `` | Class the ladder locks onto. Empty = whatever the detector is publishing. |
 | `dwn_lock_class` | `` | Class the DOWNWARD ladder follows. Empty = any class, and no 6-DoF pose (the geometry table is keyed by class). |
 | `pool_depth_m` | `nan` | Water depth in metres. REQUIRED with flow:=true -- the node refuses to publish velocity without it. |
@@ -309,6 +313,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `fwd_publish_hz` | `40` |  |
 | `dwn_publish_hz` | `0` |  |
 | `replay` | `false` | Consume image_raw from a RECORDED BAG instead of a camera. Build no camera, keep every detector, and let `ros2 bag play` drive the graph. This is how a recorded session becomes a regression fixture: the detector, tracker, lock ladder and checkpoint bank all run for real, on input that never changes. |
+| `split` | `false` | One vision process per camera, through the HailoRT service. Off: one process, the chip opened directly, 6 ms faster an inference (measured-bars 86). |
 | `fwd_device_path` | `` |  |
 | `dwn_device_path` | `` |  |
 
@@ -418,7 +423,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `allow_unknown_kill_switch` | `False` |
 | `shield_max_depth_m` | `0.0` |
 
-**`mongla_vision/camera_node.py`** — 17 parameters
+**`mongla_vision/camera_node.py`** — 19 parameters
 
 | parameter | default |
 |---|---|
@@ -439,6 +444,8 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `path` | `''` |
 | `loop` | `True` |
 | `discover_on_start` | `False` |
+| `exposure_us` | `0` |
+| `controls` | `''` |
 
 **`mongla_vision/depth/depth_estimation_node.py`** — 6 parameters
 
@@ -451,13 +458,15 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `invert_depth` | `True` |
 | `use_tracks` | `False` |
 
-**`mongla_vision/detector_dual_node.py`** — 3 parameters
+**`mongla_vision/detector_dual_node.py`** — 5 parameters
 
 | parameter | default |
 |---|---|
 | `device` | `-1` |
 | `replay` | `False` |
+| `cameras` | `'forward` |
 | `lock` | `False` |
+| `flow` | `False` |
 
 **`mongla_vision/detector_node.py`** — 27 parameters
 
@@ -491,11 +500,12 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `range_crop` | `-1` |
 | `vision_profile` | `''` |
 
-**`mongla_vision/flow/flow_node.py`** — 40 parameters
+**`mongla_vision/flow/flow_node.py`** — 41 parameters
 
 | parameter | default |
 |---|---|
 | `camera` | `'downward'` |
+| `direct_feed` | `False` |
 | `pool_depth_m` | `float('nan'` |
 | `pool_depth_min_m` | `float('nan'` |
 | `pool_depth_max_m` | `float('nan'` |
@@ -536,7 +546,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `lane_lines` | `False` |
 | `caustic_suppression` | `True` |
 
-**`mongla_vision/lock_node.py`** — 20 parameters
+**`mongla_vision/lock_node.py`** — 19 parameters
 
 | parameter | default |
 |---|---|
@@ -557,17 +567,15 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `anchor_hz` | `4.5` |
 | `full_authority_s` | `FULL_AUTHORITY_S` |
 | `zero_authority_s` | `ZERO_AUTHORITY_S` |
-| `target_width_m` | `0.0` |
 | `medium` | `'water'` |
 | `direct_feed` | `False` |
 
-**`mongla_vision/tracker_node.py`** — 16 parameters
+**`mongla_vision/tracker_node.py`** — 14 parameters
 
 | parameter | default |
 |---|---|
 | `camera` | `'laptop'` |
 | `tracker_type` | `'ocsort'` |
-| `frame_rate` | `20.0` |
 | `track_buffer` | `150` |
 | `min_hits` | `1` |
 | `iou_threshold` | `0.2` |
@@ -580,7 +588,6 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `kalman_measurement_noise` | `1.0` |
 | `kalman_adaptive_noise` | `True` |
 | `max_predict_s` | `1.5` |
-| `frame_rate_warn_ratio` | `1.5` |
 
 **`mongla_vision/utils/display_node.py`** — 10 parameters
 

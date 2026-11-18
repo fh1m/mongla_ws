@@ -170,14 +170,10 @@ def generate_launch_description():
                               description='Start tracker_node (Roboflow OC-SORT/ByteTrack + Kalman)'),
         DeclareLaunchArgument('tracker_type',  default_value='ocsort',
                               description='Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack'),
-        DeclareLaunchArgument('track_buffer',  default_value='30'),
-        DeclareLaunchArgument('min_hits',      default_value='1'),
-        # max_predict_s is the 4th rung of the coast ladder: the Kalman smoother
-        # drops a track (filters it off /tracks) after this long predicted, so it
-        # MUST exceed vision.coast_s or the control coast truncates early.
-        # SECONDS: the node renamed `max_predict_frames` to `max_predict_s`, and
-        # this launch kept passing the old name -- which rclpy ignores silently.
-        DeclareLaunchArgument('max_predict_s', default_value='1.5'),
+        # The tracker's windows (track_buffer, max_predict_s) and min_hits are
+        # node defaults, not launch arguments: one value, seconds on capture
+        # time, ordered against the coast ladder by
+        # test_coast_ladder_ordering.py. A deck sets them under `nodes:`.
         DeclareLaunchArgument('depth',         default_value='false',
                               description='Start depth_estimation_node (monocular vis_range)'),
         DeclareLaunchArgument('depth_model',   default_value='',
@@ -280,9 +276,6 @@ def generate_launch_description():
             # Above it NO track is created and /tracks stays empty while every
             # node looks healthy -- measured at 0.0 % presence on real footage.
             'detector_conf':      LaunchConfiguration('conf'),
-            'track_buffer':       LaunchConfiguration('track_buffer'),
-            'min_hits':           LaunchConfiguration('min_hits'),
-            'max_predict_s': ParameterValue(LaunchConfiguration('max_predict_s'), value_type=float),
         }],
         condition=IfCondition(LaunchConfiguration('tracking')),
     )

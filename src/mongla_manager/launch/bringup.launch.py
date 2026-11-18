@@ -5,18 +5,18 @@ The one command for the vehicle (SROT board + Pi 5 + Hailo-8):
     # Control only. Talks to the board over USB-C; no cameras.
     ros2 launch mongla_manager bringup.launch.py
 
-    # The vehicle with both cameras, the Hailo models and the lock ladder.
-    ros2 launch mongla_manager bringup.launch.py vision:=true
+    # The vehicle: both cameras, the Hailo models, the lock ladder and flow.
+    # pool_depth_m gives flow its scale: without it flow_node refuses and
+    # publishes quality 0 rather than guess (bringup_check says so).
+    ros2 launch mongla_manager bringup.launch.py pool_depth_m:=1.2
 
-    # ...plus downward-camera velocity. pool_depth_m is REQUIRED: without it
-    # flow_node refuses and publishes quality 0 rather than guess the scale.
-    ros2 launch mongla_manager bringup.launch.py vision:=true flow:=true \\
-        pool_depth_m:=1.2
+    # The board alone, for a bench session.
+    ros2 launch mongla_manager bringup.launch.py vision:=false
 
     # On the bench, in air: the optics change by ~1.33, so say so.
     ros2 launch mongla_manager bringup.launch.py vision:=true medium:=air
 
-    # Batighor, the operator center: open http://mongla.local:8000/ in any browser.
+    # Batighor, the operator center: open http://kutum.local:8000/ in any browser.
     ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
 
     # Single camera, .pt model on a dev box (footage replay; not the vehicle path).
@@ -78,24 +78,24 @@ MANAGER_SIGTERM_TIMEOUT_S = 12
 VISION_PI_PASSTHROUGH = (
     'fwd_profile', 'dwn_profile', 'fwd_models', 'dwn_models', 'fwd_active',
     'dwn_active', 'contours', 'assoc_conf', 'preprocess', 'range_crop', 'preprocess_clip',
-    'tracking', 'tracker_type', 'kalman_adaptive_noise', 'fwd_frame_rate',
-    'dwn_frame_rate', 'dwn_calibration', 'fwd_calibration', 'act_conf',
-    'anchor_xfeat_hef', 'anchor_semi_dense', 'target_width_m_forward',
-    'target_width_m_downward', 'dwn_lock_class', 'bank_forward', 'bank_downward',
+    'tracking', 'tracker_type', 'kalman_adaptive_noise',
+    'dwn_calibration', 'fwd_calibration', 'act_conf',
+    'anchor_xfeat_hef', 'anchor_semi_dense', 'dwn_lock_class', 'bank_forward', 'bank_downward',
     'fwd_fps', 'dwn_fps', 'fwd_publish_hz', 'dwn_publish_hz', 'replay',
-    'fwd_device_path', 'dwn_device_path',
+    'split', 'fwd_device_path', 'dwn_device_path',
 )
 
 
 # Switches that START something inside the vision stack, so they do nothing
-# while `vision` is false. Typed alone they used to be accepted without a word:
-# `flow:=true` gave a vehicle with no velocity and no message.
-VISION_ONLY = {'flow': 'true', 'viewer': 'true', 'replay': 'true'}
+# while `vision` is false. Typed alone they used to be accepted without a word.
+# `flow` is not here: it is on by default, so typing it starts nothing new,
+# and `vision:=false` then says itself that the cameras are off.
+VISION_ONLY = {'viewer': 'true', 'replay': 'true'}
 
 
 def vision_only_ignored(cfg: dict) -> list:
     """The vision-only switches that are on while `vision` is off."""
-    if str(cfg.get('vision', 'false')).lower() in ('true', '1'):
+    if str(cfg.get('vision', 'true')).lower() in ('true', '1'):
         return []
     on = [f'{k}:={v}' for k, v in VISION_ONLY.items() if str(cfg.get(k, '')).lower() == v]
     if str(cfg.get('lock_class', '')).strip():
@@ -144,8 +144,10 @@ def generate_launch_description():
                               description='Arm against firmware older than '
                                           'FW_BEHAVIOUR_REV_REQUIRED. Accepts an '
                                           'un-braked stop -- leave false'),
-        DeclareLaunchArgument('vision',     default_value='false',
-                              description='Start camera + detector alongside manager'),
+        DeclareLaunchArgument('vision',     default_value='true',
+                              description='The vision stack: both cameras, detectors, '
+                                          'lock ladder, flow. vision:=false for a '
+                                          'board-only bench session.'),
         # WHICH vision stack. `pi` is the VEHICLE path: vision_pi.launch.py runs
         # BOTH cameras through detector_dual_node, wires the measured calibration
         # JSONs by name, and can start flow_node. `generic` is the single-camera
@@ -186,7 +188,7 @@ def generate_launch_description():
                                           'publishes /mongla/odom and commands '
                                           'nothing, so it is on by default. '
                                           'Set false to take it off the graph.'),
-        DeclareLaunchArgument('flow',        default_value='false',
+        DeclareLaunchArgument('flow',        default_value='true',
                               description='vision_stack:=pi -- start flow_node '
                                           '(downward-camera velocity). Pairs with the '
                                           'manager\'s position_source:=flow.'),
@@ -203,8 +205,9 @@ def generate_launch_description():
                                           'floor, metres (#35).'),
         DeclareLaunchArgument('pool_depth_m', default_value='nan',
                               description='flow:=true -- metres from the DOWNWARD '
-                                          'camera to the floor. Required: without '
-                                          'it flow_node publishes quality 0 and '
+                                          'camera to the floor, until a mission\'s '
+                                          'use_course() sets the venue\'s own. With '
+                                          'neither, flow publishes quality 0 and '
                                           'refuses, by design.'),
         # --- feature switches: every one defaults to what the node ships, so a
         # plain launch is unchanged; flip one at a time to test it alone. The
@@ -242,8 +245,8 @@ def generate_launch_description():
                                           'one value, one argument. `air` for a bench '
                                           'run, or the scale is off by ~1.33.'),
         # An empty lock_class means the ladder follows ANY detected class and
-        # `/target_pose` refuses with 'target_width_m unset', because the
-        # committed geometry table is keyed by class. `lock:=true` without this
+        # `/target_pose` refuses for want of a width, because the committed
+        # geometry table is keyed by class. `lock:=true` without this
         # is a ladder you switched on and cannot aim -- measured on the vehicle:
         # "[LOCK ] no committed width for 'person'... the 6-DoF pose will refuse".
         DeclareLaunchArgument('lock_class',  default_value='',

@@ -25,8 +25,8 @@ for that job -- it reports a fixed window and a class histogram, where a
 preflight exits on the first good window and caches, so routing one through
 the other would cost the report its window. Deleted rather than wired, which
 also took `rclpy.node`, `sensor_msgs`, `vision_msgs` and `qos` out of
-`import mongla_vision` -- an import that `calibration/solver.py` and
-`calibration/guide.py` both carry workarounds for.
+`import mongla_vision` -- an import `calibration/solver.py` carries a
+workaround for.
 """
 
 from __future__ import annotations

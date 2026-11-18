@@ -148,6 +148,12 @@ is how `recommend()` happened.
 - [80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11)](#80-the-hailort-service--two-processes-on-one-chip-at-no-cost-a-frame-built-measured-not-installed-2026-11-11)
 - [81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11)](#81-the-rtc-is-not-a-control-clock--one-second-steps-read-with-tens-of-milliseconds-of-jitter-2026-11-11)
 - [84. THE OPERATOR'S VIDEO IS THE CAMERA'S OWN JPEG — 0.062 ms a frame, boxes drawn by the browser (2026-11-12)](#84-the-operators-video-is-the-cameras-own-jpeg--0062-ms-a-frame-boxes-drawn-by-the-browser-2026-11-12)
+- [85. GLOBAL-SHUTTER EXPOSURE AT SPEED — dynamic framerate on keeps 210 fps and a picture; off is black (2026-11-18)](#85-global-shutter-exposure-at-speed--dynamic-framerate-on-keeps-210-fps-and-a-picture-off-is-black-2026-11-18)
+- [86. THE SERVICE COSTS 6 MS AN INFERENCE — one vision process opening the chip directly detects 55 % more than one process per camera (2026-11-18)](#86-the-service-costs-6-ms-an-inference--one-vision-process-opening-the-chip-directly-detects-55--more-than-one-process-per-camera-2026-11-18)
+- [87. THE WHOLE VISION GRAPH AT ONCE — both detectors, the lock ladder and flow live in one process: forward at the camera's rate, downward 32 Hz, 2.7 GB free (2026-11-18)](#87-the-whole-vision-graph-at-once--both-detectors-the-lock-ladder-and-flow-live-in-one-process-forward-at-the-cameras-rate-downward-32-hz-27-gb-free-2026-11-18)
+- [88. TRACKERS AGAINST TRUTH — the shipped OC-SORT more than doubles recall at the vehicle's bars, ByteTrack and track-before-detect are rejected, and the gate model loses 70 % of its recall in another pool (2026-11-18)](#88-trackers-against-truth--the-shipped-oc-sort-more-than-doubles-recall-at-the-vehicles-bars-bytetrack-and-track-before-detect-are-rejected-and-the-gate-model-loses-70--of-its-recall-in-another-pool-2026-11-18)
+- [89. FLOW IN THE CAMERA'S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18)](#89-flow-in-the-cameras-process--the-downward-detector-gains-37--flow-keeps-110-frames-a-second-total-cpu-unchanged-2026-11-18)
+- [90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18)](#90-retrodiction-on-the-pi--4-to-6--of-a-core-while-moving-so-it-stays-off-until-its-benefit-is-measured-2026-11-18)
 <!-- contents:end -->
 
 ---
@@ -2202,6 +2208,16 @@ evidence of stillness.
 ---
 
 ## Forward camera rate — `pi_forward.fps` 15 → 60 (2026-09-09)
+
+> **2026-11-18: the rate moves within one day.** The same Fantech on Kutum
+> gave the forward detector **29.8 Hz** in the afternoon (section 87) and
+> **9.5-10.0 fps** of frames that evening under room light, counted by the
+> camera node's own fresh-frame publish (`pub=10.0Hz`) and by `vision_check`
+> from `camera_info`. Three rates from one unit, 30, 15 and 10, fit a camera
+> that lengthens its frame time in low light, which a dim pool would trigger.
+> Not yet tested against measured light. Until it is, `vision_check` names
+> the camera as the cause when the forward detector is under its bar, and the
+> answer for frames is the Sonix forward or the board-triggered sensor below.
 
 > **NOT REPRODUCED 2026-11-10.** On Kutum, raw `v4l2-ctl --stream-mmap` (no
 > OpenCV, no ROS) gave the Fantech **14.97-15.06 fps** at MJPG 640×360,
@@ -7794,6 +7810,10 @@ directory, and run from there.
 | through the service, two processes at once | 20.928 ms each | 20.995 ms | 47.8 Hz each |
 | direct, two processes at once | the second fails with error 74 | | |
 
+**RETRACTED 2026-11-18 (section 86):** on the installed service one
+inference in flight takes 16.5 ms against 10.4 ms direct; the row above is
+not reproducible and its script is not in the repository.
+
 Both bars hold: **+0.012 ms** a frame at the median, +0.04 ms at p99, and two
 processes split the chip evenly with a sum of 95.6 Hz. An idle service does
 not hold the chip: a direct process ran at full rate beside it. The daemon's
@@ -7887,3 +7907,335 @@ box; the lock's now goes inside the box and a test holds the labels apart.
 means encoding one on Kutum (the Pi 5 has no hardware encoder), which is the
 H.264 path the design names and has not been measured. Reversal of the
 pass-through: a camera whose JPEG a browser cannot decode (none seen).
+
+## 85. GLOBAL-SHUTTER EXPOSURE AT SPEED — dynamic framerate on keeps 210 fps and a picture; off is black (2026-11-18)
+
+**Bar, written before the run.** The Sonix global-shutter camera (OV9281
+behind a Sonix bridge, 0c45:636d) is the downward flow sensor. A setting is
+right for it only if, at the profile's rate, every delivered frame is a new
+exposure (no repeated JPEG payload, no sequence gap), consecutive frames are
+statistically independent (variance of consecutive differences / 2 over the
+per-pixel temporal variance near 1.0; blending pushes it well below), and the
+picture is not black.
+
+**Method.** Kutum, room light, the camera through `V4L2MailboxCamera` with
+`set_controls`, 2.5 s to settle after each change, then 1.5 to 2 s of frames.
+
+| mode | controls | mean | fps | repeats | ratio lag 1 / lag 2 |
+|---|---|---|---|---|---|
+| 640x360 @ 210 | AE, dynamic framerate 0 | 0.0 | 211 | 0 | -- (no signal) |
+| 640x360 @ 210 | AE, dynamic framerate 1 | 86.8 to 89.1 | 211 | 0 of 423 | 1.01 / 1.01 |
+| 1280x720 @ 120 | AE, dynamic framerate 0 | 0.0 | 121 | 0 | -- |
+| 1280x720 @ 120 | AE, dynamic framerate 1 | 82.6 | 121 | 0 of 242 | -- |
+| 640x400 @ 120 | AE, dynamic framerate 1 | 128.6 | 121 | -- | -- |
+| 640x360 @ 30 | AE, dynamic framerate 0 | 142.6 | 30 | -- | 1.01 / 1.01 |
+
+With dynamic framerate 1 the camera still reads `exposure_time_absolute` 40
+(4 ms) and the frame-to-frame noise variance is 22.3 against 16.3 for the
+long exposure at 30 fps: the light comes from gain, not from a longer shutter.
+Manual exposure up to 30 ms with gain 64 stays black at 210 fps; the frame
+period caps it, while the control reads back the asked value. A brightness
+offset of 64 lifts the mean to 58 but the frames are mostly offset (ratio 0.39).
+
+**Decision.** `pi_downward` and `pi_forward_global_shutter` set
+`auto_exposure` 3 and `exposure_dynamic_framerate` 1 at every open. The
+camera keeps the last process's controls (a 30 ms manual exposure from a
+sweep was still set an hour later), so the stack sets them rather than
+inherits them. On this bridge the control does not lower the rate, contrary
+to its name and to the UVC description. **Reversal:** a unit or firmware
+where dynamic framerate 1 produces repeated payloads or a rate below the
+asked one; rerun the table.
+
+**Also measured, the forward Fantech (1d6c:0103).** 30.000 fps at MJPG
+640x360 asked 60, under auto exposure and manual 5 to 60 ms alike; manual
+exposure does not change the picture (mean 98.6 to 101.6 from 0.5 to 33 ms).
+On 2026-11-10 the same camera gave 15.0 fps (see the forward-camera section
+above). Which condition halves it is not measured; the camera exposes no
+dynamic-framerate control and no UVC trigger (`bTriggerSupport` 0).
+
+**Not settled.** Pool light, not room light. Underwater the downward camera
+looks at a floor 1 to 3 m away; whether gain alone keeps texture above the
+noise floor for flow is a water-day measurement.
+
+## 86. THE SERVICE COSTS 6 MS AN INFERENCE — one vision process opening the chip directly detects 55 % more than one process per camera (2026-11-18)
+
+The owner's direction was to use the chip's ability to serve several
+processes, and section 80 said it was free: "+0.012 ms a frame". So the vision
+stack was split into one process per camera, each opening the chip through
+`hailort_service`. Measured here on Kutum, with the real cameras and models,
+it is not free, and section 80's cost row is **retracted**.
+
+**Bars, written before the runs:**
+
+| bar | what would falsify it |
+|---|---|
+| split | one process per camera lowers the combined detection rate of the two detectors below one process |
+| direct | one process opening the chip directly does not raise the downward rate over the service, with forward paused or with both live |
+
+**The chip alone** (`gate_sharks`, one inference in flight, 200 timed after
+20 discarded, the vision stack stopped; `hailortcli` cannot reach the service
+because the packaged CLI has no client, so the bench is the stack's own
+`HailoDetector` and the raw `InferModel` API):
+
+| in flight | through the service | direct |
+|---|---|---|
+| 1 | 59.9 Hz, submit to result 16.48 ms | 95.6 Hz, 10.44 ms |
+| 2 | 88.4 Hz, 22.48 ms | 95.4 Hz, 20.90 ms |
+| 3 | 92.9 Hz, 31.95 ms | 95.2 Hz, 31.35 ms |
+
+The service adds a round trip of about 6 ms to each request. Only queueing
+hides it, and queueing ages the box a controller steers on, so a detector
+(one frame in flight, the newest) pays all of it. The same happens with the
+daemon run by hand, unconfined, on another socket (16.43 ms), so it is the
+service, not the systemd confinement. Both models at once share the chip
+evenly either way: 44.2 + 44.2 Hz in one process, 44.6 + 44.6 Hz in two.
+Section 80's script is not in the repository, so how it measured 10.464 ms
+through the service cannot be rechecked; `tools/bench/hailo_latency.py`
+opens a plain `VDevice` and never used it.
+
+**The vision stack** (`vision_pi.launch.py paused:=false`, both cameras: the
+Fantech forward at 30 fps, the global-shutter downward at 210 fps; 15 s
+counted after 3 s of discovery, two runs each):
+
+| arrangement | forward | downward | combined | forward paused: downward |
+|---|---|---|---|---|
+| one process, through the service | 16.4 Hz | 30.8 Hz | 47.2 Hz | not run |
+| one process per camera, through the service | 16.4 Hz | 30.2 Hz | 46.6 Hz | 39.2 Hz |
+| one process, chip opened directly | 30.1 Hz | 42.5 Hz | 72.6 Hz | 58.6 Hz |
+
+The first two rows are means of three runs each (single 47.1, 47.0, 47.5;
+split 46.5, 46.2, 46.7). **Split fails its bar**, narrowly but in every run.
+**Direct passes**: +55 % combined, +50 % in the mission case where one
+detector runs, and the forward detector now takes every frame the camera
+makes. At 16 Hz it had been taking every second frame: a cycle just over the
+camera's 33 ms period misses each frame by a little.
+
+**Decision.** `split` defaults to false, and the single process opens the
+chip directly (`MONGLA_HAILO_PREFER=direct`, set by the launch); a direct open
+that another process has taken goes through the service instead.
+`split:=true` stays for the day a third process needs the chip. **Reversal:**
+a HailoRT release whose service round trip is under 1 ms at one in flight,
+or a vision process the single one cannot hold; rerun both tables.
+
+**Also found on the way.** A detector started paused never asked for a
+frame, so after 2 s the composed detector concluded it had no camera and
+subscribed to the image topic for good, paying the hop composition exists to
+remove. The composed launcher now tells it (`attach_camera`). And the
+downward process spends 42 % of its samples decoding 210 frames a second and
+14 % publishing `image_raw` at 205 Hz while its detector takes 43: that is
+the next cost to cut.
+
+## 87. THE WHOLE VISION GRAPH AT ONCE — both detectors, the lock ladder and flow live in one process: forward at the camera's rate, downward 32 Hz, 2.7 GB free (2026-11-18)
+
+A mission uses every sensor at once, so the question is not what one detector
+does alone but whether the whole graph holds together: both cameras
+detecting, the lock ladder with XFeat on the chip, the trackers, and flow.
+The mission language allowed one live detector at a time, citing "the OOM
+config" and a chip that holds one model; the lock ladder and flow were off in
+the vision launch to save CPU. None of those had been measured on this
+arrangement.
+
+**Bars, written before the run** (Kutum, `vision_pi.launch.py paused:=false
+lock:=true flow:=true medium:=air pool_depth_m:=1.0`, one process opening the
+chip directly, both real cameras; the board's depth and gyro stood in by a
+bench publisher, depth 0 m and a stationary gyro, because no board was
+attached):
+
+| bar | what would falsify it |
+|---|---|
+| forward | detections under 25 Hz |
+| downward | detections under 25 Hz |
+| memory | free memory under 1 GB, or the vision processes growing 50 MB in 3 min |
+| alive | any process dies |
+| flow | flow publishing under 20 Hz |
+
+**Measured**, three windows of 50 s after 40 s of start-up:
+
+| | window 1 | window 2 | window 3 |
+|---|---|---|---|
+| forward detections | 29.8 Hz | 29.8 Hz | 29.7 Hz |
+| downward detections | 32.4 Hz | 32.7 Hz | 33.1 Hz |
+| MemAvailable | 2742 MB | 2727 MB | 2705 MB |
+
+Forward runs at the camera's own 30 fps. Vision RSS grew 23 MB in one
+process and not in the others; nothing died. **The four first bars hold. The
+flow bar is the wrong bar**: flow emits one interval per 8 px of floor
+displacement or per 0.75 s, so a stationary camera publishes about 1.3 a
+second and refuses each ("0.07 px total, below the 0.5 px noise floor"). Its
+rate is a measurement of motion, not of health. Without the bench gyro it
+refused every interval for "no gyro sample", which is what it should do with
+no board.
+
+**What it costs.** `flow_node` used 1.5 to 1.7 cores. py-spy: 44 % of its
+samples in the executor taking 210 raw frames a second off DDS (about
+145 MB/s), 26 % in the estimator. Publishing `image_raw` at 60 Hz instead of
+210 cut flow to 0.9 cores and raised the downward detector to 40.1 Hz; at
+100 Hz the gain was small. **Not shipped**: flow tracks frame to anchor and
+re-anchors before 25 px between frames, so the publish rate caps the speed it
+can follow at 25 x rate / f x height, with f about 741 px. At 60 Hz that is
+0.6 m/s at 0.3 m above the floor, where a bin approach happens. The fix that
+costs no speed is composing flow into the camera process, as the detector and
+the ladder already are.
+
+**Decisions.** The lock ladder and flow are on by default in both launches.
+`use_both_cameras()` lets a mission run both detectors when a task needs both
+views, and one detector stays the default because one model alone gets the
+downward rate to 58.6 Hz (section 86). **Reversal:** a mission graph on the
+vehicle, with the board, in which either detector falls under 25 Hz or free
+memory under 1 GB; rerun this table.
+
+**Not settled.** This is the bench: no board, no motion, room light. The
+fused graph (IMU, depth, flow velocity and fixes into localization) needs the
+board on Kutum, and flow's accuracy at speed needs a moving truth (the
+downward-mode test).
+
+
+## 88. TRACKERS AGAINST TRUTH — the shipped OC-SORT more than doubles recall at the vehicle's bars, ByteTrack and track-before-detect are rejected, and the gate model loses 70 % of its recall in another pool (2026-11-18)
+
+Tracker presence (frames with a box) cannot rank trackers: a coasted box
+counts, so a tracker that keeps guessing after the target leaves scores
+higher without being more right. And until B-114 the study ran every
+Cockpit clip on its container's nominal 1000 fps, 31x the real rate.
+
+**Bars, written before the run.** A tracker is worth changing to only if, at
+the windows `tracker_node` publishes (min_hits 1, a predicted box dropped
+1.5 s after its last real one), it raises recall on frames where the gate is
+truly in view by 10 points or more while keeping boxes on absent frames at or
+below the detector's own rate. Truth is hand-labelled from 1 s contact sheets
+by eye, independently of any model: `tools/studies/truth/gate_mkv.json`
+(the gate's bar or a post visible; the sign alone does not count; six absent
+spans, 0.5 s margin unscored).
+
+**Method.** `tools/studies/tracker_ab.py --compare --truth
+tools/studies/truth/gate_mkv.json`, on `~/Downloads/gate.mkv` (Cockpit
+recording, 6142 frames over 191.8 s at 32 fps), `gate_sharks.pt` at conf
+0.15, 4915 in-view and 839 absent frames scored.
+
+| arm | recall in view | box while absent |
+|---|---|---|
+| detector only | 29.6 % | 6.4 % |
+| **OC-SORT as `tracker_node` publishes (shipped)** | **32.1 %** | **3.7 %** |
+| ByteTrack at the same windows | 45.5 % | 21.6 % |
+| OC-SORT, 5 s coast unfiltered | 51.0 % | 21.0 % |
+| ByteTrack, 5 s coast unfiltered | 61.9 % | 48.7 % |
+
+**Verdict.** OC-SORT stays. ByteTrack clears the recall bar (+15.9) and fails
+the absent bar by 3.4x: on a fifth of the frames with no gate it hands control
+a box. The ranking by presence alone would have chosen it.
+
+**The lever is the detector, not the tracker.** The gate is in view on 85 % of
+this clip and the model finds it on 30 %, in 12 s windows from 0 % to 65 %.
+The same model on the 2025 Mirpur `gate.mkv` (640x480, the clip its other
+ledger figures come from, including the 900 of 900 frames cited for
+`presence.py`) finds it on **900 of 900** frames at p50 **0.92**. Two clips
+share the name `gate.mkv`; a figure citing it must say which. A model trained
+on one pool does not carry to another, which is the case for choosing and
+checking models on the day against that day's water (CLAUDE.md §9).
+
+**At the vehicle's own bars** (acting 0.45, association floor 0.10, cache at
+conf 0.05, same truth):
+
+| arm | recall in view | box while absent |
+|---|---|---|
+| detector at 0.45 | 15.1 % | 1.7 % |
+| + `tracking/presence.py` (track-before-detect on the 0.20-0.45 boxes) | 18.0 % | 2.1 % |
+| **OC-SORT as `tracker_node` publishes** | **37.2 %** | **9.1 %** |
+| ByteTrack at the same windows | 54.9 % | 30.6 % |
+
+The tracker's second stage already extends a track with boxes down to 0.10,
+which is the evidence `presence.py` accumulates; the rung adds 2.9 points on
+top of a detector the tracker already beats by 22. **`presence.py` is
+deleted** rather than wired: it duplicated a shipped capability. ByteTrack
+fails the absent bar again, by 3.4x.
+
+**Identity switches, counted as the vehicle selects a target.** The study used
+to take the largest box every frame, which flips between two live tracks the
+vehicle never jumps between (align holds `locked_id`). Holding the locked id
+while it is published, on the 2025 `final_run/bin.mkv` (592 s, `fire`,
+`bin_fire_blood.pt`, the same two bars): **80 switches by the old count, 20 by
+the vehicle's**, one every 30 s; on `gate.mkv`, **0**. No consumer pays for
+them: align re-locks on the next real detection whatever its id, and the coast
+follows the locked id only between real detections. `tracking/reid.py` and
+`tracking/cascade.py`, built to cut switches and never wired, were **deleted**:
+they would have put a frame path and XFeat on the tracker's hot path to fix
+nothing a consumer sees. Section 54's 179 was a person walking in and out of a
+room, counted by largest box.
+
+## 89. FLOW IN THE CAMERA'S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18)
+
+Section 87 found `flow_node` spending 44 % of its samples taking about 210 raw
+frames a second off DDS, and named the fix: compose flow beside the downward
+camera, as the detector and the lock ladder already are. Done: under
+`vision_pi`, `detector_dual_node` builds the flow node in-process
+(`flow:=true`, values forwarded as `flow_*`), the camera's tee hands it every
+frame by reference, and the worker converts to grey and checks the size on
+its own thread. The camera also stops building a 691 kB `image_raw` message
+for every frame nobody subscribes to.
+
+**Bars, written before the run** (Kutum, `vision_pi.launch.py paused:=false
+lock:=true medium:=air pool_depth_m:=1.0`, both real cameras, bench depth and
+gyro stand-in, no board, room light; 30 s windows after 45 s):
+
+| bar | what would falsify it |
+|---|---|
+| flow CPU | not at least halved |
+| downward detections | lower than with flow as its own process |
+| flow frames | skipping more than a few a second |
+
+**Measured.** Downward capture about 204 Hz; the forward camera gave 10 fps in
+this light, in every arm.
+
+| arm | vision process | flow process | downward detections | flow skipped / s |
+|---|---|---|---|---|
+| A: last release, flow its own node | 1.28 cores | 1.34 cores | 38.3 Hz | 17-19 |
+| D: this code, flow its own node | 1.29 cores | 1.32 cores | 36.3 Hz | 9-12 |
+| B: this code, flow composed | 2.50 cores | -- | **50.8 Hz** | 92-98 |
+| C: this code, flow off | 1.13 cores | -- | 70.7 Hz | -- |
+
+**Two of three bars fail, and both were the wrong bars.** Flow is
+work-conserving: it processes the newest frame as soon as it is free, so its
+CPU fills whatever it is offered and is not a cost to halve (section 87 said
+the same of its publish rate). Composed, it shares the process's GIL and takes
+about 110 of the 204 frames a second instead of about 193. The downward
+detector, which shares that GIL too, gains 37 % over the same code with flow
+separate (50.8 against 36.3 Hz), and flow's total cost stays about 1.4 cores.
+
+**What 110 frames a second costs in speed.** Flow re-anchors before 25 px
+between frames, so it follows up to 25 x rate x height / f, with f about
+741 px: 1.1 m/s at 0.3 m above the floor, where a bin approach happens, and
+more higher up. A fixed 60 Hz publish (section 87) gave 0.6 m/s there and
+only 40.1 Hz of downward detection.
+
+**Decision.** Shipped composed. **Reversal:** on the vehicle with the board, a
+mission graph in which composed flow processes under 50 frames a second (the
+rate that follows 0.5 m/s at 0.3 m), or a detector falls under 25 Hz.
+
+## 90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18)
+
+`retrodict:=true` applies each flow sample at its own stamp and replays the
+events after it. It was off only because its cost on the Pi had never been
+measured. `tools/bench/retro_cost.py` drives the shipped `LocalizationNode`
+through its own callbacks: the board's IMU at 50 Hz and flow while moving, one
+interval per ~8 px of floor (~46 a second at 0.5 m/s, 1 m over the floor),
+each arriving late by a set amount.
+
+**Bar, written before the run:** on Kutum, on at 46 Hz of flow 60 ms late
+costs under 5 % of one core and keeps the callback p99 under 5 ms; either
+failing keeps it off.
+
+| Kutum, 60 s | off | on | added | p99 on |
+|---|---|---|---|---|
+| flow 46 Hz, 60 ms late | 2.35 % | 8.43 % | 6.1 % | 1.45 ms |
+| flow 46 Hz, 25 ms late | 2.40 % | 6.31 % | 3.9 % | 1.19 ms |
+| flow 20 Hz, 30 ms late | 1.88 % | 3.37 % | 1.5 % | 0.88 ms |
+
+The p99 is far inside the 20 ms IMU period, so a replay never holds the
+filter up. The CPU bar fails while moving. The bench cannot tell what the
+replay buys in position: that needs a run with moving truth, where a
+measurement applied on arrival and one applied at its stamp can be scored
+against where the vehicle really was.
+
+**Decision.** Stays off. **Reversal:** that moving-truth run shows on-arrival
+flow costs position the vehicle needs, at which point 4 to 6 % of a core is
+cheap.
+

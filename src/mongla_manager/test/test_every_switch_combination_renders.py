@@ -75,7 +75,6 @@ def test_every_pair_of_switches_renders():
 
 @pytest.mark.parametrize('args, executable', [
     ({'vision': 'true'}, 'mongla_vision/detector_dual_node'),
-    ({'vision': 'true', 'flow': 'true'}, 'mongla_vision/flow_node'),
     ({'vision': 'true', 'viewer': 'true'}, 'mongla_vision/vision_display'),
     ({'localization': 'true'}, 'mongla_localization/localization_node'),
 ])
@@ -87,11 +86,22 @@ def test_a_switch_starts_what_it_names(args, executable):
 
 @pytest.mark.parametrize('args, executable', [
     ({'vision': 'false'}, 'mongla_vision/detector_dual_node'),
-    ({'vision': 'true', 'flow': 'false'}, 'mongla_vision/flow_node'),
     ({'localization': 'false'}, 'mongla_localization/localization_node'),
 ])
 def test_a_switch_turned_off_starts_nothing(args, executable):
     assert executable not in render(args)
+
+
+@pytest.mark.parametrize('flow', ['true', 'false'])
+def test_the_flow_switch_reaches_the_vision_process(flow):
+    """Flow runs inside the downward camera's process, so the switch is a
+    parameter of that process, not an executable of its own."""
+    procs = [p for n, p in render({'vision': 'true', 'flow': flow}, params=True)
+             if n == 'mongla_vision/detector_dual_node']
+    assert procs, 'vision:=true started no vision process'
+    assert all(p.get('flow') is (flow == 'true') for p in procs), \
+        [p.get('flow') for p in procs]
+    assert 'mongla_vision/flow_node' not in render({'vision': 'true', 'flow': flow})
 
 
 def _loaded_bringup():
@@ -103,25 +113,32 @@ def _loaded_bringup():
 
 
 @pytest.mark.parametrize('cfg, named', [
-    ({'vision': 'false', 'flow': 'true'}, 'flow:=true'),
+    ({'vision': 'false', 'replay': 'true'}, 'replay:=true'),
     ({'vision': 'false', 'viewer': 'true'}, 'viewer:=true'),
     ({'vision': 'false', 'lock_class': 'gate'}, 'lock_class:=gate'),
 ])
 def test_a_vision_only_switch_without_vision_is_named(cfg, named):
-    """`flow:=true` alone starts nothing; the launch now says so."""
+    """`viewer:=true` with vision off starts nothing; the launch says so."""
     assert named in _loaded_bringup().vision_only_ignored(cfg)
 
 
 def test_with_vision_on_nothing_is_flagged():
     assert _loaded_bringup().vision_only_ignored(
-        {'vision': 'true', 'flow': 'true', 'lock_class': 'gate'}) == []
+        {'vision': 'true', 'viewer': 'true', 'lock_class': 'gate'}) == []
+
+
+def test_flow_on_by_default_does_not_warn_a_bench_launch():
+    """Flow is on by default; `vision:=false` must not then warn about a
+    switch nobody typed."""
+    assert _loaded_bringup().vision_only_ignored(
+        {'vision': 'false', 'flow': 'true'}) == []
 
 
 def test_the_warning_is_in_the_rendered_launch():
-    """And it is wired: rendering `flow:=true` alone emits the LogInfo."""
+    """And it is wired: rendering `viewer:=true` with vision off emits the LogInfo."""
     from launch.actions import LogInfo
     ctx = LaunchContext()
-    ctx.launch_configurations.update({'flow': 'true'})
+    ctx.launch_configurations.update({'vision': 'false', 'viewer': 'true'})
     seen = []
 
     def walk(entities):
@@ -136,4 +153,4 @@ def test_the_warning_is_in_the_rendered_launch():
                 continue
             walk(e.visit(ctx))
     walk([get_launch_description_from_python_launch_file(str(BRINGUP))])
-    assert any('flow:=true has no effect' in m for m in seen), seen
+    assert any('viewer:=true has no effect' in m for m in seen), seen

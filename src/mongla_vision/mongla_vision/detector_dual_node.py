@@ -12,13 +12,15 @@ one dies with `HAILO_OUT_OF_PHYSICAL_DEVICES (74)`, so the two-camera path has
 never started on this hardware. Measured, along with the two alternatives that
 look like they should work and do not:
 
-    two processes, multi_process_service + scheduler -> InvalidOperation
-        (the `hailort_service` daemon it needs is not installed)
-    one process, ROUND_ROBIN scheduler, two graphs   -> SIGSEGV
-    one process, one VDevice, both graphs, taking turns -> 98.2 Hz
+    two processes, multi_process_service + scheduler -> works since the
+        service was built and installed (kutum/setup.sh), but each inference
+        pays its ~6 ms round trip (measured-bars 86)
+    one process, one VDevice, ROUND_ROBIN scheduler    -> the default: the
+        SIGSEGV once blamed on it was interpreter teardown (hailo_device.py)
 
-So: one process, two `DetectorNode` objects, the shared device and activation
-arbiter in `detection/hailo.py`.
+So: one process, two `DetectorNode` objects, one VDevice opened directly
+(`detection/hailo_device.py`). `cameras` selects a subset for the split
+launch (`split:=true`), one process per camera through the service.
 
 Why the cameras joined them
 ---------------------------
@@ -108,10 +110,11 @@ _SHARED = ('device', 'half', 'iou', 'nms_floor', 'nms_iou', 'imgsz', 'max_det',
 # for identity regardless -- a raw index has already swapped the two cameras
 # across a reboot once.
 _CAM_PER_CAMERA = ('profile', 'device', 'device_path', 'calibration', 'fps',
-                   'publish_rate_hz', 'width', 'height')
+                   'publish_rate_hz', 'width', 'height', 'exposure_us',
+                   'controls')
 _CAM_DEFAULTS = {
     'profile': '', 'device': -1, 'device_path': '', 'calibration': '',
-    'fps': 0,
+    'fps': 0, 'exposure_us': 0, 'controls': '',
     # A composed detector is fed on demand, so this rate now governs only the
     # topic's viewers -- not the control path, which is what it used to gate.
     'publish_rate_hz': 0, 'width': 640, 'height': 480,
@@ -159,6 +162,11 @@ class _Launcher(Node):
         # pipeline check require a live camera and a person standing in front
         # of it, which is not a thing a regression test can do.
         self.declare_parameter('replay', False)
+        # Which cameras THIS process holds. Both, or one when the launch runs
+        # a process per camera through the HailoRT service: each then has its
+        # own interpreter and GIL, and the chip is shared by the service
+        # rather than by threads (measured-bars 80, 86).
+        self.declare_parameter('cameras', 'forward,downward')
         for cam in ('fwd', 'dwn'):
             for key in _PER_CAMERA:
                 self.declare_parameter(f'{cam}_{key}', _DEFAULTS[key])
@@ -184,6 +192,14 @@ class _Launcher(Node):
         for name, p in list(self._parameter_overrides.items()):
             if name.startswith(('fwd_lock_', 'dwn_lock_', 'lock_')):
                 self.declare_parameter(name, p.value)
+        # Optical flow on the downward camera, in this process for the same
+        # reason as the lock: as its own node it took ~210 raw frames a second
+        # off DDS, 44 % of its samples (measured-bars 87). `flow_*` values are
+        # forwarded with the prefix stripped; flow_node keeps its own defaults.
+        self.declare_parameter('flow', False)
+        for name, p in list(self._parameter_overrides.items()):
+            if name.startswith('flow_'):
+                self.declare_parameter(name, p.value)
 
     def lock_overrides(self, cam: str, camera: str):
         out = [Parameter('camera', value=camera)]
@@ -192,6 +208,15 @@ class _Launcher(Node):
                 if name.startswith(prefix):
                     out.append(Parameter(name[len(prefix):],
                                          value=self.get_parameter(name).value))
+        return out
+
+    def flow_overrides(self, direct: bool):
+        out = [Parameter('camera', value='downward'),
+               Parameter('direct_feed', value=direct)]
+        for name in sorted(self._parameters):
+            if name.startswith('flow_'):
+                out.append(Parameter(name[len('flow_'):],
+                                     value=self.get_parameter(name).value))
         return out
 
     def camera_overrides(self, cam: str, camera: str):
@@ -248,7 +273,8 @@ def _make_failure_hook(launcher, live: list, failed: list, state: dict):
 
 
 class _Tee:
-    """One camera, two in-process consumers: the detector and the lock.
+    """One camera, several in-process consumers: the detector, and the lock
+    and flow when they run.
 
     `CameraNode` hands frames to ONE sink. The lock takes every decoded frame
     (its stamp history must hold the frame each detection was computed on),
@@ -264,18 +290,21 @@ class _Tee:
     frames were decoded for the lock, not wasted on the detector.
     """
 
-    def __init__(self, detector, lock):
-        self._det, self._lock = detector, lock
+    def __init__(self, detector, *others):
+        self._det, self._others = detector, others
 
     def wants_frame(self) -> bool:
-        return True                 # the lock wants every frame
+        return True                 # the lock and flow want every frame
 
     def submit_frame(self, frame_bgr, header) -> None:
         self._det.submit_frame(frame_bgr, header, spare=True)
-        self._lock.submit_frame(frame_bgr, header)
+        for o in self._others:
+            o.submit_frame(frame_bgr, header)
 
     def submit_info(self, info) -> None:
-        self._lock.submit_info(info)
+        for o in self._others:
+            if hasattr(o, 'submit_info'):
+                o.submit_info(info)
 
 
 def _compose_lock(launcher, nodes: list, cam: str, camera: str,
@@ -301,6 +330,23 @@ def _compose_lock(launcher, nodes: list, cam: str, camera: str,
     return node
 
 
+def _compose_flow(launcher, nodes: list, camera: str, direct: bool):
+    """Build optical flow in-process on the downward camera, when `flow` is set.
+
+    `direct` as for the lock: by reference from the camera here, or off the
+    topic under replay.
+    """
+    if camera != 'downward' or not bool(launcher.get_parameter('flow').value):
+        return None
+    from mongla_vision.flow.flow_node import FlowVelocityNode
+    node = FlowVelocityNode(parameter_overrides=launcher.flow_overrides(direct))
+    nodes.append(node)
+    launcher.get_logger().info(
+        '[COMP ] downward: optical flow COMPOSED'
+        + (', frames by reference' if direct else ''))
+    return node
+
+
 def _no_detector_left(launcher):
     launcher.get_logger().fatal(
         '[COMP ] NO detector came up. Exiting rather than idling as a '
@@ -320,7 +366,14 @@ def main():
     hook = _make_failure_hook(launcher, live, failed, state)
     try:
         replay = bool(launcher.get_parameter('replay').value)
+        wanted = [c.strip() for c in
+                  str(launcher.get_parameter('cameras').value).split(',') if c.strip()]
+        unknown = sorted(set(wanted) - {'forward', 'downward'})
+        if unknown or not wanted:
+            raise ValueError(f"cameras={wanted}: name forward and/or downward")
         for cam, camera in (('fwd', 'forward'), ('dwn', 'downward')):
+            if camera not in wanted:
+                continue
             # Built SEQUENTIALLY on purpose. The second one configures a second
             # network group on the device the first created; doing that from a
             # thread pool is how the registry path already trips over itself.
@@ -355,20 +408,23 @@ def main():
                     f'[COMP ] {camera}: REPLAY -- no camera; consuming '
                     f'/mongla/vision/{camera}/image_raw from a bag.')
                 _compose_lock(launcher, nodes, cam, camera, direct=False)
+                _compose_flow(launcher, nodes, camera, direct=False)
                 continue
             # The lock BEFORE the camera, so the camera's first frame already
             # has both consumers to go to.
             lock = _compose_lock(launcher, nodes, cam, camera, direct=True)
+            flow = _compose_flow(launcher, nodes, camera, direct=True)
+            extra = [n for n in (lock, flow) if n is not None]
             try:
                 cam_node = CameraNode(
                     f'mongla_camera_{camera}',
                     parameter_overrides=launcher.camera_overrides(cam, camera),
-                    frame_sink=det if lock is None else _Tee(det, lock))
+                    frame_sink=_Tee(det, *extra) if extra else det)
             except Exception as exc:      # noqa: BLE001 -- any open failure
                 det.destroy_node()
-                if lock is not None:
-                    nodes.remove(lock)
-                    lock.destroy_node()
+                for n in extra:
+                    nodes.remove(n)
+                    n.destroy_node()
                 launcher.get_logger().error(
                     f'[COMP ] {camera} camera did NOT come up: {exc}')
                 launcher.get_logger().error(
@@ -376,6 +432,11 @@ def main():
                     f'/mongla/vision/{camera}/* topics this session -- a '
                     f'mission that steers on {camera} will find nothing.')
                 continue
+            # Said, not inferred: the detector used to conclude "no camera
+            # here" from 2 s without a frame, and a detector that starts
+            # paused (the launch default) asks for none -- so every run
+            # moved to the topic path for good (2026-11-18).
+            det.attach_camera()
             nodes.append(det)
             nodes.append(cam_node)
             live.append(camera)

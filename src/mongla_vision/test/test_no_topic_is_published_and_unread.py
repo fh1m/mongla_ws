@@ -41,10 +41,6 @@ PUBLISHED_UNREAD = {
     '/mongla/esc_rpm':
         'operator telemetry. 958/958 frames read exactly 0 with nothing '
         'attached, so it is watched by a human rather than acted on.',
-    '/flow_quality':
-        'a DIAGNOSTIC. The gate it describes is applied inside flow_node, which '
-        'publishes NO velocity at quality 0, so the filter never needs it. Read '
-        'by tools/bench/flow_launch_check.py and tools/bench/flow_derot_ab.py.',
     '/mongla/board_link':
         'operator telemetry: what the link carries and every named channel '
         'with its age, for a human in Batighor\'s board_link layout. The '
@@ -62,6 +58,19 @@ PUBLISHED_UNREAD = {
         'the flow node\'s tracked point pairs, for a human: overlay.py turns '
         '`flow_tracks` into them and Batighor\'s `flow` layout draws them '
         'over the downward camera. Built only while someone watches.',
+    '/flow_tracks':
+        'the tracked pairs as data. mongla_batighor/overlay.py reads it, but '
+        'subscribes only while someone watches (`Watched`, a table of '
+        'subscriptions this sweep cannot see), and draws /flow_annotations.',
+    '/undistorted/compressed':
+        'a running calibration\'s preview with its current fit applied, for '
+        'a human: Batighor\'s `calibrate` layout shows it beside the raw '
+        'picture, so straight edges show whether the fit is right. Built '
+        'only while someone watches.',
+    '/mongla/batighor/stages':
+        'for a human: which perception stages have a publisher, per camera, '
+        'from mongla_batighor/overlay.py once a second; the Vision instrument '
+        '(panels/instruments/extension.js, STAGES_TOPIC) draws it.',
     '/mongla/localization/aiding':
         'a DIAGNOSTIC of which aiding sources the filter accepted. Read in a '
         'bag after a run, never in the loop.',

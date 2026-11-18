@@ -58,3 +58,18 @@ def test_camera_profiles_have_source_key():
 def test_make_camera_from_profile_requires_source():
     with pytest.raises(ValueError):
         make_camera_from_profile({'width': 640})
+
+
+def test_a_key_no_builder_reads_is_refused_not_swallowed():
+    """`**_` once swallowed `device_path` and both cameras opened index 0.
+    A misspelt key now names itself instead of vanishing."""
+    with pytest.raises(ValueError, match='exposre_us'):
+        make_camera('video_file', path='x.mp4', exposre_us=4000)
+    with pytest.raises(ValueError, match='controls'):
+        make_camera('ros_topic', node=object(), topic='/t', controls={'gain': 1})
+
+
+def test_every_profile_control_is_one_the_mailbox_can_set():
+    from mongla_vision.cameras.v4l2_mailbox import CONTROLS
+    for name, prof in CAMERA_PROFILES.items():
+        assert set(prof.get('controls', {})) <= set(CONTROLS), name

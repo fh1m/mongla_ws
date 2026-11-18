@@ -1,5 +1,6 @@
 # The HailoRT service: the one process that opens the Hailo-8, serving every
-# vision process over a local socket (measured-bars 80: +0.012 ms a frame).
+# vision process over a local socket. It adds about 6 ms to each inference
+# (measured-bars 86), so a single vision process opens the chip directly.
 # Ours rather than the one HailoRT installs, because that one starts
 # /usr/bin/hailort_service and a source build installs to /usr/local/bin, and
 # because a vehicle wants it back fast: always restarted, 200 ms later, with

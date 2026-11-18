@@ -6,14 +6,18 @@ from mongla_vision.anchor import loop_closure as _lc
 from mongla_vision.tracking.lock_state import FULL_AUTHORITY_S, ZERO_AUTHORITY_S
 
 
+
+LIVE_PARAMS = ('full_authority_s', 'publish_hz', 'target_class',
+                'zero_authority_s')
+
 class LockSetupMixin:
     """Methods of `LockNode`; see `lock_node.py` for the node."""
 
     def _declare_parameters(self) -> None:
         """The ROS parameters this node reads, with their defaults.
 
-        Three more are declared where they are read, beside the reasoning about
-        them: `target_width_m`, `medium` and `direct_feed` (in lock_wiring.py).
+        Two more are declared where they are read, beside the reasoning about
+        them: `medium` and `direct_feed` (in lock_wiring.py).
         """
         self.declare_parameter('camera', 'forward')
         self.declare_parameter('target_class', '')
@@ -296,6 +300,8 @@ class LockSetupMixin:
                 f'{type(exc).__name__}: {exc} -- the rung still runs and will '
                 f'learn checkpoints from live detections')
 
+    LIVE_PARAMS = LIVE_PARAMS
+
     def _on_param_change(self, params):
         """Aim (or un-aim) the ladder while a mission is running.
 
@@ -305,8 +311,23 @@ class LockSetupMixin:
         one leg and hand it back, without a relaunch.
         """
         from rcl_interfaces.msg import SetParametersResult
+        fixed = [p.name for p in params if p.name not in LIVE_PARAMS]
+        if fixed:
+            return SetParametersResult(successful=False, reason=(
+                f'{", ".join(fixed)}: read once at startup -- set it under '
+                f'`nodes:` in bringup.yaml and restart. Live here: '
+                f'{", ".join(LIVE_PARAMS)}'))
         for prm in params:
-            if prm.name == 'target_class':
+            if prm.name in ('full_authority_s', 'zero_authority_s'):
+                # Read every tick by the authority taper (lock_node).
+                v = float(prm.value)
+                full = v if prm.name == 'full_authority_s' else self._full
+                zero = v if prm.name == 'zero_authority_s' else self._zero
+                if not 0.0 <= full <= zero:
+                    return SetParametersResult(successful=False, reason=(
+                        f'authority must taper: 0 <= full ({full}) <= zero ({zero})'))
+                self._full, self._zero = full, zero
+            elif prm.name == 'target_class':
                 new = str(prm.value or '').strip()
                 if new == self._cls_pinned:
                     continue
@@ -350,7 +371,7 @@ class LockSetupMixin:
         """Aim at another class, and forget everything about the old one (#75).
 
         Changing `_cls` alone left the old detection box, the follower's
-        points, the anchor's pose and label and the world memory in place,
+        points and the anchor's pose and label in place,
         so until a detection of the new class arrived the ladder kept
         publishing the OLD target, now read against the new class's width.
         The anchor's bank keeps its references: they are labelled by class,
@@ -373,18 +394,13 @@ class LockSetupMixin:
             self._follower.drop()
         self._anchor_pose, self._anchor_header, self._anchor_label = None, None, ''
         self._anchor_inliers, self._anchor_best = 0, None
-        if self._world is not None:
-            self._world = type(self._world)()
 
     def _retarget_width(self):
         """Re-resolve the committed width for the class we now follow.
 
         Without this the 6-DoF pose keeps the FIRST class's width and reports a
-        confident range for the wrong object -- worse than refusing. An
-        explicit `target_width_m` still wins, exactly as at startup.
+        confident range for the wrong object -- worse than refusing.
         """
-        if float(self.get_parameter('target_width_m').value or 0.0) > 0.0:
-            return
         try:
             from mongla_vision.target_geometry import width_for
         except ImportError:

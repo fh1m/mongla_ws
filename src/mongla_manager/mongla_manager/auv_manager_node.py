@@ -99,6 +99,7 @@ class AUVManagerNode(ActionMixin, SetupMixin, HealthMixin, VisionLinkMixin, Tele
         self._setup_health_and_watchdogs()
         self._setup_telemetry_timers()
         self._setup_uplinks()
+        self.add_on_set_parameters_callback(self._on_set_parameters)
 
     # ------------------------------------------------------------------ #
     #  Init helpers (called once from __init__, in order)                 #

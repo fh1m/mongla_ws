@@ -81,5 +81,5 @@ class DistanceState:
             alive = self._last_rx >= self._start_t and self._last_rx > 0.0
         if not alive:
             return False, ('distance estimator not publishing '
-                           '(is flow_node running? launch flow:=true pool_depth_m:=<m>)'), dist
+                           '(is flow_node running? it is on unless flow:=false, and needs pool_depth_m:=<m>)'), dist
         return True, 'stop', dist

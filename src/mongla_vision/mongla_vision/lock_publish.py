@@ -16,10 +16,6 @@ except ImportError:                    # message not built in this workspace
     # `/lock`, which is what the control loop steers on.
     TargetCorrespondences = None
 from geometry_msgs.msg import Vector3Stamped
-try:
-    from mongla_interfaces.msg import MonglaState
-except ImportError:                                              # noqa: BLE001
-    MonglaState = None
 from mongla_vision.detection.detector import Detection
 from mongla_vision.detection.messages import detections_to_array
 from mongla_vision.tracking.lock_state import Rung
@@ -125,7 +121,6 @@ class LockPublishMixin:
                                   score=float(st.authority),
                                   xyxy=(x1, y1, x2, y2)))
             self._note_visibility(x1, y1, x2, y2)
-            self._remember_world(x1, y1, x2, y2)
         # The score is the AUTHORITY, not rung trust times authority (#78).
         # A rung's own confidence is a gate (`MIN_RUNG_CONF`, applied in
         # `arbitrate`), the same job a live detection's score does against
@@ -156,8 +151,7 @@ class LockPublishMixin:
         `scale` > 1 means the reference patch appears LARGER than when it was
         stored, i.e. we are CLOSER. It is a range RATIO against the moment of
         enrolment, so it becomes metres only if the reference's true width is
-        known -- which is what `target_width_m` is for, and why that parameter
-        now reaches this node.
+        known: the locked class's entry in `target_geometry.yaml`.
 
         `theta` is in-plane rotation against a FIXED reference, not an
         integrated rate. It is hull ROLL only on the DOWNWARD camera; on the
@@ -181,99 +175,12 @@ class LockPublishMixin:
         m.header.frame_id = self._cam
         m.vector.x = th
         m.vector.y = sc
-        # The per-class table, not the operator parameter.
-        # `target_geometry.yaml` replaced `target_width_m` precisely because
-        # one width for every prop is wrong, and `width_for()` is what the
-        # 6-DoF path already uses. An explicit `target_width_m` still wins --
-        # a measured prop beats a table entry -- but the table is the default.
-        w = float(self._ladder('target_width_m') or 0.0)
-        if w <= 0.0:
-            try:
-                from mongla_vision.target_geometry import width_for
-                w = float(width_for(self._cls) or 0.0)
-            except Exception:                                    # noqa: BLE001
-                w = 0.0
+        # The locked class's width from the per-class table, kept in step
+        # with the class by `_retarget_width`.
+        w = float(self._target_w_m or 0.0)
         m.vector.z = (w / sc) if (w > 0.0 and math.isfinite(sc) and sc > 1e-6) \
             else float('nan')
         self._decomp_pub.publish(m)
-
-    def _remember_world(self, x1, y1, x2, y2) -> None:
-        """Hold the target in WORLD coordinates, so leaving frame is not
-        forgetting (`visibility.WorldTarget`).
-
-        Downward camera only, and that is the whole point. `WorldTarget`
-        needs an absolute RANGE, and it refuses a guessed one by design: "a
-        remembered position built from a guessed range would send the vehicle
-        confidently to the wrong place." For a FORWARD target we genuinely do
-        not have one -- the anchor gives a relative patch scale, metric only
-        if the prop's true width is known -- so this stays disabled there
-        rather than inventing a number.
-
-        For the DOWNWARD camera the range is measured: `_altitude_m()` is
-        the height above the floor from `flow_node`'s tile grating, and a
-        target on the floor is exactly that far away, corrected for the
-        off-axis angle. That is why this rung can be switched on for one
-        camera and not the other -- not a limitation of the memory, a fact
-        about which sensor measures what.
-
-        Every input is gated on being FRESH and FINITE. Yaw, odometry and
-        altitude each go NaN when their source cannot stand behind them, and
-        the memory refuses rather than storing a confident wrong place.
-        """
-        if self._cam != 'downward' or self._world is None:
-            return
-        K = self._K_rect if getattr(self, '_K_rect', None) is not None \
-            else getattr(self, '_K', None)
-        gray = self._gray_now()
-        if K is None or gray is None or self._odom_xy is None:
-            return
-        yaw = self._yaw_fresh()
-        alt = self._altitude_m()
-        if not (math.isfinite(yaw) and math.isfinite(alt) and alt > 0.0):
-            return
-        try:
-            from .tracking.visibility import bearing_from_pixel
-            h, w = gray.shape[:2]
-            cx, cy = 0.5 * (x1 + x2), 0.5 * (y1 + y2)
-            bx, by, bz = bearing_from_pixel(cx, cy, float(w), float(h),
-                                            float(K[0][0]), float(K[1][1]))
-            if not math.isfinite(bz) or bz <= 1e-6:
-                return
-            # De-rotate by hull roll, from the operator's R&D fusion:
-            #     dx' = dx*cos(roll) - dy*sin(roll)
-            #     dy' = dx*sin(roll) + dy*cos(roll)
-            # The downward camera is bolted to the hull, so a rolled hull
-            # rotates the IMAGE about the optical axis. Without this, a target
-            # dead ahead on a hull rolled 20 deg is remembered 20 deg off, and
-            # the error is INVISIBLE -- the bearing is perfectly
-            # self-consistent, just in the wrong frame.
-            #
-            # Roll is unactuated on the current five-thruster CAD, so the
-            # controller cannot null it. The final hull adds a roll pair, and
-            # a rolled hull still rotates the image, so it is compensated here
-            # either way.
-            #
-            # NaN roll leaves the bearing ALONE rather than assuming level.
-            # Assuming zero is a confident claim that the hull is flat, which
-            # is the plausible-number defect; leaving it uncorrected is an
-            # honest smaller claim.
-            roll = self._roll_fresh()
-            if math.isfinite(roll):
-                cr, sr = math.cos(roll), math.sin(roll)
-                bx, by = (bx * cr - by * sr), (bx * sr + by * cr)
-            # Looking DOWN: the optical axis is the vertical, so the slant
-            # range to a floor target is the altitude divided by the cosine
-            # of the off-axis angle -- which `bearing_from_pixel` already
-            # returns as the z component of a unit vector.
-            rng = alt / bz
-            # The downward camera's x/y map to the hull's lateral/forward
-            # axes, so the in-plane bearing is measured from the SAME axes
-            # yaw is measured from. `downward-camera.md` records the remap.
-            brg = math.degrees(math.atan2(bx, by))
-            self._world.observe(self._odom_xy, yaw, brg, rng,
-                                time.monotonic())
-        except Exception:                                        # noqa: BLE001
-            return
 
     # -- the field-of-view guard, ADVISORY ---------------------------------- #
     def _note_visibility(self, x1, y1, x2, y2) -> None:

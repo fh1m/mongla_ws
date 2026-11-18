@@ -31,14 +31,14 @@ kutum/
 
 ## The network
 
-Kutum answers as **`mongla.local`** on every interface (avahi), so the address
+Kutum answers as **`kutum.local`** on every interface (avahi), so the address
 never matters:
 
 | Link | How it gets an address |
 |---|---|
 | Ethernet to a router | DHCP |
 | Ethernet straight to a laptop sharing its internet | DHCP from the laptop. On a NetworkManager laptop: `nmcli connection modify "<wired connection>" ipv4.method shared`, then reconnect |
-| Ethernet straight to a laptop, no sharing | a link-local address (169.254.x.x); `mongla.local` still resolves |
+| Ethernet straight to a laptop, no sharing | a link-local address (169.254.x.x); `kutum.local` still resolves |
 | Wi-Fi | joins the network `setup.sh --system` asked for, on every boot when it is in range |
 
 The Wi-Fi password is typed into `setup.sh --system` by whoever runs it and
@@ -49,7 +49,7 @@ networks: `sudo rm /etc/netplan/61-kutum-wifi.yaml`, then rerun
 **Ethernet and Wi-Fi on one router.** Each gets its own address on the same
 network, and the main routing table sends everything for that network out of
 Ethernet. Without help, a reply to the Wi-Fi address leaves by Ethernet and is
-lost: the Pi answers ARP and nothing else, and `ssh mongla.local` times out
+lost: the Pi answers ARP and nothing else, and `ssh kutum.local` times out
 while the vehicle is up. `setup.sh --system` installs the fix, and the doctor
 fails without it:
 
@@ -59,10 +59,28 @@ fails without it:
 - `system/sysctl/60-kutum-multihome.conf` makes each interface answer ARP for
   its own address only.
 
-If Kutum is up but `mongla.local` does not answer, its link-local IPv6
-address still does (`ssh -o HostKeyAlias=mongla.local fh1m@fe80::<id>%wlan0`,
-the id from `getent hosts mongla.local`); from there, rerun the hook:
+**When `kutum.local` does not resolve.** A router that drops multicast toward
+Wi-Fi clients breaks every `.local` name for a laptop on its Wi-Fi. The bench
+router does: Kutum answered each query on both interfaces, and none of the
+answers reached the laptop (captured on both ends, 2026-11-18). The link-local
+IPv6 address needs no router, DHCP or mDNS, and is fixed by the network card,
+so it works on any network the two share. On this Pi it is
+`fe80::2ecf:67ff:fe01:a84a` (Ethernet) and `fe80::2ecf:67ff:fe01:a84b`
+(Wi-Fi); another Pi's comes from its MAC. Name the laptop's own interface on
+that network:
+
+```bash
+ssh -o HostKeyAlias=kutum.local fh1m@fe80::2ecf:67ff:fe01:a84b%wlan0
+ip -br addr     # on Kutum: its IPv4 addresses, for everything else
+```
+
+If the ssh hangs rather than refuses, rerun the reply-route hook from there:
 `sudo env IFACE=wlan0 /etc/networkd-dispatcher/routable.d/50-kutum-source-routes`.
+
+**The name is kutum**, set by `setup.sh --system`, and the doctor fails any
+other. A laptop that knew the Pi by its imaged name asks once to accept the
+host key under `kutum.local`; it is the same key (compare
+`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the Pi).
 
 **The login banner** is `system/motd/01-kutum`: the release, the CPU clock and
 temperature, the Hailo, the board's port and what runs in tmux, read from
@@ -93,13 +111,13 @@ the two lines and reboot.
 ## Every day
 
 ```bash
-kutum/deploy.sh fh1m@mongla.local               # after any change: sync, doctor, build, gate
-kutum/deploy.sh fh1m@mongla.local --check-only  # the doctor, nothing changed
-kutum/deploy.sh fh1m@mongla.local --list        # the releases on the vehicle
-kutum/deploy.sh fh1m@mongla.local --rollback    # back to the release before this one
-kutum/backup.sh fh1m@mongla.local               # after anything is made on the vehicle
-kutum/backup.sh fh1m@mongla.local --runs        # ... and the runs and footage (gigabytes)
-ssh fh1m@mongla.local bash -s < kutum/doctor.sh # the doctor, from here
+kutum/deploy.sh fh1m@kutum.local               # after any change: sync, doctor, build, gate
+kutum/deploy.sh fh1m@kutum.local --check-only  # the doctor, nothing changed
+kutum/deploy.sh fh1m@kutum.local --list        # the releases on the vehicle
+kutum/deploy.sh fh1m@kutum.local --rollback    # back to the release before this one
+kutum/backup.sh fh1m@kutum.local               # after anything is made on the vehicle
+kutum/backup.sh fh1m@kutum.local --runs        # ... and the runs and footage (gigabytes)
+ssh fh1m@kutum.local bash -s < kutum/doctor.sh # the doctor, from here
 ```
 
 On the vehicle, every shell already has ROS and the workspace (`env.sh`), so:
@@ -148,10 +166,10 @@ that. From a blank SD card to a gated vehicle:
 1. **Flash** Ubuntu Server 24.04 LTS (64-bit) for the Raspberry Pi with Raspberry Pi
    Imager. In its settings: hostname `mongla`, user `fh1m`, your SSH public key.
 2. **Seat the AI HAT+** and its PCIe ribbon. Boot on Ethernet, then
-   `ssh fh1m@mongla.local`.
+   `ssh fh1m@kutum.local`.
 3. **Install ROS 2 Jazzy** `ros-base`, following the official
    [Ubuntu (deb packages) instructions](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html).
-4. From the dev box: `kutum/deploy.sh fh1m@mongla.local`. It stages the tree, then the
+4. From the dev box: `kutum/deploy.sh fh1m@kutum.local`. It stages the tree, then the
    doctor stops it, because there is no Hailo stack yet. That stop is expected, and it
    prints the staged path.
 5. On the vehicle: `sudo ~/mongla/releases/<staged>/kutum/setup.sh --system`, with the
@@ -162,8 +180,8 @@ that. From a blank SD card to a gated vehicle:
    FAIL while a change waits for a reboot, so reboot and run `kutum/doctor.sh`, and a FAIL
    then is real. Log out and back in, so the `dialout` group applies.
 6. From the dev box, put back what only the old vehicle had:
-   `rsync -a --exclude .backed-up ~/kutum-backup/mongla/ fh1m@mongla.local:~/`
-7. From the dev box: `kutum/deploy.sh fh1m@mongla.local`. The detector models travel with
+   `rsync -a --exclude .backed-up ~/kutum-backup/mongla/ fh1m@kutum.local:~/`
+7. From the dev box: `kutum/deploy.sh fh1m@kutum.local`. The detector models travel with
    the tree (they are untracked files in `src/mongla_vision/models/`, so they come from
    the dev box's copy). It builds and runs `bringup_check`.
 8. **Plug in the board** and pin it once:
@@ -183,7 +201,7 @@ here.
 a single-purpose machine on the vehicle's own network, and a password prompt in the middle
 of a pool session costs more than it protects (the owner's call, 2026-11-07). Delete that
 file to undo it. `deploy.sh` and `backup.sh` run ssh in `BatchMode`: they need a key
-(`ssh-copy-id fh1m@mongla.local`, once) and never prompt for a password.
+(`ssh-copy-id fh1m@kutum.local`, once) and never prompt for a password.
 
 What each job actually needs (GitHub #67). Only provisioning and machine
 maintenance use root; nothing on the mission path does.

@@ -332,3 +332,39 @@ def test_a_failed_requeue_is_counted_so_it_can_trip_is_healthy():
     assert '_consec_fail' in skip, (
         'a failed re-queue must increment _consec_fail -- otherwise the error is '
         'caught and then hidden, which is worse than the crash it replaced')
+
+
+# --------------------------------------------------------------------------- #
+#  Controls -- what a profile or a mission sets, by name
+# --------------------------------------------------------------------------- #
+def test_controls_parse_from_a_launch_string_and_refuse_a_bad_name():
+    assert M.parse_controls('gain=20, exposure_dynamic_framerate=1') == {
+        'gain': 20, 'exposure_dynamic_framerate': 1}
+    assert M.parse_controls('') == {}
+    with pytest.raises(ValueError, match='gian'):
+        M.parse_controls('gian=20')
+    with pytest.raises(ValueError, match='not an integer'):
+        M.parse_controls('gain=high')
+
+
+def test_a_shutter_in_microseconds_is_manual_mode_in_100us_units():
+    assert M.exposure_controls(4000) == {'auto_exposure': 1, 'exposure_time_absolute': 40}
+    assert M.exposure_controls(30) == {'auto_exposure': 1, 'exposure_time_absolute': 1}
+    # 0 hands it back to the camera's own mode, and only when that is known.
+    assert M.exposure_controls(0, auto_mode=3) == {'auto_exposure': 3}
+    assert M.exposure_controls(0) == {}
+
+
+def test_the_control_ioctls_encode_their_struct_sizes():
+    """_IOWR('V', n, struct): the size sits in bits 16..29. v4l2_control is
+    8 bytes and v4l2_queryctrl 68; a wrong struct is a wrong request number
+    and every control call fails EINVAL or reads garbage."""
+    assert ctypes.sizeof(M._Control) == 8
+    assert ctypes.sizeof(M._Queryctrl) == 68
+    for req, size in ((M.VIDIOC_S_CTRL, 8), (M.VIDIOC_G_CTRL, 8), (M.VIDIOC_QUERYCTRL, 68)):
+        assert (req >> 16) & 0x3FFF == size
+
+
+def test_an_unknown_control_refuses_before_the_device_opens():
+    with pytest.raises(ValueError, match='gian'):
+        M.V4L2MailboxCamera('/dev/does-not-exist', controls={'gian': 1})

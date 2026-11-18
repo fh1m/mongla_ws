@@ -248,7 +248,7 @@ def test_the_composed_launcher_turns_direct_feed_ON():
     assert "direct = not bool(self.get_parameter('replay').value)" in src, (
         'direct_feed is no longer derived from replay')
     assert "Parameter('direct_feed', value=direct)" in src
-    assert 'frame_sink=det' in src
+    assert 'frame_sink=_Tee(det, *extra) if extra else det' in src
 
 
 # --------------------------------------------------------------------------- #
@@ -352,6 +352,28 @@ def test_a_detector_that_WAS_fed_directly_does_not_subscribe():
     assert det._direct is True
 
 
+def test_a_PAUSED_detector_with_a_composed_camera_never_falls_back():
+    """The vehicle launch starts detectors paused, and a paused detector asks
+    for no frames -- so silence is not evidence of a missing camera. The
+    composed launcher says so explicitly (`attach_camera`); before it did,
+    every paused start moved to the topic path for good (2026-11-18)."""
+    calls = {'subscribed': 0}
+    det = object.__new__(DN.DetectorNode)
+    det._direct = True
+    det._fed_direct = False         # paused: nothing handed over yet
+    det._sub = None
+    det._ns_in = '/x'
+    det._fallback_timer = type('T', (), {'cancel': lambda self: None})()
+    det.create_subscription = lambda *_a, **_k: calls.__setitem__(
+        'subscribed', calls['subscribed'] + 1)
+    det.get_logger = lambda: type('L', (), {'warn': lambda _s, m: None})()
+
+    det.attach_camera()
+    det._check_direct_feed()
+    assert calls['subscribed'] == 0
+    assert det._direct is True
+
+
 def test_submit_frame_records_that_the_direct_path_is_alive():
     """The flag the fallback reads. If `submit_frame` did not set it, a
     perfectly healthy composed detector would add a second, redundant
@@ -391,6 +413,10 @@ def test_the_pi_launch_pins_every_node_back_to_info():
     # which is exactly what it did on the first version of this test.
     quiet = mod._QUIET
     assert quiet[:2] == ['--log-level', 'warn'], quiet[:2]
+    # Every node the process composes, flow included: composed on the
+    # vehicle, its refusals printed zero times until it was pinned here.
     for node in ('mongla_detector_forward', 'mongla_detector_downward',
-                 'mongla_camera_forward', 'mongla_camera_downward'):
+                 'mongla_camera_forward', 'mongla_camera_downward',
+                 'mongla_lock_forward', 'mongla_lock_downward',
+                 'mongla_flow_velocity'):
         assert f'{node}:=info' in quiet, f'{node} is not pinned back to info'

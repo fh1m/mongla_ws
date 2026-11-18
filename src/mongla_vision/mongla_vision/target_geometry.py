@@ -8,8 +8,9 @@ parameter defaulting to 0.0, so the 6-DoF path published
 `ok=false, reason='target_width_m unset'` and the metric branch had never run
 on the vehicle. A number that must be typed correctly, per mission, under
 pressure, for an answer whose wrongness is invisible is not a parameter —
-it is a defect waiting for a pool day. The parameter still WINS when set,
-because a measured prop beats a rulebook nominal.
+it is a defect waiting for a pool day. The parameter is gone: it outlived
+the class it was measured for when a mission switched targets. A measured
+prop beats a rulebook nominal by going in the deck override under its class.
 
 The width is that of WHAT THE DETECTOR BOXES. See the YAML's header.
 

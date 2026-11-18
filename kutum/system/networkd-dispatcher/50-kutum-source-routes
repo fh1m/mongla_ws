@@ -5,7 +5,7 @@
 # Wi-Fi on the same router. The main table sends everything for that network
 # out of eth0 (metric 100), so a reply to a packet that came in on wlan0
 # leaves by eth0 and is lost: the vehicle answers ARP and nothing else, and
-# `ssh mongla.local` times out while the Pi is up (2026-11-12, recurring).
+# `ssh kutum.local` times out while the Pi is up (2026-11-12, recurring).
 #
 # So each interface gets its own table, holding its network and its gateway,
 # and a rule: traffic FROM an interface's address uses that interface's

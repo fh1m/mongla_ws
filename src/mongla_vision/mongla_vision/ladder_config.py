@@ -57,10 +57,6 @@ _KEYS: Dict[str, tuple] = {
     # Semi-dense matching: 2.1-2.6x inliers for +37 % match cost. OFF until
     # frame-to-reference behaviour and inlier correctness are measured.
     'anchor_semi_dense': (_as_bool, False),
-    # Measured TRUE width of the target in metres; 0 = use the rulebook
-    # nominal. A measured prop beats a nominal, which is what SAUVC's +/-5 %
-    # tolerance exists to allow for.
-    'target_width_m': (float, 0.0),
 }
 
 

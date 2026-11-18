@@ -21,13 +21,6 @@ except ImportError:                    # message not built in this workspace
     # path and nothing else -- the follower and anchor rungs still publish
     # `/lock`, which is what the control loop steers on.
     TargetCorrespondences = None
-# OPTIONAL, like TargetCorrespondences above. A workspace that has not
-# rebuilt mongla_interfaces must still get a working ladder: losing vehicle
-# state costs the object-permanence rung, not the lock.
-try:
-    from mongla_interfaces.msg import MonglaState
-except ImportError:                                              # noqa: BLE001
-    MonglaState = None
 
 from mongla_vision import qos as _qos
 from mongla_vision.anchor import health as _health
@@ -69,21 +62,15 @@ class LockWiringMixin:
         # no metric answer, and guessing one would make every range wrong by a
         # constant nobody could see.
         self._K = None
-        self._target_w_m = float(
-            self.declare_parameter('target_width_m', 0.0).value or 0.0)
-        # An explicit parameter WINS -- a measured prop beats a rulebook
-        # nominal, which is what SAUVC's +/- 5 % tolerance exists to allow for.
-        # Otherwise fall back to the committed table, keyed by the class we are
-        # locking onto. Without this the default is 0.0 and the 6-DoF branch
-        # publishes `ok=false, reason='target_width_m unset'` forever: the
-        # metric path has never once run on the vehicle.
-        # Ungated on purpose: what the table IGNORED must be reported whether
-        # or not this node needs a lookup. Inside the `if` below it would stay
-        # silent exactly when `target_width_m` was passed explicitly -- which is
-        # the case where a broken override matters most, because the operator
-        # believes the file is doing something.
+        # The width comes from the per-class table and nowhere else, so it
+        # follows the class through every switch a mission makes. A measured
+        # prop goes in ~/.mongla/target_geometry.yaml under its class. A
+        # single width parameter used to win here, and after the mission's
+        # first switch it scaled the next prop by the last one's width.
+        self._target_w_m = 0.0
+        # What the table IGNORED is reported before anything is looked up.
         self._report_geometry_problems()
-        if self._target_w_m <= 0.0 and self._cls:
+        if self._cls:
             from mongla_vision.target_geometry import width_for, describe
             w = width_for(self._cls)
             if w > 0.0:
@@ -94,11 +81,10 @@ class LockWiringMixin:
                     f"({d.get('boxes', '?')}; {d.get('source', 'no source')})")
             else:
                 self.get_logger().warn(
-                    f'[LOCK ] no committed width for {self._cls!r}, and '
-                    f'target_width_m is unset -- the 6-DoF pose will refuse. '
-                    f'Fix on the deck without a rebuild: put the width in '
-                    f'~/.mongla/target_geometry.yaml (or set '
-                    f'MONGLA_TARGET_GEOMETRY), or pass target_width_m.')
+                    f'[LOCK ] no committed width for {self._cls!r} -- the '
+                    f'6-DoF pose will refuse. Fix on the deck without a '
+                    f'rebuild: put the width in ~/.mongla/target_geometry.yaml '
+                    f'(or set MONGLA_TARGET_GEOMETRY).')
 
     def _setup_pose_inputs(self, ns) -> None:
         """The medium the camera looks through, the correspondences publisher
@@ -115,8 +101,8 @@ class LockWiringMixin:
         # startup because it silently rescales every range this node publishes.
         #
         # Placed AFTER the width lookup on purpose: `test_target_geometry`
-        # asserts `width_for(self._cls)` lands within 1500 chars of
-        # `target_width_m`, and splitting that block pushed it out of range.
+        # asserts `width_for(self._cls)` lands within 1500 chars of where the
+        # width is decided, and splitting that block pushed it out of range.
         self._medium = str(
             self.declare_parameter('medium', 'water').value or 'water').lower()
         if self._medium not in ('water', 'air'):
@@ -189,19 +175,6 @@ class LockWiringMixin:
 
         self._ladder = _ladder
         self._act_conf = float(_ladder('act_conf'))
-        self._roll_rad = float('nan')
-        self._imu_t = 0.0
-        self._yaw_deg = float('nan')
-        self._depth_m = float('nan')
-        self._armed = False
-        self._state_t = 0.0
-        # OBJECT PERMANENCE, downward camera only -- see `_remember_world`
-        # for why the forward camera cannot have it without a measured range.
-        try:
-            from .tracking.visibility import WorldTarget
-            self._world = WorldTarget()
-        except Exception:                                        # noqa: BLE001
-            self._world = None
         self._reseeds = 0
         self._vis_state = None
         self._vis_last = None
@@ -330,27 +303,6 @@ class LockWiringMixin:
                 # name precisely because it is not one.
                 self.create_subscription(Range, f'{ns}/floor_height',
                                          self._on_floor_height, 10)
-                # The vehicle's own state. The ladder ran without ever
-                # knowing which way the hull was pointing: it had odometry
-                # (where) and floor height (how high) but no yaw, so a target
-                # leaving the frame could not be turned into a world bearing
-                # and `visibility.WorldTarget` -- the object-permanence rung --
-                # was unreachable for want of one number the board already
-                # publishes.
-                #
-                # `yaw_deg` is NaN when the board has no AHRS sample, and
-                # every consumer must gate on that rather than treat NaN as
-                # zero. A heading of "0 because we do not know" points the
-                # memory due north, which is worse than having no memory.
-                if MonglaState is not None:
-                    self._state_sub = self.create_subscription(
-                        MonglaState, '/mongla/state', self._on_state, 10)
-                else:
-                    self.get_logger().warn(
-                        '[LOCK ] mongla_interfaces/MonglaState not built -- '
-                        'the ladder runs without vehicle yaw, so any '
-                        'world-frame target memory stays disabled. Rebuild '
-                        'mongla_interfaces to enable it.')
                 self._fix_pub = self.create_publisher(
                     PointStamped, '/mongla/localization/fix', 10)
                 self.get_logger().info(

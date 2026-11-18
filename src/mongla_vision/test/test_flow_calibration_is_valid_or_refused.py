@@ -140,8 +140,12 @@ def test_with_no_path_the_profile_binds_the_same_file_camera_node_reads():
 
 def test_both_launches_hand_flow_its_hardware_profile():
     root = Path(__file__).resolve().parents[1] / 'launch'
-    for name in ('vision.launch.py', 'vision_pi.launch.py'):
-        src = (root / name).read_text()
-        flow = src[src.index("executable='flow_node'"):]
-        flow = flow[:flow.index('condition=')]
-        assert "'profile':" in flow, f'{name}: flow_node gets no profile'
+    src = (root / 'vision.launch.py').read_text()
+    flow = src[src.index("executable='flow_node'"):]
+    flow = flow[:flow.index('condition=')]
+    assert "'profile':" in flow, 'vision.launch.py: flow_node gets no profile'
+    # vision_pi composes flow into the camera process; its values carry the
+    # `flow_` prefix that `detector_dual_node.flow_overrides` strips.
+    src = (root / 'vision_pi.launch.py').read_text()
+    assert "'flow_profile':        LaunchConfiguration('dwn_profile')" in src, \
+        'vision_pi.launch.py: flow gets no profile'

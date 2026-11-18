@@ -59,7 +59,7 @@ ros2 launch mongla_manager bringup.launch.py vision:=true      # the vehicle: bo
 ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true   # and in a browser
 ```
 
-Batighor (`http://mongla.local:8000/`) shows each camera's own JPEG with the detections drawn
+Batighor (`http://kutum.local:8000/`) shows each camera's own JPEG with the detections drawn
 by the browser, and its helm switches the live camera. On a bench with no board, run
 `ros2 launch mongla_batighor batighor.launch.py` beside `vision_dual.launch.py`.
 

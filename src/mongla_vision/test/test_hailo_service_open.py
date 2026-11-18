@@ -29,7 +29,7 @@ def _open(**kw):
 def test_the_service_is_used_when_it_runs():
     m = Maker()
     assert _open(installed=True, running=lambda: True, make=m,
-                 fallback='none') == 'svc'
+                 fallback='none', prefer='service') == 'svc'
     assert m.calls == [True] and hd.opened_via == 'service'
 
 
@@ -117,3 +117,49 @@ def test_importing_detection_sets_the_address_before_the_library_can_load():
     r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == 'unix:///run/hailo/hailort_uds.sock'
+
+
+def test_the_only_user_opens_the_chip_directly_even_with_the_service_up():
+    """One process is the chip's only user: the service's round trip is pure
+    cost (10.4 against 16.5 ms an inference, measured-bars 86)."""
+    m = Maker()
+    assert _open(installed=True, running=lambda: True, make=m,
+                 prefer='direct') == 'direct'
+    assert m.calls == [False] and hd.opened_via == 'direct'
+
+
+def test_a_direct_open_the_chip_refuses_goes_through_the_service():
+    class Held(Maker):
+        def __call__(self, *, service):
+            self.calls.append(service)
+            if not service:
+                raise RuntimeError('HAILO_OUT_OF_PHYSICAL_DEVICES')
+            return 'svc'
+    m = Held()
+    assert _open(installed=True, running=lambda: True, make=m,
+                 prefer='direct') == 'svc'
+    assert m.calls == [False, True] and hd.opened_via == 'service'
+    with pytest.raises(RuntimeError, match='OUT_OF_PHYSICAL'):
+        _open(installed=True, running=lambda: False, make=Held(),
+              prefer='direct')
+
+
+def test_a_misspelt_preference_is_refused(monkeypatch):
+    monkeypatch.setenv(hd.PREFER_ENV, 'directly')
+    with pytest.raises(ValueError, match='expected service or direct'):
+        _open(installed=False, make=Maker())
+
+
+def test_the_vehicle_launch_runs_one_process_that_opens_the_chip_directly():
+    """The default the measurement chose (measured-bars 86): one vision
+    process, opening the chip itself. A launch that dropped `prefer` would
+    quietly put the service's 6 ms back on every inference."""
+    import pathlib
+    import re
+    text = (pathlib.Path(__file__).resolve().parents[1]
+            / 'launch' / 'vision_pi.launch.py').read_text()
+    assert re.search(r"'split', default_value='false'", text)
+    single = re.search(r"detectors\(condition=UnlessCondition\([^)]*\)\),\s*"
+                       r"prefer='direct'\)", text)
+    assert single, 'the single vision process must prefer the direct open'
+    assert "'MONGLA_HAILO_PREFER': prefer" in text

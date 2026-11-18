@@ -55,6 +55,8 @@ from collections import deque
 
 from typing import Optional
 
+import cv2
+
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -78,25 +80,18 @@ from .flow_frame import FlowFrameMixin
 
 class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloorMixin,
                        FlowPublishMixin, Node):
-    def __init__(self):
-        super().__init__('mongla_flow_velocity')
+    def __init__(self, node_name: str = 'mongla_flow_velocity', *,
+                 parameter_overrides=None):
+        super().__init__(node_name,
+                         parameter_overrides=list(parameter_overrides or []))
 
         self._declare_parameters()
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
-        self._pool_depth = float(self.get_parameter('pool_depth_m').value)
-        lo = float(self.get_parameter('pool_depth_min_m').value)
-        hi = float(self.get_parameter('pool_depth_max_m').value)
-        # The RMS of what the ASSUMED depth gets wrong, for a floor anywhere
-        # in [lo, hi]: with a = lo - d and b = hi - d, uniform gives
-        # sqrt((a^2 + ab + b^2) / 3). Not the range's own spread -- the typed
-        # depth is often measured at one end (the dock), not the middle. Not
-        # a measurement of this venue either: the honest size of "somewhere
-        # in the range the venue states".
-        a, b = lo - self._pool_depth, hi - self._pool_depth
-        self._floor_sigma_m = (math.sqrt(max(0.0, (a * a + a * b + b * b) / 3.0))
-                               if all(map(math.isfinite, (a, b))) else 0.0)
+        self._set_pool(float(self.get_parameter('pool_depth_m').value),
+                       float(self.get_parameter('pool_depth_min_m').value),
+                       float(self.get_parameter('pool_depth_max_m').value))
         # Lens below the baro port, body FRD metres, or None = not measured
         # (issue #27; see `flow_math.height_above_floor`).
         from mongla_localization import frames as _frames
@@ -186,8 +181,13 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         ns = f'/mongla/vision/{cam}'
         img_qos = QoSProfile(depth=1,
                              reliability=QoSReliabilityPolicy.BEST_EFFORT)
-        self.create_subscription(Image, f'{ns}/image_raw', self._on_image,
-                                 img_qos)
+        # `direct_feed`: composed beside the downward camera, which hands every
+        # frame over by reference (`submit_frame`). The topic path stays for a
+        # standalone node and for replay, where a bag is the camera.
+        self._direct = bool(self.get_parameter('direct_feed').value)
+        if not self._direct:
+            self.create_subscription(Image, f'{ns}/image_raw', self._on_image,
+                                     img_qos)
         self.create_subscription(Vector3Stamped, '/mongla/imu_rates',
                                  self._on_rates, 50)
         self.create_subscription(MonglaState, '/mongla/state', self._on_state,
@@ -305,6 +305,46 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
                 f'(3.08 % axis asymmetry measured in this state); the sigma '
                 f'and {self._pub_cal.topic_name} say so.')
 
+        # Last: rclpy runs set-callbacks on declare_parameter too. The
+        # baseline ceiling is read every frame (flow_frame); the other
+        # knobs build the front end once.
+        from ..live_params import apply_live
+        apply_live(self, {
+            'max_baseline_s': lambda v: setattr(self, '_max_baseline', float(v)),
+            # The venue's floor, from the course a mission names
+            # (`mongla.use_course`). Read per frame by `_scale_ready` and the
+            # height, so a new value scales the next interval.
+            'pool_depth_m': lambda v: self._set_pool(float(v), self._pool_lo,
+                                                     self._pool_hi, live=True),
+            'pool_depth_min_m': lambda v: self._set_pool(
+                self._pool_depth, float(v), self._pool_hi, live=True),
+            'pool_depth_max_m': lambda v: self._set_pool(
+                self._pool_depth, self._pool_lo, float(v), live=True),
+        })
+
+    def _set_pool(self, depth: float, lo: float, hi: float, *,
+                  live: bool = False) -> None:
+        """The floor depth and the range a sloping floor spans.
+
+        `_floor_sigma_m` is the RMS of what the ASSUMED depth gets wrong for
+        a floor anywhere in [lo, hi]: with a = lo - d and b = hi - d, uniform
+        gives sqrt((a^2 + ab + b^2) / 3). Not the range's own spread -- the
+        typed depth is often measured at one end (the dock), not the middle.
+        Not a measurement of this venue either: the honest size of
+        "somewhere in the range the venue states".
+        """
+        if live and not (math.isfinite(depth) and depth > 0.0):
+            raise ValueError(f'pool_depth_m={depth!r}: a floor depth must be '
+                             f'a positive number of metres')
+        self._pool_depth, self._pool_lo, self._pool_hi = depth, lo, hi
+        a, b = lo - depth, hi - depth
+        self._floor_sigma_m = (math.sqrt(max(0.0, (a * a + a * b + b * b) / 3.0))
+                               if all(map(math.isfinite, (a, b))) else 0.0)
+        if live:
+            self.get_logger().info(
+                f'[FLOW ] pool depth {depth:.2f} m (range {lo:.2f}-{hi:.2f}, '
+                f'floor sigma {self._floor_sigma_m:.2f} m), set live')
+
     # ── worker ──────────────────────────────────────────────────────────────
     def _flow_loop(self) -> None:
         while not self._stop.is_set():
@@ -316,8 +356,17 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
                 self._slot_evt.clear()
             if item is None:
                 continue
+            frame, t, seq = item
             try:
-                self._process(*item)
+                # Grey and the size gate here, on this thread, so a frame the
+                # worker would have dropped is never converted, and the
+                # camera's capture thread never pays for flow.
+                gray = (cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        if frame.ndim == 3 else frame)
+                if not self._admit_frame_size((int(gray.shape[1]),
+                                               int(gray.shape[0]))):
+                    continue
+                self._process(gray, t, seq)
             except Exception as exc:            # never let the thread die
                 self.get_logger().error(f'[FLOW ] worker: {exc!r}')
 

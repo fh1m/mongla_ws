@@ -10,9 +10,11 @@
 # span would make every range wrong by a fixed factor, in the flattering
 # direction, with nothing logging a fault.
 #
-# This replaces `target_width_m`, an operator parameter defaulting to 0.0. That
-# default is why the 6-DoF path publishes `ok=false, reason='target_width_m
-# unset'` today: the metric branch has never run on the vehicle.
+# This replaced `target_width_m`, an operator parameter defaulting to 0.0,
+# under which the metric branch never ran on the vehicle. The parameter is
+# gone (2026-11-18): one width for a whole run scaled the second prop a
+# mission switched to by the first prop's width. A measured prop goes here,
+# or in the deck override below, under its class.
 #
 # What this file is. Only the per-DETECTION-CLASS widths the pose solver
 # consumes, keyed by the class names our models actually emit -- not an arena
@@ -55,7 +57,7 @@
 #
 # Who loads this. No launch file does. `mongla_vision/target_geometry.py`
 # opens it directly out of the installed share directory at call time, and
-# `lock_node` calls `width_for()` when `target_width_m` is unset. So editing it
+# `lock_node` calls `width_for()` for every class it locks onto. So editing it
 # DOES take effect on the deck -- but only after a colcon build, because the
 # copy that is read is the installed one, not this source file.
 

@@ -176,10 +176,30 @@ if [ "${1:-}" = "--system" ]; then
   systemctl daemon-reload
   systemctl reset-failed
 
-  say "6/8  network: Wi-Fi on boot, and mongla.local on every interface"
+  say "6/8  network: Wi-Fi on boot, and kutum.local on every interface"
+  # The name avahi publishes is the hostname. cloud-init would put back the
+  # one the card was imaged with at the next boot, so it is told to keep this
+  # one; avahi reads the hostname only when it starts, so it is restarted.
+  install -m 0644 "$KUTUM/system/cloud/99-kutum-hostname.cfg" /etc/cloud/cloud.cfg.d/
+  # The card's seed is what a fresh card's first boot reads, so it names kutum
+  # too. A card already booted keeps cloud-init's cached copy, which still
+  # adds the imaged name to the 127.0.1.1 line of /etc/hosts at every boot: a
+  # local alias only the Pi resolves, left because clearing the cache
+  # (`cloud-init clean`) also makes new ssh host keys (2026-11-18).
+  seed=/boot/firmware/user-data
+  if [ -f "$seed" ] && grep -q '^hostname: ' "$seed" && ! grep -q '^hostname: kutum$' "$seed"; then
+    mkdir -p "$OWNER_HOME/attic/$STAMP" && cp -a "$seed" "$OWNER_HOME/attic/$STAMP/user-data"
+    sed -i 's/^hostname: .*/hostname: kutum/' "$seed"
+  fi
+  if [ "$(hostname)" != kutum ]; then
+    sed -i 's/^127\.0\.1\.1 .*/127.0.1.1 kutum kutum/' /etc/hosts
+    grep -q '^127\.0\.1\.1 ' /etc/hosts || echo '127.0.1.1 kutum kutum' >> /etc/hosts
+    hostnamectl set-hostname kutum
+    systemctl restart avahi-daemon
+  fi
   # Ethernet stays as cloud-init wrote it (DHCP); 60-kutum-eth.yaml keeps a
   # lapsed lease's address and adds a link-local one, so a cable straight to a laptop with no DHCP server
-  # still answers on mongla.local. A laptop sharing its internet over that
+  # still answers on kutum.local. A laptop sharing its internet over that
   # cable (NetworkManager: IPv4 "Shared to other computers") hands out an
   # address by DHCP, and the Pi takes it like any router's.
   install -m 0600 "$KUTUM/system/netplan/60-kutum-eth.yaml" /etc/netplan/

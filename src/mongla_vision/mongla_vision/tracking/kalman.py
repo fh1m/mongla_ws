@@ -21,8 +21,9 @@ but the detector fired nothing), the Kalman propagates forward using
 the Kalman's best guess. `score` stays 0.0 so the control loop can
 tell it apart from a corrected frame.
 
-After `max_predict_frames` consecutive predicted frames, the filter is
-dropped — the track is considered gone.
+After `max_predict_s` seconds of capture time with no real detection, the
+filter is dropped and the track is considered gone. Seconds, not frames: a
+frame count means a different window at every detection rate.
 
 Install: pip install filterpy
 """
@@ -120,7 +121,7 @@ class PerTrackKalman:
         self._process_noise     = process_noise
         self._measurement_noise = measurement_noise
         self._last_dt           = dt
-        self.predict_streak     = 0
+        self.predict_s          = 0.0   # capture time since the last real box
 
     def step(self, cx: float, cy: float, dt: float,
              predicted: bool, r_scale: float = 1.0) -> Tuple[float, float]:
@@ -139,9 +140,9 @@ class PerTrackKalman:
             self._kf.update(np.array([[cx], [cy]], dtype=float))
             if r_scale != 1.0:
                 self._kf.R = np.eye(2) * self._measurement_noise
-            self.predict_streak = 0
+            self.predict_s = 0.0
         else:
-            self.predict_streak += 1
+            self.predict_s += dt
         cx_hat = float(self._kf.x[0])
         cy_hat = float(self._kf.x[1])
         return cx_hat, cy_hat
@@ -181,9 +182,9 @@ class TrackKalmanSmoother:
     measurement_noise : float
         R diagonal — how much we trust the detector output.
         Lower = tighter tracking, more jitter. Default 1.0.
-    max_predict_frames : int
-        After this many consecutive predicted frames the filter is
-        dropped (track has been gone too long). Default 5.
+    max_predict_s : float
+        Seconds of capture time with no real detection before the filter is
+        dropped (the track has been gone too long). Default 1.5.
     default_dt : float
         Fallback dt for the first frame (seconds). Default 1/20.
     """
@@ -191,11 +192,11 @@ class TrackKalmanSmoother:
     def __init__(self, *, adaptive_noise: bool = False,
                  process_noise: float = 0.1,
                  measurement_noise: float = 1.0,
-                 max_predict_frames: int = 5,
+                 max_predict_s: float = 1.5,
                  default_dt: float = 1.0 / 20.0):
         self._process_noise      = process_noise
         self._measurement_noise  = measurement_noise
-        self._max_predict_frames = max_predict_frames
+        self._max_predict_s      = float(max_predict_s)
         self._default_dt         = default_dt
 
         self._filters:    Dict[int, PerTrackKalman] = {}
@@ -241,7 +242,7 @@ class TrackKalmanSmoother:
         flt = self._filters.get(track_id)
         if flt is None:
             return False
-        return flt.predict_streak >= self._max_predict_frames
+        return flt.predict_s >= self._max_predict_s
 
     def drop(self, track_id: int) -> None:
         self._filters.pop(track_id, None)

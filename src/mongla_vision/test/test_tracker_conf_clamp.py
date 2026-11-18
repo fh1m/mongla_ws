@@ -26,7 +26,7 @@ nearly TRIPLES presence and takes losses past `lost_grace_s` from SIX to ONE.
 
 Nothing raised anything, ever, because a tracker with no tracks still
 publishes an empty array and every node looks healthy. Same family as the
-truncated-coast bug in `test_tracker_rate.py`.
+truncated-coast bug in `test_coast_ladder_ordering.py`.
 
 The fix is structural, not a tuned number: a detection the DETECTOR chose to
 publish must be allowed to start a track. Anything else silently discards
@@ -52,7 +52,7 @@ def _box(score, x=100.0):
 
 
 def _emitted(detector_conf, score, ttype='ocsort', frames=30, hc=0.6):
-    tr = RoboflowTracker(tracker_type=ttype, track_buffer=150, frame_rate=32.0,
+    tr = RoboflowTracker(tracker_type=ttype, track_buffer=150,
                          min_hits=3, iou_threshold=0.2,
                          track_activation_threshold=0.40,
                          high_conf_det_threshold=hc,
@@ -93,7 +93,7 @@ def test_the_clamp_never_LOOSENS_a_threshold():
     """It is a ceiling, not an assignment. A detector running at 0.45 must not
     drag a deliberately tight 0.2 tracker gate upward."""
     tr = RoboflowTracker(tracker_type='ocsort', track_buffer=150,
-                         frame_rate=32.0, min_hits=3, iou_threshold=0.2,
+                         min_hits=3, iou_threshold=0.2,
                          track_activation_threshold=0.40,
                          high_conf_det_threshold=0.20, detector_conf=0.45)
     # A 0.25 box is above the tracker's own 0.20 gate and below the

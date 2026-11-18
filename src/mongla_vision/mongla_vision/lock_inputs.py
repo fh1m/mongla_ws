@@ -1,13 +1,9 @@
-"""LockNode's inputs besides images and detections: attitude, odometry,
-floor height and camera info, each with the freshness rule it is read under.
+"""LockNode's inputs besides images and detections: odometry, floor
+height and camera info, each with the freshness rule it is read under.
 """
 import math
 import time
 import numpy as np
-try:
-    from mongla_interfaces.msg import MonglaState
-except ImportError:                                              # noqa: BLE001
-    MonglaState = None
 from geometry_msgs.msg import PointStamped
 from mongla_vision.anchor import loop_closure as _lc
 from mongla_vision.anchor import health as _health
@@ -15,69 +11,6 @@ from mongla_vision.anchor import health as _health
 
 class LockInputsMixin:
     """Methods of `LockNode`; see `lock_node.py` for the node."""
-
-    def _on_imu(self, msg) -> None:
-        """Hull roll from the board's fused BNO085.
-
-        The -1.0 convention is load-bearing. `auv_manager_node` sets
-        `orientation_covariance[0] = -1.0` when the board cannot supply
-        attitude -- the ROS "no data" marker -- and publishes a
-        structurally-valid message anyway. Reading the quaternion without
-        checking it would take (0,0,0,1) as level, which is a confident wrong
-        answer on a rolled hull and exactly the failure that convention
-        exists to prevent.
-        """
-        try:
-            if float(msg.orientation_covariance[0]) < 0.0:
-                self._roll_rad = float('nan')
-                return
-            q = msg.orientation
-            x, y, z, w = (float(q.x), float(q.y), float(q.z), float(q.w))
-            self._roll_rad = math.atan2(2.0 * (w * x + y * z),
-                                        1.0 - 2.0 * (x * x + y * y))
-            self._imu_t = time.monotonic()
-        except Exception:                                        # noqa: BLE001
-            self._roll_rad = float('nan')
-
-    def _roll_fresh(self, max_age_s: float = 1.0) -> float:
-        """Roll, or NaN when stale or never received -- same discipline as
-        `_yaw_fresh`. A second-old roll on a rolling hull is a different
-        attitude."""
-        r = getattr(self, '_roll_rad', float('nan'))
-        if not math.isfinite(r):
-            return float('nan')
-        if (time.monotonic() - getattr(self, '_imu_t', 0.0)) > max_age_s:
-            return float('nan')
-        return r
-
-    def _on_state(self, msg) -> None:
-        """The hull's heading, depth and armed state.
-
-        NaN IS THE ABSENT VALUE AND IS KEPT AS ONE. The board suppresses a
-        yaw it cannot stand behind, and `MonglaState` carries that through as
-        NaN. Coercing it to 0.0 here would hand every downstream rung a
-        confident heading of due north -- the repo's recurring defect, a
-        plausible number standing in for an absent measurement.
-        """
-        y = float(msg.yaw_deg)
-        self._yaw_deg = y if math.isfinite(y) else float('nan')
-        d = float(msg.depth_m)
-        self._depth_m = d if math.isfinite(d) else float('nan')
-        self._armed = bool(msg.armed)
-        self._state_t = time.monotonic()
-
-    def _yaw_fresh(self, max_age_s: float = 1.0) -> float:
-        """Yaw, or NaN when it is stale or was never received.
-
-        Freshness matters more here than for most signals: a remembered world
-        position is built from yaw AT THE MOMENT OF THE SIGHTING, and a yaw
-        one second old on a turning hull is a different direction entirely.
-        """
-        if not math.isfinite(getattr(self, '_yaw_deg', float('nan'))):
-            return float('nan')
-        if (time.monotonic() - getattr(self, '_state_t', 0.0)) > max_age_s:
-            return float('nan')
-        return self._yaw_deg
 
     def _on_odom(self, msg) -> None:
         """The filter's own estimate: where it thinks it is, and how sure.
