@@ -75,20 +75,16 @@ class LockSetupMixin:
         # Height above the floor = pool_depth_m - |depth|. Without it pixels
         # cannot become metres and every closure is refused, by design.
         self.declare_parameter('pool_depth_m', 0.0)
-        # 3 Hz, not 8. Measured on the Pi with the full stack live, and the
-        # cost is LATENCY rather than throughput -- detection rate is unchanged
-        # at every setting, but the anchor's 33 ms bursts delay the image
-        # pipeline:
-        #
-        #     ladder OFF          det 49.3 Hz   frame age 16.1 ms   idle 82.4 %
-        #     follower only       det 50.6 Hz             18.7 ms        75.3 %
-        #     + anchor @ 8 Hz     det 50.7 Hz             22.8 ms        65.5 %
-        #     + anchor @ 3 Hz     det 50.6 Hz             18.4 ms        66.8 %
-        #
-        # 8 Hz costs +42 % of frame age for NO extra coverage: the anchor is the
-        # long-horizon rung, called on when the follower has already given up,
-        # and the p99 gap it exists to cover is 2.418 s. 3 Hz samples that
-        # seven times over.
+        # The acting bar (B-59). Below this a detection may be ASSOCIATED by
+        # the tracker but must not be ACTED ON by the ladder. Default 0.45,
+        # deliberately NOT the 0.60 knee that measurement favours: 0.60 is
+        # derived from ONE model, ONE class and ONE venue, and shipping a
+        # control bar that tight on that evidence would trade a measured false
+        # positive for an unmeasured missed detection. 0.45 already removes
+        # the 90.8 %-on-empty-water regime (it falls to 46.8 %) while holding
+        # 98.9 % on the real gate. Raise it to 0.60 per mission once the sweep
+        # has been repeated with visually-confirmed negatives on more venues.
+        self.declare_parameter('act_conf', 0.45)
         # Publish rate -- off by default, and the default is the point.
         #
         # The ladder tracks on every camera frame (LK wants the smallest
@@ -108,20 +104,25 @@ class LockSetupMixin:
         # idle: 53.4 % -> 37.4 %), but 0 = publish every frame is the default
         # and the design intent. A RUNG CHANGE is never delayed even when a
         # limit is set -- that transition is the information.
-        # The acting bar (B-59). Below this a detection may be ASSOCIATED by
-        # the tracker but must not be ACTED ON by the ladder. Default 0.45,
-        # deliberately NOT the 0.60 knee that measurement favours: 0.60 is
-        # derived from ONE model, ONE class and ONE venue, and shipping a
-        # control bar that tight on that evidence would trade a measured false
-        # positive for an unmeasured missed detection. 0.45 already removes
-        # the 90.8 %-on-empty-water regime (it falls to 46.8 %) while holding
-        # 98.9 % on the real gate. Raise it to 0.60 per mission once the sweep
-        # has been repeated with visually-confirmed negatives on more venues.
-        self.declare_parameter('act_conf', 0.45)
         self.declare_parameter('publish_hz', 0.0)
-        # 4.5 Hz, RAISED FROM 3.0 ON A RE-MEASUREMENT (B-62).
+        # 4.5 Hz, RAISED FROM 3.0 ON A RE-MEASUREMENT (B-62). The 3.0 Hz was:
         #
-        # The 3 Hz below was set when one anchor evaluation was a "33 ms
+        # (3 Hz, not 8. Measured on the Pi with the full stack live, and the
+        # cost is LATENCY rather than throughput -- detection rate is unchanged
+        # at every setting, but the anchor's 33 ms bursts delay the image
+        # pipeline:
+        #
+        #     ladder OFF          det 49.3 Hz   frame age 16.1 ms   idle 82.4 %
+        #     follower only       det 50.6 Hz             18.7 ms        75.3 %
+        #     + anchor @ 8 Hz     det 50.7 Hz             22.8 ms        65.5 %
+        #     + anchor @ 3 Hz     det 50.6 Hz             18.4 ms        66.8 %
+        #
+        # 8 Hz costs +42 % of frame age for NO extra coverage: the anchor is the
+        # long-horizon rung, called on when the follower has already given up,
+        # and the p99 gap it exists to cover is 2.418 s. 3 Hz samples that
+        # seven times over.)
+        #
+        # That 3 Hz was set when one anchor evaluation was a "33 ms
         # burst" on the CPU. Re-measured on the vehicle after XFeat moved to
         # the accelerator, one full evaluation (detect + match against one
         # stored checkpoint):

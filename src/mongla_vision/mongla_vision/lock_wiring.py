@@ -7,7 +7,6 @@ runs per frame. The order is __init__'s, and two comments below depend on it.
 import collections
 import threading
 
-import rclpy
 from geometry_msgs.msg import PointStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CameraInfo, Image, Range

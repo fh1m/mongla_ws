@@ -130,7 +130,7 @@ class HailoDetector(Detector):
 
     def __init__(self, *, model_path: str, conf: float = 0.15,
                  max_det: int = 100,
-                 class_allowlist: Optional[Iterable[str]] = ('person',),
+                 class_allowlist: Optional[Iterable[str]] = None,
                  warmup: bool = True, logger=None, **_ignored):
         # `**_ignored` swallows the CUDA-only kwargs (device, iou, half) so the
         # three existing construction sites can pass their full kwarg set
@@ -282,8 +282,14 @@ class HailoDetector(Detector):
                     self._log.info(
                         f'[HAILO] {Path(self._path).name} warmup: first infer '
                         f'{self.warmup_ms[0]:.1f} ms, then {self.warmup_ms[1]:.1f} ms')
-            except Exception:
-                pass
+            except Exception as exc:                             # noqa: BLE001
+                # Not fatal here (the detector node decides what a failing
+                # infer means), but never silent: a graph that cannot run
+                # a blank frame will fail every real one too.
+                if self._log:
+                    self._log.error(
+                        f'[HAILO] {Path(self._path).name} warmup inference '
+                        f'FAILED: {type(exc).__name__}: {exc}')
 
     # ------------------------------------------------------------------ #
     #  Live tuning -- the surface detector_node calls
@@ -690,10 +696,16 @@ class HailoDetector(Detector):
                 x2 = (x2 * self._size - pad_x) / scale
                 y1 = (y1 * self._size - pad_y) / scale
                 y2 = (y2 * self._size - pad_y) / scale
+                x1, y1 = max(0.0, x1), max(0.0, y1)
+                x2, y2 = min(float(w), x2), min(float(h), y2)
+                # A box the model put in the grey bars has nothing left once
+                # clamped to the frame: x1 >= x2 or y1 >= y2, with its centre
+                # pinned to the edge. It is not a target in this frame.
+                if x2 <= x1 or y2 <= y1:
+                    continue
                 out.append(Detection(
                     class_id=int(cid), class_name=name, score=score,
-                    xyxy=(max(0.0, x1), max(0.0, y1),
-                          min(float(w), x2), min(float(h), y2))))
+                    xyxy=(x1, y1, x2, y2)))
         if len(out) > self._max_det:
             # Highest score first, so if the cap bites it is always the
             # weakest association fodder that goes -- never a box the control
