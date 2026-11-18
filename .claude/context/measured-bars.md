@@ -151,7 +151,7 @@ is how `recommend()` happened.
 - [85. GLOBAL-SHUTTER EXPOSURE AT SPEED — dynamic framerate on keeps 210 fps and a picture; off is black (2026-11-18)](#85-global-shutter-exposure-at-speed--dynamic-framerate-on-keeps-210-fps-and-a-picture-off-is-black-2026-11-18)
 - [86. THE SERVICE COSTS 6 MS AN INFERENCE — one vision process opening the chip directly detects 55 % more than one process per camera (2026-11-18)](#86-the-service-costs-6-ms-an-inference--one-vision-process-opening-the-chip-directly-detects-55--more-than-one-process-per-camera-2026-11-18)
 - [87. THE WHOLE VISION GRAPH AT ONCE — both detectors, the lock ladder and flow live in one process: forward at the camera's rate, downward 32 Hz, 2.7 GB free (2026-11-18)](#87-the-whole-vision-graph-at-once--both-detectors-the-lock-ladder-and-flow-live-in-one-process-forward-at-the-cameras-rate-downward-32-hz-27-gb-free-2026-11-18)
-- [88. TRACKERS AGAINST TRUTH — the shipped OC-SORT adds 2.5 points of recall and halves boxes on an absent gate; the gate model loses 70 % of its recall in another pool (2026-11-18)](#88-trackers-against-truth--the-shipped-oc-sort-adds-25-points-of-recall-and-halves-boxes-on-an-absent-gate-the-gate-model-loses-70--of-its-recall-in-another-pool-2026-11-18)
+- [88. TRACKERS AGAINST TRUTH — the shipped OC-SORT more than doubles recall at the vehicle's bars, ByteTrack and track-before-detect are rejected, and the gate model loses 70 % of its recall in another pool (2026-11-18)](#88-trackers-against-truth--the-shipped-oc-sort-more-than-doubles-recall-at-the-vehicles-bars-bytetrack-and-track-before-detect-are-rejected-and-the-gate-model-loses-70--of-its-recall-in-another-pool-2026-11-18)
 <!-- contents:end -->
 
 ---
@@ -8078,7 +8078,7 @@ board on Kutum, and flow's accuracy at speed needs a moving truth (the
 downward-mode test).
 
 
-## 88. TRACKERS AGAINST TRUTH — the shipped OC-SORT adds 2.5 points of recall and halves boxes on an absent gate; the gate model loses 70 % of its recall in another pool (2026-11-18)
+## 88. TRACKERS AGAINST TRUTH — the shipped OC-SORT more than doubles recall at the vehicle's bars, ByteTrack and track-before-detect are rejected, and the gate model loses 70 % of its recall in another pool (2026-11-18)
 
 Tracker presence (frames with a box) cannot rank trackers: a coasted box
 counts, so a tracker that keeps guessing after the target leaves scores
@@ -8119,3 +8119,19 @@ ledger figures come from, including the 900 of 900 frames cited for
 share the name `gate.mkv`; a figure citing it must say which. A model trained
 on one pool does not carry to another, which is the case for choosing and
 checking models on the day against that day's water (CLAUDE.md §9).
+
+**At the vehicle's own bars** (acting 0.45, association floor 0.10, cache at
+conf 0.05, same truth):
+
+| arm | recall in view | box while absent |
+|---|---|---|
+| detector at 0.45 | 15.1 % | 1.7 % |
+| + `tracking/presence.py` (track-before-detect on the 0.20-0.45 boxes) | 18.0 % | 2.1 % |
+| **OC-SORT as `tracker_node` publishes** | **37.2 %** | **9.1 %** |
+| ByteTrack at the same windows | 54.9 % | 30.6 % |
+
+The tracker's second stage already extends a track with boxes down to 0.10,
+which is the evidence `presence.py` accumulates; the rung adds 2.9 points on
+top of a detector the tracker already beats by 22. **`presence.py` is
+deleted** rather than wired: it duplicated a shipped capability. ByteTrack
+fails the absent bar again, by 3.4x.
