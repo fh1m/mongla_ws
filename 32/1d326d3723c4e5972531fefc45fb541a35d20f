@@ -1,0 +1,21 @@
+src/mongla_vision/mongla_vision/anchor/xfeat_onnx.py
+  s_4af8d6f83b24e8::t_2fccdeedfb8522 151-156,164-165,172-174
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_ffce3fea017e52 8425-8437
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "321d326d3723c4e5972531fefc45fb541a35d20f",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
