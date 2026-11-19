@@ -41,23 +41,26 @@ def _model_stem(path: str) -> str:
 def _parse_model_conf(s: str) -> Dict[str, float]:
     """Parse 'torpedo_blood_hole=0.55,gate=0.35' -> {name: conf_float}.
 
-    Skips malformed / non-numeric pairs silently (a live-tuned param must never
-    crash the callback). Bare entries (no '=') are ignored -- a per-model conf
-    needs a model name.
+    Raises ValueError naming every malformed pair: a bare name, a missing
+    name or a conf that is not a number. Skipping them silently left the
+    model on its old conf while the set reported success.
     """
     result: Dict[str, float] = {}
-    for part in s.split(','):
+    bad = []
+    for part in str(s or '').split(','):
         part = part.strip()
-        if not part or '=' not in part:
+        if not part:
             continue
-        name, _, value = part.partition('=')
+        name, eq, value = part.partition('=')
         name, value = name.strip(), value.strip()
-        if not name:
-            continue
         try:
+            if not (eq and name):
+                raise ValueError
             result[name] = float(value)
         except ValueError:
-            continue
+            bad.append(part)
+    if bad:
+        raise ValueError(f'model_conf pairs must be name=number; not {bad}')
     return result
 
 

@@ -244,7 +244,11 @@ class DetectorSetupMixin:
         pair naming the loaded model (or its stem) applies to it. Unknown names
         are warned, not fatal -- a live-tuned param must never crash the node.
         """
-        overrides = _parse_model_conf(value)
+        try:
+            overrides = _parse_model_conf(value)
+        except ValueError as exc:
+            self.get_logger().error(f'[DET  ] {exc}: no per-model conf applied')
+            return
         if not overrides:
             return
         for name, conf in overrides.items():
@@ -435,6 +439,10 @@ class DetectorSetupMixin:
             elif p.name == 'model_conf':
                 # Per-model override (CSV 'name=conf'); targets individual
                 # registry entries and persists across active_model switches.
+                try:
+                    _parse_model_conf(str(p.value))
+                except ValueError as exc:
+                    return SetParametersResult(successful=False, reason=str(exc))
                 self._pending_model_conf = str(p.value)
                 self._apply_model_conf(self._pending_model_conf)
 
