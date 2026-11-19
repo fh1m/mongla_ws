@@ -46,7 +46,7 @@ class RosTopicCamera(Camera):
         self._log      = logger
 
         self._lock        = threading.Lock()
-        self._latest      = None     # (np.ndarray, t_mono, w, h)
+        self._latest      = None     # (np.ndarray, t_mono, w, h, t_wall)
         self._consumed_at = -1.0     # t_mono of the last frame we returned
         self._idx         = 0
         self._exp_fps     = float(expected_fps)
@@ -79,7 +79,9 @@ class RosTopicCamera(Camera):
             return
         h, w = frame.shape[:2]
         with self._lock:
-            self._latest = (frame, time.monotonic(), w, h)
+            # Arrival on both clocks at once: the header (wall) and the
+            # staleness checks (monotonic) describe the same instant.
+            self._latest = (frame, time.monotonic(), w, h, time.time())
 
     def read(self) -> Tuple[Optional[np.ndarray], FrameMeta]:
         with self._lock:
@@ -87,7 +89,7 @@ class RosTopicCamera(Camera):
             consumed_at = self._consumed_at
         if snap is None:
             return None, FrameMeta(frame_index=self._idx, fresh=False)
-        frame, t_mono, w, h = snap
+        frame, t_mono, w, h, t_wall = snap
         fresh = t_mono > consumed_at
         if fresh:
             self._idx += 1
@@ -96,7 +98,7 @@ class RosTopicCamera(Camera):
         meta = FrameMeta(
             frame_index=self._idx,
             stamp_monotonic=t_mono,
-            stamp_wall=time.time(),
+            stamp_wall=t_wall,
             width=w,
             height=h,
             fresh=fresh,
