@@ -1,0 +1,27 @@
+tools/studies/vo_downward.py
+  s_4af8d6f83b24e8::t_0b5628df288208 1-191
+README.md
+  s_4af8d6f83b24e8::t_9cce6a66a458a4 64,798,801
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_9cce6a66a458a4 160,8461-8498
+tools/README.md
+  s_4af8d6f83b24e8::t_9cce6a66a458a4 201
+docs/index.html
+  s_4af8d6f83b24e8::t_9cce6a66a458a4 1734-1736,1738
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "bcc250be3b67fdee078c3f78b568aee5d74fb8c0",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
