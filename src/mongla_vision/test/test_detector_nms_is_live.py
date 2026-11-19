@@ -33,7 +33,7 @@ def _node(registry=None, det=None, params=None):
         _registry=registry or {}, _det=det, get_logger=lambda: log,
         get_parameter=lambda n: types.SimpleNamespace(value=values[n]))
     for name in ('_on_parameter_change', '_set_nms_live', '_apply_nms',
-                 '_apply_assoc_conf'):
+                 '_apply_assoc_conf', '_live_refusal'):
         setattr(node, name, types.MethodType(
             getattr(DetectorSetupMixin, name), node))
     return node
@@ -90,4 +90,29 @@ def test_the_launch_values_reach_a_model_built_later():
 def test_the_defaults_leave_a_new_model_as_it_was_built():
     det = _Det()
     _node()._apply_assoc_conf(det)
+    assert det.calls == []
+
+
+def test_a_refused_set_applies_nothing_it_carried():
+    """rclpy rejects the whole set when the callback says no, so nothing in
+    it may have been applied first: a conf that moved while the NMS in the
+    same call was refused left the node in a state no parameter showed."""
+    det = _Det(refuse='no NMS output to set')
+    det.update_conf = lambda c: det.calls.append(('conf', c))
+    node = _node(det=det)
+    result = node._on_parameter_change([
+        Parameter('conf', Parameter.Type.DOUBLE, 0.3),
+        Parameter('nms_floor', Parameter.Type.DOUBLE, 0.02)])
+    assert not result.successful
+    assert det.calls == []
+
+
+def test_a_bad_model_conf_refuses_the_set_before_anything_moves():
+    det = _Det()
+    det.update_conf = lambda c: det.calls.append(('conf', c))
+    node = _node(det=det)
+    result = node._on_parameter_change([
+        Parameter('conf', Parameter.Type.DOUBLE, 0.3),
+        Parameter('model_conf', Parameter.Type.STRING, 'gate=high')])
+    assert not result.successful
     assert det.calls == []

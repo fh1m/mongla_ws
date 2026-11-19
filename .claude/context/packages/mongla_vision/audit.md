@@ -67,7 +67,7 @@ measured as no help, was never wired, or duplicated something that runs.
 | water calibration | CameraInfo carries the air lens and every consumer applies the flat port itself; a calibration fitted with the board in water already contains the port, and the binding or an explicit `calibration:=` would have published it, refracting twice (every range off by n) | FIXED: both refuse a non-air file, test; latent, no water file is installed |
 | `switch_camera` | paused every other detector before finding the requested one was not running, so a mistyped name left no detector live | FIXED: the target is checked first, test |
 | allowlist on the YOLO backend | an allowlist naming no class the model emits returned `[]` every frame, with the node looking healthy; the Hailo backend already refused to narrow | FIXED: one rule, `detector.allow_ids_for`, behavioural test over both backends |
-| stale odometry | the lock stores the odometry's arrival time and never reads it, so loop closure would search and scale with a position however old | open: loop closure is off (item 5); give it an age bar, measured on the odometry's real rate, before turning it on |
+| stale odometry | the lock stored the odometry's arrival time and never read it, so loop closure would search and enrol at a position however old; the localiser publishes on a timer, so even arrival time could not see a frozen position | FIXED: closure refuses odometry whose input stamp has not moved for 0.5 s (five periods; worst gap 105.76 ms on Kutum under the vision graph, measured-bars section 91), test |
 
 ## Cameras
 
@@ -177,7 +177,7 @@ The read column says whether the file was read line by line in this audit. All 1
 | `detector_node.py` | 646 | vehicle | yes | works; stray comments cleaned |
 | `detector_params.py` | 83 | vehicle | yes | FIXED: a malformed model_conf pair was skipped and the live set reported success; now refused by name |
 | `detector_publish.py` | 181 | vehicle | yes | CHANGED: debug image signature trimmed to what it uses |
-| `detector_setup.py` | 490 | vehicle | yes | FIXED: model_conf refused whole when malformed. Recorded: a multi-parameter set that fails part-way leaves the earlier ones applied (the DSL sets one at a time) |
+| `detector_setup.py` | 490 | vehicle | yes | FIXED: model_conf refused whole when malformed; a live set is all or nothing (every refusal is decided before anything is applied) |
 | `draw.py` | 44 | vehicle | yes | CHANGED: legacy aliases and a swallowing **kwargs removed; one entry point |
 | `draw_strip.py` | 437 | none | yes | read; tools/site only (written reason in the register); FIXED absent values drew as 0.0; unused strip-height export removed |
 | `draw_video.py` | 315 | vehicle | yes | CHANGED: depth inset and depth borders removed |
@@ -201,7 +201,7 @@ The read column says whether the file was read line by line in this audit. All 1
 | `live_params.py` | 31 | vehicle + other packages | yes | works |
 | `lock_anchor.py` | 253 | vehicle | yes | FIXED B-118: anchor box scaled from backend 320x240 to camera pixels |
 | `lock_frames.py` | 245 | vehicle | yes | works; act_conf 0.45 rests on a retired model (re-derive per flown model) |
-| `lock_inputs.py` | 246 | vehicle | yes | FIXED: the closure offset measured at a 320x240 constant; now the bank grid centre. Open: _odom_t never read (stale odometry) |
+| `lock_inputs.py` | 246 | vehicle | yes | FIXED: the closure offset measured at a 320x240 constant; now the bank grid centre. FIXED: closure refuses odometry whose input stamp stopped moving (measured-bars section 91) |
 | `lock_node.py` | 349 | vehicle | yes | works; docstring said the score was trust x decay, it is the authority (#78) |
 | `lock_publish.py` | 244 | vehicle | yes | FIXED: field-of-view bearing used backend K on full-frame pixels |
 | `lock_setup.py` | 408 | vehicle | yes | FIXED: releasing target_class stayed on the pinned class (the filter is latched and was dropped while pinned) |
@@ -222,7 +222,7 @@ The read column says whether the file was read line by line in this audit. All 1
 | `tracking/lock_state.py` | 335 | vehicle | yes | works; the ladder core (strict priority, decay from the last real detection) |
 | `tracking/roboflow_tracker.py` | 267 | vehicle | yes | works; two values stored and never read removed |
 | `tracking/tracker.py` | 100 | vehicle | yes | works |
-| `tracking/visibility.py` | 206 | vehicle | yes | works; advisory only (no demand is scaled); SLACK flag deleted. Silent when the anchor fails to load (K comes from the anchor grid) |
+| `tracking/visibility.py` | 206 | vehicle | yes | works; advisory only (no demand is scaled); SLACK flag deleted. FIXED: it went silent when the anchor bank failed to load; K now stays on the camera grid without a bank |
 | `trigger_stamps.py` | 130 | none | yes | waits on the board camera trigger (upstream); written reason in the register |
 | `underwater.py` | 119 | CLI tool | yes | works (characterisation only, no verdict); stale prediction table removed |
 | `utils/__init__.py` | 7 | vehicle | yes | works |

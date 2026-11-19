@@ -340,8 +340,70 @@ def test_the_lock_passes_its_bank_s_grid_centre(monkeypatch):
         locate=lambda *a, **k: None,
         enrol=lambda *a, **k: types.SimpleNamespace(accepted=False))
     node = types.SimpleNamespace(
-        _closer_on=True, _anchor=anchor, _odom_xy=(1.0, 2.0),
+        _closer_on=True, _anchor=anchor, _odom_xy=(1.0, 2.0), _odom_t=99.9,
+        _ODOM_MAX_AGE_S=LockInputsMixin._ODOM_MAX_AGE_S,
         _odom_sigma=float('nan'), _places=lc.PlaceLog(),
         _m_per_px=lambda: 0.002, _closure_refusals=__import__('collections').Counter())
+    node._count_refusal = lambda k: LockInputsMixin._count_refusal(node, k)
     LockInputsMixin._place_tick(node, np.zeros((480, 640), np.uint8), None, 100.0)
     assert seen['centre'] == (320.0, 240.0)
+
+
+def test_stale_odometry_neither_searches_nor_enrols():
+    """The lock stored when odometry arrived and never read it, so a dead
+    localiser left closure searching and enrolling at a position however old.
+    /mongla/odom comes from a 10 Hz timer (worst gap 102.88 ms on Kutum,
+    measured-bars section 91); older than the bar, nothing runs."""
+    import collections
+    import types
+    from mongla_vision.lock_inputs import LockInputsMixin
+    calls = []
+    anchor = types.SimpleNamespace(
+        size=3, grid_centre=(320.0, 240.0),
+        locate=lambda *a, **k: calls.append('locate'),
+        enrol=lambda *a, **k: calls.append('enrol') or types.SimpleNamespace(accepted=False))
+    places = lc.PlaceLog()
+    places.should_enrol = lambda now, xy: True
+    node = types.SimpleNamespace(
+        _closer_on=True, _anchor=anchor, _odom_xy=(1.0, 2.0), _odom_sigma=0.1,
+        _places=places, _m_per_px=lambda: 0.002,
+        _closure_refusals=collections.Counter(),
+        _ODOM_MAX_AGE_S=LockInputsMixin._ODOM_MAX_AGE_S)
+    node._count_refusal = lambda k: LockInputsMixin._count_refusal(node, k)
+    gray = np.zeros((480, 640), np.uint8)
+    node._odom_t = 100.0 - 2 * LockInputsMixin._ODOM_MAX_AGE_S
+    LockInputsMixin._place_tick(node, gray, None, 100.0)
+    assert calls == []
+    assert node._closure_refusals['stale odometry'] == 1
+    node._odom_t = 100.0 - 0.1
+    LockInputsMixin._place_tick(node, gray, None, 100.0)
+    assert 'enrol' in calls
+
+
+def test_odometry_that_arrives_on_time_with_a_frozen_stamp_is_stale(monkeypatch):
+    """The localiser publishes on a 10 Hz timer whether or not its inputs
+    still arrive, and stamps each message with its newest input. Arriving on
+    time with the same stamp is a position that stopped updating, so the age
+    is taken from the last time the stamp moved."""
+    import types
+    from mongla_vision import lock_inputs as li
+    clock = [100.0]
+    monkeypatch.setattr(li.time, 'monotonic', lambda: clock[0])
+    node = types.SimpleNamespace(_odom_stamp=None, _odom_t=0.0)
+
+    def odom(stamp_s):
+        return types.SimpleNamespace(
+            header=types.SimpleNamespace(stamp=types.SimpleNamespace(
+                sec=int(stamp_s), nanosec=int((stamp_s % 1) * 1e9))),
+            pose=types.SimpleNamespace(
+                pose=types.SimpleNamespace(position=types.SimpleNamespace(x=1.0, y=2.0, z=0.5)),
+                covariance=[0.01] * 36))
+    li.LockInputsMixin._on_odom(node, odom(50.0))
+    assert node._odom_t == 100.0
+    for _ in range(10):                        # a second of on-time, frozen messages
+        clock[0] += 0.1
+        li.LockInputsMixin._on_odom(node, odom(50.0))
+    assert clock[0] - node._odom_t > li.ODOM_MAX_AGE_S
+    clock[0] += 0.1
+    li.LockInputsMixin._on_odom(node, odom(50.1))
+    assert node._odom_t == clock[0]

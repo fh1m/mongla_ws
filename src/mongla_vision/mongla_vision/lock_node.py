@@ -147,6 +147,8 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
             try:
                 self._ladder_tick()
             except Exception as exc:        # noqa: BLE001 -- B44 class
+                if not self.context.ok():
+                    return      # the node shut down mid-tick: a stop, not a fault
                 faults += 1
                 if faults in (1, 50):
                     self.get_logger().error(

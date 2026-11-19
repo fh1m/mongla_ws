@@ -41,6 +41,11 @@ _LEDGER = (pathlib.Path(__file__).resolve().parents[3]
 # module path -> attribute -> (expected value, a string the ledger must contain
 # near it, and why the number is what it is).
 LEDGER_BOUND = {
+    'mongla_vision.lock_inputs': {
+        'ODOM_MAX_AGE_S': (0.5, '105.76 ms',
+                            's; five periods of the localiser\'s 10 Hz timer, '
+                            'whose worst gap under the vision graph was 105.76 ms'),
+    },
     'mongla_vision.tracking.follower': {
         'MIN_PATCH_STD': (2.0, '86.7',
                           'grey levels; at this bar a refusal is right 86.7 % '
