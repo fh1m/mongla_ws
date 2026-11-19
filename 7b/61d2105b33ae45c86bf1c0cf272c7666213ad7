@@ -1,0 +1,21 @@
+src/mongla_vision/test/test_calibration_panel_shows_the_current_fit.py
+  s_d9cd6692c91d8a::t_80c900d7a92578 1-52
+src/mongla_vision/mongla_vision/calibration/guide_capture.py
+  s_d9cd6692c91d8a::t_6fdc02d3794285 331-333,354-355
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7b61d2105b33ae45c86bf1c0cf272c7666213ad7",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
