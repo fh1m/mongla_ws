@@ -186,10 +186,11 @@ The read column says whether the file was read line by line in this audit. All 1
 | `anchor/anchor.py` | 314 | vehicle | yes | FIXED: a box on a featureless frame raised instead of snapping nothing |
 | `anchor/bank.py` | 576 | vehicle | yes | FIXED: eviction and clear left per-index scores naming other references |
 | `anchor/bank_lookup.py` | 287 | vehicle | yes | FIXED: an empty search left the previous scores; identity bar docstring quoted the retired 60 |
-| `anchor/bank_store.py` | 111 | vehicle | yes | FIXED: load skipped the scales; a preloaded bank covered no size and its first eviction raised. Bank version 2: a bank of pre-upstream descriptors is refused (B-121) |
+| `anchor/bank_store.py` | 114 | vehicle | yes | FIXED: load skipped the scales; a preloaded bank covered no size and its first eviction raised. Bank version 2: a bank of pre-upstream descriptors is refused (B-121) |
 | `anchor/geometry.py` | 223 | vehicle | yes | works; never runs on the vehicle (the lock passes no K), recorded |
 | `anchor/health.py` | 186 | vehicle | yes | works; thresholds declared, reported only |
 | `anchor/loop_closure.py` | 291 | vehicle | yes | FIXED: offset centre was a 320x240 constant; required argument now |
+| `anchor/place_signature.py` | 90 | vehicle | yes | NEW 2026-11-19: the bank's signature is VLAD-16 over its descriptors, not the 64-D mean (Recall@1 forward 52.5 to 65.8 %, downward 47.9 to 77.1 %, measured-bars 20.3); `config/vlad16.npz` is its vocabulary |
 | `anchor/pose.py` | 368 | other packages | yes | FIXED: the ambiguity gate it accepted was never compared; deleted |
 | `anchor/xfeat_hailo.py` | 224 | vehicle | yes | CHANGED: its copy of the descriptor sampling replaced by the shared one (outputs equal within 9e-8). FIXED: the reliability head was read and dropped; it now ranks the top-k (+25.9 % correct matches on the chip). Semi-dense removed: it fit the true view change half as often (B-121) |
 | `anchor/xfeat_onnx.py` | 286 | vehicle | yes | CHANGED: keypoints and descriptors in one function both backends call; unread logger argument removed. FIXED: not upstream XFeat (ranking without reliability, bilinear raw descriptors, edge keypoints kept); now upstream's exactly: +38 % correct matches on warped frames, +8 % on real pairs (B-121, measured-bars section 92) |

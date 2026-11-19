@@ -75,6 +75,19 @@ def load_backend(model, threads):
     return m, m.XFeatONNX(model, top_k=1024, threads=threads)
 
 
+def _place_signature():
+    """The shipped module, loaded by path like the backend: one copy of vlad()."""
+    p = os.path.join(HERE, '..', '..', 'src', 'mongla_vision', 'mongla_vision',
+                     'anchor', 'place_signature.py')
+    spec = importlib.util.spec_from_file_location('place_signature', p)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+vlad = _place_signature().vlad
+
+
 def signature(desc):
     if len(desc) == 0:
         return np.zeros(64, np.float32)
@@ -93,21 +106,6 @@ def vocabulary(descs, k, seed=0):
     cv2.setRNGSeed(seed)
     _, _, c = cv2.kmeans(x, k, None, crit, 3, cv2.KMEANS_PP_CENTERS)
     return c
-
-
-def vlad(desc, words):
-    """Residuals to the nearest word, summed per word; intra-, power- and
-    L2-normalised."""
-    v = np.zeros_like(words)
-    if len(desc):
-        a = np.argmax(desc @ words.T - 0.5 * (words * words).sum(1), axis=1)
-        np.add.at(v, a, desc - words[a])
-    n = np.linalg.norm(v, axis=1, keepdims=True)
-    v = v / np.where(n > 0, n, 1.0)
-    v = np.sign(v) * np.sqrt(np.abs(v))
-    v = v.ravel()
-    n = np.linalg.norm(v)
-    return v / n if n > 0 else v
 
 
 def inliers(mod, net, k0, d0, k1, d1, ransac_px=3.0):
@@ -152,6 +150,9 @@ def main() -> int:
     ap.add_argument('--set', choices=('forward', 'downward', 'both'), default='forward')
     ap.add_argument('--signatures', default='mean')
     ap.add_argument('--boot', type=int, default=10000)
+    ap.add_argument('--write-vocab', default='',
+                    help='after scoring, learn the 16 words from EVERY clip read and write '
+                         'them here (the shipped config/vlad16.npz)')
     a = ap.parse_args()
 
     mod, net = load_backend(a.model, a.threads)
@@ -223,6 +224,13 @@ def main() -> int:
                 print(f'{"ALL " + group:<18} {"":>5} {tq:>4} {r}  {float(np.mean(losses)):>7.1%}')
                 summary[(sig, group)] = (tot[1] / tq, float(np.mean(losses)))
 
+    if a.write_vocab:
+        words = vocabulary([d for fe in feats.values() for _, d in fe], 16)
+        os.makedirs(os.path.dirname(os.path.abspath(a.write_vocab)), exist_ok=True)
+        np.savez(a.write_vocab, words=words.astype(np.float32),
+                 trained_on=np.array(sorted(feats)), seed=np.array([0]),
+                 model=np.array([os.path.basename(a.model)]))
+        print(f'wrote {a.write_vocab}: 16 words from {sorted(feats)}')
     if 'mean' not in sigs_wanted:
         return 0
     rng = np.random.default_rng(0)

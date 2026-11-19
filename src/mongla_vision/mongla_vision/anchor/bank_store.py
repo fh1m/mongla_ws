@@ -61,7 +61,8 @@ class StoreMixin:
             raise ValueError(
                 f'bank version {ver} != {self.SAVE_VERSION} (1: a different XFeat '
                 f'post-process; 2: pickled labels, which this loader will not '
-                f'run). Record the bank again: tools/pool/build_practice_bank.py')
+                f'run; 3: mean signatures, now VLAD). Record the bank again: '
+                f'tools/pool/build_practice_bank.py')
         w, h = (int(v) for v in z['backend_wh'])
         if (w, h) != (self._be.w, self._be.h):
             raise ValueError(

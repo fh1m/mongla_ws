@@ -187,6 +187,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `anchor/geometry.py` | The half of the homography we were throwing away. |
 | `anchor/health.py` | A fouled lens and a changed world look identical, and need opposite answers. |
 | `anchor/loop_closure.py` | When may a recognised place become a position fix? |
+| `anchor/place_signature.py` | The bank's place signature: VLAD over the descriptors it already holds. |
 | `anchor/pose.py` | Metric 6-DoF pose of a known-size planar target. The firing solution. |
 | `anchor/xfeat_hailo.py` | XFeat on the Hailo-8, so the anchor rung stops burning the Pi's CPU. |
 | `anchor/xfeat_onnx.py` | XFeat on the vehicle: ONNX + numpy, no torch. |

@@ -4057,6 +4057,52 @@ ships. And the signature was tested on FORWARD-camera clips; on a tiled floor
 the sweep expects place recognition to alias badly, so the downward camera
 needs its own number rather than this one.
 
+### 20.3 A better signature, and the downward number 20.2 owed (2026-11-19)
+
+`tools/studies/bank_shortlist_accuracy.py --set both --signatures mean,vlad16,vlad64`,
+`xfeat_320x240.onnx`, 24 references per clip at a 4 s stride, ground truth
+the expensive way as above, now over the forward clips AND the two downward
+ones. A VLAD vocabulary (K words, k-means on the pooled descriptors; each
+descriptor's residual to its nearest word summed per word, normalised per
+word, square-rooted, normalised) is learnt on the OTHER clips only, so no clip
+is ranked by words it taught.
+
+**Bar, written before the first run (bead po7.15.4):** a signature replaces
+the mean when, pooled over the forward clips, Recall@1 rises by at least 10
+points with the lower 95 % bound of the paired bootstrap above zero, the
+downward Recall@1 is not lower by more than 2 points, and loss@5 does not
+rise.
+
+| signature | forward r@1 / r@5 / loss@5 (120 queries) | downward r@1 / r@5 / loss@5 (48 queries) |
+|---|---|---|
+| mean (shipped to now) | 52.5 % / 87.5 % / 3.1 % | **47.9 % / 87.5 % / 6.2 %** |
+| VLAD, 16 words | **65.8 % / 93.3 % / 0.8 %** | **77.1 % / 97.9 % / 1.3 %** |
+| VLAD, 64 words | 61.7 % / 95.8 % / 0.7 % | 75.0 % / 95.8 % / 1.7 % |
+
+Paired difference to the mean, Recall@1, 95 % interval: VLAD-16 forward **+13.3
+points (+5.8 to +20.8)**, downward **+29.2 (+14.6 to +43.8)**; VLAD-64 forward
++9.2 (+2.5 to +16.7), downward +27.1 (+12.5 to +41.7). VLAD-16 passes every
+clause and **replaces the mean**; VLAD-64 misses the 10-point clause and is
+not chosen.
+
+**Result.** The mean was worst exactly where it was never measured: on the
+tiled floor 20.2 predicted would alias, Recall@1 was 47.9 % and a missed
+shortlist cost 6.2 % of the inlier yield. The shipped path now ranks by
+VLAD-16 (`anchor/place_signature.py`, `config/vlad16.npz`, 1024 numbers per
+reference). It costs 0.95 ms a call on the dev box and 1.43 ms on Kutum
+against 0.05 ms for the mean, and ranking 100 references is 0.014 ms: 0.4 %
+of the 333 ms anchor cycle. A bank saved under the mean (version 3) is
+refused, with the reason.
+
+**Caution: what this does not show.** The shipped vocabulary is learnt on all
+seven clips, so it is unmeasured on a scene none of them resembles; the
+leave-one-clip-out vocabulary above is the honest estimate, and the pool's
+own footage is where it gets re-learnt (`--write-vocab`). Recall@1 here is
+retrieval inside one clip, seconds to minutes apart; the revisit of a place an
+hour later, in a different light, is not measured. The IMU-rotated query (XFeat
+is not rotation invariant) cannot be scored on these clips, which carry no
+IMU, and waits for a recorded bag.
+
 ---
 
 ## 21. A reference does NOT decay to death — and a correction
