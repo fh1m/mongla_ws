@@ -302,6 +302,37 @@ const INSTRUMENTS = {
     },
   },
 
+  // Photons to thrust (chain.py): each stage's rate and how old its data is
+  // when seen. A bar per stage scales with its age; a stage with no stamp has
+  // a rate and "--", and what the board does not send is listed with its ask.
+  Chain: {
+    title: "Chain",
+    // chain.py publishes it twice a second.
+    topics: ["/mongla/batighor/chain"],
+    fold(s, topic, m) { try { s.c = JSON.parse(m.data); s.at = Date.now(); } catch { /* keep */ } },
+    draw(s) {
+      const c = s.c;
+      if (!c) return [el("div", { class: "note" }, "no /mongla/batighor/chain: is the chain meter running?")];
+      const rows = (c.order || []).map((k) => c.stages[k]);
+      const worst = Math.max(1, ...rows.map((r) => (fin(r.age_ms_p95) ? r.age_ms_p95 : 0)));
+      const out = [el("div", { class: "note" }, `age when seen, p50 / p95 over ${num(c.window_s, 0)} s`)];
+      for (const r of rows) {
+        const quiet = !(r.hz > 0) || (fin(r.last_s) && r.last_s > 2);
+        out.push(kv([r.label,
+          quiet ? "silent" : `${num(r.hz, 1, " Hz")}   ${num(r.age_ms_p50, 1)} / ${num(r.age_ms_p95, 1)} ms`,
+          quiet ? "stale" : (r.age_ms_p95 > 100 ? "warn" : "")]));
+        if (!quiet && fin(r.age_ms_p50)) {
+          out.push(el("div", { class: "bar" }, el("b", { style: `width:${Math.min(100, (100 * r.age_ms_p50) / worst)}%` })));
+        }
+        if (r.ask) out.push(el("div", { class: "note" }, r.ask));
+      }
+      out.push(el("div", { class: "note" }, "not sent by the board"));
+      out.push(kv(...(c.not_sent || []).map((n) => [n.label, n.ask, "stale"])));
+      out.push(kv(["view age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 2 ? "warn" : ""]));
+      return out;
+    },
+  },
+
   Health: {
     title: "Health",
     topics: ["/diagnostics"],
