@@ -57,7 +57,7 @@ os.environ['MAVLINK20'] = '1'
 
 import rclpy                                                             # noqa: E402
 from rclpy.node import Node                                              # noqa: E402
-from rclpy.executors import MultiThreadedExecutor                        # noqa: E402
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor  # noqa: E402
 
 from .node_health import HealthMixin                                     # noqa: E402
 from .node_setup import SetupMixin                                       # noqa: E402
@@ -374,7 +374,10 @@ def main(args=None):
         from mongla_localization.params_file import refuse_unknown
         refuse_unknown(node)   # bringup.yaml `nodes:` typos stop here
         executor.spin()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
+        # Ctrl-C (Jazzy raises the second): a stop, not a crash. An exit 1
+        # here reads as died and invites a restart; the teardown below runs
+        # either way.
         pass
     finally:
         _emergency_stop(node)

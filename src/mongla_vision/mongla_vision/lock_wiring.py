@@ -62,6 +62,7 @@ class LockWiringMixin:
         # no metric answer, and guessing one would make every range wrong by a
         # constant nobody could see.
         self._K = None
+        self._K_grid = None    # (w, h) of the grid K is scaled to (`_on_info`)
         # The width comes from the per-class table and nowhere else, so it
         # follows the class through every switch a mission makes. A measured
         # prop goes in ~/.mongla/target_geometry.yaml under its class. A
@@ -228,6 +229,7 @@ class LockWiringMixin:
         self._odom_sigma = float('nan')
         self._odom_z = float('nan')   # filter depth, negative below surface
         self._odom_t = 0.0
+        self._odom_stamp = None     # (sec, nanosec) of the newest input seen
         self._floor_h = float('nan')
         self._floor_h_t = 0.0
         self._pool_depth_warned = False

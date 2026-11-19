@@ -208,16 +208,18 @@ class LockPublishMixin:
         K = self._K_rect if getattr(self, '_K_rect', None) is not None \
             else getattr(self, '_K', None)
         gray = self._gray_now()
-        if K is None or gray is None:
+        grid = self._K_grid
+        if K is None or gray is None or grid is None:
             return
         try:
             from .tracking.visibility import assess
             h, w = gray.shape[:2]
-            # K is on the anchor backend's grid (`_on_info`); the box and the
-            # frame are full camera pixels, so K comes back to that grid here
-            # or every bearing in the warning is off by the ratio of the two.
-            sx = float(w) / float(self._anchor._be.w)
-            sy = float(h) / float(self._anchor._be.h)
+            # K is on the grid `_on_info` scaled it to (the anchor backend's,
+            # or the camera's own without a bank); the box and the frame are
+            # full camera pixels, so K comes back to them here or every
+            # bearing in the warning is off by the ratio of the two.
+            sx = float(w) / grid[0]
+            sy = float(h) / grid[1]
             v = assess(0.5 * (x1 + x2), 0.5 * (y1 + y2), float(w), float(h),
                        float(K[0][0]) * sx, float(K[1][1]) * sy)
         except Exception:                                        # noqa: BLE001

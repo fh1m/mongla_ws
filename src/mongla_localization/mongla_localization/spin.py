@@ -61,7 +61,13 @@ def spin(*nodes, classic=None) -> None:
     for n in nodes:
         ex.add_node(n)
     nodes[0].get_logger().info(f'[EXEC ] spinning on the {name} executor')
+    from rclpy.executors import ExternalShutdownException
     try:
         ex.spin()
+    except ExternalShutdownException:
+        # Ctrl-C on Jazzy: the signal handler shut the context down. That is
+        # a stop, not a crash; raising it made every node exit 1 with a
+        # traceback and the launch report each one as died.
+        pass
     finally:
         ex.shutdown()

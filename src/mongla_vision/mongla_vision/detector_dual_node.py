@@ -78,7 +78,7 @@ import os
 import sys
 
 import rclpy
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 
@@ -459,7 +459,9 @@ def main():
         for n in nodes:
             ex.add_node(n)
         ex.spin()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
+        # Ctrl-C (Jazzy raises the second) is a stop: an exit 1 made the
+        # launch report this process died and restart it on a normal stop.
         pass
     finally:
         for n in nodes:
