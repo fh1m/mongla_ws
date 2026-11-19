@@ -139,6 +139,10 @@ def detect(files, cols, rows):
         if img is None:
             continue
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        if size is not None and gray.shape[::-1] != size:
+            # One K describes one resolution; mixing them fits neither.
+            raise ValueError(f'{os.path.basename(f)} is {gray.shape[::-1]}, the '
+                             f'images before it are {size}: one size per run')
         size = gray.shape[::-1]
         ok, c = cv2.findChessboardCorners(gray, (cols, rows), FIND)
         if not ok:
@@ -722,8 +726,9 @@ def main() -> int:
                 out.update({k: v for k, v in json.loads(identity_json).items()
                             if k in ('usb_vid', 'usb_pid', 'usb_serial',
                                      'card', 'bus')})
-            except Exception:
-                pass
+            except Exception as exc:
+                print(f"  WARNING: --identity is not JSON ({exc}); the file "
+                      f"carries no USB identity")
 
     if air_note:
         out['air_fov_note'] = air_note
