@@ -120,6 +120,29 @@ then each finding checked against the code before anything changed.
 | `top_k` | the lock restated 1024 beside both backends' defaults | FIXED: the defaults are used |
 | `fps` | a non-zero `fps:=` on `vision.launch` also caps publishing | not a defect at the default (0); noted |
 
+## Live run on Kutum, 2026-11-19
+
+The whole of `vision_pi.launch.py`, on the release after the second read,
+with both real cameras and no board (`paused:=false`; the launch default
+starts both detectors paused for the mission to resume). Every output topic
+exists (50, once discovery has had six seconds). Rates, measured while 22
+rate-checkers loaded the Pi, so low:
+
+| | camera | detections | lock | tracks |
+|---|---|---|---|---|
+| forward, Fantech in evening light | 11.4 fps | 15.0 Hz | 15.0 Hz | 15.0 Hz |
+| downward, Sonix | 85 fps | 31.4 Hz (56.8 with 2 checkers) | 43.0 Hz | 31.5 Hz |
+
+Silent, each for a reason that is not a defect: `velocity` (flow refuses
+without `pool_depth_m`, and says so as an ERROR), `floor_height` (needs the
+board's barometer), `target_pose` and `correspondences` (need a prop the model
+knows in view; the bench has none). Two defects, both fixed (B-123): a Ctrl-C
+interrupted every node's teardown, inside the Hailo's release in the
+detector, and every launch printed a tracker clamp warning its own defaults
+caused. The dead-code sweep finds one module with no live importer,
+`trigger_stamps.py`, which waits on the board's camera trigger (upstream ask
+`pr-w`) and says so where the guard lists it.
+
 ## Cameras
 
 The Fantech (colour, USB 2) is the forward camera and the Sonix global-shutter mono is the

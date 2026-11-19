@@ -71,3 +71,21 @@ def spin(*nodes, classic=None) -> None:
         pass
     finally:
         ex.shutdown()
+
+
+def deaf_to_ctrl_c() -> None:
+    """Ignore further SIGINT while a node tears down.
+
+    A Ctrl-C in a terminal reaches every process twice: the terminal signals
+    the whole process group, and `ros2 launch` forwards its own. The first
+    stops the spin; the second landed inside `destroy_node()` and raised
+    KeyboardInterrupt there, part-way through releasing what the node holds
+    (on Kutum, 2026-11-19, inside the Hailo VDevice's `__exit__`), and the
+    node exited -2, which the launch reports as a death. Call it first in the
+    `finally` that tears down. The launch still escalates to SIGTERM and
+    SIGKILL if a teardown hangs, so nothing can outlive a stop.
+    """
+    import signal
+    import threading
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
