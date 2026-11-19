@@ -971,8 +971,8 @@ same gate clip. The detection-rung share must rise well above 20 %.
 `composed_lock_harness.py` on archive `gate.mkv` (60 s, conf 0.45, forward
 detector and ladder composed on one VDevice) held the **detection rung 100 %**
 of the time, against 20 % with the diverged build; 29.8 Hz published, 0
-XFeat calls raised. Its warning that all eight references "collapsed together"
-is the clip's own camera blur, not this fix.
+XFeat calls raised. The run also logged the lock's "camera looks degraded, 8/8
+references collapsed together" warning; its cause was not investigated.
 
 ### B-61: the Hailo detector ran on colour-swapped frames `REPRODUCED 2026-09-25` **FIXED 2026-09-25**
 
