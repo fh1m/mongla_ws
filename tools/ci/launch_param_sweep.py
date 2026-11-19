@@ -11,8 +11,8 @@ Found on its first run, in work from the same session that wrote it:
 `lock_node` declares `act_conf` -- the B-59 acting bar, the thing that stops
 the ladder locking onto open water -- and `vision_pi.launch.py` passed six
 parameters, none of them that one. The bar a pool day would want to raise was
-the bar a pool day could not reach. `anchor_xfeat_hef` and
-`anchor_semi_dense` were in the same state.
+the bar a pool day could not reach. `anchor_xfeat_hef` was in the same
+state.
 
 What is *not* a defect, so the output is not over-read:
 

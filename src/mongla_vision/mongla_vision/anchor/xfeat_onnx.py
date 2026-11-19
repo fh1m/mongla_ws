@@ -108,45 +108,105 @@ def _argmax0(sim):
         return sim.argmax(axis=0)
 
 
+def reliability_at(rel, pts, w: int, h: int) -> np.ndarray:
+    """XFeat's reliability map (1, 1, h/8, w/8) read at keypoints in input pixels.
+
+    Exactly upstream's sampling (`InterpolateSparse2d('bilinear')`):
+    coordinates normalised by (w-1, h-1), `grid_sample` with
+    align_corners=False and zeros outside the map.
+    """
+    r = np.asarray(rel, np.float32).reshape(rel.shape[-2], rel.shape[-1])
+    rh, rw = r.shape
+    u = pts[:, 0].astype(np.float64) * rw / (w - 1) - 0.5
+    v = pts[:, 1].astype(np.float64) * rh / (h - 1) - 0.5
+    x0 = np.floor(u).astype(np.int64)
+    y0 = np.floor(v).astype(np.int64)
+    out = np.zeros(len(pts), np.float64)
+    for dx in (0, 1):
+        for dy in (0, 1):
+            xi, yi = x0 + dx, y0 + dy
+            wgt = (1.0 - np.abs(u - xi)) * (1.0 - np.abs(v - yi))
+            ok = (xi >= 0) & (xi < rw) & (yi >= 0) & (yi < rh)
+            out[ok] += wgt[ok] * r[yi[ok], xi[ok]]
+    return out.astype(np.float32)
+
+
+_CUBIC_A = -0.75        # torch's bicubic kernel (grid_sample, upsample_bicubic2d)
+
+
+def _cubic_weights(t):
+    """Weights of the four taps at offsets -1, 0, 1, 2 for fraction `t`."""
+    a = _CUBIC_A
+    def near(x):            # |x| <= 1
+        return ((a + 2) * x - (a + 3)) * x * x + 1
+    def far(x):             # 1 < |x| < 2
+        return ((a * x - 5 * a) * x + 8 * a) * x - 4 * a
+    return far(t + 1), near(t), near(1 - t), far(2 - t)
+
+
+def sample_bicubic(fmap, pts, w: int, h: int) -> np.ndarray:
+    """`fmap` (C, h/8, w/8) at points in input pixels -> (N, C), as upstream's
+    `InterpolateSparse2d('bicubic')`: torch grid_sample, align_corners=False,
+    zero padding, coordinates normalised by (w-1, h-1)."""
+    c, fh, fw = fmap.shape
+    u = pts[:, 0].astype(np.float64) * fw / (w - 1) - 0.5
+    v = pts[:, 1].astype(np.float64) * fh / (h - 1) - 0.5
+    x0 = np.floor(u).astype(np.int64)
+    y0 = np.floor(v).astype(np.int64)
+    wx = _cubic_weights(u - x0)
+    wy = _cubic_weights(v - y0)
+    out = np.zeros((len(pts), c), np.float64)
+    for j in range(4):
+        yi = y0 + j - 1
+        oky = (yi >= 0) & (yi < fh)
+        for i in range(4):
+            xi = x0 + i - 1
+            ok = oky & (xi >= 0) & (xi < fw)
+            if ok.any():
+                wgt = (wy[j] * wx[i])[ok]
+                out[ok] += wgt[:, None] * fmap[:, yi[ok], xi[ok]].T
+    return out.astype(np.float32)
+
+
 def keypoints_and_descriptors(feats, kpt_logits, det_thresh: float,
-                              top_k: int) -> Tuple[np.ndarray, np.ndarray]:
+                              top_k: int, rel=None) -> Tuple[np.ndarray, np.ndarray]:
     """Keypoints (N, 2) in input pixels and unit descriptors (N, 64).
 
     Both XFeat backends call this on their raw heads, so the CPU and the
     chip cannot drift apart in how a keypoint is picked or described.
+
+    With `rel` (the third head), the top-k is taken by keypoint probability
+    times reliability, as upstream's detectAndCompute does; without it, by
+    keypoint probability alone. They differ only when NMS leaves more than
+    `top_k` (tools/studies/xfeat_reliability.py).
     """
     score = _pixel_shuffle_scores(kpt_logits[0])
     kpts = _nms(score, det_thresh)
+    # Upstream reads each keypoint's score with grid_sample 'nearest' over a
+    # (w-1)-normalised grid, which puts the last column and row outside the
+    # map: they score 0 and `valid = scores > 0` drops them. Kept, they were
+    # the only keypoints our set and upstream's disagreed on.
+    hh, ww = score.shape
+    kpts = kpts[(kpts[:, 0] < ww - 1) & (kpts[:, 1] < hh - 1)]
     if len(kpts) == 0:
         return np.zeros((0, 2), np.float32), np.zeros((0, 64), np.float32)
     if len(kpts) > top_k:
         s = score[kpts[:, 1], kpts[:, 0]]
+        if rel is not None:
+            s = s * reliability_at(rel, kpts, score.shape[1], score.shape[0])
         kpts = kpts[np.argsort(-s)[:top_k]]
 
-    # Descriptors live at 1/8 resolution; sample them at the keypoints.
-    #
-    # Bilinear, not nearest. Nearest-neighbour was tried first and it is
-    # not a rounding detail: measured against torch XFeat on the same
-    # frames it returned ~55 % of the inliers (Mirpur gate 119 vs 260,
-    # clear torpedo 262 vs 445) while finding the SAME 1024 keypoints and
-    # still clearing the 15-inlier bar -- i.e. it degraded quietly, which
-    # is the only way this kind of port ever fails. A keypoint sits
-    # anywhere inside its 8x8 cell; snapping its descriptor to the cell
-    # centre throws away exactly the sub-cell precision the matcher scores
-    # on.
-    f = feats[0]                                   # (64, h/8, w/8)
-    _, fh, fw = f.shape
-    # keypoint pixel -> continuous descriptor-grid coordinate (cell centres
-    # are at 0.5 in grid units, hence the -0.5 after scaling)
-    gxf = np.clip(kpts[:, 0] / _CELL - 0.5, 0, fw - 1)
-    gyf = np.clip(kpts[:, 1] / _CELL - 0.5, 0, fh - 1)
-    x0 = np.floor(gxf).astype(np.int32); x1 = np.minimum(x0 + 1, fw - 1)
-    y0 = np.floor(gyf).astype(np.int32); y1 = np.minimum(y0 + 1, fh - 1)
-    wx = (gxf - x0).astype(np.float32); wy = (gyf - y0).astype(np.float32)
-    desc = (f[:, y0, x0].T * ((1 - wx) * (1 - wy))[:, None]
-            + f[:, y0, x1].T * (wx * (1 - wy))[:, None]
-            + f[:, y1, x0].T * ((1 - wx) * wy)[:, None]
-            + f[:, y1, x1].T * (wx * wy)[:, None]).astype(np.float32)
+    # Descriptors live at 1/8 resolution; sample them at the keypoints, the
+    # way upstream does: bicubic, coordinates normalised by (w-1, h-1),
+    # zeros outside the map. Nearest returned ~55 % of torch XFeat's inliers;
+    # bilinear, the next choice here, left 10.5 % of correct matches and 4
+    # points of precision behind bicubic on the archive truth harness
+    # (measured-bars section 92).
+    # Upstream L2-normalises the map per cell before sampling, then each
+    # sample again; done here too, so the descriptors are upstream's own.
+    f = feats[0]
+    f = f / np.maximum(np.linalg.norm(f, axis=0, keepdims=True), 1e-12)
+    desc = sample_bicubic(f, kpts, score.shape[1], score.shape[0])
     n = np.linalg.norm(desc, axis=1, keepdims=True)
     np.divide(desc, np.maximum(n, 1e-8), out=desc)
     return kpts.astype(np.float32), desc
@@ -192,10 +252,9 @@ class XFeatONNX:
         if gray.shape[:2] != (self.h, self.w):
             gray = cv2.resize(gray, (self.w, self.h))
         x = gray.astype(np.float32)[None, None] / 255.0
-        feats, kpt_logits, _heat = self._s.run(None, {self._in: x})
-
+        feats, kpt_logits, rel = self._s.run(None, {self._in: x})
         return keypoints_and_descriptors(feats, kpt_logits, self.det_thresh,
-                                         self.top_k)
+                                         self.top_k, rel=rel)
 
     # -- matching ----------------------------------------------------------- #
     @staticmethod

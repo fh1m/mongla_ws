@@ -181,6 +181,9 @@ class WebcamCamera(Camera):
                            + ', '.join(applied) + extra)
 
     def read(self) -> Tuple[Optional[np.ndarray], FrameMeta]:
+        # OpenCV gives no buffer timestamp on every backend, so the meta below
+        # stamps when the read returns, after the decode. The vehicle's
+        # sources are the V4L2 mailbox, which carries the kernel's stamp.
         ok, frame = self._cap.read()
         meta = FrameMeta(
             frame_index=self._idx,

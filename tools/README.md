@@ -198,6 +198,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `weak_box_persistence.py` | Does sub-threshold evidence persist WHILE THE TARGET IS STILL IN SIGHT? Track-before-detect postpones the threshold: a target too dim to clear a per-frame bar is accumulated across frames until the ... |
 | `xfeat_finetune_score.py` | Did fine-tuning on our water actually help? Scored on a HELD-OUT venue. |
 | `xfeat_finetune_verdict.py` | Did the fine-tune help, or did it learn OUR POOLS? The decisive test. |
+| `xfeat_reliability.py` | Does XFeat's reliability head pick better keypoints for the anchor? XFeat has three heads. |
 | `xfeat_settings_sweep.py` | Find XFeat's best operating point FOR THIS VEHICLE, on our own footage. |
 
 ## Shared libraries

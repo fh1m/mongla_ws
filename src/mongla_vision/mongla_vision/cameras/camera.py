@@ -42,9 +42,13 @@ import numpy as np
 class FrameMeta:
     """Per-read metadata. Filled in by the source on every read() call.
 
-    `stamp_monotonic` is `time.monotonic()` at capture; used for FPS and
-    staleness checks. `stamp_wall` is `time.time()` and is what we put
-    on the ROS Image header.
+    `stamp_monotonic` is `time.monotonic()` for when the frame was taken; used
+    for FPS and staleness checks. `stamp_wall` is the same instant on the wall
+    clock and is what we put on the ROS Image header. How close "taken" is to
+    the shutter depends on the source: the V4L2 mailbox (the vehicle's) uses
+    the kernel's buffer timestamp; the OpenCV `webcam` source has none and
+    stamps when `read()` returns, after the decode (a development source,
+    in no launch file).
     """
     frame_index:     int   = 0
     stamp_monotonic: float = field(default_factory=time.monotonic)

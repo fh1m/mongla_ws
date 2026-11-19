@@ -507,6 +507,53 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-120: the localiser published a pose before it had any input `READ 2026-11-19` **FIXED 2026-11-19**
+
+**What.** `/mongla/odom` is published from a 10 Hz timer. Before the first
+input it carried the filter's initial state, the origin, stamped `now()`: a
+confident pose describing nothing, with a stamp that moved, so the lock's
+freshness gate (measured-bars section 91) passed it, and with the board clock
+mapped the manager's position uplink would have forwarded it.
+
+**Fix.** No input, no odometry. Guard:
+`test_localization_node.py::test_no_input_publishes_no_odometry`.
+
+### B-119: two values the vision stack computed and nothing read `READ 2026-11-19` **FIXED 2026-11-19**
+
+**What.** The lock kept the frame-edge assessment in `_vis_state` and only a
+test read it; the warning the operator sees printed the state and the margin
+but not the bearing the test checked, so the corrected bearing (the grid
+scaling fixed beside B-118) reached no one. And `xfeat_hailo` kept the HEF's
+reliability head as `last_reliability`, read by nothing since it was added.
+
+**Fix.** The warning prints `bearing=` and the tests read it from the
+warning; `_vis_state` is gone. The reliability head now ranks the keypoints on
+both backends, as upstream XFeat does (B-121).
+
+### B-121: the anchor's XFeat was not upstream's, and semi-dense was scored by its own fit `READ 2026-11-19` **FIXED 2026-11-19**
+
+**What.** Three silent departures from upstream `detectAndCompute`: the top-k
+ranked by keypoint probability without the reliability head; descriptors
+sampled bilinearly from the raw map instead of bicubically from the
+normalised one; keypoints kept on the last row and column. Together they cost
+the anchor 28 % of its correct matches against known homographies. Separately,
+`anchor_semi_dense` was justified by 2.1-2.6x MAGSAC inliers, a count the fit
+produces from the matches it is judging; against the truth it fits the view
+change half as often as sparse.
+
+**Fix.** The shared `keypoints_and_descriptors` follows upstream exactly
+(16 of 16 real frames, descriptors to 8.8e-7), and both backends pass the
+head. Bank files move to version 2, so a bank of the old descriptors is
+refused and relearnt. Semi-dense is removed. Numbers and the rejected
+alternatives: measured-bars section 92.
+
+**Guards.** `test_xfeat_is_upstream.py` (upstream's own answer, recorded;
+injection-verified for each behaviour); the study's `--self-test`.
+
+**How it survived.** Every earlier XFeat number was an inlier count, which
+rises with any change that makes matches agree with each other, right or not.
+The comment that justified bilinear compared it only with nearest.
+
 ### B-118: the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame `READ 2026-11-18` **FIXED 2026-11-18**
 
 **What.** The anchor resizes every frame to its backend grid (XFeat, 320x240)

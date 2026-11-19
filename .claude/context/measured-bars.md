@@ -155,6 +155,7 @@ is how `recommend()` happened.
 - [89. FLOW IN THE CAMERA'S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18)](#89-flow-in-the-cameras-process--the-downward-detector-gains-37--flow-keeps-110-frames-a-second-total-cpu-unchanged-2026-11-18)
 - [90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18)](#90-retrodiction-on-the-pi--4-to-6--of-a-core-while-moving-so-it-stays-off-until-its-benefit-is-measured-2026-11-18)
 - [91. ODOMETRY ARRIVAL — the localiser's 10 Hz never gaps past 105.76 ms, so loop closure refuses odometry older than 0.5 s (2026-11-19)](#91-odometry-arrival--the-localisers-10-hz-never-gaps-past-10576-ms-so-loop-closure-refuses-odometry-older-than-05-s-2026-11-19)
+- [92. XFEAT AS ITS AUTHORS RUN IT — reliability ranking and bicubic descriptors give the anchor 38 % more correct matches; semi-dense is removed (2026-11-19)](#92-xfeat-as-its-authors-run-it--reliability-ranking-and-bicubic-descriptors-give-the-anchor-38--more-correct-matches-semi-dense-is-removed-2026-11-19)
 <!-- contents:end -->
 
 ---
@@ -8299,7 +8300,73 @@ runs; a dropped board link would keep messages on time around a position that
 stopped moving. So the age runs from the last time the stamp moved, which a
 live filter does on every message.
 
-**What it cannot see.** A localiser that has had no input at all stamps with
-`now()`, so its stamp moves anyway and passes. This run was that case (no
-board attached), which is why the arrival gaps above stand for the timer and
-nothing more.
+**What it could not see, then.** A localiser that had had no input at all
+stamped with `now()`, so its stamp moved anyway and passed. This run was that
+case (no board attached), which is why the arrival gaps above stand for the
+timer and nothing more. Since 2026-11-19 (BUGS B-120) a localiser with no
+input publishes no odometry at all, so the lock refuses it as never heard.
+
+## 92. XFEAT AS ITS AUTHORS RUN IT — reliability ranking and bicubic descriptors give the anchor 38 % more correct matches; semi-dense is removed (2026-11-19)
+
+The anchor's XFeat had drifted from upstream (verlab/accelerated_features,
+`detectAndCompute`) in three ways nobody had measured: it ranked the top-k by
+keypoint probability alone, ignoring the reliability head the network
+computes for that purpose; it sampled descriptors bilinearly from the raw map,
+where upstream samples bicubically from the per-cell normalised map; and it
+kept keypoints on the last row and column, which upstream's sampling drops.
+
+**Truth, not a fitted inlier count.** `tools/studies/xfeat_reliability.py`
+warps real frames from four archive clips (Mirpur torpedo, torpedo_1, gate;
+the clear RoboSub torpedo) by a homography it chooses, with blur, noise and a
+gain change. A match is correct when it lands within 3 px of where the true
+homography sends it; a fit is right when the anchor's own estimator (MAGSAC,
+3 px, at least 15 inliers) puts the corners within 3 px of the truth, over the
+whole frame and over a centred box 40 % of the frame on a side, the size of a
+held target. 120 pairs, seed 1, ONNX 320x240 on the dev box.
+
+**Bar, written before the run:** adopt a change when correct matches rise by
+at least 5 % and precision falls by no more than a point on any clip.
+
+| method | correct / pair | precision | fit right, frame | fit right, target box |
+|---|---|---|---|---|
+| shipped before (keypoint rank, bilinear) | 168.3 | 44.8 % | -- | -- |
+| keypoint rank, upstream sampling | 187.3 | 48.8 % | 42.5 % | 56.7 % |
+| **reliability rank, upstream sampling (shipped)** | **232.6** | **55.9 %** | **51.7 %** | **61.7 %** |
+| semi-dense, every cell centre (was `anchor_semi_dense`) | 201.4 | 36.1 % | 25.8 % | 38.3 % |
+| upstream sparse, torch | 229.4 | 56.9 % | 45.8 % | 61.7 % |
+| upstream XFeat*, two scales and the refinement MLP | 216.6 | 82.6 % | 60.0 % | 55.0 % |
+| upstream XFeat*, one scale | 136.8 | 74.2 % | 40.0 % | 52.5 % |
+| upstream sparse + LighterGlue matcher | 272.3 | 78.5 % | 59.2 % | 69.2 % |
+
+Reliability alone, against keypoint rank with the same sampling: +24.2 %
+correct, precision up on every clip (4 to 7 points); NMS leaves more than 1024
+keypoints on 97 % of frames, so the ranking decides the set almost always.
+Bicubic alone, against bilinear with reliability: +10.5 % correct, +4.1
+points. Normalising the map first changes nothing measurable (231.9 against
+231.8) and is kept so the descriptors are upstream's own.
+
+**On the chip** (Kutum, `XFeatHailo`, 48 pairs from the same clips):
+reliability rank 218.8 correct at 56.3 % against 173.8 at 48.8 % by keypoint
+rank (+25.9 %); detection 16.7 ms a frame including the post-process. The
+quantised chip shares 72 % of its keypoints with ONNX (mean, 12 frames) and
+finds about 5 % fewer correct matches.
+
+**Fidelity.** With upstream's own selection code on the same network output,
+our keypoint set is upstream's on 16 of 16 real frames, and the descriptors
+agree to 8.8e-7. `test_xfeat_is_upstream.py` holds it against upstream's
+answer recorded for seeded heads; each of the four behaviours was removed in
+turn and the test failed.
+
+**Rejected, with the numbers above.** Semi-dense: its "2.1-2.6x inliers" were
+MAGSAC inliers among 8 px cell-centre matches that agree with a 3 px threshold
+without being right; it fits the true view change half as often. Reliability
+as a per-keypoint gate on top of the ranking (bars 0.05 to 0.3): precision
+rises to 77 % but the target-box fit falls from 61.7 % to 40.8 %. The
+inherited settings, moved one at a time (cosine bar 0.7, 0.76, 0.88, none;
+top_k 512, 2048; threshold 0.02, 0.1), are within a pair or two of the shipped
+0.82 / 1024 / 0.05 or worse.
+
+**Open.** LighterGlue is the one option that beats the shipped path on the
+anchor's own measure (+7.5 points on both fits), at 88.3 ms a pair for the
+matcher alone on two dev-box threads; how and where it can run is its own
+measurement.

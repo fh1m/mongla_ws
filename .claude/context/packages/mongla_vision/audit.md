@@ -135,13 +135,13 @@ The read column says whether the file was read line by line in this audit. All 1
 | `anchor/anchor.py` | 314 | vehicle | yes | FIXED: a box on a featureless frame raised instead of snapping nothing |
 | `anchor/bank.py` | 576 | vehicle | yes | FIXED: eviction and clear left per-index scores naming other references |
 | `anchor/bank_lookup.py` | 287 | vehicle | yes | FIXED: an empty search left the previous scores; identity bar docstring quoted the retired 60 |
-| `anchor/bank_store.py` | 111 | vehicle | yes | FIXED: load skipped the scales; a preloaded bank covered no size and its first eviction raised |
+| `anchor/bank_store.py` | 111 | vehicle | yes | FIXED: load skipped the scales; a preloaded bank covered no size and its first eviction raised. Bank version 2: a bank of pre-upstream descriptors is refused (B-121) |
 | `anchor/geometry.py` | 223 | vehicle | yes | works; never runs on the vehicle (the lock passes no K), recorded |
 | `anchor/health.py` | 186 | vehicle | yes | works; thresholds declared, reported only |
 | `anchor/loop_closure.py` | 291 | vehicle | yes | FIXED: offset centre was a 320x240 constant; required argument now |
 | `anchor/pose.py` | 368 | other packages | yes | FIXED: the ambiguity gate it accepted was never compared; deleted |
-| `anchor/xfeat_hailo.py` | 224 | vehicle | yes | CHANGED: its copy of the descriptor sampling replaced by the shared one (outputs equal within 9e-8) |
-| `anchor/xfeat_onnx.py` | 286 | vehicle | yes | CHANGED: keypoints and descriptors in one function both backends call; unread logger argument removed |
+| `anchor/xfeat_hailo.py` | 224 | vehicle | yes | CHANGED: its copy of the descriptor sampling replaced by the shared one (outputs equal within 9e-8). FIXED: the reliability head was read and dropped; it now ranks the top-k (+25.9 % correct matches on the chip). Semi-dense removed: it fit the true view change half as often (B-121) |
+| `anchor/xfeat_onnx.py` | 286 | vehicle | yes | CHANGED: keypoints and descriptors in one function both backends call; unread logger argument removed. FIXED: not upstream XFeat (ranking without reliability, bilinear raw descriptors, edge keypoints kept); now upstream's exactly, +38 % correct matches (B-121, measured-bars section 92) |
 | `calibration/__init__.py` | 26 | vehicle + other packages | yes | works |
 | `calibration/binding.py` | 79 | vehicle | yes | works |
 | `calibration/calibrate_node.py` | 401 | CLI tool + other packages | yes | read; FIXED applying a water fit said the stack would use it |
@@ -150,7 +150,7 @@ The read column says whether the file was read line by line in this audit. All 1
 | `calibration/solver.py` | 766 | CLI tool + other packages | yes | read; FIXED mixed-resolution captures fitted one K; a bad --identity is reported. The published K is air only: binding and camera_node refuse a water fit, which would be refracted twice |
 | `camera_node.py` | 931 | vehicle | yes | FIXED: the fps-override warning fired on every V4L2 start; a calibration of another aspect ratio is refused, not stretched |
 | `cameras/__init__.py` | 6 | vehicle + other packages | yes | works |
-| `cameras/camera.py` | 99 | vehicle + other packages | yes | works; docstring corrected (is_healthy drives the reopen watchdog) |
+| `cameras/camera.py` | 99 | vehicle + other packages | yes | works; docstring corrected (is_healthy drives the reopen watchdog), and says what each source stamps: the mailbox the kernel's capture time, the webcam source the read's return |
 | `cameras/discover.py` | 43 | vehicle | yes | works |
 | `cameras/reopen.py` | 82 | vehicle | yes | works |
 | `cameras/ros_topic.py` | 135 | vehicle + other packages | yes | FIXED: wall stamp taken at read, monotonic at arrival |
@@ -203,8 +203,8 @@ The read column says whether the file was read line by line in this audit. All 1
 | `lock_frames.py` | 245 | vehicle | yes | works; act_conf 0.45 rests on a retired model (re-derive per flown model) |
 | `lock_inputs.py` | 246 | vehicle | yes | FIXED: the closure offset measured at a 320x240 constant; now the bank grid centre. FIXED: closure refuses odometry whose input stamp stopped moving (measured-bars section 91) |
 | `lock_node.py` | 349 | vehicle | yes | works; docstring said the score was trust x decay, it is the authority (#78) |
-| `lock_publish.py` | 244 | vehicle | yes | FIXED: field-of-view bearing used backend K on full-frame pixels |
-| `lock_setup.py` | 408 | vehicle | yes | FIXED: releasing target_class stayed on the pinned class (the filter is latched and was dropped while pinned) |
+| `lock_publish.py` | 244 | vehicle | yes | FIXED: field-of-view bearing used backend K on full-frame pixels; the warning now prints the bearing, and `_vis_state`, read only by a test, is gone (B-119) |
+| `lock_setup.py` | 408 | vehicle | yes | FIXED: releasing target_class stayed on the pinned class (the filter is latched and was dropped while pinned). `anchor_semi_dense` removed with the half-port (B-121) |
 | `lock_wiring.py` | 311 | vehicle | yes | works; holds the last single-class filter |
 | `optics.py` | 276 | vehicle + other packages | yes | works; a redundant import removed |
 | `preflight.py` | 133 | vehicle + other packages | yes | works; stale reference to a deleted function removed |

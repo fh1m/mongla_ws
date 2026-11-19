@@ -436,10 +436,11 @@ inliers, and we have never tried it.
 ### 3. The honest ranking of what is left
 
 1. **run it on the chip** (B-62) — 23×, measured, no new maths;
-2. **use the reliability head** — replaces a global cosine bar with a
-   per-keypoint one, using an output we already compute and discard;
-3. **semi-dense mode** when sparse falls below the inlier bar — turbidity is
-   exactly the case it was built for;
+2. **use the reliability head** — DONE 2026-11-19, as upstream uses it: it
+   ranks the top-k, +24 % correct matches. As a per-keypoint gate it loses
+   fits (measured-bars section 92);
+3. **semi-dense mode** — REMOVED 2026-11-19: against known homographies it
+   fits the view change half as often as sparse (section 92);
 4. **ALREADY DONE — this item was wrong.** Checked 2026-09-25: the anchor
    DOES feed the filter. `lock_node` publishes `/mongla/localization/fix`
    (a `PointStamped` carrying the closure position with the producer's own
@@ -490,7 +491,13 @@ frame-to-REFERENCE across seconds and viewpoint change, where the two
 populations may separate differently. That is a different experiment and it
 has not been run — but on the evidence here, nothing should act on this head.
 
-### Semi-dense matching: 2.1–2.6x more inliers, and it needs no new model
+### Semi-dense matching: 2.1–2.6x more inliers, which turned out not to be right
+
+**Retracted 2026-11-19.** The inliers below were MAGSAC's, from the matches it
+was judging. Against known homographies on the same archive clips, semi-dense
+recovers the view change on 25.8 % of pairs (38.3 % on a target-sized box)
+against 51.7 % (61.7 %) for the sparse path, and it was removed. The record
+below is kept as the measurement that misled: measured-bars section 92.
 
 §58 listed semi-dense as the third remaining XFeat idea. It is the first one to
 survive measurement, and it is the largest single improvement to the anchor

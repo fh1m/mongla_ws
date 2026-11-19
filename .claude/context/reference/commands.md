@@ -515,7 +515,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `lane_lines` | `False` |
 | `caustic_suppression` | `True` |
 
-**`mongla_vision/lock_node.py`** — 19 parameters
+**`mongla_vision/lock_node.py`** — 18 parameters
 
 | parameter | default |
 |---|---|
@@ -525,7 +525,6 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `anchor` | `False` |
 | `anchor_model` | `''` |
 | `anchor_xfeat_hef` | `False` |
-| `anchor_semi_dense` | `False` |
 | `anchor_bank` | `''` |
 | `loop_closure` | `False` |
 | `place_period_s` | `_lc.PLACE_PERIOD_S` |

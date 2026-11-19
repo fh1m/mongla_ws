@@ -55,7 +55,9 @@ class StoreMixin:
         z = np.load(path, allow_pickle=True)
         ver = int(z['version'][0])
         if ver != self.SAVE_VERSION:
-            raise ValueError(f'bank version {ver} != {self.SAVE_VERSION}')
+            raise ValueError(f'bank version {ver} != {self.SAVE_VERSION}: its '
+                             f'descriptors were made by a different XFeat '
+                             f'post-process; record the bank again')
         w, h = (int(v) for v in z['backend_wh'])
         if (w, h) != (self._be.w, self._be.h):
             raise ValueError(

@@ -30,7 +30,7 @@
 | G-15 | One-call `format="hailo"` compile + **1 024 in-domain calibration images**, with a guard against the silent COCO128 fallback | SOTA | vision | 4 | 1 | 1 | **20.0** | yes — entirely off-vehicle |
 | G-16 | **Active selection** of which frames a human labels | SOTA | vision | 5 | 1 | 2 | **12.5** | yes — off-vehicle, on the existing archive |
 | G-17 | A **DeepVL-shaped second-opinion velocity model** | SOTA | vision + localization | 5 | 2 | 3 | **8.3** | partly — needs labelled velocity truth |
-| G-18 | XFeat → **XFeat\*** semi-dense in the anchor rung | SOTA | vision | 3 | 1 | 1 | **15.0** | yes — bench, on recorded footage |
+| G-18 | XFeat → **XFeat\*** semi-dense in the anchor rung — **measured 2026-11-19, rejected** (section 92) | SOTA | vision | 3 | 1 | 1 | **15.0** | done — bench, on recorded footage |
 | G-19 | Gate flow health on the **KLT Hessian** we already compute | SOTA | vision | 4 | 1 | 1 | **20.0** | yes — replay recorded caustics footage |
 | G-08 | A model-production pipeline: label → train → compile → verify, timed | OURS | vision | 5 | 2 | 3 | **8.3** | yes — entirely off-vehicle |
 | G-06 | Close the loop from `/lock` to control (`vision.lock_s > 0`) | OURS | vision | 4 | 3 | 2 | **6.7** | partly — bench with a printed target |
@@ -356,6 +356,13 @@ runs at 3 Hz by design, so the headroom exists.
 
 **The falsifier.** Replay recorded blackout footage through both. If anchor survival across our
 measured p90 gap (0.651 s) does not improve, the extra inliers are not buying what we need.
+
+**Measured 2026-11-19 (measured-bars section 92): falsified for this anchor.** Against known
+homographies on our archive, upstream XFeat\* with both scales fits the whole frame more often
+(60.0 % against 51.7 %) but a target-sized region less often (55.0 % against 61.7 %); single
+scale, the form a fixed-size HEF allows, is worse on both. What did pay inside the component:
+the reliability head ranking the top-k and upstream's bicubic descriptors, +38 % correct
+matches. LighterGlue on XFeat is the open lead (+7.5 points on both fits).
 
 ### G-19 — the health metric is one eigenvalue away · `SOTA` · vision
 
