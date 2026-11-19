@@ -10,7 +10,7 @@ with no hardware. Use it to exercise vision verbs (``vision.align`` /
     ros2 launch mongla_vision video.launch.py \\
         fwd_video:=/path/to/gate.mp4 dwn_video:=/path/to/bin.mp4
 
-    # Single video on the forward camera only:
+    # One video, on the forward camera (dwn_video left unset):
     ros2 launch mongla_vision video.launch.py fwd_video:=/path/to/gate.mp4
 
     # Single pass (no loop) for a clean one-shot mission-sequence run:
@@ -106,7 +106,7 @@ def generate_launch_description():
                               description='YOLO model stem for the downward detector.'),
         DeclareLaunchArgument('dwn_classes', default_value='fire,blood',
                               description='Class filter for the downward detector.'),
-        DeclareLaunchArgument('conf',        default_value='0.35',
+        DeclareLaunchArgument('conf',        default_value='0.45',
                               description='Detection confidence threshold (both detectors).'),
         DeclareLaunchArgument('loop',        default_value='true',
                               description='Loop both videos at EOF. true = detections keep flowing '

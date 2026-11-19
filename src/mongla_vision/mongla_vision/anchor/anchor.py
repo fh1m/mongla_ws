@@ -226,18 +226,10 @@ class Anchor:
                 k, d = k[m], d[m]
         self._ref_kpts, self._ref_desc = k, d
         self._ref_shape = (self._be.h, self._be.w)
-        self._ref_gray = gray.copy()
         # Stored in BACKEND pixels, which is the frame `locate()` and the
         # homography both work in.
         self._ref_roi = box
         return int(len(k))
-
-    @property
-    def reference_image(self):
-        """The snapped frame, for display. Kept so an operator can SEE what the
-        lock is matching against -- a number of inliers says the match is good
-        and cannot say good *at what*."""
-        return getattr(self, '_ref_gray', None)
 
     @property
     def reference_roi(self):
@@ -245,7 +237,6 @@ class Anchor:
 
     def clear(self) -> None:
         self._ref_kpts = self._ref_desc = None
-        self._ref_gray = None
         self._ref_roi = None
 
     @property

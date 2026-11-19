@@ -84,6 +84,7 @@ from rclpy.parameter import Parameter
 
 from .camera_node   import CameraNode
 from .detector_node import DetectorNode
+from .detector_params import CONF, NMS_FLOOR
 
 # Parameters that are per-camera. Anything not here is shared by both, which is
 # right for the ones that describe the machine (device, imgsz, half) and for the
@@ -120,18 +121,14 @@ _CAM_DEFAULTS = {
 
 _DEFAULTS = {
     'model_path': 'yolov11n', 'models': '', 'active_model': '', 'classes': '',
-    # 0.45: the bar gate_sharks measured, where empty water stops reading as a
-    # gate (3.2 % of gate-free frames, against 40.8 % at the 0.15 this used to
-    # default to on a retracted INT8 allowance; measured-bars sections 59 and
-    # 66). The launches pass the same number. `hailo.py` reads the active
-    # model's own sidecar and warns when `conf` is off ITS bar, so a model
-    # measured differently says so at load.
-    'conf': 0.45, 'model_conf': '', 'image_topic': '',
+    # The node's own defaults (detector_params), so `ros2 run` and the
+    # composed process start the same detector.
+    'conf': CONF, 'model_conf': '', 'image_topic': '',
     # 0.0 here, so a direct `ros2 run` is the single-node behaviour; the
     # vehicle launch turns it on (vision_pi.launch.py, `assoc_conf`).
     'assoc_conf': 0.0,
     'device': 'auto', 'half': True, 'iou': 0.5, 'imgsz': 640,
-    'nms_floor': 0.05, 'nms_iou': 0.0,
+    'nms_floor': NMS_FLOOR, 'nms_iou': 0.0,
     'max_det': 100, 'publish_contours': True,
     'publish_debug_image': True, 'debug_image_hz': 5.0,
     'alignment_deadband': 0.05, 'paused': False,
@@ -195,9 +192,11 @@ class _Launcher(Node):
                 self.declare_parameter(name, p.value)
 
     def lock_overrides(self, cam: str, camera: str):
+        # Generic `lock_X` first, then this camera's `fwd_lock_X`: rclpy keeps
+        # the LAST override of a name, so the per-camera value wins.
         out = [Parameter('camera', value=camera)]
-        for name in sorted(self._parameters):
-            for prefix in (f'{cam}_lock_', 'lock_'):
+        for prefix in ('lock_', f'{cam}_lock_'):
+            for name in sorted(self._parameters):
                 if name.startswith(prefix):
                     out.append(Parameter(name[len(prefix):],
                                          value=self.get_parameter(name).value))

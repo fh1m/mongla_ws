@@ -148,7 +148,7 @@ def generate_launch_description():
                               description='Registry key to start with (requires models:="...")'),
         DeclareLaunchArgument('classes',       default_value='',
                               description='CSV class filter; empty = all model classes'),
-        DeclareLaunchArgument('conf',          default_value='0.35'),
+        DeclareLaunchArgument('conf',          default_value='0.45'),
         DeclareLaunchArgument('iou',           default_value='0.5'),
         DeclareLaunchArgument('device_cls',    default_value='auto',
                               description='Inference device for a .pt (auto | cuda:0 | cpu); '

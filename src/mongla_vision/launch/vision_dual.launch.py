@@ -41,7 +41,7 @@ Usage:
     ros2 launch mongla_vision vision_dual.launch.py \\
         fwd_video:=/path/gate.mp4 dwn_video:=/path/bin.mp4 paused:=false
 
-Viewer keys: f=forward  d=downward  D=depth-map  (the HUD DISPLAYS only one
+Viewer keys: f=forward  d=downward  q=quit  (the HUD DISPLAYS only one
 camera at a time -- the side-by-side view was removed so it never subscribes both).
 Camera/detector/tracker log at WARN; the viewer logs at INFO.
 
@@ -110,10 +110,10 @@ def generate_launch_description():
                                           'on the downward detector. Empty = single dwn_model.'),
         DeclareLaunchArgument('dwn_classes',  default_value='fire,blood',
                               description='Class filter for the downward detector'),
-        DeclareLaunchArgument('fwd_conf',     default_value='0.35',
+        DeclareLaunchArgument('fwd_conf',     default_value='0.45',
                               description='Uniform conf for the forward detector '
                                           '(every model unless overridden below)'),
-        DeclareLaunchArgument('dwn_conf',     default_value='0.35',
+        DeclareLaunchArgument('dwn_conf',     default_value='0.45',
                               description='Uniform conf for the downward detector'),
         # Per-model conf overrides (CSV name=conf) -- tighten one model without
         # touching the others, e.g. fwd_model_conf:=torpedo_blood_hole=0.55.
@@ -146,12 +146,12 @@ def generate_launch_description():
         # detections with no hardware. Empty = live webcam (back-compat default).
         DeclareLaunchArgument(
             'fwd_topic', default_value='',
-            description='Subscribe this ROS image topic instead of a webcam. '
-                        'Set by the simulator to /mongla/sim/front_camera/image_raw.'),
+            description='Subscribe this ROS image topic instead of a webcam '
+                        '(a replayed bag, for one).'),
         DeclareLaunchArgument(
             'dwn_topic', default_value='',
-            description='Subscribe this ROS image topic instead of a webcam. '
-                        'Set by the simulator to /mongla/sim/bottom_camera/image_raw.'),
+            description='Subscribe this ROS image topic instead of a webcam '
+                        '(a replayed bag, for one).'),
         DeclareLaunchArgument('fwd_video',    default_value='',
                               description='Video file for the FORWARD camera (e.g. a gate clip). '
                                           'Set => forward runs off the file; empty => live webcam.'),
@@ -171,6 +171,12 @@ def generate_launch_description():
         DeclareLaunchArgument('pool_depth_m',    default_value='nan',
                               description='Water depth in metres. REQUIRED with flow:=true -- '
                                           'the node refuses to publish without it.'),
+        # Empty, not the vehicle's file: here the downward source is a webcam
+        # or a clip, and the Sonix calibration would be a plausible focal
+        # length for the wrong lens. flow_node refuses velocity without one.
+        DeclareLaunchArgument('dwn_calibration', default_value='',
+                              description='Calibration JSON of the camera behind the downward '
+                                          'source. REQUIRED with flow:=true.'),
         # HUD readiness: pre-subscribe the distance topics so the panel is live the
         # instant calc_distance('start') fires (no first-switch lag), then the HUD
         # auto-follows back to the last active camera on stop.
@@ -285,6 +291,7 @@ def generate_launch_description():
         parameters=[{
             'camera':       'downward',
             'pool_depth_m': ParameterValue(LaunchConfiguration('pool_depth_m'), value_type=float),
+            'calibration':  LaunchConfiguration('dwn_calibration'),
         }],
         condition=IfCondition(LaunchConfiguration('flow')),
     )

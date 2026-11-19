@@ -244,16 +244,16 @@ class LockWiringMixin:
             # Downward only. A forward bank holds crops of TARGETS -- today's
             # fixture is literally a person walking about -- and matching a
             # moving object is not a vehicle position. The floor does not move.
-            if self._camera != 'downward':
+            if self._cam != 'downward':
                 self.get_logger().warn(
                     '[LOCK ] loop_closure requested on the '
-                    f'{self._camera} camera and REFUSED. A forward bank holds '
+                    f'{self._cam} camera and REFUSED. A forward bank holds '
                     'targets, and a target that moves is not a place. Run it '
                     'on the downward camera.')
                 self._closer_on = False
             else:
                 self.create_subscription(Odometry, '/mongla/odom',
-                                         self._on_odom, _qos.sensor())
+                                         self._on_odom, 10)
                 # The floor's own height, from the tile grating in
                 # `flow_node`. That is a MEASUREMENT of the floor; flow_node
                 # declines to publish the pool_depth arithmetic under this

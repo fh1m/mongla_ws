@@ -4,7 +4,7 @@
 # What the number means. `width_m` is the true width of WHAT THE DETECTOR
 # BOXES, not the prop's largest dimension. `lock_node` snaps its anchor
 # reference to the detection bbox (`self._anchor.snap(gray, roi=det_box)`) and
-# `anchor/pose.py::target_pose` scales that region by
+# `anchor/pose.py::patch_object_points` scales that region by
 # `m_per_px = width_m / w_px`. So for a vertical pole spanning the pool the
 # right number is the POLE DIAMETER, not the span between two poles — using the
 # span would make every range wrong by a fixed factor, in the flattering
@@ -18,7 +18,10 @@
 #
 # What this file is. Only the per-DETECTION-CLASS widths the pose solver
 # consumes, keyed by the class names our models actually emit -- not an arena
-# description. The one copy of each number; nothing else in the stack states it.
+# description. The one copy of each class's number; nothing else in the stack
+# states it. Two classes that are ONE prop share it by YAML alias (`torpedo`,
+# `shaw_fish`); two props that only share a handbook size (the 12 in symbols)
+# each keep their own, so re-measuring one cannot move the other.
 #
 # Every entry carries its source. `measured: true` means we measured the actual
 # competition prop and that number wins over the rulebook's nominal, which is
@@ -320,7 +323,7 @@ robosub:
   # footage against the shipped model's 100 %); it happens to carry these two
   # as well, and a class the detector can emit must have a width or its range,
   # tool-aim and obliquity gate cannot compute.
-  shark:
+  shark: &shark_board
     # The 2 ft x 2 ft board, exactly as `torpedo_board` above -- these classes
     # label the ARTWORK, and the artwork's own size is not in the handbook.
     # So this is the board's width, and it is right ONLY IF the detector
@@ -332,8 +335,4 @@ robosub:
     unquoted: true
     source: "RoboSub 2025/26 handbook 3.2 board size; the ARTWORK size is not
       published, and no one has measured ours"
-  shaw_fish:
-    width_m: 0.6096
-    boxes: whole-board
-    unquoted: true
-    source: "as `shark` -- same board, same caveat"
+  shaw_fish: *shark_board              # the same board, the same caveat

@@ -75,31 +75,45 @@ def main() -> int:
         # and the DFC prints the exact command. Take each one it asks for, add
         # it to the model script and run again, until it quantises.
         import re
-        script, seen = [], set()
+        ranges, first, asked = {}, {}, {}                   # layer -> range in use, first suggestion, times asked
+
+        def _script():
+            return ''.join(f'quantization_param([{l}], force_range_in=[{", ".join(f"{x:.6g}" for x in v)}], '
+                           f'force_range_index=[0,1])\n' for l, v in ranges.items())
         for attempt in range(80):
             r = ClientRunner(har=har_p)
-            r.load_model_script('\n'.join(script) + '\n') if script else None
+            r.load_model_script(_script()) if ranges else None
             try:
                 r.optimize(feed)
                 break
             except Exception as e:                          # AccelerasUnsupportedError
                 # The message holds a generic template ([layer_name]) first and
                 # the command for the failing layer after it; take the latter.
-                cmds = [c for c in re.findall(
-                    r'(quantization_param\(\[[^\]]+\], force_range_in=\[[^\]]+\], '
-                    r'force_range_index=\[[^\]]+\]\))', str(e)) if '[layer_name]' not in c]
-                if not cmds or cmds[-1] in seen:
+                m = [x for x in re.findall(r'quantization_param\(\[([^\]]+)\], force_range_in=\[([^\]]+)\]',
+                                           str(e)) if x[0] != 'layer_name']
+                if not m:
                     print(f'[{name}] stopped on: {str(e)[:600]}')
                     return 1
-                seen.add(cmds[-1])
-                script.append(cmds[-1])
-                print(f'[{name}] attempt {attempt}: {cmds[-1]}')
+                layer, v = m[-1][0], [float(x) for x in m[-1][1].split(',')]
+                # The suggested range can exclude 0 (a softmax output reads
+                # [0.001, 0.026]), which the DFC's own validator refuses and
+                # then reports as KeyError('force_range_in'): every pair holds 0.
+                # A layer asked about again means the suggestion was too small
+                # ("does not support shift delta"); the DFC re-suggests a range
+                # a few percent off the last one, so the range doubles instead.
+                n = asked[layer] = asked.get(layer, 0) + 1
+                if n > 8:
+                    print(f'[{name}] {layer} still refuses at {2 ** 7}x its range: {str(e)[:400]}')
+                    return 1
+                first.setdefault(layer, [min(x, 0.0) if i % 2 == 0 else max(x, 0.0) for i, x in enumerate(v)])
+                ranges[layer] = [x * 2 ** (n - 1) for x in first[layer]]
+                print(f'[{name}] attempt {attempt}: {layer} x{2 ** (n - 1)} {ranges[layer]}')
         else:
             print(f'[{name}] gave up after 80 forced ranges')
             return 1
         r.save_har(opt_p)
-        open(os.path.join(a.dir, f'{name}.model_script.alls'), 'w').write('\n'.join(script) + '\n')
-        print(f'[{name}] quantised in {time.time() - t0:.0f} s with {len(script)} forced ranges')
+        open(os.path.join(a.dir, f'{name}.model_script.alls'), 'w').write(_script())
+        print(f'[{name}] quantised in {time.time() - t0:.0f} s with {len(ranges)} forced ranges')
         return 0
     if a.stage == 'emulate':
         outs = []

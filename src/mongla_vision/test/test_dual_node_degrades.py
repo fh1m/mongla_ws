@@ -234,3 +234,26 @@ def test_a_process_per_camera_builds_only_its_own_camera():
     launcher, built, code = _run(lambda role: MagicMock(), cameras='downward')
     assert built == ['downward'], built
     assert code is None
+
+
+def test_a_per_camera_lock_override_beats_the_generic_one():
+    """`fwd_lock_X` sorts before `lock_X`, and rclpy keeps the last override
+    of a name: built in sorted order, the generic value won (second-pass
+    audit F13). A real node reads what the composed lock would."""
+    import rclpy
+    from types import SimpleNamespace
+    from rclpy.node import Node
+    from mongla_vision.detector_dual_node import _Launcher
+    vals = {'lock_act_conf': 0.30, 'fwd_lock_act_conf': 0.60, 'dwn_lock_act_conf': 0.90}
+    fake = SimpleNamespace(_parameters=vals,
+                           get_parameter=lambda n: SimpleNamespace(value=vals[n]))
+    started = not rclpy.ok()
+    if started:
+        rclpy.init()
+    try:
+        n = Node('t_lock_overrides', parameter_overrides=_Launcher.lock_overrides(fake, 'fwd', 'forward'))
+        assert n.declare_parameter('act_conf', 0.45).value == 0.60
+        n.destroy_node()
+    finally:
+        if started:
+            rclpy.shutdown()

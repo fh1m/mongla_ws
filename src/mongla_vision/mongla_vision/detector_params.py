@@ -6,6 +6,17 @@ Pure functions: no ROS, so each is tested without a node.
 import os
 from typing import Dict
 
+# The detector defaults every entry point shares: the node's own declarations,
+# the composed two-camera process and the launches all read these.
+# 0.45: the bar gate_sharks measured, where empty water stops reading as a
+# gate (3.2 % of gate-free frames against 40.8 % at 0.15; measured-bars
+# sections 59 and 66). `hailo.py` reads the active model's own sidecar and
+# warns when `conf` is off ITS bar, so a model measured differently says so.
+CONF = 0.45
+# The lowest score the Hailo NMS returns; `conf` filters above it. The value
+# the detector configures at load (measured-bars, B-112).
+NMS_FLOOR = 0.05
+
 
 def _split_active(spec: str):
     """`active_model` -> (primary, [secondaries]).
