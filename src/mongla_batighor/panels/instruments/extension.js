@@ -320,7 +320,7 @@ const INSTRUMENTS = {
         const quiet = !(r.hz > 0) || (fin(r.last_s) && r.last_s > 2);
         out.push(kv([r.label,
           quiet ? "silent" : `${num(r.hz, 1, " Hz")}   ${num(r.age_ms_p50, 1)} / ${num(r.age_ms_p95, 1)} ms`,
-          quiet ? "stale" : (r.age_ms_p95 > 100 ? "warn" : "")]));
+          quiet ? "stale" : ""]));
         if (!quiet && fin(r.age_ms_p50)) {
           out.push(el("div", { class: "bar" }, el("b", { style: `width:${Math.min(100, (100 * r.age_ms_p50) / worst)}%` })));
         }
