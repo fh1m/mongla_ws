@@ -65,6 +65,12 @@ def main(argv=None):
         present = {n.lstrip('/') for n in node.get_node_names()}
         # Pause the others FIRST (drop inference before adding the new one), then
         # resume the target -- so the two-inferring window never opens.
+        # Refuse before pausing anything: a typo must not leave every
+        # detector paused and none resumed.
+        target = f'mongla_detector_{args.camera}'
+        if target not in present:
+            print(f'  ERROR: {target} is not running', file=sys.stderr)
+            return 2
         rc = 0
         for cam in known:
             if cam == args.camera:
@@ -76,10 +82,6 @@ def main(argv=None):
             print(f'  pause  {cam:<9s} {"[OK]" if ok else "[--]"}')
             rc = rc or (0 if ok else 1)
 
-        target = f'mongla_detector_{args.camera}'
-        if target not in present:
-            print(f'  ERROR: {target} is not running', file=sys.stderr)
-            return 2
         ok = _set_paused(node, f'/{target}', False, args.timeout)
         print(f'  resume {args.camera:<9s} {"[OK]" if ok else "[--]"}')
         return rc or (0 if ok else 1)
