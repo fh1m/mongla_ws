@@ -8414,14 +8414,57 @@ is not worse, it is more precise, and it is upstream's own code. Semi-dense
 stays rejected (30.8 % against 61.5 %). LighterGlue's 9-point lead on warped
 frames does not appear: it fits less often than the cosine matcher and ties on
 the box, with better precision. Section 93's quality bar is not met on real
-pairs either. A 24-start rerun is in
-`tools/studies/xfeat_real_pairs.py --starts 24`; this paragraph is amended
-with its result.
+pairs either.
 
-**Open.** LighterGlue is the one option that beat the shipped path on the
-warped-frame measure (+7.5 points on both fits), at 88.3 ms a pair for the
-matcher alone on two dev-box threads; how and where it can run is its own
-measurement.
+**The 24-start rerun, and EdgePoint2.** `tools/studies/xfeat_real_pairs.py
+--starts 24 --edgepoint2`: 78 of 504 real pairs survived the truth filter
+(forward and downward clips, gaps of 15, 30 and 60 frames; 3 times the 26
+above). EdgePoint2 (HITCSC, 14 variants exist; T32, S32 and S64 run, 1024
+points, the 5x5 NMS and 4 px border of its own wrapper, our cosine matcher at
+0.5 and 0.82) was scored by a paired bootstrap of 10 000 resamples, bar
+written before the run: a Hailo compile is earned only if the lower 95 % bound
+of its fit-rate difference to shipped is above -5 points, frame and box.
+
+| method (78 pairs) | correct / pair | precision | fit right, frame / box |
+|---|---|---|---|
+| shipped (upstream XFeat) | 359.0 | 56.9 % | 65.4 / 84.6 % |
+| pre-upstream | 330.0 | 52.8 % | 67.9 / 83.3 % |
+| semi-dense | 560.8 | 55.6 % | 34.6 / 67.9 % |
+| LighterGlue, 1024 points | 323.9 | 65.2 % | 57.7 / 83.3 % |
+| EdgePoint2 S64 | 210.2 | 66.8 % | 42.3 / 75.6 % |
+| EdgePoint2 S32 | 207.7 | 66.3 % | 42.3 / 71.8 % |
+| EdgePoint2 T32 | 195.7 | 65.9 % | 41.0 / 71.8 % |
+
+Difference to shipped, frame fit / box fit, points, 95 % interval:
+
+| method | frame fit | box fit |
+|---|---|---|
+| EdgePoint2 S64 | -23.1 [-33.3, -12.8] | -9.0 [-16.7, -2.6] |
+| EdgePoint2 S32 | -23.1 [-33.3, -12.8] | -12.8 [-20.5, -6.4] |
+| EdgePoint2 T32 | -24.4 [-34.6, -15.4] | -12.8 [-20.5, -6.4] |
+| LighterGlue 1024 | -7.7 [-15.4, -1.3] | -1.3 [-5.1, +2.6] |
+| pre-upstream | +2.6 [-3.8, +10.3] | -1.3 [-6.4, +2.6] |
+| semi-dense | -30.8 [-42.3, -19.2] | -16.7 [-26.9, -6.4] |
+
+**Result.** EdgePoint2 is rejected, by a margin no spread rescues: 23 points
+below shipped on the frame fit, with an interval that never comes within 12
+points of the -5 bar, and 150 fewer correct matches a pair. It is more precise
+(66 against 57 %) and cheaper (0.5 to 0.6 GFLOPs against XFeat's 1.33 in the
+authors' table), which is the trade its paper makes, and the anchor needs the
+fit. The two matcher thresholds gave the same numbers. No Hailo parse is
+attempted. This also answers the earlier worry that 26 pairs were too few to
+judge a 1 to 2 point edge: the verdict is not an edge.
+
+The same table moves a second conclusion. LighterGlue at 1024 points, the one
+option that beat shipped on warped frames, is **below shipped on frame fit
+(-7.7, interval excludes zero) and level on the box (-1.3, [-5.1, +2.6])**,
+with higher precision. Section 93's quality bar is not met on real pairs at
+any sample size here, so the Hailo port of LighterGlue is carried on to its
+own emulation bar and a finished result, but it has no measured benefit to
+buy: adopting it would need a case this study does not show.
+
+**Open.** What LighterGlue costs on the chip, if it quantises (bead
+po7.15.1.1), is still worth knowing and is being measured.
 
 **Where the frame goes, on Kutum.** One downward frame through the shipped
 Hailo path, 1024 points, 40 runs: 15.69 ms p50, of which 6.23 ms is the chip
