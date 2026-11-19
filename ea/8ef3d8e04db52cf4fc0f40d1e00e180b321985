@@ -1,0 +1,56 @@
+src/mongla_vision/mongla_vision/camera_node.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 931-932
+.claude/context/perception/detection-continuity.md
+  s_4af8d6f83b24e8::t_5e9dfd1a86942a 58-61
+src/mongla_vision/test/test_tracker_settings_are_honest.py
+  s_4af8d6f83b24e8::t_1c2523925609c1 44-75
+src/mongla_localization/mongla_localization/pnp_node.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 249-250
+src/mongla_localization/mongla_localization/pose_fuse_node.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 167-168
+.claude/context/reference/commands.md
+  s_4af8d6f83b24e8::t_1c5671f23ed833 480-482,534,553
+.claude/context/packages/mongla_vision/audit.md
+  s_4af8d6f83b24e8::t_5bb864c8406b98 123-145
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 466-467
+src/mongla_localization/mongla_localization/localization_node.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 250-251
+src/mongla_localization/mongla_localization/spin.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 74-91
+src/mongla_vision/mongla_vision/calibration/calibrate_node.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 401-402
+src/mongla_vision/test/test_ctrl_c_twice_is_a_clean_stop.py
+  s_4af8d6f83b24e8::t_948031c90984c8 1-54
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_5bb864c8406b98 510-536
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 430-431
+src/mongla_vision/mongla_vision/detector_node.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 662-663
+src/mongla_vision/mongla_vision/tracker_node.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 414-415
+  s_4af8d6f83b24e8::t_1c2523925609c1 197-198
+  s_4af8d6f83b24e8::t_cbc14376da1802 258
+  s_4af8d6f83b24e8::t_f9dcc928e267ad 213-216,259-260,266
+src/mongla_vision/mongla_vision/lock_node.py
+  s_4af8d6f83b24e8::t_3983ff707858d9 344-345
+tools/ci/gen_reference.py
+  s_4af8d6f83b24e8::t_1c5671f23ed833 233-238
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "ea8ef3d8e04db52cf4fc0f40d1e00e180b321985",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
