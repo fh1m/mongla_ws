@@ -158,6 +158,7 @@ is how `recommend()` happened.
 - [92. XFEAT AS ITS AUTHORS RUN IT — +38 % correct matches on warped frames, +8 % on real pairs; semi-dense is removed (2026-11-19)](#92-xfeat-as-its-authors-run-it--38--correct-matches-on-warped-frames-8--on-real-pairs-semi-dense-is-removed-2026-11-19)
 - [93. LIGHTERGLUE ON THE ANCHOR'S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19)](#93-lighterglue-on-the-anchors-cpu--better-fits-but-not-inside-the-333-ms-anchor-cycle-2026-11-19)
 - [94. VISUAL ODOMETRY FROM XFEAT — LK already does it better inside the same solver (2026-11-19)](#94-visual-odometry-from-xfeat--lk-already-does-it-better-inside-the-same-solver-2026-11-19)
+- [95. ONE HAILO-8, THREE NETWORKS — XFeat at the anchor's rate costs the detectors nothing, and scheduler priority buys nothing (2026-11-19)](#95-one-hailo-8-three-networks--xfeat-at-the-anchors-rate-costs-the-detectors-nothing-and-scheduler-priority-buys-nothing-2026-11-19)
 <!-- contents:end -->
 
 ---
@@ -8503,9 +8504,57 @@ On real consecutive frames (no truth; availability only) both fit 100 % of
 sees, LK is four times more accurate, and at large steps XFeat's only
 advantage is a 3-point refusal rate and a shorter tail. XFeat keeps the job
 LK cannot do, finding a place again seconds or minutes later (the anchor and
-loop closure). XFeat's time here is ONNX on the CPU; on the chip it is
-16.7 ms (section 92), which changes the cost, not the accuracy.
+loop closure). XFeat's time here is ONNX on the CPU; on the chip the whole
+frame is 11.4 ms (section 92), which changes the cost, not the accuracy.
 
 **Not tested here**: the image yaw as an observation of the board gyro's bias
 in the localiser. Today it estimates the camera-to-gyro time offset and
 cross-checks the gyro's axis and sign, and the localiser does not read it.
+
+## 95. ONE HAILO-8, THREE NETWORKS — XFeat at the anchor's rate costs the detectors nothing, and scheduler priority buys nothing (2026-11-19)
+
+`tools/bench/hailo_share.py` on Kutum: the shipped `HailoDetector` (forward
+`gate_sharks`, downward `bin_fire_blood`) and `XFeatHailo` on the process's
+one VDevice under ROUND_ROBIN, each in its own thread, paced at its own rate,
+one real downward frame for all, 15 s per condition. Latency is the call,
+submit to result, host decode included.
+
+**Bar, written before the run:** sharing is acceptable when, with XFeat at
+the anchor's 3 Hz, both detectors keep their rate within 2 % and neither
+detector's p90 rises more than 5 ms. Priority is worth setting when, with
+XFeat flat out, it brings the detectors' p90 back within 5 ms of alone.
+
+First run, downward asked for 60 Hz:
+
+| condition | forward Hz, p50 / p90 ms | downward Hz, p50 / p90 ms | XFeat Hz, p50 / p90 ms |
+|---|---|---|---|
+| detectors alone | 30.1, 23.91 / 28.88 | 44.9, 22.74 / 26.32 | |
+| + XFeat at 3 Hz | 30.1, 24.48 / 29.36 | 42.6, 23.11 / 27.43 | 3.1, 26.27 / 30.39 |
+| + XFeat flat out | 30.1, 28.89 / 31.46 | 31.1, 32.23 / 38.57 | 30.1, 32.86 / 40.22 |
+| flat out, detectors at priority 31 | 30.0, 28.82 / 30.28 | 30.7, 32.38 / 38.56 | 29.5, 32.80 / 39.68 |
+
+**FAIL on all three.** The downward detector never reached 60 Hz even alone
+(44.9 Hz): a saturated stream, so any other work comes out of its rate, and
+XFeat at 3 Hz took 5 % of it. A second run, with the downward detector at a
+rate it holds (30 Hz), reported separately and not as a re-scoring:
+
+| condition | forward Hz, p50 / p90 ms | downward Hz, p50 / p90 ms | XFeat Hz, p50 / p90 ms |
+|---|---|---|---|
+| detectors alone | 30.1, 33.03 / 33.49 | 30.1, 20.89 / 29.03 | |
+| + XFeat at 3 Hz | 30.1, 33.11 / 33.79 | 30.1, 20.98 / 25.58 | 3.1, 27.14 / 28.22 |
+| + XFeat flat out | 30.0, 31.96 / 37.98 | 30.1, 27.55 / 32.95 | 28.7, 33.73 / 41.42 |
+| flat out, detectors at priority 31 | 30.0, 29.81 / 39.02 | 30.1, 26.32 / 35.22 | 30.1, 32.94 / 39.17 |
+
+PASS at the anchor's rate and flat out; priority FAIL.
+
+**Result.** A call takes 20 to 33 ms where the chip needs about 10 (the
+comment in `detection/hailo_device.py`) and XFeat's chip share is 6.2 ms
+(section 92): the three networks queue for the host, not for the chip. At
+3 Hz XFeat moves no detector rate and no p90 beyond noise when the detectors
+run at rates they hold. Scheduler priority 31 for the detectors changed
+nothing in either run (p90 within 1.5 ms, once worse), as expected when every
+caller is a blocking thread with one frame in flight: there is never a queue
+for the scheduler to reorder. So the stack sets no priority, and the cost to
+cut is host time per call, not chip time. The downward detector's own 45 Hz
+ceiling with two detectors is the larger finding, and is its own item.
+

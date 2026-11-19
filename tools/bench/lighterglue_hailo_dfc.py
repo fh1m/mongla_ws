@@ -83,14 +83,17 @@ def main() -> int:
                 r.optimize(feed)
                 break
             except Exception as e:                          # AccelerasUnsupportedError
-                m = re.search(r'(quantization_param\(\[[^\]]+\], force_range_in=\[[^\]]+\], '
-                              r'force_range_index=\[[^\]]+\]\))', str(e))
-                if not m or m.group(1) in seen:
-                    print(f'[{name}] stopped on: {str(e)[:400]}')
+                # The message holds a generic template ([layer_name]) first and
+                # the command for the failing layer after it; take the latter.
+                cmds = [c for c in re.findall(
+                    r'(quantization_param\(\[[^\]]+\], force_range_in=\[[^\]]+\], '
+                    r'force_range_index=\[[^\]]+\]\))', str(e)) if '[layer_name]' not in c]
+                if not cmds or cmds[-1] in seen:
+                    print(f'[{name}] stopped on: {str(e)[:600]}')
                     return 1
-                seen.add(m.group(1))
-                script.append(m.group(1))
-                print(f'[{name}] attempt {attempt}: {m.group(1)[:90]}...')
+                seen.add(cmds[-1])
+                script.append(cmds[-1])
+                print(f'[{name}] attempt {attempt}: {cmds[-1]}')
         else:
             print(f'[{name}] gave up after 80 forced ranges')
             return 1
