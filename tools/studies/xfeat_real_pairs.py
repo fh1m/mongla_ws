@@ -22,6 +22,17 @@ at least 15 % and on target-box fits by at least 3 points, (2) semi-dense
 fits fewer pairs than shipped, (3) LighterGlue at 1024 fits more target
 boxes than shipped. Any of the three failing is reported as a reversal.
 
+EdgePoint2 (`--edgepoint2 DIR`, a clone of HITCSC/EdgePoint2 with its
+weights), float on the CPU at 1024 points and mutual cosine matching at the
+authors' 0.5 and at ours. Its published edge over XFeat is 1-2 AUC points,
+inside what a few dozen pairs can resolve, and its case is cost (about half
+XFeat's compute), so the test is non-inferiority with a spread. Every kept
+pair's outcome is paired against shipped on the same pair and resampled
+(10 000 paired bootstraps). Bar, written before its first run: a model earns
+a Hailo compile if, for both the whole-frame and the target-box fit, the
+lower end of the 95 % interval of (its fit rate - shipped's) is above -5
+points. A point estimate alone decides nothing.
+
 The chains favour no method by construction except that both chain
 matchers are themselves candidates; a step at 3 frames is matched right by
 every method, which `--self-test` cannot show and the agreement filter is
@@ -102,11 +113,11 @@ def run(a) -> int:
     w, h = net.w, net.h
     match = xf.XFeatONNX.match
 
-    def cos(f0, f1):
+    def cos(f0, f1, thr=0.82):
         (k0, d0), (k1, d1) = f0, f1
         if len(d0) < 2 or len(d1) < 2:
             return k0[:0], k1[:0]
-        i0, i1 = match(d0, d1)
+        i0, i1 = match(d0, d1, min_cossim=thr)
         return k0[i0], k1[i1]
 
     def glue(f0, f1):
@@ -115,16 +126,21 @@ def run(a) -> int:
         return k0[i0], k1[i1]
 
     methods = {
-        'pre-upstream': lambda hA, hB: cos(old.keypoints_and_descriptors(hA[0], hA[1], 0.05, 1024),
+        'pre-upstream': lambda hA, hB, *_: cos(old.keypoints_and_descriptors(hA[0], hA[1], 0.05, 1024),
                                           old.keypoints_and_descriptors(hB[0], hB[1], 0.05, 1024)),
-        'shipped': lambda hA, hB: cos(xr.detect(xf, hA, True), xr.detect(xf, hB, True)),
-        'semi-dense': lambda hA, hB: cos(xr.dense(hA), xr.dense(hB)),
-        'LighterGlue 1024': lambda hA, hB: glue(xr.detect(xf, hA, True), xr.detect(xf, hB, True)),
-        'LighterGlue 768': lambda hA, hB: glue(xr.detect(xf, hA, True, top_k=768),
+        'shipped': lambda hA, hB, *_: cos(xr.detect(xf, hA, True), xr.detect(xf, hB, True)),
+        'semi-dense': lambda hA, hB, *_: cos(xr.dense(hA), xr.dense(hB)),
+        'LighterGlue 1024': lambda hA, hB, *_: glue(xr.detect(xf, hA, True), xr.detect(xf, hB, True)),
+        'LighterGlue 768': lambda hA, hB, *_: glue(xr.detect(xf, hA, True, top_k=768),
                                                xr.detect(xf, hB, True, top_k=768)),
     }
+    for cfg in (('T32', 'S32', 'S64') if a.edgepoint2 else ()):
+        ep = _edgepoint2(a.edgepoint2, cfg)
+        for thr in (0.5, 0.82):
+            methods[f'EdgePoint2 {cfg} @{thr}'] = (
+                lambda hA, hB, fA, fB, ep=ep, thr=thr: cos(ep(fA), ep(fB), thr))
     A = archive_root()
-    stats = {}
+    stats, per = {}, {}
     kept = tried = 0
     for group, clips in (('downward', DOWNWARD), ('forward', FORWARD)):
         for rel in clips:
@@ -159,11 +175,12 @@ def run(a) -> int:
                     kept += 1
                     T = (Hg + Hc) / 2
                     for name, fn in methods.items():
-                        p0, p1 = fn(heads[0], heads[g])
+                        p0, p1 = fn(heads[0], heads[g], fr[0], fr[g])
                         n, c = xr.score_points(p0, p1, T)
                         H, _ = fit(p0, p1)
                         rf = H is not None and corner_err(H, T, w, h) < PX
                         rb = H is not None and corner_err(H, T, w, h, roi=True) < PX
+                        per.setdefault(name, []).append((c, rf, rb))
                         st = stats.setdefault((group, g, name), [0, 0, 0, 0, 0])
                         st[0] += 1
                         st[1] += n
@@ -196,7 +213,64 @@ def run(a) -> int:
                      (v2, 'semi-dense fits fewer pairs than shipped'),
                      (v3, 'LighterGlue fits more target boxes than shipped')):
         print(('HOLDS    ' if ok else 'REVERSED ') + what)
+    base = np.array(per['shipped'], float)
+    rng = np.random.default_rng(0)
+    idx = rng.integers(0, len(base), (10000, len(base)))
+    print(f'paired against shipped, {len(base)} pairs, 95 % bootstrap interval of the difference:')
+    earns = []
+    for m in per:
+        if m == 'shipped':
+            continue
+        d = np.array(per[m], float) - base
+        lo_hi = [np.percentile(d[idx, j].mean(1), (2.5, 97.5)) for j in range(3)]
+        mean = d.mean(0)
+        print(f'  {m:22s} correct {mean[0]:+7.1f} [{lo_hi[0][0]:+.1f}, {lo_hi[0][1]:+.1f}]  '
+              f'fit {100 * mean[1]:+5.1f} [{100 * lo_hi[1][0]:+.1f}, {100 * lo_hi[1][1]:+.1f}] pt  '
+              f'box {100 * mean[2]:+5.1f} [{100 * lo_hi[2][0]:+.1f}, {100 * lo_hi[2][1]:+.1f}] pt')
+        if m.startswith('EdgePoint2') and lo_hi[1][0] > -0.05 and lo_hi[2][0] > -0.05:
+            earns.append(m)
+    if any(m.startswith('EdgePoint2') for m in per):
+        print('VERDICT EdgePoint2 ' + (f'earns a Hailo compile: {", ".join(earns)}' if earns
+                                       else 'does not earn a Hailo compile (non-inferiority not shown)'))
     return 0
+
+
+def _edgepoint2(root, cfg, top_k=1024):
+    """EdgePoint2 `cfg` from a clone of HITCSC/EdgePoint2, as its own wrapper
+    runs it: input resized to a multiple of 32, 5x5 max-pool NMS, a 4-pixel
+    border, score above -5, top-k by score, descriptors sampled bilinearly
+    and L2-normalised, keypoints scaled back. Returns gray -> (kpts, desc)."""
+    import torch
+    import torch.nn.functional as F
+    sys.path.insert(0, root)
+    from model.model import EdgePoint2
+    from edgepoint2 import EdgePoint2Wrapper
+    net = EdgePoint2(**EdgePoint2Wrapper.cfgs[cfg[:3]])
+    net.load_state_dict(torch.load(os.path.join(root, 'weights', f'{cfg}.pth'), 'cpu',
+                                   weights_only=True))
+    net.eval()
+    mp = torch.nn.MaxPool2d(5, 1, 2)
+
+    @torch.inference_mode()
+    def run(gray):
+        oh, ow = gray.shape
+        nh, nw = oh // 32 * 32, ow // 32 * 32
+        x = torch.from_numpy(gray).float()[None, None] / 255.0
+        if (nh, nw) != (oh, ow):
+            x = F.interpolate(x, (nh, nw), mode='bilinear', align_corners=True)
+        desc, score = net(x)
+        keep = (score == mp(score)) & (score > -5)
+        keep[..., :4, :] = keep[..., -4:, :] = False
+        keep[..., :, :4] = keep[..., :, -4:] = False
+        yx = keep[0, 0].nonzero().float()
+        sc = score[0, 0][keep[0, 0]]
+        top = sc.topk(min(top_k, len(sc))).indices
+        k = yx[top][:, [1, 0]]
+        grid = ((k + 0.5) / torch.tensor([nw, nh]) * 2 - 1).reshape(1, -1, 1, 2)
+        d = F.normalize(F.grid_sample(desc, grid, mode='bilinear', align_corners=False), 2, 1)
+        k = k * torch.tensor([ow / nw, oh / nh])
+        return k.numpy().astype(np.float32), d[0, :, :, 0].T.contiguous().numpy()
+    return run
 
 
 def main(argv=None) -> int:
@@ -205,6 +279,7 @@ def main(argv=None) -> int:
     ap.add_argument('--glue', required=True)
     ap.add_argument('--old', required=True, help='xfeat_onnx.py from before section 92')
     ap.add_argument('--starts', type=int, default=12, help='start frames per clip')
+    ap.add_argument('--edgepoint2', default='', help='clone of HITCSC/EdgePoint2 (with weights)')
     return run(ap.parse_args(argv))
 
 
