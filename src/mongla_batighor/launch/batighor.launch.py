@@ -79,9 +79,14 @@ def generate_launch_description():
     # log (helm.py). The terminal does not need it.
     helm = partial(Node, package='mongla_batighor', executable='helm',
                    name='batighor_helm', output='screen')
+    # Photons to thrust: each stage's rate and age where it is seen (chain.py),
+    # for the Chain view.
+    chain = partial(Node, package='mongla_batighor', executable='chain',
+                    name='mongla_chain', output='screen')
     return LaunchDescription(args + settings + [
         *respawning(bridge, 'the Foxglove bridge'),
         *respawning(serve, 'the Batighor web app'),
         *respawning(overlay, 'the Batighor overlay'),
         *respawning(helm, 'the Batighor helm'),
+        *respawning(chain, 'the Batighor chain meter'),
     ])

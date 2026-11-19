@@ -71,6 +71,10 @@ PUBLISHED_UNREAD = {
         'for a human: which perception stages have a publisher, per camera, '
         'from mongla_batighor/overlay.py once a second; the Vision instrument '
         '(panels/instruments/extension.js, STAGES_TOPIC) draws it.',
+    '/mongla/batighor/chain':
+        'for a human: each chain stage\'s rate and age, from '
+        'mongla_batighor/chain.py twice a second; the Chain instrument '
+        '(panels/instruments/extension.js) draws it.',
     '/mongla/localization/aiding':
         'a DIAGNOSTIC of which aiding sources the filter accepted. Read in a '
         'bag after a run, never in the loop.',
