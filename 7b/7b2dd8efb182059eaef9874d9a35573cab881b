@@ -1,0 +1,101 @@
+src/mongla_vision/test/test_detector_node_stops.py
+  s_4af8d6f83b24e8::t_3739af749ebecc 1-53
+src/mongla_vision/launch/vision.launch.py
+  s_4af8d6f83b24e8::t_ed4ac9b903be5b 151
+src/mongla_vision/launch/video.launch.py
+  s_4af8d6f83b24e8::t_ec6f80d4160958 13
+  s_4af8d6f83b24e8::t_ed4ac9b903be5b 109
+src/mongla_vision/mongla_vision/detector_setup.py
+  s_4af8d6f83b24e8::t_52298d59c8bdf7 8,33,62,66,304
+src/mongla_vision/test/test_dual_node_degrades.py
+  s_4af8d6f83b24e8::t_7b5d3f57674eb8 237-259
+src/mongla_vision/mongla_vision/detector_node.py
+  s_4af8d6f83b24e8::t_8415c63b2ccb45 377-382,479,481,484-490,497-498,519,537
+  s_4af8d6f83b24e8::t_a50c651ae2f5de 480,482-483,491-496
+src/mongla_vision/test/test_detector_conf_is_one_number.py
+  s_4af8d6f83b24e8::t_ed4ac9b903be5b 1-31
+src/mongla_vision/test/test_tool_geometry.py
+  s_4af8d6f83b24e8::t_bcafa466bbc412 77,90,98-104
+  s_4af8d6f83b24e8::t_1cb85037b16c4d 105-108
+src/mongla_vision/test/test_anchor_bank.py
+  s_4af8d6f83b24e8::t_98c29576c1900f 427-456
+src/mongla_vision/mongla_vision/lock_node.py
+  s_4af8d6f83b24e8::t_93cd01e8bf1a22 121-122
+src/mongla_vision/test/test_detector_recovery.py
+  s_4af8d6f83b24e8::t_f0ede8c752ac80 129
+src/mongla_vision/test/test_lock_follows_the_mission_class.py
+  s_4af8d6f83b24e8::t_f0ede8c752ac80 59-60
+src/mongla_manager/config/bringup.example.yaml
+  s_4af8d6f83b24e8::t_9e7a2c17c83a26 347
+  s_4af8d6f83b24e8::t_8392cc2bc8f44d 280,303,327-328
+src/mongla_vision/test/test_anchor_pose.py
+  s_4af8d6f83b24e8::t_efd9548782d3b6 17-29,183-198
+src/mongla_vision/mongla_vision/detector_params.py
+  s_4af8d6f83b24e8::t_52298d59c8bdf7 9-19
+src/mongla_vision/mongla_vision/tool_geometry.py
+  s_4af8d6f83b24e8::t_e40f00047299d4 93-95,100
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_a5f986e621760f 510-532
+src/mongla_vision/mongla_vision/lock_wiring.py
+  s_4af8d6f83b24e8::t_b9ac1cbbfe6c86 247,250
+  s_4af8d6f83b24e8::t_d9afba0d8c988b 256
+src/mongla_vision/mongla_vision/anchor/pose.py
+  s_4af8d6f83b24e8::t_71c1ff016f9cd4 152-166,169-171,173-175
+src/mongla_vision/launch/vision_dual.launch.py
+  s_4af8d6f83b24e8::t_e55dccc56d8425 44,149-150,153-154
+  s_4af8d6f83b24e8::t_6bc63d7c67ff72 174-179,294
+  s_4af8d6f83b24e8::t_ed4ac9b903be5b 113,116
+src/mongla_vision/config/target_geometry.yaml
+  s_4af8d6f83b24e8::t_8024527316d67f 7,21-24,326,338
+src/mongla_vision/mongla_vision/lock_setup.py
+  s_4af8d6f83b24e8::t_43b410cf9b68cc 58-60
+  s_4af8d6f83b24e8::t_ec6f80d4160958 27-36
+  s_4af8d6f83b24e8::t_93cd01e8bf1a22 289-304,306
+  s_4af8d6f83b24e8::t_3d5fcbc3690a2f 218,225-226,233
+src/mongla_vision/mongla_vision/anchor/bank.py
+  s_4af8d6f83b24e8::t_fce6d60242ac96 580-583
+src/mongla_vision/mongla_vision/anchor/bank_store.py
+  s_4af8d6f83b24e8::t_fce6d60242ac96 22,29-31,52-53,55-58,61-64
+src/mongla_vision/launch/vision_pi.launch.py
+  s_4af8d6f83b24e8::t_ec6f80d4160958 20-21,187-190
+tools/studies/bank_shortlist_accuracy.py
+  s_4af8d6f83b24e8::t_2aec17c219ea6f 25-38,63-66,86-112,152-154,158-162,164,166,170-233,235-245
+src/mongla_vision/config/tool_geometry.yaml
+  s_4af8d6f83b24e8::t_e638919232c1ac 42-45
+src/mongla_vision/mongla_vision/lock_publish.py
+  s_4af8d6f83b24e8::t_922c133ce26fb5 22
+  s_4af8d6f83b24e8::t_71c1ff016f9cd4 50-53,57,62-64
+  s_4af8d6f83b24e8::t_a0ec67046848d8 65
+.claude/context/reference/commands.md
+  s_4af8d6f83b24e8::t_9e7a2c17c83a26 246-247,254,456,460,464,534
+  s_4af8d6f83b24e8::t_2e7d7088a8393d 179,206,234-235
+.claude/context/platform/first-pool-verification.md
+  s_4af8d6f83b24e8::t_5f74e540129890 121-124
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  s_4af8d6f83b24e8::t_52298d59c8bdf7 87,124-126,131
+  s_4af8d6f83b24e8::t_79c65ac19ec0c2 195-196,198-199
+src/mongla_vision/test/test_refraction_in_the_pose_path.py
+  s_4af8d6f83b24e8::t_efd9548782d3b6 29-30,36-46
+  s_4af8d6f83b24e8::t_8694f9be1ed685 35
+.claude/context/packages/mongla_vision/audit.md
+  s_4af8d6f83b24e8::t_84d95c055812a3 72-97
+  s_4af8d6f83b24e8::t_fbc6a62bf71f9b 98-122
+src/mongla_vision/test/test_lock_node_stands_up.py
+  s_4af8d6f83b24e8::t_ae7817860f4710 1-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7b7b2dd8efb182059eaef9874d9a35573cab881b",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
