@@ -935,7 +935,7 @@ is now refused with "read once at startup".
 **The lesson** is §9's, again: a citation is not a measurement. The ledger and
 its test agreed with each other, and neither read what runs.
 
-### B-82: the shipped `gate_sharks.hef` lost a median 0.34 of confidence to a fine-tune that diverged `MEASURED 2026-11-06 (emulator)`. **REBUILT 2026-11-06**; on-chip check owed
+### B-82: the shipped `gate_sharks.hef` lost a median 0.34 of confidence to a fine-tune that diverged `MEASURED 2026-11-06 (emulator)`. **REBUILT 2026-11-06**; **ON-CHIP CHECK DONE 2026-11-19**
 
 **What.** The forward gate detector the vehicle launches by default was
 compiled at full optimisation: 1038 frames, GPU, level 2. Its
@@ -965,6 +965,14 @@ the conf sweep on the HEF it asked for was never run.
 **To close.** With the Pi: sync the model, check the md5 against the provenance,
 run `hailortcli parse-hef`, and re-run `tools/studies/composed_lock_harness.py` on the
 same gate clip. The detection-rung share must rise well above 20 %.
+
+**Closed on Kutum, 2026-11-19.** The md5 on the vehicle matches the provenance
+(`3e9e15f0...`), `hailortcli parse-hef` reads the 3-class YOLOv8 NMS graph, and
+`composed_lock_harness.py` on archive `gate.mkv` (60 s, conf 0.45, forward
+detector and ladder composed on one VDevice) held the **detection rung 100 %**
+of the time, against 20 % with the diverged build; 29.8 Hz published, 0
+XFeat calls raised. Its warning that all eight references "collapsed together"
+is the clip's own camera blur, not this fix.
 
 ### B-61: the Hailo detector ran on colour-swapped frames `REPRODUCED 2026-09-25` **FIXED 2026-09-25**
 
