@@ -62,6 +62,7 @@ class LockWiringMixin:
         # no metric answer, and guessing one would make every range wrong by a
         # constant nobody could see.
         self._K = None
+        self._K_grid = None    # (w, h) of the grid K is scaled to (`_on_info`)
         # The width comes from the per-class table and nowhere else, so it
         # follows the class through every switch a mission makes. A measured
         # prop goes in ~/.mongla/target_geometry.yaml under its class. A
