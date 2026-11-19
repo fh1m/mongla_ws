@@ -224,7 +224,6 @@ class LockPublishMixin:
                        float(K[0][0]) * sx, float(K[1][1]) * sy)
         except Exception:                                        # noqa: BLE001
             return
-        self._vis_state = v
         # Log only on a TRANSITION. A per-frame line at 50 Hz is noise and
         # would be filtered out by whoever reads the log, which is how the
         # baked-floor warning in B-58 went unread for weeks.
@@ -233,7 +232,7 @@ class LockPublishMixin:
             if not v.safe:
                 self.get_logger().warn(
                     f'[LOCK ] target near frame edge: {v.state} '
-                    f'margin={v.h:.3f} (advisory -- no demand is scaled yet; '
+                    f'bearing={v.bearing_deg:+.1f} deg margin={v.h:.3f} (advisory -- no demand is scaled yet; '
                     f'see ladder-register.md)')
 
     def _log_health(self):

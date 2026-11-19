@@ -606,6 +606,22 @@ def _published_frame(n):
     return out[-1].header.frame_id
 
 
+def test_no_input_publishes_no_odometry():
+    """Before the first input the filter holds its initial state, which
+    describes nothing. It used to go out at the origin stamped `now()`, a
+    moving stamp the lock's freshness gate passed (measured-bars section 91)."""
+    n = _node()
+    out = []
+    n._pub = type('P', (), {'publish': lambda _s, m: out.append(m)})()
+    n._publish()
+    assert out == []
+    _fly_board(n, 100.0, 0.2, 0.0)
+    n._publish()
+    assert len(out) == 1
+    st = out[0].header.stamp
+    assert st.sec + st.nanosec * 1e-9 == pytest.approx(n._last_input_t, abs=1e-6)
+
+
 def test_the_anchor_HOLDS_against_50hz_board_attitude():
     """TRUTH: the board boots with the hull at +30 deg (its own frame); the
     hull's true pool heading is -60. After the anchor and 5 s of the board

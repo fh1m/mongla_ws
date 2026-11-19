@@ -157,7 +157,6 @@ class LockWiringMixin:
         # whichever launch started it, composed or not.
         self._act_conf = float(self.get_parameter('act_conf').value)
         self._reseeds = 0
-        self._vis_state = None
         self._vis_last = None
         self._det_box = None
         self._det_conf = 0.0

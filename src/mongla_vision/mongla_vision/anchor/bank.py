@@ -578,4 +578,8 @@ class CheckpointBank(LookupMixin, StoreMixin):
     # checkpoint comes from, never what it has to prove -- which is what keeps
     # the octagon result a visible refusal instead of a confident wrong lock.
 
-    SAVE_VERSION = 1
+    # 2: descriptors are upstream XFeat's (reliability-ranked keypoints,
+    # bicubic samples of the normalised map, measured-bars section 92). A
+    # version-1 bank holds bilinear descriptors that would match these worse,
+    # quietly, so it is refused and the rung learns afresh.
+    SAVE_VERSION = 2
