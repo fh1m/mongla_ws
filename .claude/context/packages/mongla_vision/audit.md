@@ -67,7 +67,7 @@ measured as no help, was never wired, or duplicated something that runs.
 | water calibration | CameraInfo carries the air lens and every consumer applies the flat port itself; a calibration fitted with the board in water already contains the port, and the binding or an explicit `calibration:=` would have published it, refracting twice (every range off by n) | FIXED: both refuse a non-air file, test; latent, no water file is installed |
 | `switch_camera` | paused every other detector before finding the requested one was not running, so a mistyped name left no detector live | FIXED: the target is checked first, test |
 | allowlist on the YOLO backend | an allowlist naming no class the model emits returned `[]` every frame, with the node looking healthy; the Hailo backend already refused to narrow | FIXED: one rule, `detector.allow_ids_for`, behavioural test over both backends |
-| stale odometry | the lock stores the odometry's arrival time and never reads it, so loop closure would search and scale with a position however old | open: loop closure is off (item 5); give it an age bar, measured on the odometry's real rate, before turning it on |
+| stale odometry | the lock stored the odometry's arrival time and never read it, so loop closure would search and enrol at a position however old; the localiser publishes on a timer, so even arrival time could not see a frozen position | FIXED: closure refuses odometry whose input stamp has not moved for 0.5 s (five periods; worst gap 105.76 ms on Kutum under the vision graph, measured-bars section 91), test |
 
 ## Cameras
 
@@ -201,7 +201,7 @@ The read column says whether the file was read line by line in this audit. All 1
 | `live_params.py` | 31 | vehicle + other packages | yes | works |
 | `lock_anchor.py` | 253 | vehicle | yes | FIXED B-118: anchor box scaled from backend 320x240 to camera pixels |
 | `lock_frames.py` | 245 | vehicle | yes | works; act_conf 0.45 rests on a retired model (re-derive per flown model) |
-| `lock_inputs.py` | 246 | vehicle | yes | FIXED: the closure offset measured at a 320x240 constant; now the bank grid centre. Open: _odom_t never read (stale odometry) |
+| `lock_inputs.py` | 246 | vehicle | yes | FIXED: the closure offset measured at a 320x240 constant; now the bank grid centre. FIXED: closure refuses odometry whose input stamp stopped moving (measured-bars section 91) |
 | `lock_node.py` | 349 | vehicle | yes | works; docstring said the score was trust x decay, it is the authority (#78) |
 | `lock_publish.py` | 244 | vehicle | yes | FIXED: field-of-view bearing used backend K on full-frame pixels |
 | `lock_setup.py` | 408 | vehicle | yes | FIXED: releasing target_class stayed on the pinned class (the filter is latched and was dropped while pinned) |

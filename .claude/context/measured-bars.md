@@ -154,6 +154,7 @@ is how `recommend()` happened.
 - [88. TRACKERS AGAINST TRUTH — the shipped OC-SORT more than doubles recall at the vehicle's bars, ByteTrack and track-before-detect are rejected, and the gate model loses 70 % of its recall in another pool (2026-11-18)](#88-trackers-against-truth--the-shipped-oc-sort-more-than-doubles-recall-at-the-vehicles-bars-bytetrack-and-track-before-detect-are-rejected-and-the-gate-model-loses-70--of-its-recall-in-another-pool-2026-11-18)
 - [89. FLOW IN THE CAMERA'S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18)](#89-flow-in-the-cameras-process--the-downward-detector-gains-37--flow-keeps-110-frames-a-second-total-cpu-unchanged-2026-11-18)
 - [90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18)](#90-retrodiction-on-the-pi--4-to-6--of-a-core-while-moving-so-it-stays-off-until-its-benefit-is-measured-2026-11-18)
+- [91. ODOMETRY ARRIVAL — the localiser's 10 Hz never gaps past 105.76 ms, so loop closure refuses odometry older than 0.5 s (2026-11-19)](#91-odometry-arrival--the-localisers-10-hz-never-gaps-past-10576-ms-so-loop-closure-refuses-odometry-older-than-05-s-2026-11-19)
 <!-- contents:end -->
 
 ---
@@ -8270,3 +8271,35 @@ against where the vehicle really was.
 flow costs position the vehicle needs, at which point 4 to 6 % of a core is
 cheap.
 
+
+## 91. ODOMETRY ARRIVAL — the localiser's 10 Hz never gaps past 105.76 ms, so loop closure refuses odometry older than 0.5 s (2026-11-19)
+
+Loop closure searches the bank around the filter's position and stores new
+places at it. The lock kept the time each `/mongla/odom` arrived and never
+read it, so a localiser that had stopped left closure working from a
+position however old. `/mongla/odom` is published from a 0.1 s timer, so an
+arrival gap measures whether the localiser is alive, not the filter's inputs.
+
+**Bar, written before the run:** the age limit is five publish periods
+(0.5 s); it stands if the worst inter-arrival gap on Kutum, idle and under
+the whole vision graph, is under a quarter of it.
+
+| Kutum, `localization_node`, 60 s | intervals | mean | p99 | worst |
+|---|---|---|---|---|
+| alone | 624 | 100.00 ms | 101.45 ms | 102.88 ms |
+| beside `vision_pi.launch.py` (lock, flow; forward 9.8 Hz, downward 59.2 Hz) | 611 | 100.00 ms | 103.51 ms | 105.76 ms |
+
+**Decision.** `lock_inputs.ODOM_MAX_AGE_S = 0.5`: older, the closure step
+neither searches nor enrols, and counts the refusal as `stale odometry`.
+
+**The age is taken from the stamp, not the arrival.** The timer publishes
+whether or not the filter's inputs still arrive, and stamps each message with
+its newest input (the board's IMU, 50 Hz). Arrival only proves the localiser
+runs; a dropped board link would keep messages on time around a position that
+stopped moving. So the age runs from the last time the stamp moved, which a
+live filter does on every message.
+
+**What it cannot see.** A localiser that has had no input at all stamps with
+`now()`, so its stamp moves anyway and passes. This run was that case (no
+board attached), which is why the arrival gaps above stand for the timer and
+nothing more.
