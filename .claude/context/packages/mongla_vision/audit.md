@@ -141,7 +141,7 @@ The read column says whether the file was read line by line in this audit. All 1
 | `anchor/loop_closure.py` | 291 | vehicle | yes | FIXED: offset centre was a 320x240 constant; required argument now |
 | `anchor/pose.py` | 368 | other packages | yes | FIXED: the ambiguity gate it accepted was never compared; deleted |
 | `anchor/xfeat_hailo.py` | 224 | vehicle | yes | CHANGED: its copy of the descriptor sampling replaced by the shared one (outputs equal within 9e-8). FIXED: the reliability head was read and dropped; it now ranks the top-k (+25.9 % correct matches on the chip). Semi-dense removed: it fit the true view change half as often (B-121) |
-| `anchor/xfeat_onnx.py` | 286 | vehicle | yes | CHANGED: keypoints and descriptors in one function both backends call; unread logger argument removed. FIXED: not upstream XFeat (ranking without reliability, bilinear raw descriptors, edge keypoints kept); now upstream's exactly, +38 % correct matches (B-121, measured-bars section 92) |
+| `anchor/xfeat_onnx.py` | 286 | vehicle | yes | CHANGED: keypoints and descriptors in one function both backends call; unread logger argument removed. FIXED: not upstream XFeat (ranking without reliability, bilinear raw descriptors, edge keypoints kept); now upstream's exactly: +38 % correct matches on warped frames, +8 % on real pairs (B-121, measured-bars section 92) |
 | `calibration/__init__.py` | 26 | vehicle + other packages | yes | works |
 | `calibration/binding.py` | 79 | vehicle | yes | works |
 | `calibration/calibrate_node.py` | 401 | CLI tool + other packages | yes | read; FIXED applying a water fit said the stack would use it |

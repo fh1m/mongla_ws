@@ -155,7 +155,7 @@ is how `recommend()` happened.
 - [89. FLOW IN THE CAMERA'S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18)](#89-flow-in-the-cameras-process--the-downward-detector-gains-37--flow-keeps-110-frames-a-second-total-cpu-unchanged-2026-11-18)
 - [90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18)](#90-retrodiction-on-the-pi--4-to-6--of-a-core-while-moving-so-it-stays-off-until-its-benefit-is-measured-2026-11-18)
 - [91. ODOMETRY ARRIVAL — the localiser's 10 Hz never gaps past 105.76 ms, so loop closure refuses odometry older than 0.5 s (2026-11-19)](#91-odometry-arrival--the-localisers-10-hz-never-gaps-past-10576-ms-so-loop-closure-refuses-odometry-older-than-05-s-2026-11-19)
-- [92. XFEAT AS ITS AUTHORS RUN IT — reliability ranking and bicubic descriptors give the anchor 38 % more correct matches; semi-dense is removed (2026-11-19)](#92-xfeat-as-its-authors-run-it--reliability-ranking-and-bicubic-descriptors-give-the-anchor-38--more-correct-matches-semi-dense-is-removed-2026-11-19)
+- [92. XFEAT AS ITS AUTHORS RUN IT — +38 % correct matches on warped frames, +8 % on real pairs; semi-dense is removed (2026-11-19)](#92-xfeat-as-its-authors-run-it--38--correct-matches-on-warped-frames-8--on-real-pairs-semi-dense-is-removed-2026-11-19)
 - [93. LIGHTERGLUE ON THE ANCHOR'S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19)](#93-lighterglue-on-the-anchors-cpu--better-fits-but-not-inside-the-333-ms-anchor-cycle-2026-11-19)
 <!-- contents:end -->
 
@@ -8307,7 +8307,7 @@ case (no board attached), which is why the arrival gaps above stand for the
 timer and nothing more. Since 2026-11-19 (BUGS B-120) a localiser with no
 input publishes no odometry at all, so the lock refuses it as never heard.
 
-## 92. XFEAT AS ITS AUTHORS RUN IT — reliability ranking and bicubic descriptors give the anchor 38 % more correct matches; semi-dense is removed (2026-11-19)
+## 92. XFEAT AS ITS AUTHORS RUN IT — +38 % correct matches on warped frames, +8 % on real pairs; semi-dense is removed (2026-11-19)
 
 The anchor's XFeat had drifted from upstream (verlab/accelerated_features,
 `detectAndCompute`) in three ways nobody had measured: it ranked the top-k by
@@ -8384,8 +8384,40 @@ floor, and same-place pairs clear it more often (octagon_1 42 % to 50 %); the
 bin's 8 % is the revisit-or-alias tail section 24 already describes. The bar
 stays at 100.
 
-**Open.** LighterGlue is the one option that beats the shipped path on the
-anchor's own measure (+7.5 points on both fits), at 88.3 ms a pair for the
+**Real pairs, seconds apart: the gain shrinks and LighterGlue's lead goes.**
+Everything above warps ONE frame, so both images share one instant, the same
+particles and no change of viewpoint in depth, while the anchor matches a
+reference stored seconds earlier. `tools/studies/xfeat_real_pairs.py` scores
+real frame pairs 0.5 to 2 s apart (15, 30 and 60 frames), with truth from a
+homography chained through the frames between them at a 3-frame step by two
+different matchers (a pair is kept only when the chains agree to 1.5 px and
+every step had 60 inliers). 26 of 168 pairs survived the filter, mostly the
+15-frame gaps: this is the easy regime, and one pair is 3.8 points.
+
+**Bar, written before the run:** shipped beats the pre-upstream code by at
+least 15 % correct matches and 3 points on the target-box fit; semi-dense fits
+fewer pairs than shipped; LighterGlue at 1024 fits more target boxes.
+
+| method (26 real pairs) | correct / pair | precision | fit right, frame / box |
+|---|---|---|---|
+| pre-upstream (keypoint rank, bilinear) | 323.5 | 51.4 % | 61.5 / 84.6 % |
+| shipped (upstream XFeat) | 350.0 | 54.8 % | 61.5 / 80.8 % |
+| semi-dense | 572.7 | 55.3 % | 30.8 / 53.8 % |
+| LighterGlue, 1024 points | 303.2 | 62.5 % | 53.8 / 80.8 % |
+
+**Result.** Two of the three bars are reversed. The upstream port gains 8.2 %
+correct matches and 3.4 points of precision on real pairs, not 38 %, and the
+fit rates are equal (the box difference is one pair); what survives is that it
+is not worse, it is more precise, and it is upstream's own code. Semi-dense
+stays rejected (30.8 % against 61.5 %). LighterGlue's 9-point lead on warped
+frames does not appear: it fits less often than the cosine matcher and ties on
+the box, with better precision. Section 93's quality bar is not met on real
+pairs either. A 24-start rerun is in
+`tools/studies/xfeat_real_pairs.py --starts 24`; this paragraph is amended
+with its result.
+
+**Open.** LighterGlue is the one option that beat the shipped path on the
+warped-frame measure (+7.5 points on both fits), at 88.3 ms a pair for the
 matcher alone on two dev-box threads; how and where it can run is its own
 measurement.
 
@@ -8412,8 +8444,8 @@ anchor's 333 ms at 3 Hz with the detectors running.
 Kutum's times are one pair, matcher alone, idle stack; the bank matches up to
 four references a frame.
 
-**Decision.** Not in the per-frame path. At 1024 points it clears the
-quality bar by 9.1 points and costs one anchor cycle per pair; at 768 it fits
+**Decision.** Not in the per-frame path. On warped frames at 1024 points it clears the
+quality bar by 9.1 points (section 92's real pairs did not confirm it) and costs one anchor cycle per pair; at 768 it fits
 the time and misses the bar (+4.1). It beats upstream's own sparse-plus-glue
 pairing (section 92) because the shipped features are now upstream's with
 the edge rule.

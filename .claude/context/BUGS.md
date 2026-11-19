@@ -536,7 +536,8 @@ both backends, as upstream XFeat does (B-121).
 ranked by keypoint probability without the reliability head; descriptors
 sampled bilinearly from the raw map instead of bicubically from the
 normalised one; keypoints kept on the last row and column. Together they cost
-the anchor 28 % of its correct matches against known homographies. Separately,
+the anchor 28 % of its correct matches against known homographies on warped
+frames, and 8 % on real pairs seconds apart (measured-bars section 92). Separately,
 `anchor_semi_dense` was justified by 2.1-2.6x MAGSAC inliers, a count the fit
 produces from the matches it is judging; against the truth it fits the view
 change half as often as sparse.

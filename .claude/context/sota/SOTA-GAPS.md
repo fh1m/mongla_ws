@@ -361,8 +361,9 @@ measured p90 gap (0.651 s) does not improve, the extra inliers are not buying wh
 homographies on our archive, upstream XFeat\* with both scales fits the whole frame more often
 (60.0 % against 51.7 %) but a target-sized region less often (55.0 % against 61.7 %); single
 scale, the form a fixed-size HEF allows, is worse on both. What did pay inside the component:
-the reliability head ranking the top-k and upstream's bicubic descriptors, +38 % correct
-matches. LighterGlue on XFeat is the open lead (+7.5 points on both fits).
+the reliability head ranking the top-k and upstream's bicubic descriptors: +38 % correct
+matches on warped frames, +8 % and equal fit rates on real pairs seconds apart. LighterGlue's
+lead on warped frames did not appear on real pairs (section 92).
 
 ### G-19 — the health metric is one eigenvalue away · `SOTA` · vision
 
