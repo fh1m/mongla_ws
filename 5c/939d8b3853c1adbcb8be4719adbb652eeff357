@@ -1,0 +1,23 @@
+src/mongla_vision/mongla_vision/utils/check_tracker.py
+  s_d9cd6692c91d8a::t_8ba4681e353449 35-37,86,108-109
+src/mongla_vision/mongla_vision/utils/check_thrust.py
+  s_d9cd6692c91d8a::t_785ea8dbdeb13d 40-44,106
+test/test_thrust_check_names_the_verbs_outcomes.py
+  s_d9cd6692c91d8a::t_785ea8dbdeb13d 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5c939d8b3853c1adbcb8be4719adbb652eeff357",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
