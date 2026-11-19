@@ -226,6 +226,9 @@ def _put(table, group, name, entry, origin):
     try:
         w = float(entry.get('width_m'))
     except (TypeError, ValueError):
+        # Reported like an implausible width, or the lock's start-up warning
+        # is silent and the shipped width flies in its place.
+        _REJECTED.append((name, entry.get('width_m'), origin))
         return
     if not (_MIN_WIDTH_M <= w <= _MAX_WIDTH_M):
         # Ignored, not obeyed -- same choice as a malformed file. Falling back
