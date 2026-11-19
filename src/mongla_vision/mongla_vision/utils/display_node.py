@@ -206,7 +206,6 @@ class VisionDisplayNode(Node):
         self._det_lock        = threading.Lock()
         self._tracked_dets: list = []
         self._track_ids:    list = []
-        self._n_tracks            = 0
         self._tracks_lock         = threading.Lock()
         self._frames_received = 0
         self._last_wait_log   = self.get_clock().now()
@@ -378,7 +377,6 @@ class VisionDisplayNode(Node):
         with self._tracks_lock:
             self._tracked_dets      = dets
             self._track_ids         = ids
-            self._n_tracks          = len([i for i in ids if i is not None])
         self._last_track_t = time.monotonic()
 
     def _on_distance_dbg(self, msg: Float32MultiArray) -> None:
