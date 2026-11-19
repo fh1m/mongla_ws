@@ -1,0 +1,23 @@
+README.md
+  s_4af8d6f83b24e8::t_55b80424d91d5a 798
+docs/index.html
+  s_4af8d6f83b24e8::t_55b80424d91d5a 1734,1736
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_55b80424d91d5a 8417-8436,8438-8467
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c9f41cee8060df560bcdb9bab94ba5ada40180a6",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
