@@ -1,0 +1,24 @@
+src/mongla_vision/test/test_video_file_stamps_when_it_hands_over.py
+  s_d9cd6692c91d8a::t_ef06dd8a3c8e74 30-46
+  s_d9cd6692c91d8a::t_6853ab1f8ae5c6 1-29
+src/mongla_vision/mongla_vision/cameras/video_file.py
+  s_d9cd6692c91d8a::t_24c3ef0f3d13aa 215-218
+src/mongla_vision/mongla_vision/cameras/ros_topic.py
+  s_d9cd6692c91d8a::t_ef06dd8a3c8e74 49,82-84,92,101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "eea5cff8aad3a08d1af133b31ab2374791effaf4",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
