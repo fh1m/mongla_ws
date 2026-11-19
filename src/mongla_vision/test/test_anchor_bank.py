@@ -739,3 +739,22 @@ def test_a_lookup_that_searches_nothing_leaves_no_scores():
     b._last_scores = {0: 5}
     b.locate(np.zeros((240, 320), np.uint8), label='nothing-has-this')
     assert b.last_lookup_scores() == ([], [])
+
+
+def test_a_loaded_bank_keeps_its_scales_and_can_evict(tmp_path):
+    """`load` filled every per-reference list but the scales. A preloaded
+    bank therefore claimed to cover no size (so every view re-enrolled), and
+    once full its first eviction popped an empty list: IndexError inside
+    the lock's frame callback."""
+    b = bank(capacity=2)
+    b.enrol(rich(1), roi=_roi(60, 60), det_conf=0.9, force=True)
+    b.enrol(rich(2), roi=None, det_conf=0.9, force=True)
+    p = tmp_path / 'b.npz'
+    b.save(str(p))
+    fresh = bank(capacity=2)
+    fresh.load(str(p))
+    assert len(fresh.scales) == fresh.size == 2
+    assert abs(fresh.scales[0] - 60.0) < 1.0 and fresh.scales[1] != fresh.scales[1]
+    assert fresh.covers_scale(rich(1), _roi(64, 64))
+    fresh.enrol(rich(3), roi=_roi(200, 200), det_conf=0.9, force=True)
+    assert len(fresh.scales) == fresh.size == 2

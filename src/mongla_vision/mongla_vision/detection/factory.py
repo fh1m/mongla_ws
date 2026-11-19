@@ -30,8 +30,8 @@ from pathlib import Path
 from .detector import Detector
 
 # Extensions we know how to load, most-preferred first. `yolo._resolve_model_path`
-# walks this same order when turning a stem into a path -- keep them in sync or a
-# machine will resolve one artifact and the factory will try to load another.
+# reads this list to turn a stem into a path, so the file it resolves is the
+# one the factory loads.
 KNOWN_EXTENSIONS = ('.hef', '.pt')
 
 

@@ -82,6 +82,21 @@ class HailoSegDetector(HailoDetector):
     # ------------------------------------------------------------------ #
     #  Which tensor is which
     # ------------------------------------------------------------------ #
+    def update_nms(self, floor=None, iou=None) -> None:
+        """The seg path runs its own NMS, so `iou` applies live here.
+
+        There is no chip NMS and so no `nms_floor`: the decode floor is
+        `assoc_conf`/`conf`. Asking for one raises, so the node rejects the
+        parameter instead of reporting a change that did not happen.
+        """
+        if floor is not None:
+            raise ValueError(f'{Path(self._path).name} decodes on the host: '
+                             f'there is no NMS floor; set conf or assoc_conf')
+        if iou is not None:
+            if not 0.0 < float(iou) <= 1.0:
+                raise ValueError(f'nms_iou {iou!r} is outside (0, 1]')
+            self._iou = float(iou)
+
     def _configure_outputs(self) -> None:
         """Read the ten outputs into a `SegLayout`, and ask for UINT8.
 
@@ -188,7 +203,9 @@ class HailoSegDetector(HailoDetector):
                      for b, c, m in self._heads]
             xyxy, scores, cids, masks = decode(
                 self._layout, heads, self._bufs[self._proto_name],
-                conf=self._conf,
+                # Down to the association floor, as the chip's NMS path does:
+                # boxes below `conf` reach the tracker and the ladder only.
+                conf=self._assoc_conf,
                 allow_ids=(None if self._allow_ids is None else sorted(self._allow_ids)),
                 iou=self._iou, max_det=self._max_det,
                 want_masks=self._want_masks)
@@ -203,12 +220,20 @@ class HailoSegDetector(HailoDetector):
                 continue      # wholly in the bars: no area in the frame
             mask = None
             if i < len(masks):
-                # The mask came back at the box's size in NETWORK pixels; the
-                # box is about to be reported in FRAME pixels. Resize by the
-                # same letterbox scale so the two stay the same object.
+                # The mask covers the whole box in NETWORK pixels; the box is
+                # reported clipped to the frame in FRAME pixels. Crop the
+                # mask to the part of the box inside the frame, then resize:
+                # resizing the whole mask squashed the off-frame part into
+                # view and moved the contour.
                 fw = max(1, int(round(min(float(w), x2) - max(0.0, x1))))
                 fh = max(1, int(round(min(float(h), y2) - max(0.0, y1))))
                 m = masks[i]
+                mh, mw = m.shape[:2]
+                c0 = int(round((max(0.0, x1) - x1) / (x2 - x1) * mw))
+                c1 = max(c0 + 1, int(round((min(float(w), x2) - x1) / (x2 - x1) * mw)))
+                r0 = int(round((max(0.0, y1) - y1) / (y2 - y1) * mh))
+                r1 = max(r0 + 1, int(round((min(float(h), y2) - y1) / (y2 - y1) * mh)))
+                m = m[r0:r1, c0:c1]
                 if m.shape != (fh, fw):
                     m = cv2.resize(m, (fw, fh), interpolation=cv2.INTER_NEAREST)
                 mask = m

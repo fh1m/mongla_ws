@@ -193,6 +193,20 @@ def test_setting_it_back_to_empty_RELEASES_the_pin():
     assert f._cls == 'red_pipe', 'the pin was not released'
 
 
+def test_a_release_goes_back_to_the_filter_that_arrived_while_pinned():
+    """`classes_filter` is latched: the detector sends it once. A filter that
+    arrived while the pin held was dropped, so releasing logged "following
+    classes_filter again" and stayed on the pinned class until a new filter
+    came, which may be never."""
+    f = _Fake()
+    f._retarget_width = types.MethodType(LockNode._retarget_width, f)
+    LockNode._on_param_change(f, [_param('target_class', 'red_pipe')])
+    _feed(f, 'gate')                       # arrives while pinned
+    assert f._cls == 'red_pipe'
+    LockNode._on_param_change(f, [_param('target_class', '')])
+    assert f._cls == 'gate'
+
+
 def test_a_negative_publish_hz_is_refused_not_silently_clamped():
     f = _Fake()
     f._pub_min_dt = 0.0

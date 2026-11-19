@@ -92,7 +92,7 @@ from mongla_vision.config import CAMERA_PROFILES
 from mongla_vision.detection.detector import Detection, largest
 from mongla_vision.detection.messages import array_to_detections
 from .display_draw import (
-    _SWITCH_WAIT_S, _draw_distance_panel, _draw_mission_panel, _render_splash,
+    _SWITCH_WAIT_S, _draw_distance_panel, _draw_mission_panel, _num, _render_splash,
     _render_switching,
 )
 from .display_keys import _handle_camera_keys, _handle_video_keys, _send_pause
@@ -206,7 +206,6 @@ class VisionDisplayNode(Node):
         self._det_lock        = threading.Lock()
         self._tracked_dets: list = []
         self._track_ids:    list = []
-        self._n_tracks            = 0
         self._tracks_lock         = threading.Lock()
         self._frames_received = 0
         self._last_wait_log   = self.get_clock().now()
@@ -278,13 +277,24 @@ class VisionDisplayNode(Node):
         self._seek_frame_pub = None
         self._speed_pub      = None
         if video_file_mode:
-            cam_ns = f'/mongla/vision/{camera}'
-            self._pause_client      = self.create_client(SetBool, f'{cam_ns}/video_pause')
-            self._seek_pub          = self.create_publisher(Float32, f'{cam_ns}/video_seek_rel',   10)
-            self._seek_frame_pub    = self.create_publisher(Int32,   f'{cam_ns}/video_seek_frame', 10)
-            self._speed_pub         = self.create_publisher(Float32, f'{cam_ns}/video_speed',      10)
+            self._video_controls(camera)
             self.get_logger().info(
                 '[DISP ] video mode: Space=pause  ←/→=±1s  ↑/↓=±10s  ,/.=frame step  [/]=speed')
+
+    def _video_controls(self, camera: str) -> None:
+        """Playback controls for `camera`'s video source, replacing any for
+        another camera: after a switch, Space and the arrows drive the video
+        on screen, not the one the display started on."""
+        if self._pause_client is not None:
+            self.destroy_client(self._pause_client)
+        for pub in (self._seek_pub, self._seek_frame_pub, self._speed_pub):
+            if pub is not None:
+                self.destroy_publisher(pub)
+        cam_ns = f'/mongla/vision/{camera}'
+        self._pause_client   = self.create_client(SetBool, f'{cam_ns}/video_pause')
+        self._seek_pub       = self.create_publisher(Float32, f'{cam_ns}/video_seek_rel',   10)
+        self._seek_frame_pub = self.create_publisher(Int32,   f'{cam_ns}/video_seek_frame', 10)
+        self._speed_pub      = self.create_publisher(Float32, f'{cam_ns}/video_speed',      10)
 
     # ------------------------------------------------------------------ #
     #  ROS callbacks (run on the background spin thread)                  #
@@ -353,6 +363,8 @@ class VisionDisplayNode(Node):
         self._last_det_t   = 0.0
         self._switch_t     = time.monotonic()   # arm the "waiting for stream" overlay
         self._cam_subs = self._create_cam_subs(name)
+        if self._video_mode:
+            self._video_controls(name)
 
     def _on_state(self, msg: MonglaState) -> None:
         self._state = msg
@@ -378,7 +390,6 @@ class VisionDisplayNode(Node):
         with self._tracks_lock:
             self._tracked_dets      = dets
             self._track_ids         = ids
-            self._n_tracks          = len([i for i in ids if i is not None])
         self._last_track_t = time.monotonic()
 
     def _on_distance_dbg(self, msg: Float32MultiArray) -> None:
@@ -583,7 +594,7 @@ def main(args=None):
                                f' ex={ex:+.2f} ey={ey:+.2f}')
                 st = node._state
                 state_str = (
-                    f' depth={st.depth_m:.2f}m yaw={st.yaw_deg:.1f}°'
+                    f' depth={_num(st.depth_m, ".2f")}m yaw={_num(st.yaw_deg, ".1f")}°'
                     f' mode={st.mode} armed={st.armed}'
                     if st else ''
                 )

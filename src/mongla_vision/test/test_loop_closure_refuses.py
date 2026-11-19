@@ -41,7 +41,7 @@ class _Match:
 
 def _ctx(**kw):
     base = dict(ref_age_s=120.0, travel_m=5.0, ref_sigma_m=0.30,
-                m_per_px=0.002, bank_size=32)
+                m_per_px=0.002, bank_size=32, centre=(160.0, 120.0))
     base.update(kw)
     return base
 
@@ -152,7 +152,7 @@ def test_the_offset_is_read_from_the_warp_not_from_H_translation():
     H = np.eye(3)
     H[0, 2], H[1, 2] = 100.0, 0.0
     H[2, 0] = 0.01                                # projective: warp != H[:,2]
-    off = lc.offset_metres(_Pose(H), 0.002)
+    off = lc.offset_metres(_Pose(H), 0.002, (160.0, 120.0))
     naive = np.hypot(100.0, 0.0) * 0.002
     assert abs(off - naive) > 1e-9, 'offset is being read off H[:,2]'
 
@@ -211,14 +211,14 @@ def test_an_accepted_closure_also_explains_itself():
 # --------------------------------------------------------------------------- #
 def test_a_pure_identity_homography_is_zero_offset():
     """The vehicle is exactly where the reference was taken."""
-    assert lc.offset_metres(_Pose(np.eye(3)), 0.002) == pytest.approx(0.0)
+    assert lc.offset_metres(_Pose(np.eye(3)), 0.002, (160.0, 120.0)) == pytest.approx(0.0)
 
 
 def test_a_pure_shift_moves_the_centre_by_that_shift():
     """Sanity: with no rotation or perspective, the centre moves by H[:,2]."""
     H = np.eye(3)
     H[0, 2] = 250.0
-    assert lc.offset_metres(_Pose(H), 0.002) == pytest.approx(0.5)
+    assert lc.offset_metres(_Pose(H), 0.002, (160.0, 120.0)) == pytest.approx(0.5)
 
 
 def test_a_rotation_about_the_centre_is_not_a_displacement():
@@ -229,13 +229,13 @@ def test_a_rotation_about_the_centre_is_not_a_displacement():
     what it is: zero.
     """
     import math
-    cx, cy = lc.BACKEND_CENTRE
+    cx, cy = (160.0, 120.0)
     th = math.radians(30.0)
     c, s = math.cos(th), math.sin(th)
     R = np.array([[c, -s, cx - c * cx + s * cy],
                   [s,  c, cy - s * cx - c * cy],
                   [0.0, 0.0, 1.0]])
-    assert lc.offset_metres(_Pose(R), 0.002) == pytest.approx(0.0, abs=1e-9)
+    assert lc.offset_metres(_Pose(R), 0.002, (cx, cy)) == pytest.approx(0.0, abs=1e-9)
     assert np.hypot(R[0, 2], R[1, 2]) > 10.0, (
         'the fixture needs a large H[:,2], or it cannot tell the two readings '
         'apart and proves nothing')
@@ -282,7 +282,8 @@ def test_a_revisit_of_an_old_place_closes():
     assert sigma == 0.25
     c = lc.consider(_Match(ref_position=first, index=taken[first]),
                     ref_age_s=age, travel_m=travel, ref_sigma_m=sigma,
-                    m_per_px=0.002, bank_size=len(taken))
+                    m_per_px=0.002, bank_size=len(taken),
+                    centre=(160.0, 120.0))
     assert c.ok, c.reason
 
 
@@ -304,5 +305,43 @@ def test_a_place_this_run_did_not_take_has_no_history():
     assert age != age and travel != travel and sigma != sigma
     c = lc.consider(_Match(ref_position=(7.0, 7.0)), ref_age_s=age,
                     travel_m=travel, ref_sigma_m=sigma, m_per_px=0.002,
-                    bank_size=32)
+                    bank_size=32, centre=(160.0, 120.0))
     assert not c.ok
+
+
+def test_the_offset_is_measured_at_the_backend_s_own_centre():
+    """The centre was a constant for a 320x240 grid. On a 640x480 export a
+    rotation about the true centre read as metres of travel, so a revisit
+    was refused as too far, or a near miss passed as one."""
+    import math
+    cx, cy = 320.0, 240.0
+    th = math.radians(30.0)
+    c, s = math.cos(th), math.sin(th)
+    R = np.array([[c, -s, cx - c * cx + s * cy],
+                  [s,  c, cy - s * cx - c * cy],
+                  [0.0, 0.0, 1.0]])
+    assert lc.offset_metres(_Pose(R), 0.002, (cx, cy)) == pytest.approx(0.0, abs=1e-9)
+    assert lc.offset_metres(_Pose(R), 0.002, (160.0, 120.0)) > 0.1
+
+
+def test_the_lock_passes_its_bank_s_grid_centre(monkeypatch):
+    """Drives the lock's own closure step, which no test reached: the centre
+    `consider` is given must be the bank backend's, not a 320x240 guess."""
+    import types
+    from mongla_vision.lock_inputs import LockInputsMixin
+    seen = {}
+
+    def fake_consider(bp, **kw):
+        seen.update(kw)
+        return lc.Closure(False, 'no match')
+    monkeypatch.setattr(lc, 'consider', fake_consider)
+    anchor = types.SimpleNamespace(
+        size=3, grid_centre=(320.0, 240.0),
+        locate=lambda *a, **k: None,
+        enrol=lambda *a, **k: types.SimpleNamespace(accepted=False))
+    node = types.SimpleNamespace(
+        _closer_on=True, _anchor=anchor, _odom_xy=(1.0, 2.0),
+        _odom_sigma=float('nan'), _places=lc.PlaceLog(),
+        _m_per_px=lambda: 0.002, _closure_refusals=__import__('collections').Counter())
+    LockInputsMixin._place_tick(node, np.zeros((480, 640), np.uint8), None, 100.0)
+    assert seen['centre'] == (320.0, 240.0)

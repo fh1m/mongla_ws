@@ -83,7 +83,7 @@ from typing import Dict, Iterable, List, Optional
 import numpy as np
 
 from . import hailo_device
-from .detector import Detection, Detector
+from .detector import Detection, Detector, allow_ids_for
 from .hef_file import baked_score_threshold, load_class_index, measured_bars
 
 _INPUT_FALLBACK = 640
@@ -294,40 +294,8 @@ class HailoDetector(Detector):
     #  Live tuning -- the surface detector_node calls
     # ------------------------------------------------------------------ #
     def update_allowlist(self, class_allowlist) -> None:
-        if class_allowlist is None:
-            self._allow_ids = None
-            return
-        wanted = {str(c).strip().lower() for c in class_allowlist if str(c).strip()}
-        if not wanted:
-            self._allow_ids = None
-            return
-        ids = {cid for cid, cname in self._names.items() if cname.lower() in wanted}
-        unknown = wanted - {self._names[i].lower() for i in ids}
-        if unknown and self._log:
-            self._log.warn(
-                f'[HAILO] class(es) {sorted(unknown)} are not in this model. '
-                f'Available: {sorted(self._names.values())[:10]}')
-        # Not none of them. If every requested name is unknown, `ids` is
-        # EMPTY -- and an empty allowlist filters every detection away, so the
-        # detector returns [] on every frame while the graph looks healthy.
-        # That is the silent-[] failure this codebase already has a rule
-        # against (`CLAUDE.md` §4, the missing-sidecar case), reached from a
-        # different direction: one typo'd class name and the whole pipeline
-        # goes quiet with a single WARN.
-        #
-        # Refusing to narrow is the safe direction: the caller gets everything
-        # the model found and can filter downstream, instead of getting
-        # nothing and believing the water is empty.
-        if wanted and not ids:
-            if self._log:
-                self._log.error(
-                    f'[HAILO] NONE of {sorted(wanted)} exist in this model -- '
-                    f'ignoring the allowlist rather than filtering every '
-                    f'detection away. Fix the class name, or the pipeline is '
-                    f'blind while looking healthy.')
-            self._allow_ids = None
-            return
-        self._allow_ids = ids
+        self._allow_ids = allow_ids_for(self._names, class_allowlist,
+                                        log=self._log, tag='[HAILO]')
 
     def _lower_floor(self) -> Optional[float]:
         """Configure the NMS at `EMIT_FLOOR` when the graph was compiled above it.

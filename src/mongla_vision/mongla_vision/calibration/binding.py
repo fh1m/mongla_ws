@@ -71,9 +71,15 @@ def calibration_for_profile(profile: str) -> str:
         for path in sorted(glob.glob(os.path.join(d, '*.json'))):
             try:
                 with open(path) as fh:
-                    applies = json.load(fh).get('applies_to') or []
+                    c = json.load(fh)
+                applies = c.get('applies_to') or []
             except Exception:
                 continue          # a malformed file must not hide a good one
+            # The published K is the in-AIR lens: every consumer applies the
+            # port itself, so a water fit (port already inside) would be
+            # refracted twice.
+            if c.get('medium', 'air') != 'air':
+                continue
             if isinstance(applies, list) and profile in applies:
                 return path
     return ''

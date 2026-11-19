@@ -29,9 +29,11 @@ from collections import Counter
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos  import QoSProfile, QoSReliabilityPolicy
 
 from vision_msgs.msg import Detection2DArray
+
+from mongla_vision import qos
+from mongla_vision.utils.check_pipeline import _class_of
 
 
 def main(argv=None):
@@ -81,13 +83,7 @@ def main(argv=None):
             ids_this_frame.add(tid)
 
             # class name from hypothesis
-            class_name = ''
-            if d.results:
-                hyp = d.results[0]
-                if hasattr(hyp, 'hypothesis'):
-                    class_name = str(hyp.hypothesis.class_id)
-                else:
-                    class_name = str(getattr(hyp, 'id', ''))
+            class_name = _class_of(d)
             if class_name:
                 state['classes'][class_name] += 1
 
@@ -109,8 +105,8 @@ def main(argv=None):
         state['all_ids']     |= ids_this_frame
         state['prev_ids']     = ids_this_frame
 
-    qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE)
-    node.create_subscription(Detection2DArray, f'{ns}/tracks', _on_tracks, qos)
+    node.create_subscription(Detection2DArray, f'{ns}/tracks', _on_tracks,
+                             qos.DETECTIONS)
 
     print(f"[tracker_check] watching {ns}/tracks for {args.duration:.1f}s ...")
     t0 = time.monotonic()

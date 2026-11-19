@@ -271,13 +271,13 @@ class TestTimingCorrections:
         `100.0 - 0.00785` for every camera, i.e. that every stamp marks the END
         of exposure. uvcvideo stamps the START (read off a live stream), so
         the default ADDS; an EOF driver subtracts."""
-        n = _make(pool_depth_m=4.0, exposure_us=157.0, time_offset_s=0.0,
+        n = _make(pool_depth_m=4.0, exposure_us=15700.0, time_offset_s=0.0,
                   stamp_at_midpoint=False, estimate_time_offset=False)
         try:
             assert n._stamp_for(100.0, 0.02) == pytest.approx(100.0 + 0.00785)
         finally:
             n.destroy_node()
-        n = _make(pool_depth_m=4.0, exposure_us=157.0, stamp_source='eof',
+        n = _make(pool_depth_m=4.0, exposure_us=15700.0, stamp_source='eof',
                   time_offset_s=0.0,
                   stamp_at_midpoint=False, estimate_time_offset=False)
         try:
@@ -297,7 +297,7 @@ class TestTimingCorrections:
             n.destroy_node()
 
     def test_all_three_compose(self):
-        n = _make(pool_depth_m=4.0, exposure_us=157.0, stamp_at_midpoint=True,
+        n = _make(pool_depth_m=4.0, exposure_us=15700.0, stamp_at_midpoint=True,
                   estimate_time_offset=False, time_offset_s=0.010)
         try:
             # midpoint 99.75, PLUS 7.85 ms (an SOE stamp), minus 10 ms offset

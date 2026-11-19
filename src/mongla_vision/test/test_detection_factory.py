@@ -33,16 +33,14 @@ def test_hef_is_preferred_over_pt():
     assert KNOWN_EXTENSIONS == ('.hef', '.pt')
 
 
-def test_the_resolver_walks_the_same_extension_order():
-    """REGRESSION GUARD for the split above. The factory and the resolver each
-    keep their own list; a stem that resolves to .hef but dispatches on a list
-    that has not heard of .hef would load a Hailo graph through ultralytics."""
+def test_the_resolver_walks_the_factory_list():
+    """One list, read by both: a stem resolved by a private copy that had not
+    heard of .hef would load a Hailo graph through ultralytics."""
     src = code_of_file(Path(__file__).resolve().parents[1]
            / 'mongla_vision' / 'detection' / 'yolo.py')
-    assert "for ext in ('.hef', '.pt'):" in src, (
-        'yolo._resolve_model_path no longer walks the factory order')
-    assert src.count("for ext in ('.hef', '.pt'):") == 2, (
-        'both the source-tree and share-dir search roots must agree')
+    assert src.count('for ext in KNOWN_EXTENSIONS:') == 2, (
+        'both the source-tree and share-dir search roots must read the list')
+    assert "('.hef', '.pt')" not in src
 
 
 def test_an_explicit_hef_path_is_passed_through():

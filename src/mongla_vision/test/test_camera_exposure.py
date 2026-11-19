@@ -113,3 +113,19 @@ class TestShipped:
         assert "'gain'" not in src, (
             'gain is exposed again -- it was measured to do nothing on the '
             'Fantech, so it can only mislead')
+
+
+def test_the_webcam_source_reads_exposure_us_as_microseconds(monkeypatch):
+    """`exposure_us` is microseconds at camera_node and the V4L2 source;
+    WebcamCamera wrote it straight into `exposure_time_absolute`, which is in
+    100 us units, so the DSL's own `exposure_us=4000` (4 ms) became a 400 ms
+    shutter on this source."""
+    from mongla_vision.cameras import webcam
+    calls = []
+    monkeypatch.setattr(webcam.subprocess, 'run',
+                        lambda args, **k: calls.append(args) or
+                        type('R', (), {'returncode': 0})())
+    cam = webcam.WebcamCamera.__new__(webcam.WebcamCamera)
+    cam._device, cam.name, cam._log = '/dev/x', 'x', None
+    cam._set_exposure(4000, None, 0.0, 0.0, 0.0)
+    assert ['v4l2-ctl', '-d', '/dev/x', '-c', 'exposure_time_absolute=40'] in calls

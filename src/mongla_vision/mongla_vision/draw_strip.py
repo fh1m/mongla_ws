@@ -43,9 +43,6 @@ _R4_H = 76    # Instruments (was 88)
 _R5_H = 22    # Heading tape (was 26)
 _R6_H = 22    # Health / progress row (was 26)
 
-# Base strip height — used for backwards-compat export only; actual height is dynamic.
-_STRIP_H = _R1_H + _R2_H + _R3_H + _R4_H + _R5_H + _R6_H  # 274
-
 _SFS  = 0.34   # base panel font scale (was 0.374)
 _SLH  = 11     # base panel line height (was 12)
 _SPAD = 3      # panel inner padding (was 4)
