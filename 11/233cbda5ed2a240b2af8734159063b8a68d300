@@ -1,0 +1,30 @@
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  s_d9cd6692c91d8a::t_44047154169577 133-135
+src/mongla_vision/mongla_vision/flow/flow_setup.py
+  s_d9cd6692c91d8a::t_44047154169577 114
+src/mongla_vision/test/test_camera_exposure.py
+  s_d9cd6692c91d8a::t_89451e9682fdf0 116-131
+src/mongla_vision/test/test_flow_node.py
+  s_d9cd6692c91d8a::t_89451e9682fdf0 274,280,300
+src/mongla_vision/mongla_vision/cameras/webcam.py
+  s_d9cd6692c91d8a::t_39ca677c40269e 30-31
+  s_d9cd6692c91d8a::t_44047154169577 25,42,161-163,179
+.claude/context/packages/mongla_vision/audit.md
+  s_d9cd6692c91d8a::t_6fdc5b953a755b 114-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "11233cbda5ed2a240b2af8734159063b8a68d300",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
