@@ -431,7 +431,9 @@ class FlowSetupMixin:
         # bug three times.
         t = header.stamp.sec + header.stamp.nanosec * 1e-9
         if t <= 0.0:
-            t = time.monotonic()
+            # The frames' own clock: camera stamps and the gyro's are wall
+            # time, so a monotonic fallback put this frame on another clock.
+            t = time.time()
         with self._slot_lock:
             if self._slot is not None:
                 self._dropped += 1
