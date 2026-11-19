@@ -9,6 +9,11 @@ import numpy as np
 from mongla_vision.draw_widgets import pil_text, pil_text_size
 
 
+def _num(v, spec: str) -> str:
+    """An absent number (None or NaN) is '--', never a NaN or a 0.0."""
+    return '--' if v is None or v != v else format(v, spec)
+
+
 # ---------------------------------------------------------------------------
 # Splash screen
 # ---------------------------------------------------------------------------
@@ -63,7 +68,7 @@ def _draw_mission_panel(out, *, camera, fps, primary, native_w, native_h,
         lines.append(('axes: Y->surge  X->lat', (180, 180, 120)))
     if state is not None:
         arm = 'ARMED' if getattr(state, 'armed', False) else 'safe'
-        lines.append((f'{state.depth_m:+.2f} m   {arm}',
+        lines.append((f'{_num(state.depth_m, "+.2f")} m   {arm}',
                       (60, 60, 235) if getattr(state, 'armed', False) else (170, 170, 170)))
 
     fs_badge = 0.95 * sf
@@ -125,8 +130,8 @@ def _draw_distance_panel(out, dbg) -> None:
     sf = max(0.9, w / 1920.0)
     lines = [
         ('ODOMETRY', (40, 210, 255)),
-        (f'dist  {dist:+.3f} m', (235, 235, 235)),
-        (f'height {height:.2f} m', (200, 200, 200)),
+        (f'dist  {_num(dist, "+.3f")} m', (235, 235, 235)),
+        (f'height {_num(height, ".2f")} m', (200, 200, 200)),
         (f'tracks {tracks}', (60, 230, 120) if tracks >= 6 else (60, 60, 235)),
     ]
     fs = 0.62 * sf
