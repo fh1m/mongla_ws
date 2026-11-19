@@ -1,51 +1,54 @@
-"""An unknown class name must not filter EVERY detection away.
+"""An unknown class name must not filter EVERY detection away, on any backend.
 
-`HailoDetector.update_allowlist` mapped requested names to class ids. If a
-name did not exist in the model, it contributed no id -- and if EVERY requested
-name was unknown, the allowlist became an empty set, which filters everything.
-The detector then returns [] on every frame, the graph publishes at full rate,
-and one WARN is the only sign. That is the silent-[] failure `CLAUDE.md` §4 has
-a rule against, reached from a different direction: one typo'd class name.
+Mapping requested names to class ids, an unknown name contributes no id; if
+EVERY name is unknown the filter is an empty set, which drops everything. The
+detector then returns [] on every frame, the graph publishes at full rate, and
+one WARN is the only sign: the silent-[] failure `CLAUDE.md` section 4 has a
+rule against, reached from one typo'd class name. The Hailo backend refused to
+narrow in that case; the PyTorch backend, at construction and live, narrowed
+to nothing. Both now call `detector.allow_ids_for`.
 
-Refusing to narrow is the safe direction -- the caller gets everything the model
-found and can filter downstream, rather than getting nothing and believing the
-water is empty.
+Refusing to narrow is the safe direction -- the caller gets everything the
+model found and can filter downstream, rather than getting nothing and
+believing the water is empty.
 """
-import ast
-from pathlib import Path
+import pytest
 
-SRC = (Path(__file__).resolve().parents[1] / 'mongla_vision' / 'detection'
-       / 'hailo.py')
+from mongla_vision.detection.detector import allow_ids_for
+from mongla_vision.detection.hailo import HailoDetector
+from mongla_vision.detection.yolo import YoloDetector
 
-
-def _update_allowlist_source() -> str:
-    tree = ast.parse(SRC.read_text())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == 'update_allowlist':
-            return ast.get_source_segment(SRC.read_text(), node)
-    raise AssertionError('update_allowlist not found')
+NAMES = {0: 'gate', 1: 'buoy'}
 
 
-def test_all_unknown_names_fall_back_to_allow_all():
-    src = _update_allowlist_source()
-    assert 'if wanted and not ids:' in src, (
-        'update_allowlist does not special-case "every requested name is '
-        'unknown", so it assigns an EMPTY allowlist and the detector goes '
-        'blind on every frame while the pipeline looks healthy.')
-    i = src.index('if wanted and not ids:')
-    after = src[i:i + 700]
-    assert 'self._allow_ids = None' in after, (
-        'the all-unknown branch must widen to allow-all, not narrow to none')
+class _Log:
+    def __init__(self):
+        self.lines = []
+
+    def warn(self, m):
+        self.lines.append(m)
+
+    warning = error = warn
 
 
-def test_an_empty_request_still_means_allow_all():
-    """The pre-existing, correct behaviour: no allowlist asked for = no filter."""
-    src = _update_allowlist_source()
-    assert 'if not wanted:' in src and 'self._allow_ids = None' in src
+def test_the_rule():
+    assert allow_ids_for(NAMES, None) is None
+    assert allow_ids_for(NAMES, ['', ' ']) is None
+    log = _Log()
+    assert allow_ids_for(NAMES, ['Gate', 'nope'], log=log) == {0}
+    assert any("['nope']" in m for m in log.lines)
+    log = _Log()
+    assert allow_ids_for(NAMES, ['gat'], log=log, tag='[X]') is None
+    assert any('NONE of' in m for m in log.lines)
 
 
-def test_a_known_name_still_narrows():
-    """The guard must not have turned the allowlist into a no-op."""
-    src = _update_allowlist_source()
-    assert 'self._allow_ids = ids' in src, (
-        'a valid allowlist must still narrow, or the class filter is dead')
+@pytest.mark.parametrize('cls', [HailoDetector, YoloDetector])
+def test_every_backend_widens_on_a_typo_and_narrows_on_a_name(cls):
+    d = cls.__new__(cls)
+    d._names, d._log = NAMES, None
+    d.update_allowlist(['gat'])
+    assert d._allow_ids is None
+    d.update_allowlist([''])
+    assert d._allow_ids is None
+    d.update_allowlist(['buoy'])
+    assert d._allow_ids == {1}
