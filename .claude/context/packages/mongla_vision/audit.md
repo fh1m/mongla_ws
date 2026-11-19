@@ -64,6 +64,9 @@ measured as no help, was never wired, or duplicated something that runs.
 | written, never read | a scan of every package for attributes assigned and never loaded: in vision, display_node's `yaw_source` parameter and four HUD fields, ByteTrack's copies of its settings, the lock's `_anchor_best`, and five more | DELETED; subscriptions held for teardown are kept |
 | ambiguity knob | `solve_pnp` took `ambiguity_max` (and `pnp_node` exposed it live, "to re-solve a bag with a different gate") but never compared it: since the first commit the flip is reported and the consumer gates on off-axis plus spread | DELETED, so no operator tunes a knob that does nothing; the reprojection gate stays |
 | plane tilt | `anchor/geometry.plane_geometry` runs only when the bank is given a K, and the lock gives it none, so on the vehicle it never runs (the orphan guards see an import) | recorded, not wired: measured coarse on footage (measured-bars §9), and the shot gate reads the PnP pose |
+| water calibration | CameraInfo carries the air lens and every consumer applies the flat port itself; a calibration fitted with the board in water already contains the port, and the binding or an explicit `calibration:=` would have published it, refracting twice (every range off by n) | FIXED: both refuse a non-air file, test; latent, no water file is installed |
+| `switch_camera` | paused every other detector before finding the requested one was not running, so a mistyped name left no detector live | FIXED: the target is checked first, test |
+| allowlist on the YOLO backend | an allowlist naming no class the model emits returned `[]` every frame, with the node looking healthy; the Hailo backend already refused to narrow | FIXED: one rule, `detector.allow_ids_for`, behavioural test over both backends |
 | stale odometry | the lock stores the odometry's arrival time and never reads it, so loop closure would search and scale with a position however old | open: loop closure is off (item 5); give it an age bar, measured on the odometry's real rate, before turning it on |
 
 ## Cameras
@@ -122,14 +125,13 @@ loop on Kutum, or the rig that gives a ground truth to measure the ladder agains
 
 ## Every file
 
-The read column says whether the file was read line by line in this audit; "pending"
-files pass their tests and the sweeps but have not been read yet.
+The read column says whether the file was read line by line in this audit. All 105 were.
 
 | File | Lines | Reached from | Read | Finding |
 |---|---|---|---|---|
 | `__init__.py` | 35 | vehicle + other packages | yes | works; docstring lists the real exports |
-| `_text_engine.py` | 149 | vehicle | pending | tests pass; line read pending |
-| `anchor/__init__.py` | 0 | vehicle + other packages | pending | tests pass; line read pending |
+| `_text_engine.py` | 149 | vehicle | yes | read; sound |
+| `anchor/__init__.py` | 0 | vehicle + other packages | yes | empty package marker |
 | `anchor/anchor.py` | 314 | vehicle | yes | FIXED: a box on a featureless frame raised instead of snapping nothing |
 | `anchor/bank.py` | 576 | vehicle | yes | FIXED: eviction and clear left per-index scores naming other references |
 | `anchor/bank_lookup.py` | 287 | vehicle | yes | FIXED: an empty search left the previous scores; identity bar docstring quoted the retired 60 |
@@ -142,10 +144,10 @@ files pass their tests and the sweeps but have not been read yet.
 | `anchor/xfeat_onnx.py` | 286 | vehicle | yes | CHANGED: keypoints and descriptors in one function both backends call; unread logger argument removed |
 | `calibration/__init__.py` | 26 | vehicle + other packages | yes | works |
 | `calibration/binding.py` | 79 | vehicle | yes | works |
-| `calibration/calibrate_node.py` | 401 | CLI tool + other packages | pending | tests pass; line read pending |
-| `calibration/guide_capture.py` | 377 | CLI tool + other packages | pending | tests pass; line read pending |
-| `calibration/guide_files.py` | 290 | CLI tool + other packages | pending | tests pass; line read pending |
-| `calibration/solver.py` | 766 | CLI tool + other packages | pending | tests pass; line read pending |
+| `calibration/calibrate_node.py` | 401 | CLI tool + other packages | yes | read; FIXED applying a water fit said the stack would use it |
+| `calibration/guide_capture.py` | 377 | CLI tool + other packages | yes | read; FIXED a stale refit error and pose suggestion stayed on the panel, and a water capture showed its FOV as the air one |
+| `calibration/guide_files.py` | 290 | CLI tool + other packages | yes | read; FIXED the camera list showed a water fit as the camera's lens |
+| `calibration/solver.py` | 766 | CLI tool + other packages | yes | read; FIXED mixed-resolution captures fitted one K; a bad --identity is reported. The published K is air only: binding and camera_node refuse a water fit, which would be refracted twice |
 | `camera_node.py` | 931 | vehicle | yes | FIXED: the fps-override warning fired on every V4L2 start; a calibration of another aspect ratio is refused, not stretched |
 | `cameras/__init__.py` | 6 | vehicle + other packages | yes | works |
 | `cameras/camera.py` | 99 | vehicle + other packages | yes | works; docstring corrected (is_healthy drives the reopen watchdog) |
@@ -156,7 +158,7 @@ files pass their tests and the sweeps but have not been read yet.
 | `cameras/video_file.py` | 248 | vehicle + other packages | yes | FIXED: stamped before the pacing sleep (333 ms early at 0.1x) |
 | `cameras/webcam.py` | 220 | vehicle + other packages | yes | FIXED: exposure_us written raw into 100 us units (4 ms asked, 400 ms set) |
 | `config.py` | 186 | vehicle + other packages | yes | works; the Fantech is forward for colour, the Sonix downward for rate (measured 2026-11-18) |
-| `continuity.py` | 280 | none | pending | tools/studies only (written reason in the register) |
+| `continuity.py` | 280 | none | yes | read; tools/studies only (written reason in the register) |
 | `detection/__init__.py` | 17 | vehicle + other packages | yes | works |
 | `detection/contours.py` | 159 | vehicle | yes | works |
 | `detection/detector.py` | 123 | vehicle + other packages | yes | CHANGED: holds allow_ids_for, the one allowlist rule |
@@ -177,10 +179,10 @@ files pass their tests and the sweeps but have not been read yet.
 | `detector_publish.py` | 181 | vehicle | yes | CHANGED: debug image signature trimmed to what it uses |
 | `detector_setup.py` | 490 | vehicle | yes | FIXED: model_conf refused whole when malformed. Recorded: a multi-parameter set that fails part-way leaves the earlier ones applied (the DSL sets one at a time) |
 | `draw.py` | 44 | vehicle | yes | CHANGED: legacy aliases and a swallowing **kwargs removed; one entry point |
-| `draw_strip.py` | 437 | none | pending | tools/site only (written reason in the register); FIXED absent values drew as 0.0 |
+| `draw_strip.py` | 437 | none | yes | read; tools/site only (written reason in the register); FIXED absent values drew as 0.0; unused strip-height export removed |
 | `draw_video.py` | 315 | vehicle | yes | CHANGED: depth inset and depth borders removed |
-| `draw_widgets.py` | 404 | vehicle | pending | tests pass; line read pending |
-| `factory.py` | 172 | vehicle + other packages | pending | tests pass; line read pending |
+| `draw_widgets.py` | 404 | vehicle | yes | read; sound |
+| `factory.py` | 172 | vehicle + other packages | yes | read; sound |
 | `flow/__init__.py` | 0 | vehicle + other packages | yes | empty |
 | `flow/flow_checks.py` | 275 | vehicle | yes | FIXED: a failed planar fit left the last image yaw, paired with this gyro for the time offset |
 | `flow/flow_constants.py` | 178 | vehicle | yes | works; gyro de-rotation gain 0 by recorded decision (measured about the lens, not the hull pivot) |
@@ -224,12 +226,12 @@ files pass their tests and the sweeps but have not been read yet.
 | `trigger_stamps.py` | 130 | none | yes | waits on the board camera trigger (upstream); written reason in the register |
 | `underwater.py` | 119 | CLI tool | yes | works (characterisation only, no verdict); stale prediction table removed |
 | `utils/__init__.py` | 7 | vehicle | yes | works |
-| `utils/check_pipeline.py` | 264 | CLI tool | pending | tests pass; line read pending |
-| `utils/check_thrust.py` | 116 | CLI tool | pending | tests pass; line read pending |
-| `utils/check_tracker.py` | 167 | CLI tool | pending | tests pass; line read pending |
-| `utils/display_draw.py` | 200 | vehicle | pending | tests pass; line read pending |
+| `utils/check_pipeline.py` | 264 | CLI tool | yes | read; sound (detector node names match the launch) |
+| `utils/check_thrust.py` | 116 | CLI tool | yes | read; the outcome table is a copy of the verb's, held equal by a test |
+| `utils/check_tracker.py` | 167 | CLI tool | yes | read; uses the shared QoS and class decoder |
+| `utils/display_draw.py` | 200 | vehicle | yes | read; FIXED absent depth, distance and height printed as numbers; now -- |
 | `utils/display_keys.py` | 115 | vehicle | yes | CHANGED: the D key removed |
-| `utils/display_node.py` | 644 | vehicle | pending | CHANGED: depth map, vis_range and the D key removed |
+| `utils/display_node.py` | 644 | vehicle | yes | read; CHANGED: depth map, vis_range and the D key removed; FIXED video keys drove the start camera after a switch; unread track count removed |
 | `utils/switch_camera.py` | 93 | CLI tool | yes | works; false SRAM claim replaced with the measured both-live rates |
 | `utils/water_check.py` | 111 | CLI tool | yes | works; orphan comment removed |
 
