@@ -1,0 +1,28 @@
+tools/README.md
+  s_4af8d6f83b24e8::t_24ec301d6dc416 75
+README.md
+  s_4af8d6f83b24e8::t_2b87e98102b022 798
+docs/index.html
+  s_4af8d6f83b24e8::t_2b87e98102b022 1734,1736
+tools/bench/hailo_stages.py
+  s_4af8d6f83b24e8::t_46faf678efbf96 2-33,35,37-38,40-41,43,45-48,50-92,94-167
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_233261c5567a73 8552
+  s_4af8d6f83b24e8::t_6254aab09eddd6 8557-8583
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "9925a4bcc7df86ce19dc4a347ac8af1fb32caa06",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
