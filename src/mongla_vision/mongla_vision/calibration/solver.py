@@ -422,7 +422,7 @@ def synth_view(objp, K, D, rvec, tvec, w, h, noise_px=0.3, rng=None):
     return p.reshape(-1, 1, 2).astype(np.float32)
 
 
-def suggest_next_pose(objp, ips, size, candidates, i_fixed=0, k=4):
+def suggest_next_pose(objp, ips, size, candidates, k=4):
     """AprilCal's next-best-pose, scored by predicted Max ERE.
 
     This is the part that makes a novice's calibration good. Richardson et

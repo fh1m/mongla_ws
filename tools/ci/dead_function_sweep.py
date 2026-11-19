@@ -21,7 +21,13 @@ What is *not* a defect, so the output is not over-read:
     or a launch file names. Called by name from outside Python.
   * dunders, properties and dataclass hooks -- called by the language.
   * a method that overrides or implements an interface, called through the base
-    class rather than by its own name.
+    class rather than by its own name -- provided SOMETHING calls that name. A
+    family of implementations nothing calls is reported (`class_names()`).
+
+A method is judged on what can reach a method: a call `x.m(...)`, a decorator,
+a string, or a read `x.m` -- but a read only when no data attribute shares the
+name, because `state.authority` the field is not `model.authority()` the
+method. A property is read, not called, so any read counts for it.
   * a public helper a package exports for a consumer outside this repo.
 
 So: a question list, like the other three. For each row, name the caller. If
@@ -113,6 +119,15 @@ def _defs_and_refs():
     defs: dict[str, list] = {}
     refs: set[str] = set()
     imported: dict[str, set] = {}
+    # What can call a METHOD, kept apart from `refs`. A method is reached only
+    # through an object, so a bare name never calls one, and an attribute LOAD
+    # is ambiguous whenever the same name is also a data attribute somewhere.
+    # Pooled into one set, `ConfidenceModel.authority()` read as called because
+    # a lock state has a field `authority`, and it never was (2026-11-18).
+    meth_calls: set[str] = set()     # `x.m(...)`, decorators, strings
+    attr_loads: set[str] = set()     # `x.m`, not called
+    data_attrs: set[str] = set()     # `x.m = ...`, class-body fields
+    props: set[str] = set()          # names defined as a property
     for p in _py_files():
         try:
             tree = ast.parse(p.read_text())
@@ -141,6 +156,15 @@ def _defs_and_refs():
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if shipped and node.name not in api:
+                    # A property is read, not called, so for it a plain
+                    # attribute read is the caller even where a field
+                    # shares its name.
+                    prop = any(isinstance(d_, ast.Name) and d_.id == 'property'
+                               or isinstance(d_, ast.Attribute)
+                               and d_.attr in ('setter', 'getter', 'deleter')
+                               for d_ in node.decorator_list)
+                    if prop:
+                        props.add(node.name)
                     defs.setdefault(node.name, []).append(
                         (str(rel), node.lineno, node in methods))
                 # A decorated function is referenced by its decorator, and a
@@ -150,12 +174,23 @@ def _defs_and_refs():
                     for n in ast.walk(dec):
                         if isinstance(n, ast.Name):
                             refs.add(n.id)
+                            meth_calls.add(n.id)
                         elif isinstance(n, ast.Attribute):
                             refs.add(n.attr)
+                            meth_calls.add(n.attr)
             elif isinstance(node, ast.Name):
                 refs.add(node.id)
             elif isinstance(node, ast.Attribute):
                 refs.add(node.attr)
+                if isinstance(node.ctx, ast.Store):
+                    data_attrs.add(node.attr)
+                else:
+                    attr_loads.add(node.attr)
+            elif isinstance(node, ast.ClassDef):
+                for st in node.body:
+                    tgts = (st.targets if isinstance(st, ast.Assign) else
+                            [st.target] if isinstance(st, ast.AnnAssign) else [])
+                    data_attrs |= {t_.id for t_ in tgts if isinstance(t_, ast.Name)}
             elif isinstance(node, (ast.Import, ast.ImportFrom)):
                 for al in node.names:
                     leaf = (al.asname or al.name).split('.')[-1]
@@ -171,12 +206,16 @@ def _defs_and_refs():
                 fn = node.func
                 name = (fn.id if isinstance(fn, ast.Name)
                         else fn.attr if isinstance(fn, ast.Attribute) else '')
+                if isinstance(fn, ast.Attribute):
+                    meth_calls.add(fn.attr)
                 if name in ('getattr', 'hasattr', 'setattr', 'delattr'):
                     for arg in node.args[1:2]:
                         if isinstance(arg, ast.Constant) and isinstance(
                                 arg.value, str):
                             refs.add(arg.value)
-    return defs, refs, imported
+                            meth_calls.add(arg.value)
+    method_refs = meth_calls | (attr_loads - (data_attrs - props))
+    return defs, refs, imported, method_refs
 
 
 def _verb_refs():
@@ -270,8 +309,10 @@ def main() -> int:
                          'outside their own package, so a dead one is certain')
     a = ap.parse_args()
 
-    defs, refs, imported = _defs_and_refs()
-    refs |= _text_refs() | _verb_refs()
+    defs, refs, imported, method_refs = _defs_and_refs()
+    outside = _text_refs() | _verb_refs()
+    refs |= outside
+    method_refs |= outside
 
     # A function inside an unreachable module is already accounted for.
     # `orphan_sweep.py` lists those modules, each with the consumer it waits
@@ -285,13 +326,15 @@ def main() -> int:
             continue
         if a.private and not name.startswith('_'):
             continue
-        # A METHOD defined more than once is an override or a duck-typed
-        # interface: the call site names one of them and cannot say which, so
-        # neither can be judged. A module-level FUNCTION defined twice is just
-        # two functions -- if one is dead the tool must still say so.
-        if len(sites) > 1 and all(m for _f, _l, m in sites):
-            continue
-        if name in refs:
+        # A METHOD is judged on what can reach a method. Defined more than
+        # once it is an override or a duck-typed interface, and one call site
+        # covers the family -- but a family with NO call site is dead in every
+        # class: `Detector.class_names()` was implemented by both detectors and
+        # called by nothing. A FUNCTION is judged on any reference.
+        if all(m for _f, _l, m in sites):
+            if name in method_refs:
+                continue
+        elif name in refs:
             continue
         f, ln, _m = sites[0]
         if a.package and a.package not in f:

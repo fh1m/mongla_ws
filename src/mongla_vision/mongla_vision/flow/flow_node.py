@@ -170,8 +170,9 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         self._n_wrong_size = 0
         self._n_median_fallback = 0
         self._n_yaw_disagree = 0
-        self._last_yaw_img = 0.0
-        self._last_scale_rate = 0.0
+        # What the last planar fit measured; NaN when it did not run or failed.
+        self._last_yaw_img = float('nan')
+        self._last_scale_rate = float('nan')
         # Height measured by the CAMERA, checked against the barometer path.
         self._h_optical = HeightFromDivergence()
         self._depth_hist = deque(maxlen=16)

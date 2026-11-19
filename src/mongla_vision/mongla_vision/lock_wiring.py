@@ -7,7 +7,6 @@ runs per frame. The order is __init__'s, and two comments below depend on it.
 import collections
 import threading
 
-import rclpy
 from geometry_msgs.msg import PointStamped, Vector3Stamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CameraInfo, Image, Range
@@ -184,12 +183,10 @@ class LockWiringMixin:
         self._follower = Follower() if bool(
             self.get_parameter('follow').value) else None
         self._anchor = None
-        # Inliers the last bank evaluation produced, and the reference that
-        # produced them. Starts at 0, which cannot read as stale because
+        # Inliers the last bank evaluation produced. Starts at 0, which cannot read as stale because
         # staleness is gated on `has_reference` -- an empty bank is not a
         # decayed one, and the two need different answers.
         self._anchor_inliers = 0
-        self._anchor_best = None
         self._anchor_enrolled = 0
         # What the bank is holding. One bank can carry several kinds of thing,
         # so a checkpoint is tagged with the class it was enrolled from and the

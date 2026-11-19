@@ -175,7 +175,6 @@ class AnchorMixin:
             self._anchor_trend.append(int(bp.inliers))
             self._anchor_pose = bp.pose
             self._anchor_inliers = int(bp.inliers)
-            self._anchor_best = bp.index
             anchor_ran = True
             # The frame this pose was fitted to. The anchor runs at
             # 3 Hz while this loop runs at frame rate, so between

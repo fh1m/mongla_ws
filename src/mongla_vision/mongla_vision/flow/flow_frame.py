@@ -320,7 +320,6 @@ class FlowFrameMixin:
                 f'(score {score:.3f} vs {CAUSTIC_TOPHAT_MAX}): tracking the '
                 f'{"ERODED" if caustic else "raw"} floor')
         self._anchor_caustic = caustic
-        self._caustic_score = score
         if caustic:
             gray = suppress_caustics(gray)
         self._anchor_gray = gray

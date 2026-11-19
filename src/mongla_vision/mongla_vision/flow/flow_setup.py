@@ -10,7 +10,8 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from geometry_msgs.msg import Vector3Stamped
 from mongla_interfaces.msg import MonglaState
-from mongla_vision.flow.flow_math import Intrinsics, RefractiveRectifier
+from mongla_vision.flow.flow_math import Intrinsics
+from mongla_vision.optics import RefractiveRectifier
 from mongla_vision.stamps import capture_monotonic
 from mongla_vision import image_msg
 from .flow_constants import (  # noqa: F401
@@ -109,7 +110,10 @@ class FlowSetupMixin:
         self.declare_parameter('undistort', True)
         # TIMING. Each of these is larger than the residual the estimator
         # removes, so they are corrected deterministically first.
-        self.declare_parameter('exposure_us', 0.0)      # V4L2 100us units
+        # Half of this is added to each stamp (`exposure_correction_s`).
+        # Units are V4L2's 100 us, NOT camera_node's microseconds of the same
+        # name. 0, the default and what every launch leaves, applies nothing.
+        self.declare_parameter('exposure_us', 0.0)
         # Which instant the camera driver stamps (V4L2 TSTAMP_SRC). 'soe' is
         # what `uvcvideo` sets -- both vehicle cameras -- and the camera node
         # logs what the driver actually reports at stream start (issue #34).

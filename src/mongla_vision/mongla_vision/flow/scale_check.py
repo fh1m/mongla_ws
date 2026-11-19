@@ -16,8 +16,8 @@ which one is wrong -- and `pool_depth_m` is the one nobody measures. Silently
 preferring either is how a stack acquires a number it cannot defend. The same
 rule `flow_node` already follows for its optical cross-check.
 
-THE DISCIPLINE comes from the prototype's `MetricCalibrator`: a weighted
-median rather than a mean (one bad pair must not move the answer), confidence
+THE DISCIPLINE comes from the prototype's `MetricCalibrator`: a median
+rather than a mean (one bad pair must not move the answer), confidence
 from the coefficient of variation, a minimum sample count, and ageing so a
 calibration cannot outlive the conditions it was measured in.
 
@@ -73,8 +73,10 @@ class ScaleCrossCheck:
             return
         if not (math.isfinite(grating_m) and math.isfinite(baro_m)):
             return
-        self._pairs.append((time.monotonic() if now is None else float(now),
-                            float(grating_m), float(baro_m)))
+        t = time.monotonic() if now is None else float(now)
+        self._pairs.append((t, float(grating_m), float(baro_m)))
+        # Only the window is ever read, so only the window is kept.
+        self._pairs = [p for p in self._pairs if (t - p[0]) <= self.max_age_s]
 
     def _fresh(self, now: Optional[float] = None):
         t = time.monotonic() if now is None else float(now)

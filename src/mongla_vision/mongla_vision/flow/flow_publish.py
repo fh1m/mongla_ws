@@ -52,7 +52,9 @@ class FlowPublishMixin:
            Ours reads 15.7 ms on AUTO exposure -- 7.85 ms, larger on its own
            than the 6 ms tolerance, and it MOVES with the light. Its SIGN is
            the driver's stamp source: uvcvideo stamps the START, so this ADDS
-           (issue #34; it used to subtract, a full exposure wrong).
+           (issue #34; it used to subtract, a full exposure wrong). Applied
+           only when `exposure_us` is set, and no launch sets it, so on the
+           vehicle this term is 0 and `td` carries the lag.
 
         3. td. Whatever fixed lag remains, from `TimeOffset`.
         """

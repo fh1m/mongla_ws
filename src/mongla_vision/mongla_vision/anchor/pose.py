@@ -96,10 +96,6 @@ from typing import Tuple
 
 import numpy as np
 
-# Below this ratio of (best reprojection error / second-best) the two branches
-# are treated as distinguishable. Measured in `test_anchor_pose.py`.
-AMBIGUITY_MAX = 0.55
-
 # A pose whose own reprojection is worse than this is not describing the pixels
 # it was fitted to, whatever the ambiguity says.
 MAX_REPROJ_PX = 4.0
@@ -157,7 +153,6 @@ class TargetPose:
 def target_pose(ref_pts, live_pts, K, *, width_m: float,
                 ref_size_px: Tuple[float, float],
                 dist=None,
-                ambiguity_max: float = AMBIGUITY_MAX,
                 max_reproj_px: float = MAX_REPROJ_PX) -> TargetPose:
     """6-DoF pose of the snapped patch, given how wide it really is.
 
@@ -193,8 +188,7 @@ def target_pose(ref_pts, live_pts, K, *, width_m: float,
     obj = np.zeros((len(ref), 3), np.float64)
     obj[:, 0] = (ref[:, 0] - w_px * 0.5) * m_per_px
     obj[:, 1] = (ref[:, 1] - h_px * 0.5) * m_per_px
-    return solve_pnp(obj, live, K, dist=dist, ambiguity_max=ambiguity_max,
-                     max_reproj_px=max_reproj_px)
+    return solve_pnp(obj, live, K, dist=dist, max_reproj_px=max_reproj_px)
 
 
 def ambiguity_ratio(errs) -> float:
@@ -213,7 +207,6 @@ def ambiguity_ratio(errs) -> float:
 
 
 def solve_pnp(obj_pts, img_pts, K, *, dist=None,
-              ambiguity_max: float = AMBIGUITY_MAX,
               max_reproj_px: float = MAX_REPROJ_PX) -> TargetPose:
     """6-DoF pose from 2D-3D correspondences. THE solver; there is one.
 
