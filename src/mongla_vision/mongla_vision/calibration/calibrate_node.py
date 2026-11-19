@@ -355,8 +355,15 @@ class CalibrateNode:
                     name, err = files.apply_calibration(
                         self.install, str(args.get('file', '')), self.device,
                         self.cap.applies_to)
-                    return (True, f'applied -> {name}; relaunch the vision stack '
-                                  f'to use it') if name else (False, err)
+                    if not name:
+                        return False, err
+                    if name.endswith('_water.json'):
+                        # The binding loads only the air lens (CameraInfo is
+                        # refracted downstream), so say what this file is for.
+                        return True, (f'applied -> {name}; a water fit validates '
+                                      f'the refraction model, the stack keeps the '
+                                      f'air calibration')
+                    return True, f'applied -> {name}; relaunch the vision stack to use it'
                 if op == 'configure':
                     return self.configure(args)
                 return False, f'unknown op {op!r}; ops: {", ".join(OPS)}'
