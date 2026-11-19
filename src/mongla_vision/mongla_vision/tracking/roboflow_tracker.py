@@ -165,14 +165,13 @@ class RoboflowTracker(Tracker):
                 high_conf_det_threshold=float(high_conf_det_threshold),
             )
 
-        self._track_buffer = int(track_buffer)
         # Seconds a track coasts after its last real detection, on capture
         # time. 150 -> 5.0 s, the window the parameter always described.
         self.coast_max_s = int(track_buffer) / 30.0
         self._last_real_t: Dict[int, float] = {}
-        # track_id -> (class_id, class_name, last_real_score) from the last
-        # frame a real detection confirmed the track. Coasted boxes read it.
-        self._meta: Dict[int, Tuple[int, str, float]] = {}
+        # track_id -> (class_id, class_name) from the last frame a real
+        # detection confirmed the track. Coasted boxes read it.
+        self._meta: Dict[int, Tuple[int, str]] = {}
 
     # ------------------------------------------------------------------ #
     def update(self, detections: List[Detection],
@@ -196,7 +195,7 @@ class RoboflowTracker(Tracker):
             cid = int(out.class_id[i]) if out.class_id is not None else 0
             score = float(out.confidence[i]) if out.confidence is not None else 0.0
             name = str(names[i]) if names is not None else _name_from(cid, detections)
-            self._meta[tid] = (cid, name, score)
+            self._meta[tid] = (cid, name)
             self._last_real_t[tid] = float(frame_t)
             matched.add(tid)
             results.append(TrackedDetection(
@@ -217,7 +216,7 @@ class RoboflowTracker(Tracker):
             meta = self._meta.get(tid)
             if meta is None:
                 continue  # never had a real detection -> nothing to coast
-            cid, name, _ = meta
+            cid, name = meta
             last = self._last_real_t.get(tid)
             if last is None or float(frame_t) - last > self.coast_max_s:
                 continue  # coasted past its window, by capture time
