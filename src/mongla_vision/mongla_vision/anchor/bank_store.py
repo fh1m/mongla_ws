@@ -79,6 +79,10 @@ class StoreMixin:
             roi = z[f'r{i}']
             a._ref_roi = None if not np.isfinite(roi).all() else tuple(
                 float(v) for v in roi)
+            # The scale is sqrt(ROI area) in backend pixels, which the saved
+            # ROI already is; NaN for a whole-frame reference, as at enrolment.
+            self._scale.append(float('nan') if a._ref_roi is None else float(
+                np.sqrt(max(1.0, abs(roi[2] - roi[0]) * abs(roi[3] - roi[1])))))
             # No stored image: a preloaded reference can still MATCH, it simply
             # cannot be displayed. Better than refusing to load, and better
             # than inventing a picture.
