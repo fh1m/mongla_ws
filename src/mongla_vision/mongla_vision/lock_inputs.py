@@ -137,7 +137,8 @@ class LockInputsMixin:
                 travel_m=ref_travel,
                 ref_sigma_m=ref_sigma,
                 m_per_px=self._m_per_px(),
-                bank_size=self._anchor.size)
+                bank_size=self._anchor.size,
+                centre=self._anchor.grid_centre)
             if c.ok:
                 self._closures += 1
                 m = PointStamped()
