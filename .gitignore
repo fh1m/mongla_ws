@@ -43,6 +43,10 @@ env/
 .omp/
 .cursor/
 .claude/plugins/
+# The Hailo DFC writes its quantisation scratch into the directory it runs in.
+bias_correction_cache_*/
+native_cache*/
+quant_cache*/
 
 # ─── Local secrets / env ───────────────────────────────────────────────
 .env

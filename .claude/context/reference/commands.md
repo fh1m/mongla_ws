@@ -176,7 +176,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `fwd_classes` | `gate,shark,shaw_fish` | Class filter for the forward detector. |
 | `dwn_model` | `bin_fire_blood` | YOLO model stem for the downward detector. |
 | `dwn_classes` | `fire,blood` | Class filter for the downward detector. |
-| `conf` | `0.35` | Detection confidence threshold (both detectors). |
+| `conf` | `0.45` | Detection confidence threshold (both detectors). |
 | `loop` | `true` | Loop both videos at EOF. true = detections keep flowing for verb/gain tuning; false = single pass for a clean mission-sequence run (a loop re-shows the target at EOF, which can re-trigger detected() acquisition mid-run). |
 | `viewer` | `true` | Open the HUD (viewer:=false = headless autonomous run). |
 | `tracking` | `true` |  |
@@ -203,7 +203,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `models` | `` | CSV name=stem registry for hot model switching: "gate=gate_nano_100ep,combined=gate_flare_medium_100ep" |
 | `active_model` | `` | Registry key to start with (requires models:="...") |
 | `classes` | `` | CSV class filter; empty = all model classes |
-| `conf` | `0.35` |  |
+| `conf` | `0.45` |  |
 | `iou` | `0.5` |  |
 | `device_cls` | `auto` | Inference device for a .pt (auto | cuda:0 | cpu); a .hef ignores it |
 | `imgsz` | `640` | Inference square size for a .pt. A .hef bakes its input size at compile time and ignores this. |
@@ -231,8 +231,8 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `dwn_model` | `bin_fire_blood` | Single YOLO model stem (used only when dwn_models is empty) |
 | `dwn_models` | `` | CSV of model stems for runtime switching on the downward detector. Empty = single dwn_model. |
 | `dwn_classes` | `fire,blood` | Class filter for the downward detector |
-| `fwd_conf` | `0.35` | Uniform conf for the forward detector (every model unless overridden below) |
-| `dwn_conf` | `0.35` | Uniform conf for the downward detector |
+| `fwd_conf` | `0.45` | Uniform conf for the forward detector (every model unless overridden below) |
+| `dwn_conf` | `0.45` | Uniform conf for the downward detector |
 | `fwd_model_conf` | `` | Per-model conf overrides on forward, CSV name=conf (e.g. torpedo_blood_hole=0.55) |
 | `dwn_model_conf` | `` | Per-model conf overrides on downward, CSV name=conf |
 | `device_cls` | `auto` | Inference device for a .pt (auto | cuda:0 | cpu); a .hef ignores it |
@@ -243,14 +243,15 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `viewer` | `true` |  |
 | `tracking` | `true` |  |
 | `tracker_type` | `ocsort` | Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack |
-| `fwd_topic` | `` | Subscribe this ROS image topic instead of a webcam. Set by the simulator to /mongla/sim/front_camera/image_raw. |
-| `dwn_topic` | `` | Subscribe this ROS image topic instead of a webcam. Set by the simulator to /mongla/sim/bottom_camera/image_raw. |
+| `fwd_topic` | `` | Subscribe this ROS image topic instead of a webcam (a replayed bag, for one). |
+| `dwn_topic` | `` | Subscribe this ROS image topic instead of a webcam (a replayed bag, for one). |
 | `fwd_video` | `` | Video file for the FORWARD camera (e.g. a gate clip). Set => forward runs off the file; empty => live webcam. |
 | `dwn_video` | `` | Video file for the DOWNWARD camera (e.g. a bin clip). Set => downward runs off the file; empty => live webcam. |
 | `fwd_loop` | `true` | Loop the forward video at EOF (video source only). |
 | `dwn_loop` | `true` | Loop the downward video at EOF (video source only). |
 | `flow` | `false` | Start flow_node on the downward camera (velocity, and calc_distance start/stop). |
 | `pool_depth_m` | `nan` | Water depth in metres. REQUIRED with flow:=true -- the node refuses to publish without it. |
+| `dwn_calibration` | `` | Calibration JSON of the camera behind the downward source. REQUIRED with flow:=true. |
 | `hud_distance` | `true` | HUD pre-arms the distance panel (shows on calc_distance). |
 
 ### `mongla_vision/vision_pi.launch.py`
@@ -452,15 +453,15 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `active_model` | `''` |
 | `device` | `'auto'` |
 | `half` | `True` |
-| `conf` | `0.35` |
+| `conf` | `CONF` |
 | `assoc_conf` | `0.0` |
 | `model_conf` | `''` |
 | `iou` | `0.5` |
-| `nms_floor` | `0.05` |
+| `nms_floor` | `NMS_FLOOR` |
 | `nms_iou` | `0.0` |
 | `imgsz` | `640` |
 | `max_det` | `100` |
-| `classes` | `'person'` |
+| `classes` | `''` |
 | `publish_contours` | `True` |
 | `masks` | `True` |
 | `publish_debug_image` | `True` |
@@ -530,7 +531,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `loop_closure` | `False` |
 | `place_period_s` | `_lc.PLACE_PERIOD_S` |
 | `place_travel_m` | `_lc.PLACE_TRAVEL_M` |
-| `pool_depth_m` | `0.0` |
+| `pool_depth_m` | `float('nan'` |
 | `act_conf` | `0.45` |
 | `publish_hz` | `0.0` |
 | `anchor_hz` | `4.5` |

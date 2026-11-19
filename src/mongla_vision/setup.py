@@ -11,7 +11,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name,              ['package.xml']),
-        ('share/' + package_name + '/config',  glob('config/*.yaml')),
+        ('share/' + package_name + '/config',  glob('config/*.yaml') + glob('config/*.npz')),
         # The measured camera intrinsics were NOT installed, so even a launch
         # file that passed the share path would have found nothing there.
         ('share/' + package_name + '/config/calibration',

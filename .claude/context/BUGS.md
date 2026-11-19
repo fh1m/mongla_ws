@@ -507,6 +507,29 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-122: loop closure could not start, and the anchor pose put the object's origin outside the target `READ 2026-11-19` **FIXED 2026-11-19**
+
+**What.** Two defects found by the second line-by-line read of `mongla_vision`.
+`loop_closure:=true` raised in the lock's setup on every camera, because two
+mistakes sat one behind the other: it read `self._camera`, which nothing sets
+(the node keeps `self._cam`), and behind that it subscribed to odometry with
+`_qos.sensor()`, which the qos module does not define. Every closure test read
+source text or drove the policy object alone, so none ever stood the node up
+with the switch on: the capability was built, tested and unreachable. And the
+anchor's metric pose built its object points as `(ref - centre) * width_m /
+w_px` with the centre and width of the reference ROI, but the reference points
+are in full-frame pixels, so any ROI not at the origin shifted the object
+plane by its offset and every `pnp_node` range and bearing was wrong by it.
+
+**Fix.** The setup reads `self._cam` and subscribes with depth 10;
+`pose.patch_object_points` takes the ROI's own centre in frame pixels and is
+what `lock_publish` calls (the old `target_pose`, used only by tests, is
+gone). Guards: `test_lock_node_stands_up.py` stands the node up with the switch
+on, on both cameras, and walks a whole closure through `consider` to the fix
+message; `test_anchor_pose.py` places an offset ROI and recovers the true
+range. Still BUILT, NEVER FLOWN: the real matcher has never closed a loop on
+the vehicle, and any earlier claim that loop closure works predates this.
+
 ### B-120: the localiser published a pose before it had any input `READ 2026-11-19` **FIXED 2026-11-19**
 
 **What.** `/mongla/odom` is published from a 10 Hz timer. Before the first
@@ -912,7 +935,7 @@ is now refused with "read once at startup".
 **The lesson** is §9's, again: a citation is not a measurement. The ledger and
 its test agreed with each other, and neither read what runs.
 
-### B-82: the shipped `gate_sharks.hef` lost a median 0.34 of confidence to a fine-tune that diverged `MEASURED 2026-11-06 (emulator)`. **REBUILT 2026-11-06**; on-chip check owed
+### B-82: the shipped `gate_sharks.hef` lost a median 0.34 of confidence to a fine-tune that diverged `MEASURED 2026-11-06 (emulator)`. **REBUILT 2026-11-06**; **ON-CHIP CHECK DONE 2026-11-19**
 
 **What.** The forward gate detector the vehicle launches by default was
 compiled at full optimisation: 1038 frames, GPU, level 2. Its
@@ -942,6 +965,14 @@ the conf sweep on the HEF it asked for was never run.
 **To close.** With the Pi: sync the model, check the md5 against the provenance,
 run `hailortcli parse-hef`, and re-run `tools/studies/composed_lock_harness.py` on the
 same gate clip. The detection-rung share must rise well above 20 %.
+
+**Closed on Kutum, 2026-11-19.** The md5 on the vehicle matches the provenance
+(`3e9e15f0...`), `hailortcli parse-hef` reads the 3-class YOLOv8 NMS graph, and
+`composed_lock_harness.py` on archive `gate.mkv` (60 s, conf 0.45, forward
+detector and ladder composed on one VDevice) held the **detection rung 100 %**
+of the time, against 20 % with the diverged build; 29.8 Hz published, 0
+XFeat calls raised. The run also logged the lock's "camera looks degraded, 8/8
+references collapsed together" warning; its cause was not investigated.
 
 ### B-61: the Hailo detector ran on colour-swapped frames `REPRODUCED 2026-09-25` **FIXED 2026-09-25**
 

@@ -24,28 +24,16 @@ class LockSetupMixin:
         self.declare_parameter('follow', True)
         self.declare_parameter('anchor', False)
         self.declare_parameter('anchor_model', '')
-        # DEFAULT ON since the InferModel port (B-62). Measured on the
-        # vehicle: 10.89 ms alone and 19.85 ms with the detector inferring,
-        # against 32.9 ms for the ONNX path it replaces -- 1.7x even fully
-        # contended, and off the cores the camera pump needs. The two share
-        # the chip through HailoRT's scheduler (`detection/hailo.py`); in the
-        # composed graph, 17.65 ms p50 in-graph over 378 calls on archive
-        # footage (tools/studies/composed_lock_harness.py).
-        #
-        # Cross-backend equivalence checked before flipping this: 875/888/878
-        # of 1024 keypoints match between the ONNX and HEF descriptors, so a
-        # checkpoint enrolled on one path is matchable on the other and the
-        # bank does not partition by transport. The identity bar is 40.
-        #
-        # Set false to force the CPU path -- on a dev box with no chip the
-        # resolver falls back on its own, so this is for A/B measurement.
-        #
-        # DEFAULT OFF since 2026-10-03. Chip sharing works only INSIDE one
-        # process, and a standalone lock_node runs as its own: it opened a
-        # second VDevice, raced the detector process for the chip, and when
-        # it won the vehicle had NO detection (HAILO_OUT_OF_PHYSICAL_DEVICES).
-        # The numbers above stand; they need the lock composed with the
-        # detector to be had safely.
+        # OFF here, ON where the lock is composed with the detector
+        # (vision_pi sets `lock_anchor_xfeat_hef`). The chip is shared only
+        # INSIDE one process: a standalone lock_node opening its own VDevice
+        # races the detector process for the chip, and when it wins the
+        # vehicle has no detection (HAILO_OUT_OF_PHYSICAL_DEVICES). Composed,
+        # the HEF is the faster path (measured-bars 92: 11.4 ms a frame on
+        # Kutum, against ~33 ms for the ONNX on the CPU), and ONNX and HEF
+        # descriptors match well enough that a bank enrolled on one is
+        # matchable on the other (875-888 of 1024 keypoints). On a dev box
+        # with no chip the resolver falls back to the ONNX on its own.
         self.declare_parameter('anchor_xfeat_hef', False)
         # A bank built BEFORE the run, from practice footage or stills:
         # `tools/pool/build_practice_bank.py`. Measured 2026-09-24 -- references
@@ -67,8 +55,9 @@ class LockSetupMixin:
         self.declare_parameter('place_period_s', _lc.PLACE_PERIOD_S)
         self.declare_parameter('place_travel_m', _lc.PLACE_TRAVEL_M)
         # Height above the floor = pool_depth_m - |depth|. Without it pixels
-        # cannot become metres and every closure is refused, by design.
-        self.declare_parameter('pool_depth_m', 0.0)
+        # cannot become metres and every closure is refused, by design. NaN
+        # until set: absence is never a plausible number (the flow node too).
+        self.declare_parameter('pool_depth_m', float('nan'))
         # The acting bar (B-59). Below this a detection may be ASSOCIATED by
         # the tracker but must not be ACTED ON by the ladder. Default 0.45,
         # deliberately NOT the 0.60 knee that measurement favours: 0.60 is
@@ -226,22 +215,22 @@ class LockSetupMixin:
             if p.endswith('.hef'):
                 try:
                     from mongla_vision.anchor.xfeat_hailo import XFeatHailo
-                    backend = XFeatHailo(p, top_k=1024)
+                    backend = XFeatHailo(p)
                     self.get_logger().info(
                         f'[LOCK ] anchor on the Hailo-8: {os.path.basename(p)}')
                 except Exception as exc:                         # noqa: BLE001
                     self.get_logger().warn(
                         f'[LOCK ] {os.path.basename(p)} would not load on the '
                         f'accelerator ({type(exc).__name__}: {exc}) -- falling '
-                        f'back to ONNX on the CPU, which measured 32.9 ms per '
-                        f'call against 1.43 ms on the chip (B-62).')
+                        f'back to ONNX on the CPU, about 33 ms a frame against '
+                        f'11.4 ms on the chip (measured-bars 92).')
                     alt = sorted(glob.glob(os.path.join(
                         os.path.dirname(p), 'xfeat_*.onnx')))
                     p = alt[0] if alt else ''
                     if not p:
                         raise
             if backend is None:
-                backend = XFeatONNX(p, top_k=1024)
+                backend = XFeatONNX(p)
             self._anchor = CheckpointBank(backend,
                                           period_s=self._anchor_period)
             self.get_logger().info(
@@ -297,17 +286,24 @@ class LockSetupMixin:
                 f'{", ".join(fixed)}: read once at startup -- set it under '
                 f'`nodes:` in bringup.yaml and restart. Live here: '
                 f'{", ".join(LIVE_PARAMS)}'))
+        # Validate the whole call before applying any of it: a refusal must
+        # leave the node as it was, not half-changed (second-pass audit).
+        full, zero = self._full, self._zero
         for prm in params:
-            if prm.name in ('full_authority_s', 'zero_authority_s'):
-                # Read every tick by the authority taper (lock_node).
-                v = float(prm.value)
-                full = v if prm.name == 'full_authority_s' else self._full
-                zero = v if prm.name == 'zero_authority_s' else self._zero
-                if not 0.0 <= full <= zero:
-                    return SetParametersResult(successful=False, reason=(
-                        f'authority must taper: 0 <= full ({full}) <= zero ({zero})'))
-                self._full, self._zero = full, zero
-            elif prm.name == 'target_class':
+            if prm.name == 'full_authority_s':
+                full = float(prm.value)
+            elif prm.name == 'zero_authority_s':
+                zero = float(prm.value)
+            elif prm.name == 'publish_hz' and float(prm.value or 0.0) < 0.0:
+                return SetParametersResult(
+                    successful=False, reason='publish_hz must be >= 0 (0 = no limit)')
+        if not 0.0 <= full <= zero:
+            return SetParametersResult(successful=False, reason=(
+                f'authority must taper: 0 <= full ({full}) <= zero ({zero})'))
+        # Read every tick by the authority taper (lock_node).
+        self._full, self._zero = full, zero
+        for prm in params:
+            if prm.name == 'target_class':
                 new = str(prm.value or '').strip()
                 if new == self._cls_pinned:
                     continue
@@ -327,10 +323,6 @@ class LockSetupMixin:
                         f'classes_filter again ({self._cls!r})')
             elif prm.name == 'publish_hz':
                 hz = float(prm.value or 0.0)
-                if hz < 0.0:
-                    return SetParametersResult(
-                        successful=False,
-                        reason='publish_hz must be >= 0 (0 = no limit)')
                 self._pub_min_dt = (1.0 / hz) if hz > 0.0 else 0.0
                 self.get_logger().info(
                     f'[LOCK ] publish_hz {"unlimited" if hz <= 0 else hz}')

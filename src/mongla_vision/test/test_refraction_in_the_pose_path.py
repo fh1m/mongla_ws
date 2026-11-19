@@ -26,12 +26,24 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mongla_vision.anchor.pose import target_pose            # noqa: E402
+from mongla_vision.anchor.pose import (TargetPose, patch_object_points,  # noqa: E402
+                                        solve_pnp)
 from mongla_vision.optics import N_WATER, RefractiveRectifier  # noqa: E402
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of_file  # noqa: E402  (issue #22)
+
+
+def target_pose(ref, live, K, *, width_m, ref_size_px):
+    """The patch adapter and the solver, as lock_publish and pnp_node run them
+    for a reference region at the frame origin."""
+    w, h = ref_size_px
+    obj = patch_object_points(ref, (w / 2.0, h / 2.0), w, width_m) if h > 0 else None
+    if obj is None:
+        return TargetPose(ok=False, reason='bad reference size')
+    return solve_pnp(obj, np.asarray(live, np.float64).reshape(-1, 2), K)
+
 
 
 @contextlib.contextmanager

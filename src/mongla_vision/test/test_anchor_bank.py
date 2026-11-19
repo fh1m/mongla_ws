@@ -424,6 +424,36 @@ def test_loading_a_bank_built_at_another_resolution_is_REFUSED(tmp_path):
     assert other.size == 0
 
 
+class _Ran(Exception):
+    pass
+
+
+def _boom():
+    raise _Ran('the bank file ran code')
+
+
+class _Payload:
+    def __reduce__(self):
+        return (_boom, ())
+
+
+def test_a_bank_with_pickled_contents_is_refused_without_running_them(tmp_path):
+    """A bank can come from off the vehicle. Version 2 stored its labels
+    pickled and the loader unpickled them, so a crafted file ran its code on
+    load (second-pass audit F22). The loader reads with pickling off."""
+    b = bank()
+    b.enrol(view(1, 400), roi=None, det_conf=0.9, label='gate', force=True)
+    p = tmp_path / 'practice.npz'
+    b.save(str(p))
+    z = dict(np.load(str(p)))
+    z['labels'] = np.array([_Payload()], dtype=object)
+    np.savez(str(p), **z)
+    fresh = bank()
+    with pytest.raises(ValueError):             # numpy refuses the object array
+        fresh.load(str(p))
+    assert fresh.size == 0
+
+
 def test_saving_an_empty_bank_is_refused(tmp_path):
     """An empty .npz would load as a bank that silently never answers."""
     with pytest.raises(ValueError, match='empty'):

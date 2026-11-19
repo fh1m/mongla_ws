@@ -39,10 +39,10 @@
 # aims the camera as it always did -- but says so, loudly, because that is
 # exactly the shot that will miss.
 #
-# Measure these. Every entry below is `unmeasured: true` and reads as ZERO
-# OFFSET, which is byte-for-byte today's behaviour. That is deliberate: a
-# guessed offset is worse than a known-absent one, because it moves the aim
-# point with false confidence. Measuring is a tape-measure job on the hull:
+# Measure these. Every entry below is `unmeasured: true`: its zeros are
+# placeholders, and `pixel_offset` refuses them (None, not a zero correction),
+# so the stack aims the camera and warns. A guessed offset is worse than a
+# known-absent one, because it moves the aim point with false confidence. Measuring is a tape-measure job on the hull:
 # camera optical centre (the lens front element, near enough at these
 # tolerances) to the tool's bore centre, hull upright, in millimetres.
 #

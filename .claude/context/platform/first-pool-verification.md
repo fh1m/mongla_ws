@@ -118,7 +118,10 @@ target than a person who walks back in.
 **Warning: Never fired. Not once, anywhere.** Needs the downward camera, a working
 baro (0.2) and `floor_height` from the tile grating. Until 2026-11-18 it could not
 fire at all: its self-closure guards read the newest place instead of the matched
-one (`BUGS.md` B-117).
+one (`BUGS.md` B-117). Until 2026-11-19 switching it on crashed the lock's
+setup on every camera (B-122), so no earlier report of it running is true. Now
+a test stands the node up with it on; the real XFeat matcher has still never
+closed a loop on the vehicle.
 
 ```yaml
 # ~/.mongla/bringup.yaml

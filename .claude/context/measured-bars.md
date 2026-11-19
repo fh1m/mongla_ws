@@ -4057,6 +4057,52 @@ ships. And the signature was tested on FORWARD-camera clips; on a tiled floor
 the sweep expects place recognition to alias badly, so the downward camera
 needs its own number rather than this one.
 
+### 20.3 A better signature, and the downward number 20.2 owed (2026-11-19)
+
+`tools/studies/bank_shortlist_accuracy.py --set both --signatures mean,vlad16,vlad64`,
+`xfeat_320x240.onnx`, 24 references per clip at a 4 s stride, ground truth
+the expensive way as above, now over the forward clips AND the two downward
+ones. A VLAD vocabulary (K words, k-means on the pooled descriptors; each
+descriptor's residual to its nearest word summed per word, normalised per
+word, square-rooted, normalised) is learnt on the OTHER clips only, so no clip
+is ranked by words it taught.
+
+**Bar, written before the first run (bead po7.15.4):** a signature replaces
+the mean when, pooled over the forward clips, Recall@1 rises by at least 10
+points with the lower 95 % bound of the paired bootstrap above zero, the
+downward Recall@1 is not lower by more than 2 points, and loss@5 does not
+rise.
+
+| signature | forward r@1 / r@5 / loss@5 (120 queries) | downward r@1 / r@5 / loss@5 (48 queries) |
+|---|---|---|
+| mean (shipped to now) | 52.5 % / 87.5 % / 3.1 % | **47.9 % / 87.5 % / 6.2 %** |
+| VLAD, 16 words | **65.8 % / 93.3 % / 0.8 %** | **77.1 % / 97.9 % / 1.3 %** |
+| VLAD, 64 words | 61.7 % / 95.8 % / 0.7 % | 75.0 % / 95.8 % / 1.7 % |
+
+Paired difference to the mean, Recall@1, 95 % interval: VLAD-16 forward **+13.3
+points (+5.8 to +20.8)**, downward **+29.2 (+14.6 to +43.8)**; VLAD-64 forward
++9.2 (+2.5 to +16.7), downward +27.1 (+12.5 to +41.7). VLAD-16 passes every
+clause and **replaces the mean**; VLAD-64 misses the 10-point clause and is
+not chosen.
+
+**Result.** The mean was worst exactly where it was never measured: on the
+tiled floor 20.2 predicted would alias, Recall@1 was 47.9 % and a missed
+shortlist cost 6.2 % of the inlier yield. The shipped path now ranks by
+VLAD-16 (`anchor/place_signature.py`, `config/vlad16.npz`, 1024 numbers per
+reference). It costs 0.95 ms a call on the dev box and 1.43 ms on Kutum
+against 0.05 ms for the mean, and ranking 100 references is 0.014 ms: 0.4 %
+of the 333 ms anchor cycle. A bank saved under the mean (version 3) is
+refused, with the reason.
+
+**Caution: what this does not show.** The shipped vocabulary is learnt on all
+seven clips, so it is unmeasured on a scene none of them resembles; the
+leave-one-clip-out vocabulary above is the honest estimate, and the pool's
+own footage is where it gets re-learnt (`--write-vocab`). Recall@1 here is
+retrieval inside one clip, seconds to minutes apart; the revisit of a place an
+hour later, in a different light, is not measured. The IMU-rotated query (XFeat
+is not rotation invariant) cannot be scored on these clips, which carry no
+IMU, and waits for a recorded bag.
+
 ---
 
 ## 21. A reference does NOT decay to death — and a correction
@@ -8414,14 +8460,57 @@ is not worse, it is more precise, and it is upstream's own code. Semi-dense
 stays rejected (30.8 % against 61.5 %). LighterGlue's 9-point lead on warped
 frames does not appear: it fits less often than the cosine matcher and ties on
 the box, with better precision. Section 93's quality bar is not met on real
-pairs either. A 24-start rerun is in
-`tools/studies/xfeat_real_pairs.py --starts 24`; this paragraph is amended
-with its result.
+pairs either.
 
-**Open.** LighterGlue is the one option that beat the shipped path on the
-warped-frame measure (+7.5 points on both fits), at 88.3 ms a pair for the
-matcher alone on two dev-box threads; how and where it can run is its own
-measurement.
+**The 24-start rerun, and EdgePoint2.** `tools/studies/xfeat_real_pairs.py
+--starts 24 --edgepoint2`: 78 of 504 real pairs survived the truth filter
+(forward and downward clips, gaps of 15, 30 and 60 frames; 3 times the 26
+above). EdgePoint2 (HITCSC, 14 variants exist; T32, S32 and S64 run, 1024
+points, the 5x5 NMS and 4 px border of its own wrapper, our cosine matcher at
+0.5 and 0.82) was scored by a paired bootstrap of 10 000 resamples, bar
+written before the run: a Hailo compile is earned only if the lower 95 % bound
+of its fit-rate difference to shipped is above -5 points, frame and box.
+
+| method (78 pairs) | correct / pair | precision | fit right, frame / box |
+|---|---|---|---|
+| shipped (upstream XFeat) | 359.0 | 56.9 % | 65.4 / 84.6 % |
+| pre-upstream | 330.0 | 52.8 % | 67.9 / 83.3 % |
+| semi-dense | 560.8 | 55.6 % | 34.6 / 67.9 % |
+| LighterGlue, 1024 points | 323.9 | 65.2 % | 57.7 / 83.3 % |
+| EdgePoint2 S64 | 210.2 | 66.8 % | 42.3 / 75.6 % |
+| EdgePoint2 S32 | 207.7 | 66.3 % | 42.3 / 71.8 % |
+| EdgePoint2 T32 | 195.7 | 65.9 % | 41.0 / 71.8 % |
+
+Difference to shipped, frame fit / box fit, points, 95 % interval:
+
+| method | frame fit | box fit |
+|---|---|---|
+| EdgePoint2 S64 | -23.1 [-33.3, -12.8] | -9.0 [-16.7, -2.6] |
+| EdgePoint2 S32 | -23.1 [-33.3, -12.8] | -12.8 [-20.5, -6.4] |
+| EdgePoint2 T32 | -24.4 [-34.6, -15.4] | -12.8 [-20.5, -6.4] |
+| LighterGlue 1024 | -7.7 [-15.4, -1.3] | -1.3 [-5.1, +2.6] |
+| pre-upstream | +2.6 [-3.8, +10.3] | -1.3 [-6.4, +2.6] |
+| semi-dense | -30.8 [-42.3, -19.2] | -16.7 [-26.9, -6.4] |
+
+**Result.** EdgePoint2 is rejected, by a margin no spread rescues: 23 points
+below shipped on the frame fit, with an interval that never comes within 12
+points of the -5 bar, and 150 fewer correct matches a pair. It is more precise
+(66 against 57 %) and cheaper (0.5 to 0.6 GFLOPs against XFeat's 1.33 in the
+authors' table), which is the trade its paper makes, and the anchor needs the
+fit. The two matcher thresholds gave the same numbers. No Hailo parse is
+attempted. This also answers the earlier worry that 26 pairs were too few to
+judge a 1 to 2 point edge: the verdict is not an edge.
+
+The same table moves a second conclusion. LighterGlue at 1024 points, the one
+option that beat shipped on warped frames, is **below shipped on frame fit
+(-7.7, interval excludes zero) and level on the box (-1.3, [-5.1, +2.6])**,
+with higher precision. Section 93's quality bar is not met on real pairs at
+any sample size here, so the Hailo port of LighterGlue is carried on to its
+own emulation bar and a finished result, but it has no measured benefit to
+buy: adopting it would need a case this study does not show.
+
+**Open.** What LighterGlue costs on the chip, if it quantises (bead
+po7.15.1.1), is still worth knowing and is being measured.
 
 **Where the frame goes, on Kutum.** One downward frame through the shipped
 Hailo path, 1024 points, 40 runs: 15.69 ms p50, of which 6.23 ms is the chip
@@ -8549,12 +8638,36 @@ PASS at the anchor's rate and flat out; priority FAIL.
 
 **Result.** A call takes 20 to 33 ms where the chip needs about 10 (the
 comment in `detection/hailo_device.py`) and XFeat's chip share is 6.2 ms
-(section 92): the three networks queue for the host, not for the chip. At
+(section 92): the three networks queue for the host, not for the chip (retracted below: it is the chip). At
 3 Hz XFeat moves no detector rate and no p90 beyond noise when the detectors
 run at rates they hold. Scheduler priority 31 for the detectors changed
 nothing in either run (p90 within 1.5 ms, once worse), as expected when every
 caller is a blocking thread with one frame in flight: there is never a queue
-for the scheduler to reorder. So the stack sets no priority, and the cost to
-cut is host time per call, not chip time. The downward detector's own 45 Hz
-ceiling with two detectors is the larger finding, and is its own item.
+for the scheduler to reorder. So the stack sets no priority. The downward detector's own 45 Hz ceiling
+with two detectors is the larger finding, and is its own item.
+
+**Retracted the same day: the queue is the chip, not the host.** The sentence
+above inferred host time from a call longer than an assumed 10 ms of chip; it
+was never split. `tools/bench/hailo_stages.py --pair` times each step of
+`HailoDetector.infer` on Kutum, forward `gate_sharks` at 30 Hz and downward
+`bin_fire_blood` at 60 Hz, one Sonix frame, 12 s per condition. Bar written
+before the run: the stage whose median grows by at least half the downward
+call's growth from alone to paired owns the ceiling.
+
+| network, condition | letterbox | ready | chip (run_async + wait) | decode + boxes | call | rate |
+|---|---|---|---|---|---|---|
+| forward, alone | 0.36 | 0.03 | 15.82 | 0.03 | 16.24 | 30.1 Hz |
+| downward, alone | 0.35 | 0.03 | 13.49 | 0.07 | 13.94 | 60.1 Hz |
+| forward, paired | 0.41 | 0.03 | 24.62 | 0.03 | 25.42 | 30.1 Hz |
+| downward, paired | 0.38 | 0.03 | 22.60 | 0.07 | 23.09 | 45.1 Hz |
+
+(p50, ms.) The downward call grew 9.14 ms, of which the chip stage 9.11:
+**the ceiling is the chip.** Host work is under 0.5 ms a call. Each network
+needs 13.5 to 15.8 ms of chip alone, not 10, and 30 Hz forward plus 60 Hz
+downward asks for 30 x 15.8 + 60 x 13.5 = 1284 ms of chip a second: 128 %
+of one Hailo-8. Paired, each call waits for the other network's turn, and the
+downward rate settles where the chip is full (45 x 13.5 + 30 x 15.8 = 1081 ms
+a second, the switching between network groups included). XFeat's 6.2 ms at
+3 Hz is 1.9 % of the chip. What buys downward rate is chip time: a smaller
+input for the downward model, or a lower asked rate; host work cannot.
 

@@ -14,7 +14,19 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mongla_vision.anchor.pose import TargetPose, target_pose   # noqa: E402
+from mongla_vision.anchor.pose import (TargetPose, patch_object_points,  # noqa: E402
+                                        solve_pnp)
+
+
+def target_pose(ref, live, K, *, width_m, ref_size_px):
+    """The patch adapter and the solver, as lock_publish and pnp_node run them
+    for a reference region at the frame origin."""
+    w, h = ref_size_px
+    obj = patch_object_points(ref, (w / 2.0, h / 2.0), w, width_m) if h > 0 else None
+    if obj is None:
+        return TargetPose(ok=False, reason='bad reference size')
+    return solve_pnp(obj, np.asarray(live, np.float64).reshape(-1, 2), K)
+
 
 K = np.array([[1027.873, 0.0, 617.323],
               [0.0, 1033.857, 373.022],
@@ -168,3 +180,19 @@ def test_two_perfect_branches_are_a_coin_flip_not_a_certainty():
     assert ambiguity_ratio([0.5, 2.0]) == 0.25
     r = ambiguity_ratio([0.7])
     assert r != r, 'one branch has no ratio; it must be unknown, not decisive'
+
+
+def test_the_origin_is_the_regions_centre_wherever_the_region_sits():
+    """The anchor keeps FULL-FRAME keypoints, so a region away from the frame
+    corner must not move the object. `w / 2` as the origin did exactly that:
+    a 50-px box at x = 100 on a 0.6 m target put every point 1.2 m off."""
+    rng = np.random.default_rng(5)
+    roi = (100.0, 60.0, 150.0, 100.0)
+    c = (0.5 * (roi[0] + roi[2]), 0.5 * (roi[1] + roi[3]))
+    pts = np.stack([rng.uniform(roi[0], roi[2], 200), rng.uniform(roi[1], roi[3], 200)], 1)
+    pts = np.concatenate([pts, 2 * np.array(c) - pts])          # symmetric about the centre
+    obj = patch_object_points(pts, c, roi[2] - roi[0], 0.6)
+    assert np.allclose(obj[:, :2].mean(0), 0.0, atol=1e-9)
+    assert np.allclose(np.ptp(obj[:, 0]), 0.6, atol=0.05)
+    assert patch_object_points(pts, c, 0.0, 0.6) is None
+    assert patch_object_points(pts, c, 50.0, 0.0) is None

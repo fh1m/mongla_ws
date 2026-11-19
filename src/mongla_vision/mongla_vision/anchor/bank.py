@@ -60,6 +60,7 @@ from typing import Optional
 
 import numpy as np
 
+from . import place_signature
 from .anchor import Anchor, MIN_COSSIM, MIN_INLIERS
 from .bank_lookup import LookupMixin
 from .bank_store import StoreMixin
@@ -80,10 +81,10 @@ from .bank_store import StoreMixin
 # already bound by something a bigger call does not change. That optimisation
 # was measured and dropped.
 #
-# What does fix it is not matching everything. Each reference carries a 64-D
-# signature -- the L2-normalised mean of its own descriptors, already computed,
-# no second network -- and only the top-k by signature are matched. That is
-# FLAT: 100 references cost what 5 do, plus a 100x64 dot product.
+# What does fix it is not matching everything. Each reference carries a 1024-D
+# signature -- VLAD over its own descriptors, already computed, no second
+# network (`place_signature.py`) -- and only the top-k by signature are matched.
+# That is FLAT: 100 references cost what 5 do, plus a 100x1024 dot product.
 #
 # Memory never was the constraint: a reference is 1024x64 float32 = 256 kB, so
 # 64 of them is 16 MB.
@@ -91,11 +92,15 @@ CAPACITY = 64
 
 # How wide the shortlist may get. The accuracy cost of a narrow one, measured
 # on the archive clips over 120 queries (`measured-bars.md` §20.2) as the
-# inlier yield lost against always matching every reference:
+# inlier yield lost against always matching every reference. These figures are
+# for the old 64-D MEAN signature, which ranked the right reference first 50.8 %
+# of the time:
 #
 #     k=1  17.6 %     k=2  9.3 %     k=3  6.3 %     k=5  1.9 %     k=8  0.7 %
 #
-# Recall@1 is only 50.8 %, and that is not the number to steer by: several
+# The VLAD signature that replaced it (section 20.2) loses 0.8 % at k=5 on the
+# forward clips and 1.3 % on the downward ones, against 3.1 % and 6.2 % for the
+# mean on the same queries. Recall@1 is not the number to steer by: several
 # references are nearly as good, so a "wrong" shortlist costs yield rather than
 # the lock. k=5 is the knee. 8 is the ceiling this constant sets, not the
 # default -- the default is whatever the time budget affords, below.
@@ -285,7 +290,7 @@ class CheckpointBank(LookupMixin, StoreMixin):
         self._max_k = int(max(1, max_shortlist))
         self._budget = float(budget_fraction)
         self._refs: list[Anchor] = []
-        # One 64-D signature per reference, and what each reference IS.
+        # One 1024-D signature per reference, and what each reference IS.
         self._sigs: list[np.ndarray] = []
         self._labels: list[str] = []
         # Where the vehicle WAS when each checkpoint was taken: (roll, pitch,
@@ -352,11 +357,6 @@ class CheckpointBank(LookupMixin, StoreMixin):
         """Measured cost of one match on THIS machine, or 0.0 if never timed."""
         return self._match_s * 1e3
 
-    def reference_image(self, i: int):
-        """The frame reference `i` was snapped from, for display. A number of
-        inliers says a match is good and cannot say good *at what*."""
-        return self._refs[i].reference_image if 0 <= i < len(self._refs) else None
-
     @property
     def reference_roi(self):
         """The newest reference's ROI, in BACKEND pixels.
@@ -371,21 +371,14 @@ class CheckpointBank(LookupMixin, StoreMixin):
     # -- enrolment (the meta-updater) --------------------------------------- #
     @staticmethod
     def _signature(desc: np.ndarray) -> np.ndarray:
-        """One 64-D vector per reference: the L2-normalised mean descriptor.
+        """One 1024-D unit vector per reference: VLAD over its descriptors.
 
-        Not a learned global descriptor -- it is what the backend already
-        produced, so retrieval costs a dot product and no second network. The
-        claim it encodes is weak but real and measured: two views of one scene
-        share keypoints, so their mean descriptors sit closer together than two
-        views of different scenes. Recall@1 is only 50.8 % on the archive, and
-        that is acceptable because being wrong costs 1.9 % of inlier yield at
-        k=5, not the lock.
+        Not a learned global descriptor -- it is built from what the backend
+        already produced, so retrieval costs a dot product and no second
+        network. Recall@1 on the archive, against the 64-D mean it replaced:
+        forward 52.5 -> 65.8 %, downward 47.9 -> 77.1 % (`place_signature.py`).
         """
-        if desc is None or len(desc) == 0:
-            return np.zeros(64, np.float32)
-        v = np.asarray(desc, np.float32).mean(axis=0)
-        n = float(np.linalg.norm(v))
-        return (v / n) if n > 0.0 else v
+        return place_signature.signature(desc)
 
     def shortlist_k(self) -> int:
         """How many references this box can afford to match, right now.
@@ -582,4 +575,10 @@ class CheckpointBank(LookupMixin, StoreMixin):
     # bicubic samples of the normalised map, measured-bars section 92). A
     # version-1 bank holds bilinear descriptors that would match these worse,
     # quietly, so it is refused and the rung learns afresh.
-    SAVE_VERSION = 2
+    # 3: labels and annotations are stored as text, so a bank loads with
+    # pickling off. A version-2 bank stored them pickled, and loading a file
+    # from off the vehicle would run whatever code it carried.
+    # 4: the signatures are 1024-D VLAD, not the 64-D mean. A version-3 bank's
+    # signatures are a different measure, and ranking them against a VLAD query
+    # would fail on shape or, worse, not.
+    SAVE_VERSION = 4

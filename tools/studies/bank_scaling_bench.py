@@ -55,6 +55,10 @@ def rand_desc(n, k, seed):
 def signature(desc):
     """One 64-D vector per reference: the L2-normalised mean descriptor.
 
+    The bank now ranks by VLAD (`anchor/place_signature.py`, measured-bars
+    20.3); this bench keeps the mean it timed. The dot product it times grows
+    from 64 to 1024 numbers a reference, 0.014 ms for 100 references on Kutum.
+
     Not a learned global descriptor -- it is what we already have. The claim it
     encodes is weak but real: two views of one scene share keypoints, so their
     mean descriptors are closer than two views of different scenes. Whether

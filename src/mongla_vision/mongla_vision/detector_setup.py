@@ -5,7 +5,7 @@ A model swap on the day is one `set_model`; everything that swap touches is here
 import os
 from typing import List, Optional
 from mongla_vision.detection.factory   import make_detector
-from .detector_params import _model_stem, _parse_model_conf, _split_active
+from .detector_params import CONF, NMS_FLOOR, _model_stem, _parse_model_conf, _split_active
 
 
 
@@ -30,7 +30,7 @@ class DetectorSetupMixin:
         self.declare_parameter('active_model',        '')     # registry key to start with
         self.declare_parameter('device',              'auto')
         self.declare_parameter('half',                True)   # fp16: ~half the VRAM; coerced off on non-CUDA (yolo.py)
-        self.declare_parameter('conf',                0.35)
+        self.declare_parameter('conf',                CONF)
         # BYTE association floor: boxes from here up to `conf` go out on
         # `candidates` only (the tracker and the lock ladder), never on
         # `detections`, so nothing that steers can act on one. 0.0 = OFF, and
@@ -59,11 +59,11 @@ class DetectorSetupMixin:
         # (measured-bars 79). `iou` above is the .pt backend's, read at
         # construction; it is not sent to a HEF, because its default differs
         # from the compiled 0.70 and would change every graph unasked.
-        self.declare_parameter('nms_floor',           0.05)
+        self.declare_parameter('nms_floor',           NMS_FLOOR)
         self.declare_parameter('nms_iou',             0.0)
         self.declare_parameter('imgsz',               640)
         self.declare_parameter('max_det',             100)   # post-NMS cap (live-tunable)
-        self.declare_parameter('classes',             'person')
+        self.declare_parameter('classes',             '')     # empty: every class the model emits
         # Outlines are EVIDENCE, and evidence should be switchable at the
         # pool rather than in a branch -- the same argument as `claw_required:
         # false` in the champions' configs. Measured cost at the counts a
@@ -301,7 +301,7 @@ class DetectorSetupMixin:
         """
         floor = float(self.get_parameter('nms_floor').value)
         iou = float(self.get_parameter('nms_iou').value)
-        want_floor = None if abs(floor - 0.05) < 1e-9 else floor
+        want_floor = None if abs(floor - NMS_FLOOR) < 1e-9 else floor
         want_iou = iou if iou > 0.0 else None
         if (want_floor is None and want_iou is None) \
                 or not hasattr(det, 'update_nms'):

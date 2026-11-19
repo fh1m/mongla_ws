@@ -56,6 +56,8 @@ class _Fake:
         self._anchor_pose = self._anchor_header = None
         self._anchor_label, self._anchor_inliers = '', 0
         self._world = None
+        from mongla_vision.tracking.lock_state import FULL_AUTHORITY_S, ZERO_AUTHORITY_S
+        self._full, self._zero = FULL_AUTHORITY_S, ZERO_AUTHORITY_S
         for name in ('_switch_target', '_forget_target_locked', '_retarget_width'):
             setattr(self, name, types.MethodType(getattr(LockNode, name), self))
     def get_logger(self):
