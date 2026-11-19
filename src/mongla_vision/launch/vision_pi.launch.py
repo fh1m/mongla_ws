@@ -444,7 +444,7 @@ def generate_launch_description():
                 #                       because the lock shares this process's
                 #                       VDevice
                 #   medium        -- the lock rectifies its OBJECT points
-                # The ladder's bars (act_conf, anchor_semi_dense) and place
+                # The ladder's bar (act_conf) and place
                 # recognition are NOT plumbed: they are node parameters, set on
                 # the deck under `nodes:` (mongla_lock_forward / _downward), so
                 # every launch path behaves alike.

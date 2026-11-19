@@ -93,6 +93,12 @@ class LocalizationPublishMixin:
         # Report observability alongside the pose, so the two can never
         # disagree about which tick they describe.
         self._report_aiding()
+        # No input yet: the filter holds its initial state, which describes
+        # nothing. Publishing it would hand every consumer (the lock's loop
+        # closure, the manager's uplink) a confident pose at the origin, with a
+        # stamp that moves; silence is what "no estimate" looks like.
+        if self._last_input_t <= 0.0:
+            return
         st = self._filter.X
         m = Odometry()
         # The stamp is the latest input's, not `now()`. Every input to this
@@ -102,12 +108,9 @@ class LocalizationPublishMixin:
         # sd, 35.12 ms p2p. This stack has now made the wrong-clock mistake in
         # six places; this was nearly the seventh, on the output of the one
         # node that was careful at all four inputs.
-        if self._last_input_t > 0.0:
-            m.header.stamp.sec = int(self._last_input_t)
-            m.header.stamp.nanosec = int(
-                (self._last_input_t - int(self._last_input_t)) * 1e9)
-        else:
-            m.header.stamp = self.get_clock().now().to_msg()
+        m.header.stamp.sec = int(self._last_input_t)
+        m.header.stamp.nanosec = int(
+            (self._last_input_t - int(self._last_input_t)) * 1e9)
         # `pool` is a CLAIM, and it is only true once the heading is anchored.
         m.header.frame_id = frames.POOL if self._anchored else frames.ODOM
         # Both frames are NED (z down: position.z is +depth) with an FRD child.

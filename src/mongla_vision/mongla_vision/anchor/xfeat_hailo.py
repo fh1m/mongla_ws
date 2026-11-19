@@ -39,17 +39,10 @@ from . import xfeat_onnx as _x
 # network, so they are what this keys on.
 _FEAT_CH, _KPT_CH, _REL_CH = 64, 65, 1
 
-# The third head. The XFeat paper emits a keypoint heatmap, a 64-D
-# descriptor map AND a reliability heatmap; `hailortcli parse-hef` confirms
-# our own HEF carries all three (conv20 30x40x64, conv27 30x40x65,
-# conv23 30x40x1). We computed the reliability on-chip and dropped it on the
-# floor, while `min_cossim = 0.82` did the same job as ONE GLOBAL CONSTANT for
-# every keypoint in every frame.
-#
-# It is exposed as `last_reliability` rather than being applied here: the
-# matcher is shared with the ONNX path, and changing what a match means on one
-# backend only is how the two would come to disagree. Measure what it buys
-# before any rung acts on it.
+# The third head, the reliability heatmap (conv23 30x40x1), ranks the
+# keypoints with their probability, as upstream does. Both backends hand it to
+# the shared `keypoints_and_descriptors`, so they pick the same set
+# (measured-bars section 92).
 
 # Deadlock guards, not latency knobs -- same rationale as detection/hailo.py:
 # an inference that takes a second has already broken the mission, and a tight
@@ -64,7 +57,7 @@ class XFeatHailo:
     w, h = 320, 240
 
     def __init__(self, hef_path: str, *, top_k: int = 1024,
-                 det_thresh: float = 0.05, semi_dense: bool = False):
+                 det_thresh: float = 0.05):
         # The process's one VDevice (B-62): a VDevice of its own gave
         # HAILO_OUT_OF_PHYSICAL_DEVICES(74). The device runs HailoRT's
         # ROUND_ROBIN scheduler (see `detection/hailo_device.py`), so this group and
@@ -77,20 +70,7 @@ class XFeatHailo:
         # This anchor's own buffers only -- never the chip.
         self._lock = threading.Lock()
         self.top_k, self.det_thresh = int(top_k), float(det_thresh)
-        # SEMI-DENSE: every grid cell as a keypoint instead of NMS-selecting
-        # 1024 from the same map. Measured on the vehicle, four frame pairs:
-        # 589/210/218/202 inliers against sparse 229/80/105/92 -- 2.1-2.6x,
-        # for +37 % match cost (45.85 ms vs 33.50). The number that matters:
-        # the anchor's trust bar is 100 inliers, and on the weakest pair
-        # sparse scores 80 and FAILS it while dense scores 210.
-        #
-        # DEFAULT OFF until two things are measured: frame-to-REFERENCE
-        # behaviour (this tested consecutive frames; the anchor matches a
-        # checkpoint stored seconds ago from another viewpoint) and whether
-        # the extra inliers are CORRECT rather than merely numerous. MAGSAC
-        # agreeing on a homography is good evidence, not proof, and a wrong
-        # loop closure moves the vehicle.
-        self.semi_dense = bool(semi_dense)
+        self._rel_warned = False
         self.path = hef_path
         self._target = hailo_device.shared_device()
         self._model = self._target.create_infer_model(hef_path)
@@ -136,16 +116,20 @@ class XFeatHailo:
             elif a.shape[-1] == _KPT_CH:
                 kpts = a.transpose(2, 0, 1)[None]
             elif a.shape[-1] == _REL_CH:
-                rel = a[..., 0]
+                rel = a.transpose(2, 0, 1)[None]
         if feats is None or kpts is None:
             raise RuntimeError(
                 f'{self.path}: expected heads with {_FEAT_CH} and {_KPT_CH} '
                 f'channels, got {[v.shape for v in raw.values()]}. This HEF '
                 f'is not an XFeat build.')
-        self.last_reliability = rel
-        if self.semi_dense:
-            return self._post_dense(feats)
-        return self._post(feats, kpts)
+        if rel is None and not self._rel_warned:
+            # An older build without the head still works, ranked as before.
+            self._rel_warned = True
+            import logging
+            logging.getLogger(__name__).warning(
+                f'{self.path}: no reliability head; keypoints ranked by '
+                f'probability alone (fewer correct matches, section 92)')
+        return self._post(feats, kpts, rel)
 
     def _configured(self):
         """This anchor's network group, configured once. NOT activated.
@@ -196,27 +180,9 @@ class XFeatHailo:
     def _out_names(self):
         return [o.name for o in self._model.outputs]
 
-    def _post_dense(self, feats):
-        """Every descriptor-grid cell as a keypoint -- no NMS, no top_k.
-
-        The map is already computed; sparse throws most of it away. Cell
-        centres map back to full resolution at stride 8, matching the sampling
-        `_post` does for NMS keypoints, so the two produce coordinates in the
-        same frame.
-        """
-        f = feats[0]
-        c, fh, fw = f.shape
-        d = f.reshape(c, -1).T.astype(np.float32)
-        n = np.linalg.norm(d, axis=1, keepdims=True)
-        n[n == 0] = 1.0
-        ys, xs = np.mgrid[0:fh, 0:fw]
-        k = np.stack([(xs.ravel() + 0.5) * 8.0, (ys.ravel() + 0.5) * 8.0],
-                     axis=1).astype(np.float32)
-        return k, (d / n).astype(np.float32)
-
-    def _post(self, feats, kpt_logits):
+    def _post(self, feats, kpt_logits, rel=None):
         return _x.keypoints_and_descriptors(feats, kpt_logits, self.det_thresh,
-                                            self.top_k)
+                                            self.top_k, rel=rel)
 
     # The same matcher, deliberately. A checkpoint enrolled through one
     # backend must be matchable through the other, or the bank silently

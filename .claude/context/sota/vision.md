@@ -383,7 +383,7 @@ That is the real argument for a DeepVL-shaped model: not a fallback, a **second 
 | V-4 | one-call compile with in-domain calibration | 6 manual DFC steps, 320 calibration frames | `format="hailo"` since ultralytics 8.4.97 — but it needs **≥1 024** in-domain images or it **silently uses COCO128** |
 | V-5 | a **second, independent** velocity estimator | one estimator (LK flow), refusing when it knows it cannot measure | DeepVL: **3.9 % error through a full blackout, 28 k params, <5 ms** — our own floor is 3.4 % |
 | V-6 | gate visual health on the tracking **Hessian** | health = point survival fraction | Super Odometry 2.0 uses the **same matrix Shi-Tomasi already computes**; we are one eigenvalue from a published metric |
-| V-7 | semi-dense features for the anchor | XFeat sparse | XFeat\*: **+111 % inliers, +10.2 Acc@10°, 1.4× time** |
+| V-7 | semi-dense features for the anchor | XFeat sparse, upstream-exact since 2026-11-19 | XFeat\*: **+111 % inliers, +10.2 Acc@10°, 1.4× time** on MegaDepth; on our archive it loses the target-box fit (55.0 % against 61.7 %), so not adopted (measured-bars section 92) |
 | V-8 | a **sonar** fallback when optics fail | nothing — the blackout is absorbed by the ladder alone | 2 of 5 top TDRs carry sonar for exactly our 2.418 s p99 gap. **No software substitute exists in the literature** |
 | V-9 | metric monocular depth to remove a known-height requirement | flow **refuses** without a height | only **UniDepth V2** survives water (AbsRel 0.093–0.116); **no published Hailo-8 number for it** |
 

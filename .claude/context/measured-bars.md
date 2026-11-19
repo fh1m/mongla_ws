@@ -155,6 +155,10 @@ is how `recommend()` happened.
 - [89. FLOW IN THE CAMERA'S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18)](#89-flow-in-the-cameras-process--the-downward-detector-gains-37--flow-keeps-110-frames-a-second-total-cpu-unchanged-2026-11-18)
 - [90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18)](#90-retrodiction-on-the-pi--4-to-6--of-a-core-while-moving-so-it-stays-off-until-its-benefit-is-measured-2026-11-18)
 - [91. ODOMETRY ARRIVAL — the localiser's 10 Hz never gaps past 105.76 ms, so loop closure refuses odometry older than 0.5 s (2026-11-19)](#91-odometry-arrival--the-localisers-10-hz-never-gaps-past-10576-ms-so-loop-closure-refuses-odometry-older-than-05-s-2026-11-19)
+- [92. XFEAT AS ITS AUTHORS RUN IT — +38 % correct matches on warped frames, +8 % on real pairs; semi-dense is removed (2026-11-19)](#92-xfeat-as-its-authors-run-it--38--correct-matches-on-warped-frames-8--on-real-pairs-semi-dense-is-removed-2026-11-19)
+- [93. LIGHTERGLUE ON THE ANCHOR'S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19)](#93-lighterglue-on-the-anchors-cpu--better-fits-but-not-inside-the-333-ms-anchor-cycle-2026-11-19)
+- [94. VISUAL ODOMETRY FROM XFEAT — LK already does it better inside the same solver (2026-11-19)](#94-visual-odometry-from-xfeat--lk-already-does-it-better-inside-the-same-solver-2026-11-19)
+- [95. ONE HAILO-8, THREE NETWORKS — XFeat at the anchor's rate costs the detectors nothing, and scheduler priority buys nothing (2026-11-19)](#95-one-hailo-8-three-networks--xfeat-at-the-anchors-rate-costs-the-detectors-nothing-and-scheduler-priority-buys-nothing-2026-11-19)
 <!-- contents:end -->
 
 ---
@@ -8299,7 +8303,258 @@ runs; a dropped board link would keep messages on time around a position that
 stopped moving. So the age runs from the last time the stamp moved, which a
 live filter does on every message.
 
-**What it cannot see.** A localiser that has had no input at all stamps with
-`now()`, so its stamp moves anyway and passes. This run was that case (no
-board attached), which is why the arrival gaps above stand for the timer and
-nothing more.
+**What it could not see, then.** A localiser that had had no input at all
+stamped with `now()`, so its stamp moved anyway and passed. This run was that
+case (no board attached), which is why the arrival gaps above stand for the
+timer and nothing more. Since 2026-11-19 (BUGS B-120) a localiser with no
+input publishes no odometry at all, so the lock refuses it as never heard.
+
+## 92. XFEAT AS ITS AUTHORS RUN IT — +38 % correct matches on warped frames, +8 % on real pairs; semi-dense is removed (2026-11-19)
+
+The anchor's XFeat had drifted from upstream (verlab/accelerated_features,
+`detectAndCompute`) in three ways nobody had measured: it ranked the top-k by
+keypoint probability alone, ignoring the reliability head the network
+computes for that purpose; it sampled descriptors bilinearly from the raw map,
+where upstream samples bicubically from the per-cell normalised map; and it
+kept keypoints on the last row and column, which upstream's sampling drops.
+
+**Truth, not a fitted inlier count.** `tools/studies/xfeat_reliability.py`
+warps real frames from four archive clips (Mirpur torpedo, torpedo_1, gate;
+the clear RoboSub torpedo) by a homography it chooses, with blur, noise and a
+gain change. A match is correct when it lands within 3 px of where the true
+homography sends it; a fit is right when the anchor's own estimator (MAGSAC,
+3 px, at least 15 inliers) puts the corners within 3 px of the truth, over the
+whole frame and over a centred box 40 % of the frame on a side, the size of a
+held target. 120 pairs, seed 1, ONNX 320x240 on the dev box.
+
+**Bar, written before the run:** adopt a change when correct matches rise by
+at least 5 % and precision falls by no more than a point on any clip.
+
+| method | correct / pair | precision | fit right, frame | fit right, target box |
+|---|---|---|---|---|
+| shipped before (keypoint rank, bilinear) | 168.3 | 44.8 % | -- | -- |
+| keypoint rank, upstream sampling | 187.3 | 48.8 % | 42.5 % | 56.7 % |
+| **reliability rank, upstream sampling (shipped)** | **232.6** | **55.9 %** | **51.7 %** | **61.7 %** |
+| semi-dense, every cell centre (was `anchor_semi_dense`) | 201.4 | 36.1 % | 25.8 % | 38.3 % |
+| upstream sparse, torch | 229.4 | 56.9 % | 45.8 % | 61.7 % |
+| upstream XFeat*, two scales and the refinement MLP | 216.6 | 82.6 % | 60.0 % | 55.0 % |
+| upstream XFeat*, one scale | 136.8 | 74.2 % | 40.0 % | 52.5 % |
+| upstream sparse + LighterGlue matcher | 272.3 | 78.5 % | 59.2 % | 69.2 % |
+
+Reliability alone, against keypoint rank with the same sampling: +24.2 %
+correct, precision up on every clip (4 to 7 points); NMS leaves more than 1024
+keypoints on 97 % of frames, so the ranking decides the set almost always.
+Bicubic alone, against bilinear with reliability: +10.5 % correct, +4.1
+points. Normalising the map first changes nothing measurable (231.9 against
+231.8) and is kept so the descriptors are upstream's own.
+
+**On the chip** (Kutum, `XFeatHailo`, 48 pairs from the same clips):
+reliability rank 218.8 correct at 56.3 % against 173.8 at 48.8 % by keypoint
+rank (+25.9 %); detection 16.7 ms a frame including the post-process. The
+quantised chip shares 72 % of its keypoints with ONNX (mean, 12 frames) and
+finds about 5 % fewer correct matches.
+
+**Fidelity.** With upstream's own selection code on the same network output,
+our keypoint set is upstream's on 16 of 16 real frames, and the descriptors
+agree to 8.8e-7. `test_xfeat_is_upstream.py` holds it against upstream's
+answer recorded for seeded heads; each of the four behaviours was removed in
+turn and the test failed.
+
+**Rejected, with the numbers above.** Semi-dense: its "2.1-2.6x inliers" were
+MAGSAC inliers among 8 px cell-centre matches that agree with a 3 px threshold
+without being right; it fits the true view change half as often. Reliability
+as a per-keypoint gate on top of the ranking (bars 0.05 to 0.3): precision
+rises to 77 % but the target-box fit falls from 61.7 % to 40.8 %. The
+inherited settings, moved one at a time (cosine bar 0.7, 0.76, 0.88, none;
+top_k 512, 2048; threshold 0.02, 0.1), are within a pair or two of the shipped
+0.82 / 1024 / 0.05 or worse.
+
+**Downstream: the loop-closure bar still holds.** `CLOSURE_INLIERS = 100`
+was set from section 24's near/far inlier separation under the old XFeat, and
+more surviving matches can move both. `floor_place_recognition.py` re-run on
+the same three downward clips (24 frames each, both versions, same pairs; the
+old one reproduces section 24 exactly):
+
+| floor | near p50, old / new | far pairs at 100 or more, old / new | far max, old / new |
+|---|---|---|---|
+| octagon_1 (caustics) | 76 / 90 | 0 % / 0 % | 53 / 71 |
+| octagon_Bottom | 168 / 168 | 0 % / 0 % | 107 / 111 |
+| bin | 192 / 228 | 8 % / 8 % | 262 / 301 |
+
+The share of different-place pairs clearing the bar is unchanged on every
+floor, and same-place pairs clear it more often (octagon_1 42 % to 50 %); the
+bin's 8 % is the revisit-or-alias tail section 24 already describes. The bar
+stays at 100.
+
+**Real pairs, seconds apart: the gain shrinks and LighterGlue's lead goes.**
+Everything above warps ONE frame, so both images share one instant, the same
+particles and no change of viewpoint in depth, while the anchor matches a
+reference stored seconds earlier. `tools/studies/xfeat_real_pairs.py` scores
+real frame pairs 0.5 to 2 s apart (15, 30 and 60 frames), with truth from a
+homography chained through the frames between them at a 3-frame step by two
+different matchers (a pair is kept only when the chains agree to 1.5 px and
+every step had 60 inliers). 26 of 168 pairs survived the filter, mostly the
+15-frame gaps: this is the easy regime, and one pair is 3.8 points.
+
+**Bar, written before the run:** shipped beats the pre-upstream code by at
+least 15 % correct matches and 3 points on the target-box fit; semi-dense fits
+fewer pairs than shipped; LighterGlue at 1024 fits more target boxes.
+
+| method (26 real pairs) | correct / pair | precision | fit right, frame / box |
+|---|---|---|---|
+| pre-upstream (keypoint rank, bilinear) | 323.5 | 51.4 % | 61.5 / 84.6 % |
+| shipped (upstream XFeat) | 350.0 | 54.8 % | 61.5 / 80.8 % |
+| semi-dense | 572.7 | 55.3 % | 30.8 / 53.8 % |
+| LighterGlue, 1024 points | 303.2 | 62.5 % | 53.8 / 80.8 % |
+
+**Result.** Two of the three bars are reversed. The upstream port gains 8.2 %
+correct matches and 3.4 points of precision on real pairs, not 38 %, and the
+fit rates are equal (the box difference is one pair); what survives is that it
+is not worse, it is more precise, and it is upstream's own code. Semi-dense
+stays rejected (30.8 % against 61.5 %). LighterGlue's 9-point lead on warped
+frames does not appear: it fits less often than the cosine matcher and ties on
+the box, with better precision. Section 93's quality bar is not met on real
+pairs either. A 24-start rerun is in
+`tools/studies/xfeat_real_pairs.py --starts 24`; this paragraph is amended
+with its result.
+
+**Open.** LighterGlue is the one option that beat the shipped path on the
+warped-frame measure (+7.5 points on both fits), at 88.3 ms a pair for the
+matcher alone on two dev-box threads; how and where it can run is its own
+measurement.
+
+**Where the frame goes, on Kutum.** One downward frame through the shipped
+Hailo path, 1024 points, 40 runs: 15.69 ms p50, of which 6.23 ms is the chip
+and the copy and 9.46 ms is the CPU post-process. Inside the post-process,
+the bicubic descriptor sampling took 6.47 ms; softmax and pixel shuffle 0.82,
+NMS 0.41, reliability 0.29, map normalisation 0.17. The sampler is now one
+float32 gather of a pixel-major copy per tap instead of a float64
+boolean-indexed loop: 2.77 ms against 23.66 ms on Kutum for the sampler
+alone on random maps, the largest difference from the old sampler 7.2e-7.
+End to end on the same camera frame, 60 runs: **15.77 ms to 11.35 ms p50**
+(p90 15.98 to 11.41), the same keypoints and a minimum descriptor cosine of
+1.000000 between the two. Moving the post-process onto the chip is now worth
+at most the remaining ~5 ms.
+
+## 93. LIGHTERGLUE ON THE ANCHOR'S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19)
+
+Section 92 left LighterGlue as the one matcher that beat the shipped path.
+`tools/bench/lighterglue_export.py` writes it to ONNX (all six layers, no
+pruning or early stop, which do not export; the log-assignment agrees with
+kornia's unpruned network to 3.4e-4), and `xfeat_reliability.py --glue`
+scores it on the shipped keypoints and descriptors, same 120 pairs.
+
+**Bar, written before the run:** ship it if the target-box fit rises by at
+least 5 points over the shipped matcher and the per-frame cost fits the
+anchor's 333 ms at 3 Hz with the detectors running.
+
+| matcher on the shipped features | points | correct / pair | precision | fit right, frame / box | Kutum, 2 threads / 4 threads |
+|---|---|---|---|---|---|
+| cosine, mutual, 0.82 (shipped) | 1024 | 232.6 | 55.9 % | 51.7 / 61.7 % | -- |
+| LighterGlue | 1024 | 282.0 | 79.0 % | 61.7 / 70.8 % | 378.5 / 292.0 ms |
+| LighterGlue | 768 | 217.5 | 79.6 % | 60.0 / 65.8 % | -- |
+| LighterGlue | 512 | 144.3 | 78.9 % | 56.7 / 55.8 % | 130.6 / 96.9 ms |
+| LighterGlue | 256 | 66.7 | 73.3 % | 45.0 / 43.3 % | 52.6 / 39.2 ms |
+
+Kutum's times are one pair, matcher alone, idle stack; the bank matches up to
+four references a frame.
+
+**Decision.** Not in the per-frame path. On warped frames at 1024 points it clears the
+quality bar by 9.1 points (section 92's real pairs did not confirm it) and costs one anchor cycle per pair; at 768 it fits
+the time and misses the bar (+4.1). It beats upstream's own sparse-plus-glue
+pairing (section 92) because the shipped features are now upstream's with
+the edge rule.
+
+**A second chance does not work as written.** The plan was to call
+LighterGlue only when the cosine matcher's fit missed the 15-inlier bar. On
+all 120 pairs the cosine fit cleared 15, including the ones whose fit was
+wrong, so the trigger never fired. An inlier count cannot say when the fast
+matcher failed; that needs a different signal, or a caller that is already
+off the 3 Hz cycle: loop-closure verification and re-acquisition after the
+lock is lost.
+
+## 94. VISUAL ODOMETRY FROM XFEAT — LK already does it better inside the same solver (2026-11-19)
+
+The flow node fits one similarity transform per interval
+(`flow_math.solve_planar_motion`): the optical axis's translation, the image
+yaw rate and the scale rate, from LK tracks. An XFeat odometry rung could
+only earn its chip time by giving that same solver better correspondences.
+`tools/studies/vo_downward.py` feeds the shipped solver from both trackers
+and changes nothing else. Truth is exact: real downward archive frames (three
+clips, caustics included) moved by a known similarity each step, each frame
+degraded independently; 4 base frames a clip, 20 steps, two regimes.
+
+**Bar, written before the run:** XFeat earns a rung only if, at large steps,
+it refuses at least 20 points fewer intervals or its yaw error is at most
+0.7x LK's with translation no worse, and at small steps it is within 10 % of
+LK on both.
+
+| regime | tracker | refused | translation err p50 / p90 | yaw err p50 / p90 | dev-box CPU |
+|---|---|---|---|---|---|
+| small (1-3 px, <= 0.5 deg) | LK, shipped | 0.8 % | 0.10 / 0.51 px | 0.021 / 0.117 deg | 11.1 ms |
+| small | XFeat | 0.0 % | 0.41 / 0.92 px | 0.092 / 0.239 deg | 145.7 ms |
+| large (8-30 px, 2-8 deg) | LK, shipped | 3.3 % | 0.21 / 1.01 px | 0.084 / 0.369 deg | 13.7 ms |
+| large | XFeat | 0.0 % | 0.33 / 0.65 px | 0.095 / 0.252 deg | 147.3 ms |
+
+On real consecutive frames (no truth; availability only) both fit 100 % of
+24 intervals at a 1- and a 6-frame gap; LK's one-motion residual is lower
+(0.18 against 0.86 px, 0.54 against 1.07 px).
+
+**Decision.** No XFeat odometry rung: at the step sizes the downward camera
+sees, LK is four times more accurate, and at large steps XFeat's only
+advantage is a 3-point refusal rate and a shorter tail. XFeat keeps the job
+LK cannot do, finding a place again seconds or minutes later (the anchor and
+loop closure). XFeat's time here is ONNX on the CPU; on the chip the whole
+frame is 11.4 ms (section 92), which changes the cost, not the accuracy.
+
+**Not tested here**: the image yaw as an observation of the board gyro's bias
+in the localiser. Today it estimates the camera-to-gyro time offset and
+cross-checks the gyro's axis and sign, and the localiser does not read it.
+
+## 95. ONE HAILO-8, THREE NETWORKS — XFeat at the anchor's rate costs the detectors nothing, and scheduler priority buys nothing (2026-11-19)
+
+`tools/bench/hailo_share.py` on Kutum: the shipped `HailoDetector` (forward
+`gate_sharks`, downward `bin_fire_blood`) and `XFeatHailo` on the process's
+one VDevice under ROUND_ROBIN, each in its own thread, paced at its own rate,
+one real downward frame for all, 15 s per condition. Latency is the call,
+submit to result, host decode included.
+
+**Bar, written before the run:** sharing is acceptable when, with XFeat at
+the anchor's 3 Hz, both detectors keep their rate within 2 % and neither
+detector's p90 rises more than 5 ms. Priority is worth setting when, with
+XFeat flat out, it brings the detectors' p90 back within 5 ms of alone.
+
+First run, downward asked for 60 Hz:
+
+| condition | forward Hz, p50 / p90 ms | downward Hz, p50 / p90 ms | XFeat Hz, p50 / p90 ms |
+|---|---|---|---|
+| detectors alone | 30.1, 23.91 / 28.88 | 44.9, 22.74 / 26.32 | |
+| + XFeat at 3 Hz | 30.1, 24.48 / 29.36 | 42.6, 23.11 / 27.43 | 3.1, 26.27 / 30.39 |
+| + XFeat flat out | 30.1, 28.89 / 31.46 | 31.1, 32.23 / 38.57 | 30.1, 32.86 / 40.22 |
+| flat out, detectors at priority 31 | 30.0, 28.82 / 30.28 | 30.7, 32.38 / 38.56 | 29.5, 32.80 / 39.68 |
+
+**FAIL on all three.** The downward detector never reached 60 Hz even alone
+(44.9 Hz): a saturated stream, so any other work comes out of its rate, and
+XFeat at 3 Hz took 5 % of it. A second run, with the downward detector at a
+rate it holds (30 Hz), reported separately and not as a re-scoring:
+
+| condition | forward Hz, p50 / p90 ms | downward Hz, p50 / p90 ms | XFeat Hz, p50 / p90 ms |
+|---|---|---|---|
+| detectors alone | 30.1, 33.03 / 33.49 | 30.1, 20.89 / 29.03 | |
+| + XFeat at 3 Hz | 30.1, 33.11 / 33.79 | 30.1, 20.98 / 25.58 | 3.1, 27.14 / 28.22 |
+| + XFeat flat out | 30.0, 31.96 / 37.98 | 30.1, 27.55 / 32.95 | 28.7, 33.73 / 41.42 |
+| flat out, detectors at priority 31 | 30.0, 29.81 / 39.02 | 30.1, 26.32 / 35.22 | 30.1, 32.94 / 39.17 |
+
+PASS at the anchor's rate and flat out; priority FAIL.
+
+**Result.** A call takes 20 to 33 ms where the chip needs about 10 (the
+comment in `detection/hailo_device.py`) and XFeat's chip share is 6.2 ms
+(section 92): the three networks queue for the host, not for the chip. At
+3 Hz XFeat moves no detector rate and no p90 beyond noise when the detectors
+run at rates they hold. Scheduler priority 31 for the detectors changed
+nothing in either run (p90 within 1.5 ms, once worse), as expected when every
+caller is a blocking thread with one frame in flight: there is never a queue
+for the scheduler to reorder. So the stack sets no priority, and the cost to
+cut is host time per call, not chip time. The downward detector's own 45 Hz
+ceiling with two detectors is the larger finding, and is its own item.
+

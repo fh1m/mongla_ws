@@ -71,11 +71,16 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `hailo_latency.py` | Throughput is not latency, and a control loop pays latency. |
 | `hailo_nms_floor.py` | Is the score threshold compiled into a HEF a floor, or only a default? A detection HEF carries an NMS score threshold from its compile. |
 | `hailo_service_drill.py` | What happens to a vision process when the HailoRT service dies. |
+| `hailo_share.py` | What XFeat costs the detectors when the three share one Hailo-8. |
 | `hailo_stages.py` | Where does a Hailo frame actually go? Per-stage, on real frames. |
 | `hef_vs_cpu.py` | Does XFeat still MATCH after INT8? The gate that makes the HEF a result. |
 | `hull_stations.py` | Read EXACT thruster stations out of an Onshape GLB export. |
 | `imu_rest_stats.py` | What the board's IMU says when the vehicle is NOT moving. |
 | `label_contact_sheet.py` | Render every clip's strongest detection of one class, so a human can label. |
+| `lighterglue_export.py` | Export XFeat's LighterGlue matcher to ONNX, for the anchor's CPU. |
+| `lighterglue_hailo.py` | LighterGlue rewritten for the Hailo-8 compiler, float first. |
+| `lighterglue_hailo_dfc.py` | Step 2 of 2: parse, quantise and emulate a LighterGlue half on the Hailo-8. |
+| `lighterglue_hailo_prep.py` | Step 1 of 2 for LighterGlue on the Hailo-8: ONNX halves and real calibration. |
 | `mine_hard_negatives.py` | Mine the frames the detector is most confidently WRONG about. |
 | `mixer_map.py` | Measure what the mixer ACTUALLY does, using the Pico's console as readback. |
 | `model_inventory.py` | Every model on this box, what it detects, and whether it has been checked. |
@@ -194,10 +199,13 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `tau_from_scale.py` | Rank the four scale sources against a KNOWN-CONSTANT-SPEED approach. |
 | `tracker_ab.py` | Which tracker closes more gaps on REAL competition footage? The question this settles, with numbers rather than an argument: the coast layer exists to bridge detection gaps, and nobody has ever ... |
 | `truth/` | Hand-labelled truth for the studies: when a target is really in view, labelled by eye from the frames and independently of any model, so a tracker or detector can be scored rather than compared with ... |
+| `vo_downward.py` | Should XFeat feed the downward camera's motion fit, or does LK already do it? The flow node already fits ONE similarity transform per interval (`flow_math.solve_planar_motion`): translation of the ... |
 | `weak_box_locality.py` | Are the weak boxes inside a gap WHERE THE TARGET WAS, or scattered noise? `gap_recovery_potential.py` showed every gap contains weak detections. |
 | `weak_box_persistence.py` | Does sub-threshold evidence persist WHILE THE TARGET IS STILL IN SIGHT? Track-before-detect postpones the threshold: a target too dim to clear a per-frame bar is accumulated across frames until the ... |
 | `xfeat_finetune_score.py` | Did fine-tuning on our water actually help? Scored on a HELD-OUT venue. |
 | `xfeat_finetune_verdict.py` | Did the fine-tune help, or did it learn OUR POOLS? The decisive test. |
+| `xfeat_real_pairs.py` | Do section 92's XFeat gains hold on REAL pairs, seconds apart? Section 92 scored every change on one archive frame warped by a known homography: exact truth, but the same instant in both images, the ... |
+| `xfeat_reliability.py` | Does XFeat's reliability head pick better keypoints for the anchor? XFeat has three heads. |
 | `xfeat_settings_sweep.py` | Find XFeat's best operating point FOR THIS VEHICLE, on our own footage. |
 
 ## Shared libraries
