@@ -8422,6 +8422,19 @@ warped-frame measure (+7.5 points on both fits), at 88.3 ms a pair for the
 matcher alone on two dev-box threads; how and where it can run is its own
 measurement.
 
+**Where the frame goes, on Kutum.** One downward frame through the shipped
+Hailo path, 1024 points, 40 runs: 15.69 ms p50, of which 6.23 ms is the chip
+and the copy and 9.46 ms is the CPU post-process. Inside the post-process,
+the bicubic descriptor sampling took 6.47 ms; softmax and pixel shuffle 0.82,
+NMS 0.41, reliability 0.29, map normalisation 0.17. The sampler is now one
+float32 gather of a pixel-major copy per tap instead of a float64
+boolean-indexed loop: 2.77 ms against 23.66 ms on Kutum for the sampler
+alone on random maps, the largest difference from the old sampler 7.2e-7.
+End to end on the same camera frame, 60 runs: **15.77 ms to 11.35 ms p50**
+(p90 15.98 to 11.41), the same keypoints and a minimum descriptor cosine of
+1.000000 between the two. Moving the post-process onto the chip is now worth
+at most the remaining ~5 ms.
+
 ## 93. LIGHTERGLUE ON THE ANCHOR'S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19)
 
 Section 92 left LighterGlue as the one matcher that beat the shipped path.

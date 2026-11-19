@@ -148,6 +148,12 @@ def sample_bicubic(fmap, pts, w: int, h: int) -> np.ndarray:
     """`fmap` (C, h/8, w/8) at points in input pixels -> (N, C), as upstream's
     `InterpolateSparse2d('bicubic')`: torch grid_sample, align_corners=False,
     zero padding, coordinates normalised by (w-1, h-1)."""
+    # Coordinates and weights in float64 (N values, cheap); the gather and the
+    # sum in float32 over a pixel-major copy, so each tap reads one contiguous
+    # row of C floats. A tap outside the map gets weight 0 and reads row 0,
+    # which is upstream's zero padding without compacting the arrays. Measured
+    # on Kutum at 1024 points: 2.8 ms, against 23.7 ms for the float64
+    # boolean-indexed loop this replaced (measured-bars section 92).
     c, fh, fw = fmap.shape
     u = pts[:, 0].astype(np.float64) * fw / (w - 1) - 0.5
     v = pts[:, 1].astype(np.float64) * fh / (h - 1) - 0.5
@@ -155,17 +161,17 @@ def sample_bicubic(fmap, pts, w: int, h: int) -> np.ndarray:
     y0 = np.floor(v).astype(np.int64)
     wx = _cubic_weights(u - x0)
     wy = _cubic_weights(v - y0)
-    out = np.zeros((len(pts), c), np.float64)
+    rows = np.ascontiguousarray(np.asarray(fmap, np.float32).reshape(c, -1).T)
+    out = np.zeros((len(pts), c), np.float32)
     for j in range(4):
         yi = y0 + j - 1
         oky = (yi >= 0) & (yi < fh)
         for i in range(4):
             xi = x0 + i - 1
             ok = oky & (xi >= 0) & (xi < fw)
-            if ok.any():
-                wgt = (wy[j] * wx[i])[ok]
-                out[ok] += wgt[:, None] * fmap[:, yi[ok], xi[ok]].T
-    return out.astype(np.float32)
+            wgt = np.where(ok, wy[j] * wx[i], 0.0).astype(np.float32)
+            out += wgt[:, None] * rows[np.where(ok, yi * fw + xi, 0)]
+    return out
 
 
 def keypoints_and_descriptors(feats, kpt_logits, det_thresh: float,
