@@ -32,3 +32,24 @@ def test_a_failure_after_shutdown_ends_the_loop_without_an_error():
     t.join(1.0)
     assert not t.is_alive()
     assert errors == []
+
+
+def test_the_lock_ladder_ends_without_a_fault_after_shutdown(monkeypatch):
+    """Same race in the lock ladder: rclpy.ok() passed, then the context
+    closed mid-tick and the publish failed, logged as `ladder fault #1` on
+    every stop of the vision graph on Kutum."""
+    from mongla_vision import lock_node
+    monkeypatch.setattr(lock_node.rclpy, 'ok', lambda: True)
+    errors = []
+
+    def boom():
+        raise RuntimeError("Failed to publish: publisher's context is invalid")
+    n = types.SimpleNamespace(
+        _stopping=threading.Event(), _ladder_tick=boom,
+        context=types.SimpleNamespace(ok=lambda: False),
+        get_logger=lambda: types.SimpleNamespace(error=errors.append))
+    t = threading.Thread(target=lock_node.LockNode._loop, args=(n,), daemon=True)
+    t.start()
+    t.join(1.0)
+    assert not t.is_alive()
+    assert errors == []
