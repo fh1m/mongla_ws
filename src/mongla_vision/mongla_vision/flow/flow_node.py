@@ -378,6 +378,8 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
                     continue
                 self._process(gray, t, seq)
             except Exception as exc:            # never let the thread die
+                if not self.context.ok():
+                    return          # the node shut down mid-frame: a stop, not a fault
                 self.get_logger().error(f'[FLOW ] worker: {exc!r}')
 
     def _vz_down(self) -> Optional[float]:
