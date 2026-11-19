@@ -177,7 +177,7 @@ The read column says whether the file was read line by line in this audit. All 1
 | `detector_node.py` | 646 | vehicle | yes | works; stray comments cleaned |
 | `detector_params.py` | 83 | vehicle | yes | FIXED: a malformed model_conf pair was skipped and the live set reported success; now refused by name |
 | `detector_publish.py` | 181 | vehicle | yes | CHANGED: debug image signature trimmed to what it uses |
-| `detector_setup.py` | 490 | vehicle | yes | FIXED: model_conf refused whole when malformed. Recorded: a multi-parameter set that fails part-way leaves the earlier ones applied (the DSL sets one at a time) |
+| `detector_setup.py` | 490 | vehicle | yes | FIXED: model_conf refused whole when malformed; a live set is all or nothing (every refusal is decided before anything is applied) |
 | `draw.py` | 44 | vehicle | yes | CHANGED: legacy aliases and a swallowing **kwargs removed; one entry point |
 | `draw_strip.py` | 437 | none | yes | read; tools/site only (written reason in the register); FIXED absent values drew as 0.0; unused strip-height export removed |
 | `draw_video.py` | 315 | vehicle | yes | CHANGED: depth inset and depth borders removed |
