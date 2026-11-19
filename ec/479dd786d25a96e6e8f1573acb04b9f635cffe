@@ -1,0 +1,21 @@
+.gitignore
+  s_4af8d6f83b24e8::t_8cafd5ea3be41a 46-49
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_7183753f4a1195 938,969-976
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "ec479dd786d25a96e6e8f1573acb04b9f635cffe",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
