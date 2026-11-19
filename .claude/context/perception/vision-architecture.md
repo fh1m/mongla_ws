@@ -185,7 +185,7 @@ Canary log line (grep for this on every machine):
 
 The **extension decides the backend**, not a `backend=` argument — one fact, in
 one place. `detection/factory.py` keeps the preference order and
-`yolo._resolve_model_path` walks the same list when it turns a stem into a path:
+`yolo._resolve_model_path` reads that list when it turns a stem into a path:
 
 ```python
 KNOWN_EXTENSIONS = ('.hef', '.pt')   # most preferred first

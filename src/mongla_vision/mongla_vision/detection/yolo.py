@@ -20,6 +20,7 @@ from typing import Iterable, List, Optional
 import numpy as np
 
 from .detector import Detector, Detection
+from .factory  import KNOWN_EXTENSIONS
 from .gpu      import select_device
 
 
@@ -123,7 +124,7 @@ def _resolve_model_path(name: str) -> str:
     if src_models is not None:
         # .hef first: on the Pi + AI HAT+ it is the compiled artifact for THIS
         # machine; the .pt is the dev-box fallback (footage replay, training).
-        for ext in ('.hef', '.pt'):
+        for ext in KNOWN_EXTENSIONS:
             cand = src_models / f'{name}{ext}'
             if cand.exists():
                 return str(cand)
@@ -133,7 +134,7 @@ def _resolve_model_path(name: str) -> str:
         from ament_index_python.packages import get_package_share_directory
         share = get_package_share_directory('mongla_vision')
         share_models_dir = str(Path(share) / 'models')
-        for ext in ('.hef', '.pt'):
+        for ext in KNOWN_EXTENSIONS:
             cand = Path(share) / 'models' / f'{name}{ext}'
             if cand.exists():
                 return str(cand)
