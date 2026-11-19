@@ -375,8 +375,9 @@ been sitting there the whole time.
 ### FOV and object permanence — confirmed by others
 
 **VISTA-CBF+ELR (2026)** keeps collision constraints hard while relaxing
-field-of-view ones — independently confirming the `SLACK = True` decision
-already written into `visibility.py`, and adding one idea we do not have:
+field-of-view ones — independently confirming the soft field-of-view
+decision already written into `visibility.py` (`Visibility.scale` tapers,
+never refuses), and adding one idea we do not have:
 **occlusion-evasive replanning**, acting before the target is lost rather than
 after.
 
