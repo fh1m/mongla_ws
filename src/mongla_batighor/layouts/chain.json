@@ -1,0 +1,41 @@
+{
+  "configById": {
+    "Image!forward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/forward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/forward/annotations": {
+            "visible": true
+          }
+        }
+      }
+    },
+    "Image!downward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          }
+        }
+      }
+    },
+    "mongla.batighor.Chain!chain": {}
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "Image!forward",
+      "second": "Image!downward",
+      "splitPercentage": 50.0
+    },
+    "second": "mongla.batighor.Chain!chain",
+    "splitPercentage": 40.0
+  }
+}

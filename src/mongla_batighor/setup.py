@@ -45,6 +45,7 @@ setup(
             'helm = mongla_batighor.helm:main',
             'deck = mongla_batighor.deck:main',
             'views = mongla_batighor.views:main',
+            'chain = mongla_batighor.chain:main',
         ],
     },
 )
