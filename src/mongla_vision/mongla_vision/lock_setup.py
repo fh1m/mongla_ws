@@ -325,9 +325,14 @@ class LockSetupMixin:
                     self.get_logger().info(
                         f'[LOCK ] target_class pinned to {new!r}')
                 else:
+                    # The filter is latched and arrives once; one that came
+                    # while pinned is followed now, not when the next comes.
+                    filt = getattr(self, '_cls_filtered', '')
+                    if filt and filt != self._cls:
+                        self._switch_target(filt)
                     self.get_logger().info(
                         '[LOCK ] target_class released -- following '
-                        'classes_filter again')
+                        f'classes_filter again ({self._cls!r})')
             elif prm.name == 'publish_hz':
                 hz = float(prm.value or 0.0)
                 if hz < 0.0:
@@ -346,9 +351,11 @@ class LockSetupMixin:
         filter is not an aim -- steering the ladder at one of several would be
         a guess, and the ladder's whole value is that it does not guess.
         """
+        names = [n.strip() for n in str(msg.data).split(',') if n.strip()]
+        # Kept even while pinned: a release goes back to it.
+        self._cls_filtered = names[0] if len(names) == 1 else ''
         if self._cls_pinned:
             return                        # operator pinned it; do not fight
-        names = [n.strip() for n in str(msg.data).split(',') if n.strip()]
         if len(names) != 1 or names[0] == self._cls:
             return
         self._switch_target(names[0])

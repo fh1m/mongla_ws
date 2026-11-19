@@ -39,6 +39,7 @@ class LockWiringMixin:
         # look for -- see `_on_classes_filter`.
         self._cls_pinned = str(self.get_parameter('target_class').value).strip()
         self._cls = self._cls_pinned
+        self._cls_filtered = ''       # the last single-class filter seen
         self._full = float(self.get_parameter('full_authority_s').value)
         self._zero = float(self.get_parameter('zero_authority_s').value)
 
