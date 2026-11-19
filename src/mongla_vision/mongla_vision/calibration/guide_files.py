@@ -89,6 +89,8 @@ def list_cameras(cal_dir):
                 d = json.load(open(f))
             except Exception:
                 continue
+            if d.get('medium', 'air') != 'air':
+                continue        # the stack loads only the air lens (binding.py)
             info = {
                 'file': os.path.basename(f),
                 'applies_to': d.get('applies_to'),
