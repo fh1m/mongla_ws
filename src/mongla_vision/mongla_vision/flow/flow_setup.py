@@ -111,7 +111,7 @@ class FlowSetupMixin:
         # TIMING. Each of these is larger than the residual the estimator
         # removes, so they are corrected deterministically first.
         # Half of this is added to each stamp (`exposure_correction_s`).
-        # Units are V4L2's 100 us, NOT camera_node's microseconds of the same
+        # Microseconds, the same unit as camera_node's parameter of this
         # name. 0, the default and what every launch leaves, applies nothing.
         self.declare_parameter('exposure_us', 0.0)
         # Which instant the camera driver stamps (V4L2 TSTAMP_SRC). 'soe' is
@@ -431,7 +431,9 @@ class FlowSetupMixin:
         # bug three times.
         t = header.stamp.sec + header.stamp.nanosec * 1e-9
         if t <= 0.0:
-            t = time.monotonic()
+            # The frames' own clock: camera stamps and the gyro's are wall
+            # time, so a monotonic fallback put this frame on another clock.
+            t = time.time()
         with self._slot_lock:
             if self._slot is not None:
                 self._dropped += 1

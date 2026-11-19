@@ -78,7 +78,6 @@ class VideoFileCamera(Camera):
                 f'frames={self._total_frames}  loop={self._loop}')
 
         self._idx         = 0
-        self._last_ok     = time.monotonic()
         self._consec_fail = 0
         self._eof         = False
 
@@ -202,7 +201,6 @@ class VideoFileCamera(Camera):
             frame = cv2.resize(frame, (self._actual_w, self._actual_h))
 
         self._consec_fail = 0
-        self._last_ok     = meta.stamp_monotonic
         self._last_frame  = frame
         self._idx        += 1
         meta.fresh        = True
@@ -214,6 +212,10 @@ class VideoFileCamera(Camera):
         if wait > 0.001:
             time.sleep(wait)
         self._next_frame_time = time.monotonic() + self._frame_interval / max(0.05, self._speed)
+        # Stamped when handed over, after the pacing wait: a file has no
+        # capture instant, and a stamp taken before the sleep made every
+        # freshness gate read the replay's pacing as latency.
+        meta.stamp_monotonic, meta.stamp_wall = time.monotonic(), time.time()
 
         return frame, meta
 

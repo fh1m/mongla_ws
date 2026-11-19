@@ -49,11 +49,6 @@ MARGIN_ENTER = 0.18
 # outright rather than merely damped.
 MARGIN_CRITICAL = 0.06
 
-# Soft, not hard. Visibility yields to collision avoidance, always. The
-# 2026 result is explicit: collision constraints stay hard, field-of-view gets
-# slack. A vehicle that holds a lock into a wall has optimised the wrong thing.
-SLACK = True
-
 OK = 'ok'
 NEAR_EDGE = 'near_edge'
 CRITICAL = 'critical'
@@ -80,6 +75,11 @@ class Visibility:
         Only ever applied to the component that increases bearing. Damping
         everything would stop the vehicle approaching a target that is dead
         centre, which is the opposite of the intent.
+
+        Soft, not hard: a scale, never a refusal. Visibility yields to
+        collision avoidance, always; collision constraints stay hard and
+        field of view gets slack. A vehicle that holds a lock into a wall has
+        optimised the wrong thing.
         """
         if self.state == OK:
             return 1.0

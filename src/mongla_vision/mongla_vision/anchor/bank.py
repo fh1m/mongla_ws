@@ -553,6 +553,11 @@ class CheckpointBank(LookupMixin, StoreMixin):
         return any(max(s, k) / min(s, k) < self._cover for k in known)
 
     @property
+    def grid_centre(self) -> tuple:
+        """The centre of the backend's pixel grid, where matches live."""
+        return (self._be.w / 2.0, self._be.h / 2.0)
+
+    @property
     def scales(self) -> list[float]:
         return list(self._scale)
 

@@ -328,7 +328,9 @@ def assess(st, cols, rows, square, size, fs):
             fit = fs.fit_standard(objp, ips, sz)
             Kf = fit['K']
             fxs = np.array([K[0, 0] for K, _ in samples])
-            v = fs.fov_from_K(Kf, sz[0], sz[1])
+            # In the medium the board was in: a water capture measures the
+            # water FOV, and the air one is derived from it, as the solver does.
+            v, _ = fs.fov_for_medium(fs.fov_from_K(Kf, sz[0], sz[1]), st.medium)
             # Where the model is least certain, as a PIXEL, so it can be
             # drawn. A metric you can point at is an instruction.
             wpx = None
@@ -349,8 +351,8 @@ def assess(st, cols, rows, square, size, fs):
                 st.worst_px = wpx
                 st.assessed_n = len(files)
                 st.n_boards = len(ips)
-                if best is not None:
-                    st.suggest = best
+                st.suggest = best          # None when there is nothing to ask for
+                st.assess_err = None       # this fit worked; the old error is past
         except Exception as exc:
             with st.lock:
                 st.assessed_n = len(files)

@@ -183,13 +183,13 @@ class Closure:
     offset_m: float = float('nan')
 
 
-# The backend's own pixel grid (xfeat_onnx runs at 320x240), whose CENTRE is
-# the point the offset is measured at.
-BACKEND_CENTRE = (160.0, 120.0)
-
-
-def offset_metres(pose, m_per_px: float, centre=BACKEND_CENTRE) -> float:
+def offset_metres(pose, m_per_px: float, centre) -> float:
     """How far the stored view has moved, in metres, measured at the CENTRE.
+
+    `centre` is the middle of the backend's own pixel grid, the grid the
+    homography and `m_per_px` are in. The caller passes it from the backend:
+    a constant here assumed 320x240 and measured from the wrong point for
+    any other export.
 
     NOT H[0,2]/H[1,2]. Those are the translation only for a pure shift
     about the origin; under any rotation, scale or perspective they are not
@@ -223,7 +223,7 @@ def consider(pose, *, ref_age_s: float, travel_m: float, ref_sigma_m: float,
              min_travel_m: float = MIN_TRAVEL_M,
              exclude_newest: int = EXCLUDE_NEWEST,
              max_offset_m: float = MAX_OFFSET_M,
-             centre=BACKEND_CENTRE) -> Closure:
+             centre) -> Closure:
     """Decide whether a bank match may be handed to the filter as a position.
 
     Every refusal is named, because a loop closure that silently never fires

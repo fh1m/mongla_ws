@@ -130,7 +130,9 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         self._yaw_tol = float(self.get_parameter('yaw_cross_check_tol').value)
         self._undistort = bool(self.get_parameter('undistort').value)
         self._intr = None
-        self._exposure_units = float(self.get_parameter('exposure_us').value)
+        # Microseconds, as at camera_node; kept internally in V4L2's 100 us
+        # units, which is what `exposure_time_absolute` reports.
+        self._exposure_units = float(self.get_parameter('exposure_us').value) / 100.0
         self._stamp_src = str(self.get_parameter('stamp_source').value).lower()
         if self._stamp_src not in ('soe', 'eof'):
             self.get_logger().warn(

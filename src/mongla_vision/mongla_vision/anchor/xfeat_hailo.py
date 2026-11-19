@@ -215,32 +215,8 @@ class XFeatHailo:
         return k, (d / n).astype(np.float32)
 
     def _post(self, feats, kpt_logits):
-        """Identical arithmetic to the ONNX path, reusing its helpers."""
-        score = _x._pixel_shuffle_scores(kpt_logits[0])
-        k = _x._nms(score, self.det_thresh)
-        if len(k) == 0:
-            return (np.zeros((0, 2), np.float32),
-                    np.zeros((0, 64), np.float32))
-        if len(k) > self.top_k:
-            s = score[k[:, 1], k[:, 0]]
-            k = k[np.argsort(-s)[:self.top_k]]
-        f = feats[0]
-        _, fh, fw = f.shape
-        gx = np.clip(k[:, 0] / 8.0 - 0.5, 0, fw - 1)
-        gy = np.clip(k[:, 1] / 8.0 - 0.5, 0, fh - 1)
-        x0 = np.floor(gx).astype(np.int32)
-        x1 = np.minimum(x0 + 1, fw - 1)
-        y0 = np.floor(gy).astype(np.int32)
-        y1 = np.minimum(y0 + 1, fh - 1)
-        wx = (gx - x0)[None, :]
-        wy = (gy - y0)[None, :]
-        d = (f[:, y0, x0] * (1 - wx) * (1 - wy)
-             + f[:, y0, x1] * wx * (1 - wy)
-             + f[:, y1, x0] * (1 - wx) * wy
-             + f[:, y1, x1] * wx * wy).T
-        n = np.linalg.norm(d, axis=1, keepdims=True)
-        n[n == 0] = 1
-        return k.astype(np.float32), (d / n).astype(np.float32)
+        return _x.keypoints_and_descriptors(feats, kpt_logits, self.det_thresh,
+                                            self.top_k)
 
     # The same matcher, deliberately. A checkpoint enrolled through one
     # backend must be matchable through the other, or the bank silently

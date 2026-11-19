@@ -19,7 +19,8 @@ from typing import Iterable, List, Optional
 
 import numpy as np
 
-from .detector import Detector, Detection
+from .detector import Detector, Detection, allow_ids_for
+from .factory  import KNOWN_EXTENSIONS
 from .gpu      import select_device
 
 
@@ -123,7 +124,7 @@ def _resolve_model_path(name: str) -> str:
     if src_models is not None:
         # .hef first: on the Pi + AI HAT+ it is the compiled artifact for THIS
         # machine; the .pt is the dev-box fallback (footage replay, training).
-        for ext in ('.hef', '.pt'):
+        for ext in KNOWN_EXTENSIONS:
             cand = src_models / f'{name}{ext}'
             if cand.exists():
                 return str(cand)
@@ -133,7 +134,7 @@ def _resolve_model_path(name: str) -> str:
         from ament_index_python.packages import get_package_share_directory
         share = get_package_share_directory('mongla_vision')
         share_models_dir = str(Path(share) / 'models')
-        for ext in ('.hef', '.pt'):
+        for ext in KNOWN_EXTENSIONS:
             cand = Path(share) / 'models' / f'{name}{ext}'
             if cand.exists():
                 return str(cand)
@@ -219,18 +220,7 @@ class YoloDetector(Detector):
                 f"[YOLO ] available classes ({len(self._names)}):\n    {table}")
 
         self._allow_ids = None
-        if class_allowlist is not None:
-            allow_lower = {str(c).strip().lower() for c in class_allowlist if c}
-            self._allow_ids = {
-                cid for cid, cname in self._names.items()
-                if str(cname).strip().lower() in allow_lower
-            }
-            if not self._allow_ids and allow_lower:
-                if self._log:
-                    self._log.warning(
-                        f"[YOLO ] class_allowlist={sorted(allow_lower)} matched 0 classes "
-                        f"in model. Detector will return [] for every frame. Available: "
-                        f"{sorted(self._names.values())[:10]}...")
+        self.update_allowlist(class_allowlist)
 
         self._ready = False
         self.warmup_ms = None
@@ -311,18 +301,8 @@ class YoloDetector(Detector):
         class_allowlist -- list of class name strings, or None to keep all.
         Called by detector_node when the 'classes' ROS param changes live.
         """
-        if class_allowlist is None:
-            self._allow_ids = None
-        else:
-            allow_lower = {str(c).strip().lower() for c in class_allowlist if c}
-            self._allow_ids = {
-                cid for cid, cname in self._names.items()
-                if str(cname).strip().lower() in allow_lower
-            }
-            if not self._allow_ids and allow_lower and self._log:
-                self._log.warning(
-                    f"[YOLO ] update_allowlist: {sorted(allow_lower)} matched 0 classes. "
-                    f"Available: {sorted(self._names.values())[:10]}")
+        self._allow_ids = allow_ids_for(self._names, class_allowlist,
+                                        log=self._log, tag='[YOLO ]')
 
     def update_conf(self, conf: float) -> None:
         self._conf = float(conf)

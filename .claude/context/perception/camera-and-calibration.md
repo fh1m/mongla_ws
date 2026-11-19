@@ -273,9 +273,13 @@ Three consequences, all implemented and tested:
    inverse-Snell derivations, flagged `air_fov_note: DERIVED …`. Running the
    air→water conversion on an already-in-water measurement would apply the
    refraction twice.
-3. **The launch loads the AIR file.** The water one is evidence, not a
-   replacement, and the solver says so on install rather than implying the
-   file goes live.
+3. **The stack loads only the AIR file, and refuses a water one.** CameraInfo
+   carries the air lens and every consumer applies the port itself, so a
+   water fit published there would be refracted twice. The profile binding
+   skips a file whose `medium` is not air, the camera node refuses one named
+   by an explicit `calibration:=` and publishes size-only CameraInfo with a
+   warning, and the calibration page says so when a water fit is applied.
+   **Calibrate in air on the day**; a water fit checks the refraction model.
 
 ## 10. THE WHOLE PAGE WAS INERT, AND EVERY TEST WAS GREEN
 

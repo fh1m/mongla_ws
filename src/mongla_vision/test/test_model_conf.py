@@ -23,9 +23,14 @@ def test_empty_is_empty_dict():
     assert _parse_model_conf('   ') == {}
 
 
-def test_skips_bare_and_malformed():
-    # bare entry (no '='), no name, and non-numeric conf are all skipped, not fatal
-    assert _parse_model_conf('gate,=0.5,torpedo=abc,slalom=0.4') == {'slalom': 0.4}
+def test_a_malformed_pair_is_refused_and_named():
+    """Bare entry, no name, non-numeric conf: each was skipped silently, so the
+    model kept its old conf while the set reported success."""
+    import pytest
+    with pytest.raises(ValueError) as e:
+        _parse_model_conf('gate,=0.5,torpedo=abc,slalom=0.4')
+    for part in ('gate', '=0.5', 'torpedo=abc'):
+        assert repr(part) in str(e.value)
 
 
 def test_whitespace_tolerant():

@@ -22,12 +22,13 @@ import numpy as np
 from .camera import Camera, FrameMeta
 
 
-def blur_capped_exposure(exposure_us, max_blur_px, f_px, max_rate_rad_s):
+def blur_capped_exposure(exposure_100us, max_blur_px, f_px, max_rate_rad_s):
     """Clamp a requested shutter to what the expected rotation allows.
 
     Blur from rotation is `f_px * omega * t_exp`, so the longest shutter that
     keeps it under `max_blur_px` is `max_blur_px / (f_px * omega)`. Returned
-    in units of 0.1 ms, which is what V4L2's `exposure_time_absolute` wants.
+    and taken in units of 0.1 ms, which is what V4L2's `exposure_time_absolute`
+    wants; the caller converts from microseconds.
 
     Module-level and pure ON PURPOSE: the arithmetic is the part that is easy
     to get silently wrong, and a test must be able to drive THIS function
@@ -38,7 +39,7 @@ def blur_capped_exposure(exposure_us, max_blur_px, f_px, max_rate_rad_s):
     It only ever TIGHTENS. A cap that could also lengthen the shutter would
     introduce blur nobody asked for, under a name that promises the opposite.
     """
-    exp = int(exposure_us)
+    exp = int(exposure_100us)
     if max_blur_px > 0 and f_px > 0 and max_rate_rad_s > 0:
         cap = int(1e4 * max_blur_px / (f_px * max_rate_rad_s))
         if cap < exp:
@@ -157,8 +158,9 @@ class WebcamCamera(Camera):
         """
         if not exposure_us:
             return                                    # 0 = leave on auto
-        exp = blur_capped_exposure(exposure_us, max_blur_px, f_px,
-                                   max_rate_rad_s)
+        # Microseconds in, as at camera_node; V4L2 wants 100 us units.
+        asked = max(1, round(float(exposure_us) / 100.0))
+        exp = blur_capped_exposure(asked, max_blur_px, f_px, max_rate_rad_s)
         dev = (self._device if isinstance(self._device, str)
                else f'/dev/video{self._device}')
         applied = []
@@ -174,7 +176,7 @@ class WebcamCamera(Camera):
         if self._log:
             extra = (f'  (blur cap {max_blur_px:.1f}px at '
                      f'{max_rate_rad_s:.2f}rad/s -> {exp})'
-                     if exp != int(exposure_us) else '')
+                     if exp != asked else '')
             self._log.info(f'[CAM  ] {self.name}: exposure pinned -- '
                            + ', '.join(applied) + extra)
 

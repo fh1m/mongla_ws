@@ -104,8 +104,52 @@ def _argmax0(sim):
     try:
         import cv2
         return cv2.reduceArgMax(sim, None, 0).ravel().astype(np.int64)
-    except (AttributeError, Exception):        # noqa: B014
+    except Exception:                          # noqa: BLE001
         return sim.argmax(axis=0)
+
+
+def keypoints_and_descriptors(feats, kpt_logits, det_thresh: float,
+                              top_k: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Keypoints (N, 2) in input pixels and unit descriptors (N, 64).
+
+    Both XFeat backends call this on their raw heads, so the CPU and the
+    chip cannot drift apart in how a keypoint is picked or described.
+    """
+    score = _pixel_shuffle_scores(kpt_logits[0])
+    kpts = _nms(score, det_thresh)
+    if len(kpts) == 0:
+        return np.zeros((0, 2), np.float32), np.zeros((0, 64), np.float32)
+    if len(kpts) > top_k:
+        s = score[kpts[:, 1], kpts[:, 0]]
+        kpts = kpts[np.argsort(-s)[:top_k]]
+
+    # Descriptors live at 1/8 resolution; sample them at the keypoints.
+    #
+    # Bilinear, not nearest. Nearest-neighbour was tried first and it is
+    # not a rounding detail: measured against torch XFeat on the same
+    # frames it returned ~55 % of the inliers (Mirpur gate 119 vs 260,
+    # clear torpedo 262 vs 445) while finding the SAME 1024 keypoints and
+    # still clearing the 15-inlier bar -- i.e. it degraded quietly, which
+    # is the only way this kind of port ever fails. A keypoint sits
+    # anywhere inside its 8x8 cell; snapping its descriptor to the cell
+    # centre throws away exactly the sub-cell precision the matcher scores
+    # on.
+    f = feats[0]                                   # (64, h/8, w/8)
+    _, fh, fw = f.shape
+    # keypoint pixel -> continuous descriptor-grid coordinate (cell centres
+    # are at 0.5 in grid units, hence the -0.5 after scaling)
+    gxf = np.clip(kpts[:, 0] / _CELL - 0.5, 0, fw - 1)
+    gyf = np.clip(kpts[:, 1] / _CELL - 0.5, 0, fh - 1)
+    x0 = np.floor(gxf).astype(np.int32); x1 = np.minimum(x0 + 1, fw - 1)
+    y0 = np.floor(gyf).astype(np.int32); y1 = np.minimum(y0 + 1, fh - 1)
+    wx = (gxf - x0).astype(np.float32); wy = (gyf - y0).astype(np.float32)
+    desc = (f[:, y0, x0].T * ((1 - wx) * (1 - wy))[:, None]
+            + f[:, y0, x1].T * (wx * (1 - wy))[:, None]
+            + f[:, y1, x0].T * ((1 - wx) * wy)[:, None]
+            + f[:, y1, x1].T * (wx * wy)[:, None]).astype(np.float32)
+    n = np.linalg.norm(desc, axis=1, keepdims=True)
+    np.divide(desc, np.maximum(n, 1e-8), out=desc)
+    return kpts.astype(np.float32), desc
 
 
 class XFeatONNX:
@@ -117,7 +161,7 @@ class XFeatONNX:
     """
 
     def __init__(self, model_path: str, *, top_k: int = 1024,
-                 det_thresh: float = 0.05, threads: int = 1, logger=None):
+                 det_thresh: float = 0.05, threads: int = 1):
         import onnxruntime as ort
         if not os.path.exists(model_path):
             raise FileNotFoundError(
@@ -136,7 +180,6 @@ class XFeatONNX:
         self.h, self.w = int(shape[2]), int(shape[3])
         self.top_k = int(top_k)
         self.det_thresh = float(det_thresh)
-        self._log = logger
 
     # -- detection ---------------------------------------------------------- #
     def detect(self, gray: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -151,41 +194,8 @@ class XFeatONNX:
         x = gray.astype(np.float32)[None, None] / 255.0
         feats, kpt_logits, _heat = self._s.run(None, {self._in: x})
 
-        score = _pixel_shuffle_scores(kpt_logits[0])
-        kpts = _nms(score, self.det_thresh)
-        if len(kpts) == 0:
-            return np.zeros((0, 2), np.float32), np.zeros((0, 64), np.float32)
-        if len(kpts) > self.top_k:
-            s = score[kpts[:, 1], kpts[:, 0]]
-            kpts = kpts[np.argsort(-s)[:self.top_k]]
-
-        # Descriptors live at 1/8 resolution; sample them at the keypoints.
-        #
-        # Bilinear, not nearest. Nearest-neighbour was tried first and it is
-        # not a rounding detail: measured against torch XFeat on the same
-        # frames it returned ~55 % of the inliers (Mirpur gate 119 vs 260,
-        # clear torpedo 262 vs 445) while finding the SAME 1024 keypoints and
-        # still clearing the 15-inlier bar -- i.e. it degraded quietly, which
-        # is the only way this kind of port ever fails. A keypoint sits
-        # anywhere inside its 8x8 cell; snapping its descriptor to the cell
-        # centre throws away exactly the sub-cell precision the matcher scores
-        # on.
-        f = feats[0]                                   # (64, h/8, w/8)
-        _, fh, fw = f.shape
-        # keypoint pixel -> continuous descriptor-grid coordinate (cell centres
-        # are at 0.5 in grid units, hence the -0.5 after scaling)
-        gxf = np.clip(kpts[:, 0] / _CELL - 0.5, 0, fw - 1)
-        gyf = np.clip(kpts[:, 1] / _CELL - 0.5, 0, fh - 1)
-        x0 = np.floor(gxf).astype(np.int32); x1 = np.minimum(x0 + 1, fw - 1)
-        y0 = np.floor(gyf).astype(np.int32); y1 = np.minimum(y0 + 1, fh - 1)
-        wx = (gxf - x0).astype(np.float32); wy = (gyf - y0).astype(np.float32)
-        desc = (f[:, y0, x0].T * ((1 - wx) * (1 - wy))[:, None]
-                + f[:, y0, x1].T * (wx * (1 - wy))[:, None]
-                + f[:, y1, x0].T * ((1 - wx) * wy)[:, None]
-                + f[:, y1, x1].T * (wx * wy)[:, None]).astype(np.float32)
-        n = np.linalg.norm(desc, axis=1, keepdims=True)
-        np.divide(desc, np.maximum(n, 1e-8), out=desc)
-        return kpts.astype(np.float32), desc
+        return keypoints_and_descriptors(feats, kpt_logits, self.det_thresh,
+                                         self.top_k)
 
     # -- matching ----------------------------------------------------------- #
     @staticmethod

@@ -37,6 +37,11 @@ from rclpy.node   import Node
 
 from mongla_interfaces.action import Move
 
+# The verb's result codes. mongla_control's motion_vision/control.py owns them;
+# this package does not depend on it, so a test keeps the copy equal.
+OUTCOME = {0: 'ALIGNED', 1: 'LOST', 2: 'TIMEOUT', 3: 'NO_CAMERA', 4: 'ABORTED',
+           5: 'DRIFTED', 6: 'ESTIMATED_CROSSING', 7: 'COMMIT_UNVERIFIED'}
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
@@ -93,14 +98,12 @@ def main(argv=None):
     rclpy.spin_until_future_complete(node, result_future)
     result = result_future.result().result
 
-    _OUTCOME = {0: 'ALIGNED', 1: 'LOST', 2: 'TIMEOUT', 3: 'NO_CAMERA', 4: 'ABORTED',
-                5: 'DRIFTED', 6: 'ESTIMATED_CROSSING', 7: 'COMMIT_UNVERIFIED'}
     code = int(round(result.final_value))
     aligned = code == 0
     print()
     print(f'[VTHR ] {"PASS (aligned)" if aligned else "ran (not aligned)"}')
     print(f'  message            : {result.message}')
-    print(f'  outcome            : {_OUTCOME.get(code, code)}')
+    print(f'  outcome            : {OUTCOME.get(code, code)}')
     print(f'  last pixel error   : {result.error_value:.1f}px')
     print()
     print('[VTHR ] An outcome of LOST or NO_CAMERA means the detector is not '

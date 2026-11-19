@@ -252,3 +252,15 @@ class TestTheSolveButtonPointsAtSomethingReal:
             assert argv[2] == str(tmp_path / 'caps')
         finally:
             cap.stop()
+
+
+def test_images_of_two_sizes_are_refused_not_fitted(tmp_path):
+    """`detect` kept the size of the last image read, so a capture folder
+    that mixed resolutions fitted one K to both and labelled it with one."""
+    import cv2
+    import pytest
+    from mongla_vision.calibration import solver
+    cv2.imwrite(str(tmp_path / 'a.png'), np.zeros((48, 64, 3), np.uint8))
+    cv2.imwrite(str(tmp_path / 'b.png'), np.zeros((96, 128, 3), np.uint8))
+    with pytest.raises(ValueError, match='one size per run'):
+        solver.detect([str(tmp_path / 'a.png'), str(tmp_path / 'b.png')], 8, 6)

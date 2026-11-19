@@ -785,6 +785,16 @@ class CameraNode(Node):
                 with open(own) as fh:
                     c = json.load(fh)
                 path = own
+            if c.get('medium', 'air') != 'air':
+                # CameraInfo carries the in-AIR lens; flow, the lock and
+                # pnp_node apply the flat port themselves. A fit made with the
+                # board in water already contains the port and would be
+                # refracted twice: every range off by a factor of n.
+                self.get_logger().warn(
+                    f"[CAM  ] calibration {os.path.basename(path)} was fitted "
+                    f"in {c.get('medium')!r}; CameraInfo carries the air lens, "
+                    f"so it is not used. Publishing size-only CameraInfo (k=0)")
+                return None
             K = c['camera_matrix']; D = c['distortion_coefficients']
             cal = {
                 'K': [float(v) for row in K for v in row],

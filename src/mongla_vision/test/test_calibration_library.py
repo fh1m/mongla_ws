@@ -230,3 +230,21 @@ def test_a_switch_to_a_bad_profile_is_refused_before_a_path_is_made(g):
     with pytest.raises(ValueError):
         g.capture_dir('pi_forward', 'water/../../x')
     assert g.capture_dir('pi_forward', 'water').endswith('calib_pi_forward_water')
+
+
+def test_a_camera_is_shown_the_air_lens_the_stack_loads(g, tmp_path, monkeypatch):
+    """A water fit sorting first was shown as the camera's calibration;
+    the binding loads only the air one, so that is the one to show."""
+    d = str(tmp_path)
+    ident = {'usb_vid': '1bcf', 'usb_pid': '2c99'}
+    _write(d, 'a_water.json', medium='water', **ident)
+    _write(d, 'b_air.json', **ident)
+    monkeypatch.setattr(g.glob, 'glob', lambda pat: (
+        ['/dev/video0'] if pat.startswith('/dev/video') else
+        sorted(os.path.join(d, f) for f in os.listdir(d))))
+    monkeypatch.setattr(g.subprocess, 'run', lambda *a, **k: type(
+        'R', (), {'stdout': 'Video Capture\n[0]: MJPG'})())
+    monkeypatch.setattr(g, 'camera_identity', lambda dev: dict(ident))
+    [cam] = g.list_cameras(d)
+    assert cam['calibration']['file'] == 'b_air.json'
+    assert cam['match'] == 'confirmed'

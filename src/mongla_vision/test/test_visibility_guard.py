@@ -16,7 +16,7 @@ import math
 import pytest
 
 from mongla_vision.tracking.visibility import (CRITICAL, LOST, NEAR_EDGE, OK,
-                                               SLACK, Visibility,
+                                               Visibility,
                                                assess, bearing_from_pixel)
 
 W, H, FX, FY = 640.0, 480.0, 500.0, 500.0
@@ -73,9 +73,11 @@ def test_damping_is_tapered_not_a_cliff():
 
 
 def test_visibility_is_SOFT():
-    """Collision stays hard, field of view gets slack. A vehicle that holds
-    a lock into a wall has optimised the wrong thing."""
-    assert SLACK is True
+    """Collision stays hard, field of view gets slack: near the edge the
+    demand is tapered, not refused. A vehicle that holds a lock into a wall
+    has optimised the wrong thing."""
+    v = Visibility(NEAR_EDGE, 0.5 * (0.18 + 0.06), 'mid taper')
+    assert 0.0 < v.scale < 1.0
 
 
 def test_no_intrinsics_is_lost_not_a_guess():
