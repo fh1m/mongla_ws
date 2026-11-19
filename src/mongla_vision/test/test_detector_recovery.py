@@ -126,6 +126,7 @@ def _loop_node(infer, monkeypatch):
     n.get_logger = lambda: n._log
     n._infer_fails = 0
     n._want = threading.Event()
+    n._stopping = threading.Event()
     n._infer_q = q.Queue()
     n._bridge = None
     n._pre = None

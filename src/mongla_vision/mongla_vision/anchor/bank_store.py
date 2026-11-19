@@ -19,18 +19,16 @@ class StoreMixin:
         out = {'version': np.array([self.SAVE_VERSION]),
                'count': np.array([len(self._refs)]),
                'backend_wh': np.array([self._be.w, self._be.h]),
-               'labels': np.array(self._labels, dtype=object),
+               'labels': np.array([str(v) for v in self._labels], dtype=str),
                'yields': np.array(self._yields, np.int32),
                'att': np.array([(np.nan, np.nan, np.nan) if a is None else a
                                 for a in self._att], np.float32),
                'depth': np.array(self._depth, np.float32),
                'pos': np.array([(np.nan, np.nan) if q is None else q
                                 for q in self._pos], np.float32),
-               # JSON per reference: a dict of named points is not an array,
-               # and a ragged object array would not survive allow_pickle=False
-               # for anyone who loads this more carefully than we do.
-               'ann': np.array([json.dumps(a or {}) for a in self._ann],
-                               dtype=object)}
+               # JSON text per reference: a dict of named points is not an
+               # array, and `load` reads with pickling off.
+               'ann': np.array([json.dumps(a or {}) for a in self._ann], dtype=str)}
         for i, a in enumerate(self._refs):
             out[f'k{i}'] = np.asarray(a._ref_kpts, np.float32)
             out[f'd{i}'] = np.asarray(a._ref_desc, np.float32)
@@ -51,13 +49,19 @@ class StoreMixin:
         homography, and every pose wrong by a factor of two. That is the exact
         class of failure this codebase keeps finding, so it is a hard refusal
         rather than a rescale.
+
+        Pickling stays off: a bank can come from off the vehicle.
         """
-        z = np.load(path, allow_pickle=True)
+        with np.load(path, allow_pickle=False) as z:
+            return self._load_from(z, append)
+
+    def _load_from(self, z, append: bool) -> int:
         ver = int(z['version'][0])
         if ver != self.SAVE_VERSION:
-            raise ValueError(f'bank version {ver} != {self.SAVE_VERSION}: its '
-                             f'descriptors were made by a different XFeat '
-                             f'post-process; record the bank again')
+            raise ValueError(
+                f'bank version {ver} != {self.SAVE_VERSION} (1: a different XFeat '
+                f'post-process; 2: pickled labels, which this loader will not '
+                f'run). Record the bank again: tools/pool/build_practice_bank.py')
         w, h = (int(v) for v in z['backend_wh'])
         if (w, h) != (self._be.w, self._be.h):
             raise ValueError(
@@ -85,10 +89,6 @@ class StoreMixin:
             # ROI already is; NaN for a whole-frame reference, as at enrolment.
             self._scale.append(float('nan') if a._ref_roi is None else float(
                 np.sqrt(max(1.0, abs(roi[2] - roi[0]) * abs(roi[3] - roi[1])))))
-            # No stored image: a preloaded reference can still MATCH, it simply
-            # cannot be displayed. Better than refusing to load, and better
-            # than inventing a picture.
-            a._ref_gray = None
             self._refs.append(a)
             self._yields.append(yields[i] if i < len(yields) else len(a._ref_kpts))
             self._sigs.append(z[f's{i}'])

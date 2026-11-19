@@ -92,7 +92,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Tuple
 
 import numpy as np
 
@@ -150,45 +149,30 @@ class TargetPose:
         return worst <= float(tol_deg)
 
 
-def target_pose(ref_pts, live_pts, K, *, width_m: float,
-                ref_size_px: Tuple[float, float],
-                dist=None,
-                max_reproj_px: float = MAX_REPROJ_PX) -> TargetPose:
-    """6-DoF pose of the snapped patch, given how wide it really is.
+def patch_object_points(ref_pts, centre_px, width_px: float, width_m: float):
+    """A snapped reference patch's points as object-plane metres, or None.
 
-    `ref_pts` / `live_pts` are the anchor's RANSAC inliers. `ref_size_px` is the
-    reference REGION's (width, height) in the same pixel frame, and `width_m` is
-    that region's true width in metres -- the one piece of world knowledge this
-    needs, and the reason the answer is metric. `K` must be the camera matrix at
-    the resolution the points are in.
+    The patch adapter: `ref_pts` are reference pixels, `centre_px` the centre
+    of the reference REGION in the SAME pixel frame (rectified when they are),
+    `width_px` its width and `width_m` its true width -- the one piece of world
+    knowledge that makes the answer metric. The patch is planar by
+    construction (one snapped view), so z = 0, and the origin is the region's
+    centre. Any other evidence source that knows where its points are ON THE
+    TARGET calls `solve_pnp` with its own object points instead.
 
-    this is the patch adapter, not the solver. All it does is turn a snapped
-    reference patch into object points in metres and hand them to `solve_pnp`.
-    Any other evidence source that can state where its points are ON THE TARGET
-    -- a board layout, a set of opening centres, a segmentation contour --
-    calls `solve_pnp` directly with its own object points and gets the identical
-    IPPE-interval / SQPnP-point-estimate / iterative-polish treatment. That is
-    the whole reason the solve was extracted: one solver, many kinds of
-    evidence, and a recorded correspondence set can be re-solved off a bag long
-    after the run.
-
-    Refuses -- with a reason -- rather than returning a pose it cannot defend.
+    The origin is the region's centre in frame pixels, not half its width:
+    the anchor keeps FULL-FRAME keypoints, so `w / 2` put the origin at the
+    frame's left edge plus half a box, and a box away from the corner moved
+    every object point by its own offset (second-pass audit 2026-11-19).
     """
     ref = np.asarray(ref_pts, np.float64).reshape(-1, 2)
-    live = np.asarray(live_pts, np.float64).reshape(-1, 2)
-    if len(ref) < 4 or len(ref) != len(live):
-        return TargetPose(ok=False, n_points=len(ref), reason='too few points')
-    w_px, h_px = float(ref_size_px[0]), float(ref_size_px[1])
-    if w_px <= 0 or h_px <= 0 or width_m <= 0:
-        return TargetPose(ok=False, reason='bad reference size')
-
-    # Reference pixels -> object-plane metres, origin at the patch centre. The
-    # patch is planar BY CONSTRUCTION (it is one snapped view), so Z = 0.
-    m_per_px = float(width_m) / w_px
+    if not (width_px > 0.0 and width_m > 0.0) or len(ref) == 0:
+        return None
+    m_per_px = float(width_m) / float(width_px)
     obj = np.zeros((len(ref), 3), np.float64)
-    obj[:, 0] = (ref[:, 0] - w_px * 0.5) * m_per_px
-    obj[:, 1] = (ref[:, 1] - h_px * 0.5) * m_per_px
-    return solve_pnp(obj, live, K, dist=dist, max_reproj_px=max_reproj_px)
+    obj[:, 0] = (ref[:, 0] - float(centre_px[0])) * m_per_px
+    obj[:, 1] = (ref[:, 1] - float(centre_px[1])) * m_per_px
+    return obj
 
 
 def ambiguity_ratio(errs) -> float:

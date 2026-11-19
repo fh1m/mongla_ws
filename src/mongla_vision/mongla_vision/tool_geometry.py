@@ -90,13 +90,14 @@ def known_tools():
 def pixel_offset(tool: str, *, fx: float, fy: float, range_m: float):
     """Signed (du, dv) px the target must sit at to be on the TOOL's axis.
 
-    Returns None when it cannot be computed -- unknown tool, no calibration, or
-    no range. Refusing is the point: the caller then aims the camera, as the
+    Returns None when it cannot be computed -- unknown or unmeasured tool, no
+    calibration, or no range. An unmeasured entry reads zero, and a zero it
+    has not earned is a plausible number standing in for an absent one. Refusing is the point: the caller then aims the camera, as the
     stack always did, and says so. A guessed correction moves the aim point
     with false confidence, which is strictly worse than a known-absent one.
     """
     off = offset_m(tool)
-    if off is None or not (fx > 0.0 and fy > 0.0):
+    if off is None or not is_measured(tool) or not (fx > 0.0 and fy > 0.0):
         return None
     if not (range_m and math.isfinite(range_m) and range_m > 1e-3):
         return None

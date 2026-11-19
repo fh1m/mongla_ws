@@ -74,7 +74,7 @@ def test_the_correction_is_range_dependent_and_grows_up_close():
     """The property that makes this more than a constant, and the one most
     likely to be 'simplified' away."""
     tg._CACHE['probe'] = {'camera': 'forward', 'x': 0.04, 'y': 0.12,
-                          'z': 0.0, 'unmeasured': True}
+                          'z': 0.0, 'unmeasured': False}
     try:
         far = pixel_offset('probe', fx=FX, fy=FY, range_m=1.5)
         near = pixel_offset('probe', fx=FX, fy=FY, range_m=0.8)
@@ -87,10 +87,21 @@ def test_the_correction_is_range_dependent_and_grows_up_close():
 def test_no_range_refuses_rather_than_assuming_one():
     """A nominal standoff would be a guess wearing a correction's clothes."""
     tg._CACHE['probe'] = {'camera': 'forward', 'x': 0.04, 'y': 0.12,
-                          'z': 0.0, 'unmeasured': True}
+                          'z': 0.0, 'unmeasured': False}
     try:
         for bad in (0.0, -1.0, float('nan'), None):
             assert pixel_offset('probe', fx=FX, fy=FY, range_m=bad) is None
+    finally:
+        tg._CACHE.pop('probe', None)
+
+
+def test_an_unmeasured_tool_refuses_rather_than_reading_zero():
+    """Its table entry reads zero, and that zero is nobody's measurement
+    (second-pass audit F17). The caller then aims the camera and says so."""
+    tg._CACHE['probe'] = {'camera': 'forward', 'x': 0.04, 'y': 0.12,
+                          'z': 0.0, 'unmeasured': True}
+    try:
+        assert pixel_offset('probe', fx=FX, fy=FY, range_m=1.5) is None
     finally:
         tg._CACHE.pop('probe', None)
 

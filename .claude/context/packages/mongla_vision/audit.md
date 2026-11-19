@@ -69,6 +69,57 @@ measured as no help, was never wired, or duplicated something that runs.
 | allowlist on the YOLO backend | an allowlist naming no class the model emits returned `[]` every frame, with the node looking healthy; the Hailo backend already refused to narrow | FIXED: one rule, `detector.allow_ids_for`, behavioural test over both backends |
 | stale odometry | the lock stored the odometry's arrival time and never read it, so loop closure would search and enrol at a position however old; the localiser publishes on a timer, so even arrival time could not see a frozen position | FIXED: closure refuses odometry whose input stamp has not moved for 0.5 s (five periods; worst gap 105.76 ms on Kutum under the vision graph, measured-bars section 91), test |
 
+## Second pass, 2026-11-19
+
+A second line-by-line read of every file in the package, by a separate reader,
+found 23 things. Each was checked against the code before it was acted on.
+
+| | What | State |
+|---|---|---|
+| F1 | `loop_closure:=true` raised at setup on every camera (`self._camera`, then a qos helper that does not exist) | FIXED (B-122); `test_lock_node_stands_up.py` stands the node up with it on |
+| F2 | the anchor pose's object points used the ROI's centre in ROI pixels against full-frame points, shifting every `pnp_node` range by the ROI offset | FIXED (B-122); offset-ROI truth test |
+| F3, F11 | the composed detector, the bare node and three launches each stated their own `conf` (0.35 or 0.45) and NMS floor; the bare node filtered to `person`, a COCO class no competition model emits | FIXED: `detector_params.CONF` and `NMS_FLOOR`, read everywhere; `classes` defaults to every class |
+| F4 | `vision_dual`'s `flow:=true` started a flow node with no calibration, which can only refuse | FIXED: `dwn_calibration` argument, empty by default (the source there is a webcam or a clip, not the Sonix) |
+| F5-F7 | launch docstrings said the opposite of what the files do (downward video, the calibration wiring) | FIXED |
+| F8, F12 | the lock declares the XFeat HEF off and prefers the ONNX | BY DESIGN, comment rewritten: a standalone lock process opening the chip races the detector process for it; only the composed Pi launch, which shares one VDevice, turns it on |
+| F9 | a refused live parameter could leave the authority pair half-applied | FIXED: the whole call is validated before anything is applied |
+| F10 | a camera that failed to open left its detector's worker thread and network groups running | FIXED: `DetectorNode.destroy_node`; `test_detector_node_stops.py`, injection-verified |
+| F13 | a generic `lock_X` override beat the per-camera `fwd_lock_X` | FIXED: per-camera applied last; a real rclpy node reads the winner, injection-verified |
+| F14 | the lock's ladder thread started before the rung counters existed | FIXED |
+| F15 | the XFeat top-k restated beside both backends' own defaults | FIXED: the backends' defaults are used |
+| F16 | the lock's `pool_depth_m` "unset" was 0.0 | FIXED: NaN, as in the flow node |
+| F17 | an unmeasured tool offset was returned as a zero correction | FIXED: `pixel_offset` refuses it; the camera is aimed and the warning stands |
+| F18 | repeated widths in `target_geometry.yaml` | KEPT for props that only share a handbook size; `shaw_fish` aliases `shark`, the one case that is the same board |
+| F19, F20 | `vision_dual` documented a `D` viewer key that was removed and simulator topics that no longer exist | FIXED |
+| F21 | a non-zero `fps` also caps publishing | NOT A DEFECT as shipped; the default is 0 |
+| F22 | the anchor bank loaded with pickling on, so a bank file from off the vehicle could run code | FIXED: bank version 3 stores text, loads with pickling off and closes the archive; a crafted file is refused without running (injection-verified) |
+| F23 | `CheckpointBank.reference_image` had no caller, and with it went `Anchor.reference_image` and the full frame copy every reference kept for it | DELETED |
+
+## Second read, 2026-11-19
+
+A second line-by-line read of every file in the package, by a separate reader,
+then each finding checked against the code before anything changed.
+
+| | What | State |
+|---|---|---|
+| B-122 | `loop_closure:=true` raised in setup on every camera (`self._camera`, then a qos helper that does not exist), so closure was built, tested and unreachable | FIXED; `test_lock_node_stands_up.py` stands the node up with it on and walks a closure to the fix message; BUILT, NEVER FLOWN |
+| B-122 | the anchor pose's object points used the ROI's own centre and width against full-frame reference points, shifting the object plane by the ROI offset | FIXED: `pose.patch_object_points`, offset-ROI test; `target_pose` (tests only) deleted |
+| detector defaults | the composed detector and `ros2 run` started with different `conf` (0.45 against 0.35) and classes (`''` against a COCO `person` that filters every competition model to nothing); the NMS "is it the default" check restated 0.05 | FIXED: `CONF` and `NMS_FLOOR` in `detector_params.py`, read by the node, the composed process and every launch |
+| dual-launch flow | `vision_dual flow:=true` started a flow node with no calibration, which can only refuse | FIXED: `dwn_calibration` argument, empty by default (a webcam or clip is not the vehicle's lens) |
+| docstrings | `video.launch` said forward only; `vision_pi` said no launch passes the calibration; `vision_dual` named a `D` viewer key and simulator topics that do not exist | FIXED |
+| anchor backend | a standalone lock looks for the ONNX before the HEF | by design, comment corrected: a separate lock process opening the chip races the detector process for it; the composed Pi launch sets the HEF. The fallback warning quoted the old chip-only 1.43 ms; now 11.4 ms a frame (measured-bars 92) |
+| live parameters | an authority pair applied before a later parameter in the same call was refused | FIXED: the whole call is validated first |
+| detector teardown | a composed camera that failed to open destroyed its detector, whose worker kept running and whose models stayed configured on the chip | FIXED: `destroy_node` stops the worker and closes every loaded model; `test_detector_node_stops.py`, injection-verified |
+| lock overrides | a generic `lock_X` beat a per-camera `fwd_lock_X`, because rclpy keeps the last override and they were built in sorted order | FIXED, injection-verified (latent: no shipped launch collided) |
+| startup race | the lock's ladder thread started before its rung counters existed | FIXED |
+| `pool_depth_m` | the lock's unset value was 0.0, the flow node's NaN | FIXED: NaN; the `> 0` guard already refused both |
+| tool offsets | `pixel_offset` returned a zero correction for an unmeasured tool, against its own docstring | FIXED: None, so the stack aims the camera and warns, as it said |
+| prop widths | the geometry table claims one copy of each number, and repeats 0.305 and 0.6096 | the repeats are different props sharing a handbook size and stay separate; the one true duplicate (`shaw_fish`, the same board as `shark`) is now an alias |
+| bank file | the bank loader unpickled an operator-given file and never closed it | FIXED: labels stored as text, read with pickling off inside `with`; `SAVE_VERSION` 3 refuses a version-2 bank with the reason; injection-verified |
+| uncalled | `CheckpointBank.reference_image`, then `Anchor.reference_image` and the full-frame copy each reference kept for it | DELETED |
+| `top_k` | the lock restated 1024 beside both backends' defaults | FIXED: the defaults are used |
+| `fps` | a non-zero `fps:=` on `vision.launch` also caps publishing | not a defect at the default (0); noted |
+
 ## Cameras
 
 The Fantech (colour, USB 2) is the forward camera and the Sonix global-shutter mono is the

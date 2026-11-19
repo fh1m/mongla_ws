@@ -352,11 +352,6 @@ class CheckpointBank(LookupMixin, StoreMixin):
         """Measured cost of one match on THIS machine, or 0.0 if never timed."""
         return self._match_s * 1e3
 
-    def reference_image(self, i: int):
-        """The frame reference `i` was snapped from, for display. A number of
-        inliers says a match is good and cannot say good *at what*."""
-        return self._refs[i].reference_image if 0 <= i < len(self._refs) else None
-
     @property
     def reference_roi(self):
         """The newest reference's ROI, in BACKEND pixels.
@@ -582,4 +577,7 @@ class CheckpointBank(LookupMixin, StoreMixin):
     # bicubic samples of the normalised map, measured-bars section 92). A
     # version-1 bank holds bilinear descriptors that would match these worse,
     # quietly, so it is refused and the rung learns afresh.
-    SAVE_VERSION = 2
+    # 3: labels and annotations are stored as text, so a bank loads with
+    # pickling off. A version-2 bank stored them pickled, and loading a file
+    # from off the vehicle would run whatever code it carried.
+    SAVE_VERSION = 3

@@ -507,6 +507,29 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-122: loop closure could not start, and the anchor pose put the object's origin outside the target `READ 2026-11-19` **FIXED 2026-11-19**
+
+**What.** Two defects found by the second line-by-line read of `mongla_vision`.
+`loop_closure:=true` raised in the lock's setup on every camera, because two
+mistakes sat one behind the other: it read `self._camera`, which nothing sets
+(the node keeps `self._cam`), and behind that it subscribed to odometry with
+`_qos.sensor()`, which the qos module does not define. Every closure test read
+source text or drove the policy object alone, so none ever stood the node up
+with the switch on: the capability was built, tested and unreachable. And the
+anchor's metric pose built its object points as `(ref - centre) * width_m /
+w_px` with the centre and width of the reference ROI, but the reference points
+are in full-frame pixels, so any ROI not at the origin shifted the object
+plane by its offset and every `pnp_node` range and bearing was wrong by it.
+
+**Fix.** The setup reads `self._cam` and subscribes with depth 10;
+`pose.patch_object_points` takes the ROI's own centre in frame pixels and is
+what `lock_publish` calls (the old `target_pose`, used only by tests, is
+gone). Guards: `test_lock_node_stands_up.py` stands the node up with the switch
+on, on both cameras, and walks a whole closure through `consider` to the fix
+message; `test_anchor_pose.py` places an offset ROI and recovers the true
+range. Still BUILT, NEVER FLOWN: the real matcher has never closed a loop on
+the vehicle, and any earlier claim that loop closure works predates this.
+
 ### B-120: the localiser published a pose before it had any input `READ 2026-11-19` **FIXED 2026-11-19**
 
 **What.** `/mongla/odom` is published from a 10 Hz timer. Before the first

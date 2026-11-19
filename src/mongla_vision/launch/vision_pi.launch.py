@@ -17,8 +17,8 @@ of which is a thing that was silently wrong before:
    runtime `conf` is the only bar that decides; the old "INT8 costs ~0.08"
    allowance was retracted (§66: a healthy build loses ~0.01).
 
-3. The calibration is actually passed. No launch file in this repo passes it,
-   so `CameraInfo.k` publishes all-zero and every pixel->bearing conversion
+3. The calibration is passed, by name, for both cameras. Without it
+   `CameraInfo.k` publishes all-zero and every pixel->bearing conversion
    silently falls back to a GUESSED field of view -- on a stack whose whole
    uplink contract is bearings. The measured intrinsics
    (63.8 deg in air; 46.7 deg in water by Snell) exist as a file and were reaching
@@ -184,11 +184,10 @@ def arguments() -> list:
         # length and the frame centre. The fix was verified in a tool that
         # passed the path by hand and never reached the launch.
         #
-        # The Fantech is UNCALIBRATED and that is said, not implied by an
-        # empty default that looks like an oversight -- but it is now WIRED
-        # BY NAME rather than hardcoded to ''. `_calib` returns '' when the
-        # file is absent, so this is the uncalibrated state today AND becomes
-        # live the moment `fov_solve.py --install` writes the file. Nobody has
+        # Both are WIRED BY NAME rather than hardcoded. `_calib` returns ''
+        # when a file is absent, so a camera with no calibration says so, and
+        # a new one is live the moment `fov_solve.py --install` writes the
+        # file (the Fantech's, 2026-09-07, is in config/calibration). Nobody has
         # to remember to come back and change a launch default, which is the
         # step that would otherwise be forgotten between calibrating the
         # camera and the calibration actually reaching it -- the exact class

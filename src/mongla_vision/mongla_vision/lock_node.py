@@ -118,6 +118,8 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
         self._setup_loop_closure(ns)
         self._setup_outputs(ns)
         self._stopping = threading.Event()
+        # Before the thread: it counts into this on its first tick.
+        self._n_by_rung = {r: 0 for r in Rung}
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
         # LIVE, like the detector and the tracker. The ladder was aimable only
@@ -126,7 +128,6 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
         # `publish_hz` now take effect on the next tick.
         self.add_on_set_parameters_callback(self._on_param_change)
         self.create_timer(5.0, self._log_health)
-        self._n_by_rung = {r: 0 for r in Rung}
 
         self.get_logger().info(
             f'[LOCK ] {cam}: follow={self._follower is not None} '

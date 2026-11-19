@@ -374,7 +374,12 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         self._stale_sum = 0.0
         self._stale_max = 0.0
         self._infer_fails = 0
-        threading.Thread(target=self._infer_loop_guarded, daemon=True).start()
+        # Set by destroy_node. A composed camera that fails to open destroys
+        # its detector; without this the worker kept looping and its network
+        # group stayed configured until the process exited.
+        self._stopping = threading.Event()
+        self._worker = threading.Thread(target=self._infer_loop_guarded, daemon=True)
+        self._worker.start()
 
         registry_info = (
             f"  registry={list(self._registry)}  active={self._active_name!r}"
@@ -471,6 +476,26 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         except Exception as exc:                # noqa: BLE001
             self.get_logger().error(f'[DET  ] rebuild failed: {exc!r}')
 
+    def destroy_node(self):
+        """Stop the worker, then hand every loaded model's network group back.
+
+        The device itself stays: another node's models may still be configured
+        on it, and `hailo_device.close_all` releases it at exit.
+        """
+        stopping = getattr(self, '_stopping', None)     # a half-built node has none
+        if stopping is not None:
+            stopping.set()
+            w = getattr(self, '_worker', None)
+            if w is not None and w is not threading.current_thread():
+                w.join(2.0)
+            owned = [self._det, *getattr(self, '_registry', {}).values(), *getattr(self, '_extra', [])]
+            self._det = None
+            for det in {id(d): d for d in owned if d is not None}.values():
+                close = getattr(det, 'close', None)
+                if close is not None:
+                    close()
+        return super().destroy_node()
+
     def _infer_loop_guarded(self):
         """`_infer_loop`, but a raise is LOGGED and the loop restarts.
 
@@ -491,7 +516,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         loop failing every frame is loud rather than a log flood.
         """
         faults = 0
-        while rclpy.ok():
+        while rclpy.ok() and not self._stopping.is_set():
             try:
                 self._infer_loop()
                 return                      # clean exit: rclpy shutting down
@@ -509,7 +534,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
 
         One frame per pass, in the order the steps are written. Each step that
         can drop the frame returns None, and the loop moves on to the next one."""
-        while rclpy.ok():
+        while rclpy.ok() and not self._stopping.is_set():
             item = self._next_frame()
             if item is None:
                 continue

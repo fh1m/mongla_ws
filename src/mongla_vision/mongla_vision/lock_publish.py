@@ -19,6 +19,7 @@ from geometry_msgs.msg import Vector3Stamped
 from mongla_vision.detection.detector import Detection
 from mongla_vision.detection.messages import detections_to_array
 from mongla_vision.tracking.lock_state import Rung
+from mongla_vision.anchor import pose as _pose
 
 
 class LockPublishMixin:
@@ -46,26 +47,22 @@ class LockPublishMixin:
             return
         if self._K is None or self._target_w_m <= 0.0:
             return          # `_report_geometry_problems` already said why
-        roi = self._anchor.reference_roi
-        wh = ((roi[2] - roi[0], roi[3] - roi[1]) if roi
-              else (self._anchor._be.w, self._anchor._be.h))
-        w_px, h_px = float(wh[0]), float(wh[1])
-        if w_px <= 0 or h_px <= 0:
-            return
+        roi = self._anchor.reference_roi or (0.0, 0.0, float(self._anchor._be.w),
+                                             float(self._anchor._be.h))
+        w_px = float(roi[2] - roi[0])
+        centre = np.array([[0.5 * (roi[0] + roi[2]), 0.5 * (roi[1] + roi[3])]])
         ref_pts = pose.ref_pts
         if self._rect is not None:
             ref_pts = self._rect.rectify(ref_pts)
+            centre = self._rect.rectify(centre)
         ref = np.asarray(ref_pts, np.float64).reshape(-1, 2)
         live = np.asarray(pose.live_pts, np.float64).reshape(-1, 2)
         if len(ref) < 4 or len(ref) != len(live):
             return
-
-        # Reference pixels -> object-plane metres, origin at the patch centre.
-        # The patch is planar BY CONSTRUCTION (one snapped view), so z = 0.
-        m_per_px = float(self._target_w_m) / w_px
-        obj = np.zeros((len(ref), 3), np.float64)
-        obj[:, 0] = (ref[:, 0] - w_px * 0.5) * m_per_px
-        obj[:, 1] = (ref[:, 1] - h_px * 0.5) * m_per_px
+        # Reference pixels -> object-plane metres, origin at the region's centre.
+        obj = _pose.patch_object_points(ref, centre.reshape(2), w_px, self._target_w_m)
+        if obj is None:
+            return
 
         m = TargetCorrespondences()
         if header is not None:
