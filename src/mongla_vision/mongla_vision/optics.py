@@ -255,7 +255,6 @@ def rectifier_for(K, medium: str, D=None):
     1/n scale error: every range 33 % short, a plausible number, no warning.
     Two nodes each building this pair by hand is how the two would drift apart.
     """
-    import numpy as np
     K = np.asarray(K, float)
     fx, fy = float(K[0][0]), float(K[1][1])
     cx, cy = float(K[0][2]), float(K[1][2])

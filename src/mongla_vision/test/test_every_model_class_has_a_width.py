@@ -294,6 +294,25 @@ def test_an_implausible_override_is_reported_not_just_dropped(monkeypatch):
     del tg._REJECTED[:]
 
 
+def test_an_unreadable_override_width_is_reported_too(monkeypatch):
+    """`width_m: 0.3m` is not a number. It was skipped without a word, so
+    the lock's start-up warning, which lists rejected overrides, was silent
+    and the shipped width flew in its place."""
+    tg = _geometry()
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'mine.yaml')
+        with open(path, 'w') as fh:
+            yaml.safe_dump({'gate': {'width_m': '1.5m'}}, fh)
+        monkeypatch.setenv('MONGLA_TARGET_GEOMETRY', path)
+        tg._CACHE.clear()
+        tg._STAMPS.clear()
+        del tg._REJECTED[:]
+        assert [(n, w) for n, w, _ in tg.rejected_overrides()] == [('gate', '1.5m')]
+    tg._CACHE.clear()
+    tg._STAMPS.clear()
+    del tg._REJECTED[:]
+
+
 def test_a_one_inch_pipe_is_an_acceptable_target():
     """The smallest thing we steer on must survive the plausibility floor.
 

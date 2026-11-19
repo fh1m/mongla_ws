@@ -168,7 +168,7 @@ class LockSetupMixin:
         for name, w_bad, origin in rejected_overrides():
             self.get_logger().warn(
                 f'[LOCK ] IGNORED override {name}={w_bad} m from {origin}: '
-                f'outside the plausible band, likely cm typed as m')
+                f'not a number of metres in the plausible band')
 
     def _build_anchor(self):
         """Optional by design: a missing ONNX must cost the anchor rung, not
