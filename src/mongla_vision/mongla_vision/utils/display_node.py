@@ -277,13 +277,24 @@ class VisionDisplayNode(Node):
         self._seek_frame_pub = None
         self._speed_pub      = None
         if video_file_mode:
-            cam_ns = f'/mongla/vision/{camera}'
-            self._pause_client      = self.create_client(SetBool, f'{cam_ns}/video_pause')
-            self._seek_pub          = self.create_publisher(Float32, f'{cam_ns}/video_seek_rel',   10)
-            self._seek_frame_pub    = self.create_publisher(Int32,   f'{cam_ns}/video_seek_frame', 10)
-            self._speed_pub         = self.create_publisher(Float32, f'{cam_ns}/video_speed',      10)
+            self._video_controls(camera)
             self.get_logger().info(
                 '[DISP ] video mode: Space=pause  ←/→=±1s  ↑/↓=±10s  ,/.=frame step  [/]=speed')
+
+    def _video_controls(self, camera: str) -> None:
+        """Playback controls for `camera`'s video source, replacing any for
+        another camera: after a switch, Space and the arrows drive the video
+        on screen, not the one the display started on."""
+        if self._pause_client is not None:
+            self.destroy_client(self._pause_client)
+        for pub in (self._seek_pub, self._seek_frame_pub, self._speed_pub):
+            if pub is not None:
+                self.destroy_publisher(pub)
+        cam_ns = f'/mongla/vision/{camera}'
+        self._pause_client   = self.create_client(SetBool, f'{cam_ns}/video_pause')
+        self._seek_pub       = self.create_publisher(Float32, f'{cam_ns}/video_seek_rel',   10)
+        self._seek_frame_pub = self.create_publisher(Int32,   f'{cam_ns}/video_seek_frame', 10)
+        self._speed_pub      = self.create_publisher(Float32, f'{cam_ns}/video_speed',      10)
 
     # ------------------------------------------------------------------ #
     #  ROS callbacks (run on the background spin thread)                  #
@@ -352,6 +363,8 @@ class VisionDisplayNode(Node):
         self._last_det_t   = 0.0
         self._switch_t     = time.monotonic()   # arm the "waiting for stream" overlay
         self._cam_subs = self._create_cam_subs(name)
+        if self._video_mode:
+            self._video_controls(name)
 
     def _on_state(self, msg: MonglaState) -> None:
         self._state = msg
