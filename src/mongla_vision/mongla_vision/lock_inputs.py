@@ -8,12 +8,18 @@ from geometry_msgs.msg import PointStamped
 from mongla_vision.anchor import loop_closure as _lc
 from mongla_vision.anchor import health as _health
 
+# /mongla/odom comes from the localiser's 10 Hz timer: worst gap 105.76 ms on
+# Kutum under the whole vision graph (measured-bars section 91), and a live
+# filter's stamp moves with every one. Five periods without a new stamp means
+# the localiser or its inputs stopped, not jitter.
+ODOM_MAX_AGE_S = 0.5
 
 class LockInputsMixin:
     """Methods of `LockNode`; see `lock_node.py` for the node."""
 
     # A floor height older than this is not this vehicle's altitude any more.
     _FLOOR_H_MAX_AGE_S = 2.0
+    _ODOM_MAX_AGE_S = ODOM_MAX_AGE_S
 
     def _on_odom(self, msg) -> None:
         """The filter's own estimate: where it thinks it is, and how sure.
@@ -30,7 +36,15 @@ class LockInputsMixin:
         vx, vy = float(cov[0]), float(cov[7])
         self._odom_sigma = (math.sqrt(vx + vy)
                             if (vx > 0.0 and vy > 0.0) else float('nan'))
-        self._odom_t = time.monotonic()
+        # The localiser publishes on a timer whether or not its inputs still
+        # arrive, stamping each message with its newest input (50 Hz IMU). So
+        # the age that matters is since the STAMP last moved: on-time messages
+        # with a frozen stamp are a position that stopped updating.
+        st = msg.header.stamp
+        stamp = (int(st.sec), int(st.nanosec))
+        if stamp != self._odom_stamp:
+            self._odom_stamp = stamp
+            self._odom_t = time.monotonic()
 
     def _note_anchor_health(self) -> None:
         """Say WHICH failure this is, when the bank stops matching.
@@ -111,6 +125,12 @@ class LockInputsMixin:
         """
         if not self._closer_on or gray is None or self._anchor is None:
             return
+        if now - self._odom_t > self._ODOM_MAX_AGE_S:
+            # A position the localiser stopped sending would be searched
+            # around and stored as where a place is: refused, and counted
+            # with the other refusals so it is seen.
+            self._count_refusal('stale odometry')
+            return
         xy = self._odom_xy
         self._places.step(xy)
 
@@ -156,14 +176,7 @@ class LockInputsMixin:
             else:
                 # Counted, not dropped. A closure path that silently never
                 # fires is indistinguishable from one that was never wired up.
-                key = c.reason.split(' -- ')[0].split('(')[0].strip()
-                self._closure_refusals[key] += 1
-                n = sum(self._closure_refusals.values())
-                if n % 300 == 0:
-                    top = ', '.join(f'{k} x{v}' for k, v in
-                                    self._closure_refusals.most_common(3))
-                    self.get_logger().info(
-                        f'[LOCK ] no closure in {n} looks: {top}')
+                self._count_refusal(c.reason.split(' -- ')[0].split('(')[0].strip())
 
         # ---- remember ----------------------------------------------------
         # A place whose position the filter cannot put a sigma on would make
@@ -181,6 +194,15 @@ class LockInputsMixin:
                 self.get_logger().info(
                     f'[LOCK ] place {self._anchor.size}: {r.keypoints} kp '
                     f'at ({xy[0]:.2f}, {xy[1]:.2f})')
+
+    def _count_refusal(self, key: str) -> None:
+        """Counted, not dropped, and summarised every 300 looks."""
+        self._closure_refusals[key] += 1
+        n = sum(self._closure_refusals.values())
+        if n % 300 == 0:
+            top = ', '.join(f'{k} x{v}' for k, v in
+                            self._closure_refusals.most_common(3))
+            self.get_logger().info(f'[LOCK ] no closure in {n} looks: {top}')
 
     def _m_per_px(self) -> float:
         """Metres per BACKEND pixel on the floor. NaN without an altitude.
