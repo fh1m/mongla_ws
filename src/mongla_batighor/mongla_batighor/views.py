@@ -320,6 +320,14 @@ def board_link(v: View):
         (45, v('link', instrument('Link'))))
 
 
+def chain(v: View):
+    """Photons to thrust: each stage's rate and age, beside what the cameras see."""
+    # The ages are computed by chain.py (seen minus stamp, per stage), so they
+    # are one table in the Chain instrument, not plots of raw stamps.
+    return row((40, col(*(v(c, camera(c)) for c in CAMERAS))),
+               (60, v('chain', instrument('Chain'))))
+
+
 def bins_downward(v: View):
     """Aligning over a target below: the floor with boxes, the detections, the error."""
     return row((60, v('down', camera('downward', synced=True))),
@@ -356,7 +364,7 @@ NOT_SHOWN = {
 }
 
 VIEWS = {f.__name__: f for f in (cockpit, vision, flow, localization, thrust, board_health,
-                                 board_link, bins_downward, calibrate, weak_link)}
+                                 board_link, chain, bins_downward, calibrate, weak_link)}
 FILE = {'cockpit': 'mongla_layout'}            # the default keeps the name links use
 
 
