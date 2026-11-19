@@ -250,7 +250,44 @@ def score_points(p0, p1, H):
 
 MODES = ('ours keypoint', 'ours reliability', 'ours dense', 'upstream sparse',
          'upstream XFeat*', 'upstream XFeat* single-scale', 'upstream LighterGlue', 'rel + norm-first bilinear', 'rel + norm-first bicubic',
-         'rel + raw bicubic', 'gate 0.05', 'gate 0.1', 'gate 0.2', 'gate 0.3')
+         'rel + raw bicubic', 'gate 0.05', 'gate 0.1', 'gate 0.2', 'gate 0.3',
+         'ours glue', 'ours second chance')
+
+
+def _glue(path):
+    """The exported LighterGlue (tools/bench/lighterglue_export.py) and its
+    mutual-match filter, as one callable."""
+    import importlib.util
+    import onnxruntime as ort
+    spec = importlib.util.spec_from_file_location(
+        'lighterglue_export', os.path.join(HERE, '..', 'bench', 'lighterglue_export.py'))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    o = ort.SessionOptions()
+    o.intra_op_num_threads = 2
+    sess = ort.InferenceSession(path, o, providers=['CPUExecutionProvider'])
+
+    def run(k0, d0, k1, d1, w, h, min_conf=0.1):
+        if len(k0) < 2 or len(k1) < 2:
+            return np.zeros(0, int), np.zeros(0, int)
+        sc = sess.run(None, {'kpts0': k0[None].astype(np.float32),
+                             'kpts1': k1[None].astype(np.float32),
+                             'desc0': d0[None].astype(np.float32),
+                             'desc1': d1[None].astype(np.float32),
+                             'size': np.array([w, h], np.float32)})[0]
+        i0, i1, _ = m.mutual(sc, min_conf)
+        return i0, i1
+    return run
+
+
+def fit_inliers(p0, p1):
+    """The anchor's own acceptance count: MAGSAC at its 3 px."""
+    if len(p0) < 8:
+        return 0
+    H, mask = cv2.findHomography(p0.reshape(-1, 1, 2).astype(np.float32),
+                                 p1.reshape(-1, 1, 2).astype(np.float32),
+                                 cv2.USAC_MAGSAC, 3.0)
+    return 0 if H is None or mask is None else int(mask.sum())
 
 
 def resample(heads, k, how, w, h):
@@ -271,14 +308,18 @@ def resample(heads, k, how, w, h):
     return d.numpy().astype(np.float32)
 
 
-def run(model, ref_dir, n_frames, seed, only=None):
+def run(model, ref_dir, n_frames, seed, only=None, glue=''):
     import time
+    lg = _glue(glue) if glue else None
+    second = 0
     xf = _xfeat_module()
     net = Heads(model)
     ref = _upstream(ref_dir) if ref_dir else None
     modes = [m for m in (only or MODES)
-             if m in MODES or m.split()[0] in ('cos', 'topk', 'thresh')]
+             if m in MODES or m.split()[0] in ('cos', 'topk', 'thresh', 'glue')]
     modes = [m for m in modes if ref or not (m.startswith('upstream') or m.startswith('rel +'))]
+    modes = [m for m in modes if lg or not (m in ('ours glue', 'ours second chance')
+                                            or m.startswith('glue'))]
     A = archive_root()
     rng = np.random.default_rng(seed)
     match = xf.XFeatONNX.match
@@ -334,6 +375,29 @@ def run(model, ref_dir, n_frames, seed, only=None):
                         r0 = xf.reliability_at(h0[2], k0, net.w, net.h) >= tau
                         r1 = xf.reliability_at(h1[2], k1, net.w, net.h) >= tau
                         k0, d0, k1, d1 = k0[r0], d0[r0], k1[r1], d1[r1]
+                    elif m.startswith('glue'):
+                        # LighterGlue on the top N keypoints: its cost grows
+                        # with the square of N.
+                        tk = int(m.split()[1])
+                        k0, d0 = detect(xf, h0, True, top_k=tk)
+                        k1, d1 = detect(xf, h1, True, top_k=tk)
+                        i0, i1 = lg(k0, d0, k1, d1, net.w, net.h)
+                        k0, k1 = k0[i0], k1[i1]
+                        d0 = d1 = None
+                    elif m in ('ours glue', 'ours second chance'):
+                        # The shipped keypoints and descriptors; LighterGlue
+                        # always, or only when the cosine matcher's fit
+                        # misses the anchor's 15-inlier bar.
+                        k0, d0 = detect(xf, h0, True)
+                        k1, d1 = detect(xf, h1, True)
+                        i0 = i1 = np.zeros(0, int)
+                        if m == 'ours second chance' and len(d0) >= 2 and len(d1) >= 2:
+                            i0, i1 = match(d0, d1)
+                        if m == 'ours glue' or fit_inliers(k0[i0], k1[i1]) < 15:
+                            second += m == 'ours second chance'
+                            i0, i1 = lg(k0, d0, k1, d1, net.w, net.h)
+                        k0, k1 = k0[i0], k1[i1]
+                        d0 = d1 = None
                     elif m == 'ours dense':
                         k0, d0 = dense(h0)
                         k1, d1 = dense(h1)
@@ -376,6 +440,9 @@ def run(model, ref_dir, n_frames, seed, only=None):
               f'homography ok {100 * okf[m] / cnt:5.1f}% (target box '
               f'{100 * okr[m] / cnt:5.1f}%)  {1000 * cost[m] / cnt:6.1f} ms/pair')
     print('  (ms: dev box CPU; upstream includes its forward pass, ours does not)')
+    if 'ours second chance' in modes:
+        print(f'second chance: LighterGlue ran on {second} of {cnt} pairs '
+              f'({100.0 * second / max(1, cnt):.0f} %)')
     if 'ours keypoint' not in tot or 'ours reliability' not in tot:
         return 0
     gain = 100.0 * (tot['ours reliability'][1] - tot['ours keypoint'][1]) \
@@ -487,6 +554,7 @@ def main(argv=None):
     ap.add_argument('--frames', type=int, default=40, help='per clip')
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--modes', default='', help='comma-separated subset of MODES')
+    ap.add_argument('--glue', default='', help='xfeat_lighterglue.onnx, for the glue modes')
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
@@ -495,7 +563,7 @@ def main(argv=None):
     if not a.model:
         ap.error('--model is required')
     only = [m.strip() for m in a.modes.split(',') if m.strip()] or None
-    return run(a.model, a.reference, a.frames, a.seed, only)
+    return run(a.model, a.reference, a.frames, a.seed, only, a.glue)
 
 
 if __name__ == '__main__':

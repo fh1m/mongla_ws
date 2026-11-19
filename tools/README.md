@@ -76,6 +76,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `hull_stations.py` | Read EXACT thruster stations out of an Onshape GLB export. |
 | `imu_rest_stats.py` | What the board's IMU says when the vehicle is NOT moving. |
 | `label_contact_sheet.py` | Render every clip's strongest detection of one class, so a human can label. |
+| `lighterglue_export.py` | Export XFeat's LighterGlue matcher to ONNX, for the anchor's CPU. |
 | `mine_hard_negatives.py` | Mine the frames the detector is most confidently WRONG about. |
 | `mixer_map.py` | Measure what the mixer ACTUALLY does, using the Pico's console as readback. |
 | `model_inventory.py` | Every model on this box, what it detects, and whether it has been checked. |

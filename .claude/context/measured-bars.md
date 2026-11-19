@@ -156,6 +156,7 @@ is how `recommend()` happened.
 - [90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18)](#90-retrodiction-on-the-pi--4-to-6--of-a-core-while-moving-so-it-stays-off-until-its-benefit-is-measured-2026-11-18)
 - [91. ODOMETRY ARRIVAL — the localiser's 10 Hz never gaps past 105.76 ms, so loop closure refuses odometry older than 0.5 s (2026-11-19)](#91-odometry-arrival--the-localisers-10-hz-never-gaps-past-10576-ms-so-loop-closure-refuses-odometry-older-than-05-s-2026-11-19)
 - [92. XFEAT AS ITS AUTHORS RUN IT — reliability ranking and bicubic descriptors give the anchor 38 % more correct matches; semi-dense is removed (2026-11-19)](#92-xfeat-as-its-authors-run-it--reliability-ranking-and-bicubic-descriptors-give-the-anchor-38--more-correct-matches-semi-dense-is-removed-2026-11-19)
+- [93. LIGHTERGLUE ON THE ANCHOR'S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19)](#93-lighterglue-on-the-anchors-cpu--better-fits-but-not-inside-the-333-ms-anchor-cycle-2026-11-19)
 <!-- contents:end -->
 
 ---
@@ -8387,3 +8388,40 @@ stays at 100.
 anchor's own measure (+7.5 points on both fits), at 88.3 ms a pair for the
 matcher alone on two dev-box threads; how and where it can run is its own
 measurement.
+
+## 93. LIGHTERGLUE ON THE ANCHOR'S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19)
+
+Section 92 left LighterGlue as the one matcher that beat the shipped path.
+`tools/bench/lighterglue_export.py` writes it to ONNX (all six layers, no
+pruning or early stop, which do not export; the log-assignment agrees with
+kornia's unpruned network to 3.4e-4), and `xfeat_reliability.py --glue`
+scores it on the shipped keypoints and descriptors, same 120 pairs.
+
+**Bar, written before the run:** ship it if the target-box fit rises by at
+least 5 points over the shipped matcher and the per-frame cost fits the
+anchor's 333 ms at 3 Hz with the detectors running.
+
+| matcher on the shipped features | points | correct / pair | precision | fit right, frame / box | Kutum, 2 threads / 4 threads |
+|---|---|---|---|---|---|
+| cosine, mutual, 0.82 (shipped) | 1024 | 232.6 | 55.9 % | 51.7 / 61.7 % | -- |
+| LighterGlue | 1024 | 282.0 | 79.0 % | 61.7 / 70.8 % | 378.5 / 292.0 ms |
+| LighterGlue | 768 | 217.5 | 79.6 % | 60.0 / 65.8 % | -- |
+| LighterGlue | 512 | 144.3 | 78.9 % | 56.7 / 55.8 % | 130.6 / 96.9 ms |
+| LighterGlue | 256 | 66.7 | 73.3 % | 45.0 / 43.3 % | 52.6 / 39.2 ms |
+
+Kutum's times are one pair, matcher alone, idle stack; the bank matches up to
+four references a frame.
+
+**Decision.** Not in the per-frame path. At 1024 points it clears the
+quality bar by 9.1 points and costs one anchor cycle per pair; at 768 it fits
+the time and misses the bar (+4.1). It beats upstream's own sparse-plus-glue
+pairing (section 92) because the shipped features are now upstream's with
+the edge rule.
+
+**A second chance does not work as written.** The plan was to call
+LighterGlue only when the cosine matcher's fit missed the 15-inlier bar. On
+all 120 pairs the cosine fit cleared 15, including the ones whose fit was
+wrong, so the trigger never fired. An inlier count cannot say when the fast
+matcher failed; that needs a different signal, or a caller that is already
+off the 3 Hz cycle: loop-closure verification and re-acquisition after the
+lock is lost.
