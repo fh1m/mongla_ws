@@ -8549,12 +8549,36 @@ PASS at the anchor's rate and flat out; priority FAIL.
 
 **Result.** A call takes 20 to 33 ms where the chip needs about 10 (the
 comment in `detection/hailo_device.py`) and XFeat's chip share is 6.2 ms
-(section 92): the three networks queue for the host, not for the chip. At
+(section 92): the three networks queue for the host, not for the chip (retracted below: it is the chip). At
 3 Hz XFeat moves no detector rate and no p90 beyond noise when the detectors
 run at rates they hold. Scheduler priority 31 for the detectors changed
 nothing in either run (p90 within 1.5 ms, once worse), as expected when every
 caller is a blocking thread with one frame in flight: there is never a queue
-for the scheduler to reorder. So the stack sets no priority, and the cost to
-cut is host time per call, not chip time. The downward detector's own 45 Hz
-ceiling with two detectors is the larger finding, and is its own item.
+for the scheduler to reorder. So the stack sets no priority. The downward detector's own 45 Hz ceiling
+with two detectors is the larger finding, and is its own item.
+
+**Retracted the same day: the queue is the chip, not the host.** The sentence
+above inferred host time from a call longer than an assumed 10 ms of chip; it
+was never split. `tools/bench/hailo_stages.py --pair` times each step of
+`HailoDetector.infer` on Kutum, forward `gate_sharks` at 30 Hz and downward
+`bin_fire_blood` at 60 Hz, one Sonix frame, 12 s per condition. Bar written
+before the run: the stage whose median grows by at least half the downward
+call's growth from alone to paired owns the ceiling.
+
+| network, condition | letterbox | ready | chip (run_async + wait) | decode + boxes | call | rate |
+|---|---|---|---|---|---|---|
+| forward, alone | 0.36 | 0.03 | 15.82 | 0.03 | 16.24 | 30.1 Hz |
+| downward, alone | 0.35 | 0.03 | 13.49 | 0.07 | 13.94 | 60.1 Hz |
+| forward, paired | 0.41 | 0.03 | 24.62 | 0.03 | 25.42 | 30.1 Hz |
+| downward, paired | 0.38 | 0.03 | 22.60 | 0.07 | 23.09 | 45.1 Hz |
+
+(p50, ms.) The downward call grew 9.14 ms, of which the chip stage 9.11:
+**the ceiling is the chip.** Host work is under 0.5 ms a call. Each network
+needs 13.5 to 15.8 ms of chip alone, not 10, and 30 Hz forward plus 60 Hz
+downward asks for 30 x 15.8 + 60 x 13.5 = 1284 ms of chip a second: 128 %
+of one Hailo-8. Paired, each call waits for the other network's turn, and the
+downward rate settles where the chip is full (45 x 13.5 + 30 x 15.8 = 1081 ms
+a second, the switching between network groups included). XFeat's 6.2 ms at
+3 Hz is 1.9 % of the chip. What buys downward rate is chip time: a smaller
+input for the downward model, or a lower asked rate; host work cannot.
 
