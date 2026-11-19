@@ -157,6 +157,7 @@ is how `recommend()` happened.
 - [91. ODOMETRY ARRIVAL — the localiser's 10 Hz never gaps past 105.76 ms, so loop closure refuses odometry older than 0.5 s (2026-11-19)](#91-odometry-arrival--the-localisers-10-hz-never-gaps-past-10576-ms-so-loop-closure-refuses-odometry-older-than-05-s-2026-11-19)
 - [92. XFEAT AS ITS AUTHORS RUN IT — +38 % correct matches on warped frames, +8 % on real pairs; semi-dense is removed (2026-11-19)](#92-xfeat-as-its-authors-run-it--38--correct-matches-on-warped-frames-8--on-real-pairs-semi-dense-is-removed-2026-11-19)
 - [93. LIGHTERGLUE ON THE ANCHOR'S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19)](#93-lighterglue-on-the-anchors-cpu--better-fits-but-not-inside-the-333-ms-anchor-cycle-2026-11-19)
+- [94. VISUAL ODOMETRY FROM XFEAT — LK already does it better inside the same solver (2026-11-19)](#94-visual-odometry-from-xfeat--lk-already-does-it-better-inside-the-same-solver-2026-11-19)
 <!-- contents:end -->
 
 ---
@@ -8457,3 +8458,41 @@ wrong, so the trigger never fired. An inlier count cannot say when the fast
 matcher failed; that needs a different signal, or a caller that is already
 off the 3 Hz cycle: loop-closure verification and re-acquisition after the
 lock is lost.
+
+## 94. VISUAL ODOMETRY FROM XFEAT — LK already does it better inside the same solver (2026-11-19)
+
+The flow node fits one similarity transform per interval
+(`flow_math.solve_planar_motion`): the optical axis's translation, the image
+yaw rate and the scale rate, from LK tracks. An XFeat odometry rung could
+only earn its chip time by giving that same solver better correspondences.
+`tools/studies/vo_downward.py` feeds the shipped solver from both trackers
+and changes nothing else. Truth is exact: real downward archive frames (three
+clips, caustics included) moved by a known similarity each step, each frame
+degraded independently; 4 base frames a clip, 20 steps, two regimes.
+
+**Bar, written before the run:** XFeat earns a rung only if, at large steps,
+it refuses at least 20 points fewer intervals or its yaw error is at most
+0.7x LK's with translation no worse, and at small steps it is within 10 % of
+LK on both.
+
+| regime | tracker | refused | translation err p50 / p90 | yaw err p50 / p90 | dev-box CPU |
+|---|---|---|---|---|---|
+| small (1-3 px, <= 0.5 deg) | LK, shipped | 0.8 % | 0.10 / 0.51 px | 0.021 / 0.117 deg | 11.1 ms |
+| small | XFeat | 0.0 % | 0.41 / 0.92 px | 0.092 / 0.239 deg | 145.7 ms |
+| large (8-30 px, 2-8 deg) | LK, shipped | 3.3 % | 0.21 / 1.01 px | 0.084 / 0.369 deg | 13.7 ms |
+| large | XFeat | 0.0 % | 0.33 / 0.65 px | 0.095 / 0.252 deg | 147.3 ms |
+
+On real consecutive frames (no truth; availability only) both fit 100 % of
+24 intervals at a 1- and a 6-frame gap; LK's one-motion residual is lower
+(0.18 against 0.86 px, 0.54 against 1.07 px).
+
+**Decision.** No XFeat odometry rung: at the step sizes the downward camera
+sees, LK is four times more accurate, and at large steps XFeat's only
+advantage is a 3-point refusal rate and a shorter tail. XFeat keeps the job
+LK cannot do, finding a place again seconds or minutes later (the anchor and
+loop closure). XFeat's time here is ONNX on the CPU; on the chip it is
+16.7 ms (section 92), which changes the cost, not the accuracy.
+
+**Not tested here**: the image yaw as an observation of the board gyro's bias
+in the localiser. Today it estimates the camera-to-gyro time offset and
+cross-checks the gyro's axis and sign, and the localiser does not read it.

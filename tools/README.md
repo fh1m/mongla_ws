@@ -198,6 +198,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `tau_from_scale.py` | Rank the four scale sources against a KNOWN-CONSTANT-SPEED approach. |
 | `tracker_ab.py` | Which tracker closes more gaps on REAL competition footage? The question this settles, with numbers rather than an argument: the coast layer exists to bridge detection gaps, and nobody has ever ... |
 | `truth/` | Hand-labelled truth for the studies: when a target is really in view, labelled by eye from the frames and independently of any model, so a tracker or detector can be scored rather than compared with ... |
+| `vo_downward.py` | Should XFeat feed the downward camera's motion fit, or does LK already do it? The flow node already fits ONE similarity transform per interval (`flow_math.solve_planar_motion`): translation of the ... |
 | `weak_box_locality.py` | Are the weak boxes inside a gap WHERE THE TARGET WAS, or scattered noise? `gap_recovery_potential.py` showed every gap contains weak detections. |
 | `weak_box_persistence.py` | Does sub-threshold evidence persist WHILE THE TARGET IS STILL IN SIGHT? Track-before-detect postpones the threshold: a target too dim to clear a per-frame bar is accumulated across frames until the ... |
 | `xfeat_finetune_score.py` | Did fine-tuning on our water actually help? Scored on a HELD-OUT venue. |
