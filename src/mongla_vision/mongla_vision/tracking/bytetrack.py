@@ -61,7 +61,7 @@ class ByteTrackWrapper(Tracker):
         )
 
         # class_name registry: track_id -> class_name from last real detection
-        self._class_map: Dict[int, str] = {}
+        self._class_map: Dict[int, tuple] = {}     # track id -> (class id, name)
 
     def update(self, detections: List[Detection],
                frame_t: float) -> List[TrackedDetection]:  # noqa: ARG002
@@ -91,8 +91,8 @@ class ByteTrackWrapper(Tracker):
 
                 if confidence > 0.0:
                     name = _class_name_from_id(class_id, detections)
-                    self._class_map[tid] = name
-                class_name = self._class_map.get(tid, str(class_id))
+                    self._class_map[tid] = (class_id, name)
+                class_name = self._class_map.get(tid, (class_id, str(class_id)))[1]
 
                 results.append(TrackedDetection(
                     class_id=class_id,
@@ -114,7 +114,7 @@ class ByteTrackWrapper(Tracker):
                               getattr(strack, 'track_id', -1)))
             if tid in confirmed_ids:
                 continue
-            class_name = self._class_map.get(tid, '')
+            class_id, class_name = self._class_map.get(tid, (0, ''))
             if not class_name:
                 continue   # never got a real detection; skip
             # Use last known bbox from the STrack (Kalman state in ByteTrack).
@@ -123,7 +123,7 @@ class ByteTrackWrapper(Tracker):
                 continue
             x1, y1, x2, y2 = (float(v) for v in tlbr)
             results.append(TrackedDetection(
-                class_id=0,
+                class_id=class_id,     # its own class, not 0, while it coasts
                 class_name=class_name,
                 score=0.0,
                 xyxy=(x1, y1, x2, y2),
