@@ -92,7 +92,7 @@ from mongla_vision.config import CAMERA_PROFILES
 from mongla_vision.detection.detector import Detection, largest
 from mongla_vision.detection.messages import array_to_detections
 from .display_draw import (
-    _SWITCH_WAIT_S, _draw_distance_panel, _draw_mission_panel, _render_splash,
+    _SWITCH_WAIT_S, _draw_distance_panel, _draw_mission_panel, _num, _render_splash,
     _render_switching,
 )
 from .display_keys import _handle_camera_keys, _handle_video_keys, _send_pause
@@ -583,7 +583,7 @@ def main(args=None):
                                f' ex={ex:+.2f} ey={ey:+.2f}')
                 st = node._state
                 state_str = (
-                    f' depth={st.depth_m:.2f}m yaw={st.yaw_deg:.1f}°'
+                    f' depth={_num(st.depth_m, ".2f")}m yaw={_num(st.yaw_deg, ".1f")}°'
                     f' mode={st.mode} armed={st.armed}'
                     if st else ''
                 )
