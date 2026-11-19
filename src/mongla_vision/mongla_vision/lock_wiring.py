@@ -229,6 +229,7 @@ class LockWiringMixin:
         self._odom_sigma = float('nan')
         self._odom_z = float('nan')   # filter depth, negative below surface
         self._odom_t = 0.0
+        self._odom_stamp = None     # (sec, nanosec) of the newest input seen
         self._floor_h = float('nan')
         self._floor_h_t = 0.0
         self._pool_depth_warned = False
