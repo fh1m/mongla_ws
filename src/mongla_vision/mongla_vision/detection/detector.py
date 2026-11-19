@@ -83,6 +83,37 @@ class Detector:
         return f'<{self.__class__.__name__} name={self.name}>'
 
 
+def allow_ids_for(names, class_allowlist, *, log=None, tag='[DET  ]'):
+    """The class ids an allowlist keeps, or None for no filter.
+
+    None, or nothing but blanks, means no filter. If every requested name is
+    missing from the model, the ids would be EMPTY, and an empty filter
+    drops every detection: the detector returns [] on every frame while the
+    graph looks healthy, the silent-[] failure CLAUDE.md section 4 forbids,
+    reached from one typo'd class name. So it refuses to narrow, loudly; the
+    caller gets everything and can filter downstream. Every backend calls
+    this, so they cannot disagree on it.
+    """
+    if class_allowlist is None:
+        return None
+    wanted = {str(c).strip().lower() for c in class_allowlist if str(c).strip()}
+    if not wanted:
+        return None
+    ids = {cid for cid, cname in names.items() if str(cname).strip().lower() in wanted}
+    unknown = wanted - {str(names[i]).strip().lower() for i in ids}
+    if not ids:
+        if log is not None:
+            log.error(f'{tag} NONE of {sorted(wanted)} exist in this model -- '
+                      f'ignoring the allowlist rather than filtering every '
+                      f'detection away. Fix the class name, or the pipeline is '
+                      f'blind while looking healthy.')
+        return None
+    if unknown and log is not None:
+        log.warn(f'{tag} class(es) {sorted(unknown)} are not in this model. '
+                 f'Available: {sorted(names.values())[:10]}')
+    return ids
+
+
 def largest(detections: List[Detection]) -> Detection | None:
     """Return the detection with the largest bbox area, or None if the
     list is empty. The detector's debug overlay and its range-crop size
