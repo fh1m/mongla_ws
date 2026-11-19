@@ -68,3 +68,15 @@ def test_half_a_pair_is_not_stored():
         x.add(1.0, 0.0, now=float(i))            # no barometric height
         x.add(0.0, 1.0, now=float(i))            # no grating height
     assert x.check(now=1.0).samples == 0
+
+
+def test_pairs_past_the_age_limit_are_dropped_not_kept():
+    """`check` only reads fresh pairs, and nothing else ever read the old
+    ones, but they were never removed: at the 2 Hz floor read an hour's run
+    held 7200 pairs, all walked on every check. Memory is the window's."""
+    from mongla_vision.flow.scale_check import ScaleCrossCheck
+    x = ScaleCrossCheck(max_age_s=60.0)
+    for i in range(3600 * 2):
+        x.add(1.0, 1.0, now=i * 0.5)
+    assert len(x._pairs) <= 2 * 60 + 1
+    assert x.check(now=3599.5).samples == len(x._pairs)

@@ -328,10 +328,6 @@ class CheckpointBank(LookupMixin, StoreMixin):
         return len(self._refs)
 
     @property
-    def yields(self) -> list[int]:
-        return list(self._yields)
-
-    @property
     def has_reference(self) -> bool:
         return bool(self._refs)
 
@@ -345,6 +341,7 @@ class CheckpointBank(LookupMixin, StoreMixin):
         self._ann.clear()
         self._pos.clear()
         self._scale.clear()
+        self._last_scores = {}          # keyed by indices that no longer exist
 
     @property
     def labels(self) -> list[str]:
@@ -522,6 +519,9 @@ class CheckpointBank(LookupMixin, StoreMixin):
         self._ann.pop(i)
         self._pos.pop(i)
         self._scale.pop(i)
+        # Every later reference moved down a slot, so the last lookup's
+        # per-index scores now name different references.
+        self._last_scores = {}
 
     def _roi_scale(self, gray, roi) -> float:
         """sqrt(ROI area) in BACKEND pixels. NaN for a whole-frame reference.

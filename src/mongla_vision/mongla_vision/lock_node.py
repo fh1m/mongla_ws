@@ -9,9 +9,11 @@
                                     last REAL detection
 
 Publishes a `Detection2DArray` on `<ns>/lock` carrying ONE box: whatever rung
-can still stand behind an answer. `class_id` names the rung, `score` is the
-arbiter's confidence (rung trust x time decay), so a consumer that already
-knows how to read detections needs no new message type and no new units.
+can still stand behind an answer. The hypothesis names the rung, `score` is the
+AUTHORITY (decayed from the last real detection; a rung's own confidence is a
+gate, not a factor -- `lock_publish._publish`, #78) and `id` the class it
+follows, so a consumer that already reads detections needs no new message type
+and no new units.
 
 Why a separate topic and not `/detections`. Publishing a followed or anchored
 box onto the detector's topic would make it indistinguishable from something

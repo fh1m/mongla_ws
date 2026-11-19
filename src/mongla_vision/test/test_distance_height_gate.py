@@ -14,8 +14,10 @@ this" was turned into a number that means "we measured zero".
        proportional to height, so the distance kept integrating at a stale
        scale, with a plausible number and no warning.
 
-These test the accumulator contract and the freshness rule directly; the node's
-own wiring is covered by test_flow_node.py. The node these were written
+B05's rule now lives where the distance comes from: `flow_velocity` refuses an
+unknown height (`test_flow_velocity.py`), and the distance is the integral of
+that gated velocity, so a refused interval is skipped, never added as zero.
+These test the freshness rule and the output side. The node these were written
 against (distance_estimation_node) was retired for flow_node; the B10 tests
 now guard flow_node, which had lost the fix.
 """
@@ -26,53 +28,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mongla_vision.flow.flow_math import DistanceAccumulator   # noqa: E402
-
-
-def _active_acc():
-    """An accumulator armed along the body-forward axis (yaw 0, not lateral).
-
-    Flow is (dx, dy) and fore/aft rides IMAGE-Y on the downward camera, so the
-    test vectors are y-only -- an x-only flow projects to exactly zero on this
-    axis and would make every assertion below pass for the wrong reason.
-    """
-    acc = DistanceAccumulator()
-    acc.start(0.0, False)
-    return acc
-
-
-# --------------------------------------------------------------------------- #
-#  B05 -- None must SKIP the frame, 0.0 must not stand in for it
-# --------------------------------------------------------------------------- #
-def test_a_None_height_skips_the_frame_entirely():
-    acc = _active_acc()
-    acc.add((0.0, 40.0), None, 500.0)
-    assert acc.distance_m == 0.0, 'a frame with no height must not be integrated'
-
-
-def test_zero_height_is_NOT_the_same_as_no_height():
-    """The heart of B05. Both leave distance at 0.0, and they are different
-    facts: one is a skipped frame, the other is a recorded non-movement."""
-    skipped = _active_acc()
-    skipped.add((0.0, 40.0), None, 500.0)
-
-    recorded = _active_acc()
-    recorded.add((0.0, 40.0), 0.0, 500.0)
-
-    # Both are 0.0 -- which is exactly why the bug was invisible.
-    assert skipped.distance_m == recorded.distance_m == 0.0
-    # The distinction is only observable on the NEXT good frame: a real height
-    # must move the distance, proving the accumulator was not poisoned.
-    skipped.add((0.0, 40.0), 0.8, 500.0)
-    assert skipped.distance_m != 0.0, 'a good frame after a skip must integrate'
-
-
-def test_a_real_height_integrates_proportionally():
-    """Guards the scale itself: distance is linear in height."""
-    a, b = _active_acc(), _active_acc()
-    a.add((0.0, 40.0), 0.5, 500.0)
-    b.add((0.0, 40.0), 1.0, 500.0)
-    assert b.distance_m == pytest.approx(2.0 * a.distance_m, rel=1e-6)
 
 
 # --------------------------------------------------------------------------- #

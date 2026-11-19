@@ -40,7 +40,7 @@ def test_it_is_called_BEFORE_the_height_is_consumed():
     """Read after use and the tile height is always one frame stale against
     the frame that scaled its velocity by it."""
     called = SRC.index('self._read_the_floor(gray, t)')
-    used = SRC.index('if self._tile_height is not None:')
+    used = SRC.index('h = self._tile_height')
     assert called < used, 'the floor is read after its height is used'
 
 

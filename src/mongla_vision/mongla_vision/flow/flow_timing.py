@@ -22,8 +22,8 @@ cannot. Three deterministic errors, then one estimator for the remainder.
 
   1. `ClockMap`      board time -> host time, without TIMESYNC (the board does
                      not implement it -- 0 of 12 replies, measured).
-  2. exposure/2      the image timestamp convention is MID-EXPOSURE, and ours
-                     runs on AUTO exposure, so this term MOVES with the light.
+  2. exposure/2      the image timestamp convention is MID-EXPOSURE. Applied
+                     only when flow's `exposure_us` is set; no launch sets it.
   3. interval mid    an adaptive-baseline flow velocity is an AVERAGE over its
                      interval and belongs at the midpoint, not the end.
   4. `TimeOffset`    trace correlation + parabolic fit for what is left.
@@ -220,9 +220,11 @@ def exposure_offset_s(exposure_time_absolute: Optional[float]) -> float:
     Ours is 15.7 ms on auto exposure in this light -- **7.85 ms**, larger than
     the transport jitter and larger than the offset most papers estimate. And
     because it is AUTO, it MOVES: someone measured calibrated offsets shifting
-    by 2 ms as exposure went 1 -> 2 -> 4 ms. So this is read live per frame
-    rather than baked in, and the argument is in V4L2's own units (100 µs),
-    which is what `exposure_time_absolute` reports.
+    by 2 ms as exposure went 1 -> 2 -> 4 ms. The argument is in V4L2's own
+    units (100 µs), which is what `exposure_time_absolute` reports. It is NOT
+    read live: flow_node's `exposure_us` parameter is the only source, it
+    defaults to 0 and no launch sets it, so this term is 0 on the vehicle and
+    `td` absorbs the fixed part of the lag.
     """
     if exposure_time_absolute is None:
         return 0.0
@@ -432,10 +434,6 @@ class TimeOffset:
         prominence = float(y0 - np.percentile(corr, 10.0))
         self._quality = (max(0.0, min(1.0, y0))
                          * max(0.0, min(1.0, prominence * 1.5)))
-        return self._td
-
-    @property
-    def td(self) -> float:
         return self._td
 
     @property

@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from mongla_vision.flow.flow_math import (
-    height_above_floor, axis_unit, project, robust_flow,
+    height_above_floor, robust_flow,
     interp_rate, integrate_rate, solve_planar_motion, DistanceAccumulator,
     HeightFromDivergence, Intrinsics,
 )
@@ -23,24 +23,6 @@ def test_height_none_when_nonphysical():
     # depth below the floor / bad pool_depth -> None (caller holds last).
     assert height_above_floor(1.0, -2.0) is None
     assert height_above_floor(0.0, 0.0) is None
-
-
-# ── axis projection (one axis only) ──────────────────────────────────────────
-def test_axis_axial_is_forward_image_y():
-    ax = axis_unit(0.0, lateral=False)         # yaw 0 -> +y image
-    assert ax[0] == pytest.approx(0.0, abs=1e-9)
-    assert ax[1] == pytest.approx(1.0)
-
-
-def test_axis_lateral_is_perpendicular():
-    ax = axis_unit(0.0, lateral=True)          # yaw 0 +90 -> +x image
-    assert ax[0] == pytest.approx(1.0)
-    assert ax[1] == pytest.approx(0.0, abs=1e-9)
-
-
-def test_project_discards_cross_axis_component():
-    # a flow with both components, projected onto +y, keeps only the y part.
-    assert project((3.0, 4.0), axis_unit(0.0, lateral=False)) == pytest.approx(4.0)
 
 
 # ── robust flow (outlier rejection) ──────────────────────────────────────────
@@ -74,36 +56,6 @@ def test_interp_rate_clamps_and_handles_empty():
     assert interp_rate(buf, 0.0) == (5.0, 6.0)   # before start -> first
     assert interp_rate(buf, 9.0) == (5.0, 6.0)   # after end -> last
     assert interp_rate([], 0.0) is None
-
-
-# ── accumulator (start/reset/stop + metric fold) ─────────────────────────────
-def test_accumulator_integrates_axial_metres():
-    acc = DistanceAccumulator()
-    acc.start(axis_yaw_rad=0.0, lateral=False)   # project onto +y image
-    # 10 frames, each 5 px of forward (y) flow, height 2 m, f_px 500.
-    # per frame: 5 * 2 / 500 = 0.02 m -> total 0.2 m.
-    for _ in range(10):
-        acc.add((0.0, 5.0), height_m=2.0, f_px=500.0)
-    assert acc.stop() == pytest.approx(0.2)
-
-
-def test_accumulator_ignores_cross_axis_flow():
-    acc = DistanceAccumulator()
-    acc.start(axis_yaw_rad=0.0, lateral=False)   # axial = +y
-    for _ in range(10):
-        acc.add((5.0, 0.0), height_m=2.0, f_px=500.0)   # pure x (cross-axis)
-    assert acc.stop() == pytest.approx(0.0)
-
-
-def test_accumulator_inactive_is_noop_and_reset():
-    acc = DistanceAccumulator()
-    acc.add((0.0, 5.0), 2.0, 500.0)              # not started -> no-op
-    assert acc.distance_m == 0.0
-    acc.start(0.0, False)
-    acc.add((0.0, 5.0), 2.0, 500.0)
-    assert acc.distance_m > 0.0
-    acc.start(0.0, False)                        # re-start zeroes it
-    assert acc.distance_m == 0.0
 
 
 # --------------------------------------------------------------------------- #
@@ -434,7 +386,7 @@ class TestRefractiveRectifier:
     FX, FY, CX, CY, N = 513.94, 516.93, 308.7, 186.5, 1.333
 
     def _rec(self):
-        from mongla_vision.flow.flow_math import RefractiveRectifier
+        from mongla_vision.optics import RefractiveRectifier
         return RefractiveRectifier(self.FX, self.FY, self.CX, self.CY, n=self.N)
 
     def test_the_principal_point_is_a_FIXED_POINT(self):
@@ -481,7 +433,7 @@ class TestRefractiveRectifier:
         """n is a physical constant, not a tuning knob -- but if someone sets
         it wrong the failure must be a clean scale error, not a shape change,
         because a scale error is what the pool tape can catch."""
-        from mongla_vision.flow.flow_math import RefractiveRectifier
+        from mongla_vision.optics import RefractiveRectifier
         a = self._rec()
         b = RefractiveRectifier(self.FX, self.FY, self.CX, self.CY, n=1.0)
         # n = 1 is "no water": the rectifier must reduce to the identity.

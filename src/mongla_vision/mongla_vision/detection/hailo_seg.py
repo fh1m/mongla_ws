@@ -199,6 +199,8 @@ class HailoSegDetector(HailoDetector):
             x2 = (float(xyxy[i, 2]) - pad_x) / scale
             y1 = (float(xyxy[i, 1]) - pad_y) / scale
             y2 = (float(xyxy[i, 3]) - pad_y) / scale
+            if min(float(w), x2) <= max(0.0, x1) or min(float(h), y2) <= max(0.0, y1):
+                continue      # wholly in the bars: no area in the frame
             mask = None
             if i < len(masks):
                 # The mask came back at the box's size in NETWORK pixels; the

@@ -257,7 +257,7 @@ def test_eviction_drops_the_least_useful_reference_not_the_oldest():
         b.locate(view(1, 400))                       # exercises the yields
     b.enrol(view(1, 400, drop=200), roi=None, det_conf=0.9, force=True)
     assert b.size == 2
-    assert b.yields[0] == max(b.yields), 'the useful reference was evicted'
+    assert b._yields[0] == max(b._yields), 'the useful reference was evicted'
 
 
 # --------------------------------------------------------------------------- #
@@ -712,3 +712,30 @@ def test_scale_is_recorded_in_backend_pixels():
     assert abs(b.scales[0] - 60.0) < 1.0
 
 
+
+
+def test_an_eviction_forgets_the_scores_its_indices_no_longer_name():
+    """`last_lookup_scores` keys by reference index. Evicting reference j
+    moves every later reference down one slot, so scores kept across it
+    paired one reference's current yield with another's best, and the
+    health check judged the camera on that."""
+    b = CheckpointBank(FakeBackend())
+    b._last_scores = {0: 5, 1: 9, 2: 7}
+    b._yields = [10, 3, 8]
+    for name in ('_refs', '_sigs', '_labels', '_att', '_depth', '_ann',
+                 '_pos', '_scale'):
+        setattr(b, name, [None, None, None])
+    b._evict()
+    assert b.last_lookup_scores() == ([], [])
+    b._last_scores = {0: 5}
+    b.clear()
+    assert b.last_lookup_scores() == ([], [])
+
+
+def test_a_lookup_that_searches_nothing_leaves_no_scores():
+    """A label or radius that empties the pool returned before the scores
+    were reset, so the health check judged the previous lookup again."""
+    b = CheckpointBank(FakeBackend())
+    b._last_scores = {0: 5}
+    b.locate(np.zeros((240, 320), np.uint8), label='nothing-has-this')
+    assert b.last_lookup_scores() == ([], [])

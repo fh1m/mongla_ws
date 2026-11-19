@@ -190,3 +190,51 @@ def test_a_deferred_function_that_got_a_caller_is_dropped_from_the_register():
     live = {_key(ln) for ln in _run().splitlines() if ln.startswith('src/')}
     stale = sorted(set(DEFERRED_FUNCTIONS) - live)
     assert not stale, f'now called (or gone) -- drop from DEFERRED_FUNCTIONS: {stale}'
+
+
+def test_a_method_is_not_called_by_a_field_or_an_override_of_its_name(tmp_path):
+    """The two shapes the sweep used to pass, both found 2026-11-18.
+
+    `ConfidenceModel.authority()` read as called because a lock state has a
+    FIELD `authority` that is read everywhere; `Detector.class_names()` was
+    skipped as an override because both detectors implemented it, while
+    nothing in the repository ever called it. A real call clears each.
+    """
+    root = tmp_path / 'tree'
+    pkg = root / 'src' / 'mongla_vision' / 'mongla_vision'
+    pkg.mkdir(parents=True)
+    (root / 'tools').mkdir()
+    plant = pkg / 'stamps.py'
+    real = (_ROOT / 'src' / 'mongla_vision' / 'mongla_vision' / 'stamps.py')
+    body = real.read_text() + '''
+
+class _State:
+    authority: float = 0.0
+
+
+def read_state(s):
+    return s.authority
+
+
+class _Model:
+    def authority(self):
+        return 1.0
+
+
+class _A:
+    def class_names(self):
+        return {}
+
+
+class _B:
+    def class_names(self):
+        return {}
+'''
+    plant.write_text(body)
+    out = _run(root=root)
+    assert 'authority()' in out, 'a field read passed for a call'
+    assert 'class_names()' in out, 'an uncalled interface passed as an override'
+
+    plant.write_text(body + '\n\ndef use(m, a):\n    return m.authority(), a.class_names()\n')
+    out = _run(root=root)
+    assert 'authority()' not in out and 'class_names()' not in out

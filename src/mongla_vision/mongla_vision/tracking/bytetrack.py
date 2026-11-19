@@ -59,10 +59,6 @@ class ByteTrackWrapper(Tracker):
             minimum_matching_threshold=iou_threshold,
             track_activation_threshold=track_activation_threshold,
         )
-        self._track_buffer = track_buffer
-        self._min_hits     = min_hits
-        self._iou_threshold = iou_threshold
-        self._track_activation_threshold = track_activation_threshold
 
         # class_name registry: track_id -> class_name from last real detection
         self._class_map: Dict[int, str] = {}

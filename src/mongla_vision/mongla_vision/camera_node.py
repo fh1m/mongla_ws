@@ -6,9 +6,10 @@ One camera per node instance. Pick the source via the `profile` ROS param
 overrides. The node publishes:
 
   /mongla/vision/<cam>/image_raw     sensor_msgs/Image      (bgr8)
-  /mongla/vision/<cam>/camera_info   sensor_msgs/CameraInfo (size only; K/D
-                                                              empty until we
-                                                              ship a calib file)
+  /mongla/vision/<cam>/camera_info   sensor_msgs/CameraInfo (K/D from the
+                                                              calibration bound
+                                                              to the profile;
+                                                              size only without)
   /mongla/vision/<cam>/stream/compressed   sensor_msgs/CompressedImage  (the
   /mongla/vision/<cam>/preview/compressed  camera's own JPEG, 30 and 5 Hz;
                                            encoded only for a source with none)
@@ -284,11 +285,12 @@ class CameraNode(Node):
             # delivers 68 Hz raw against a detector that consumes ~50, and the
             # surplus starves the OTHER camera through USB/CPU contention.
             fps_override = int(self.get_parameter('fps').value)
-            if fps_override > 0:
-                profile['fps'] = fps_override
             if profile.get('source') in ('v4l2', 'webcam'):
                 profile.update(self._asked_controls(profile.get('controls')))
-                # WARN, not info. The launch files pin the process default to
+            if fps_override > 0:
+                profile['fps'] = fps_override
+                # Only when there is an override: a warning with none would
+                # report a rate change that did not happen. WARN, not info. The launch files pin the process default to
                 # `warn`, so an info line here is invisible -- and a silently
                 # capped camera is the exact round-26 defect, which cost a
                 # round precisely because nothing said the rate had been
@@ -814,6 +816,18 @@ class CameraNode(Node):
             return
         sx = info.width / cal['w']
         sy = info.height / cal['h']
+        # Scaling holds only at the calibration's own aspect ratio. At another
+        # (4:3 from a 16:9 calibration) a sensor crops rather than squashes,
+        # so a scaled K would be a confident, wrong lens: publish size only.
+        if abs(sx - sy) > 0.01 * max(sx, sy):
+            if not getattr(self, '_aspect_warned', False):
+                self._aspect_warned = True
+                self.get_logger().warning(
+                    f"[CAM  ] streaming {info.width}x{info.height} against a "
+                    f"calibration taken at {cal['w']}x{cal['h']}: another aspect "
+                    f"ratio, so the lens cannot be scaled to it; publishing "
+                    f"size-only CameraInfo (k=0)")
+            return
         K = list(cal['K'])
         K[0] *= sx; K[2] *= sx        # fx, cx
         K[4] *= sy; K[5] *= sy        # fy, cy

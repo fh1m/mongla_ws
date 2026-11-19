@@ -76,6 +76,9 @@ class LookupMixin:
         """
         import time
 
+        # Reset before any early return: a lookup that searched nothing must
+        # not leave the previous lookup's scores for the health check.
+        self._last_scores = {}
         pool = [i for i in range(len(self._refs))
                 if label is None or self._labels[i] == label]
 
@@ -125,7 +128,6 @@ class LookupMixin:
         # one that used to win. `best` cannot carry that -- it is a statement
         # about the whole shortlist -- and the numbers were being computed and
         # discarded on every lookup. See `anchor/health.py`.
-        self._last_scores = {}
         for i in pool:
             p = self._refs[i].locate_features(kq, dq)
             n = int(getattr(p, 'inliers', 0) or 0)
@@ -196,8 +198,8 @@ class LookupMixin:
         -- turbidity blinds the detector and the matcher together and moves the
         IMU not at all:
 
-          geometry    inliers >= `identity_inliers` (60, measured to admit 0 %
-                      of the other-prop frames while keeping 57 % of true ones)
+          geometry    inliers >= `identity_inliers` (`IDENTITY_INLIERS` in
+                      `bank.py`, with the sweep that chose it)
           semantics   a detector hypothesis of the SAME class, recently. The
                       detector is the identity authority: it misses things, it
                       does not confuse a gate for a torpedo, so a hypothesis far

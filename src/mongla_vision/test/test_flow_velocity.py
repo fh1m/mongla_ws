@@ -101,6 +101,18 @@ def test_NO_HEIGHT_is_a_REFUSAL_not_a_default():
     assert not flow_velocity(dx, dy, 0.0, f_px=F, height_m=1.5).ok
 
 
+def test_a_NaN_height_is_a_refusal_not_a_NaN_velocity():
+    """`TileGrating.height_m` returns NaN for a grating it cannot size, and
+    `NaN <= 0` is False. Accepted, it published an ok=True NaN velocity and
+    folded it into `distance_m`, which then read NaN until the next start."""
+    dx, dy = _render(vx=0.5, h=1.5)
+    nan, inf = float('nan'), float('inf')
+    for bad in (nan, inf):
+        assert not flow_velocity(dx, dy, DT, f_px=F, height_m=bad).ok
+        assert not flow_velocity(dx, dy, DT, f_px=bad, height_m=1.5).ok
+        assert not flow_velocity(dx, dy, bad, f_px=F, height_m=1.5).ok
+
+
 def test_a_HEIGHT_ERROR_is_a_clean_MULTIPLIER():
     """Stated because it is the dominant real-world error and it is
     well-behaved: a 10 % height error is a 10 % speed error and nothing
