@@ -133,13 +133,13 @@ files pass their tests and the sweeps but have not been read yet.
 | `anchor/anchor.py` | 314 | vehicle | yes | FIXED: a box on a featureless frame raised instead of snapping nothing |
 | `anchor/bank.py` | 576 | vehicle | yes | FIXED: eviction and clear left per-index scores naming other references |
 | `anchor/bank_lookup.py` | 287 | vehicle | yes | FIXED: an empty search left the previous scores; identity bar docstring quoted the retired 60 |
-| `anchor/bank_store.py` | 107 | vehicle | yes | works; refuses a bank from another resolution |
+| `anchor/bank_store.py` | 111 | vehicle | yes | FIXED: load skipped the scales; a preloaded bank covered no size and its first eviction raised |
 | `anchor/geometry.py` | 223 | vehicle | yes | works; never runs on the vehicle (the lock passes no K), recorded |
 | `anchor/health.py` | 186 | vehicle | yes | works; thresholds declared, reported only |
-| `anchor/loop_closure.py` | 291 | vehicle | yes | FIXED B-117: guards now read the matched place; per-place age, excursion and sigma |
+| `anchor/loop_closure.py` | 291 | vehicle | yes | FIXED: offset centre was a 320x240 constant; required argument now |
 | `anchor/pose.py` | 368 | other packages | yes | FIXED: the ambiguity gate it accepted was never compared; deleted |
-| `anchor/xfeat_hailo.py` | 248 | vehicle | pending | tests pass; line read pending |
-| `anchor/xfeat_onnx.py` | 276 | vehicle | pending | works; docstring said INPUT pixels, they are BACKEND pixels |
+| `anchor/xfeat_hailo.py` | 224 | vehicle | yes | CHANGED: its copy of the descriptor sampling replaced by the shared one (outputs equal within 9e-8) |
+| `anchor/xfeat_onnx.py` | 286 | vehicle | yes | CHANGED: keypoints and descriptors in one function both backends call; unread logger argument removed |
 | `calibration/__init__.py` | 26 | vehicle + other packages | yes | works |
 | `calibration/binding.py` | 79 | vehicle | yes | works |
 | `calibration/calibrate_node.py` | 401 | CLI tool + other packages | pending | tests pass; line read pending |
@@ -149,33 +149,33 @@ files pass their tests and the sweeps but have not been read yet.
 | `camera_node.py` | 931 | vehicle | yes | FIXED: the fps-override warning fired on every V4L2 start; a calibration of another aspect ratio is refused, not stretched |
 | `cameras/__init__.py` | 6 | vehicle + other packages | yes | works |
 | `cameras/camera.py` | 99 | vehicle + other packages | yes | works; docstring corrected (is_healthy drives the reopen watchdog) |
-| `cameras/discover.py` | 43 | vehicle | yes | works; docstring named the wrong consumer, fixed |
+| `cameras/discover.py` | 43 | vehicle | yes | works |
 | `cameras/reopen.py` | 82 | vehicle | yes | works |
-| `cameras/ros_topic.py` | 133 | vehicle + other packages | pending | tests pass; line read pending |
+| `cameras/ros_topic.py` | 135 | vehicle + other packages | yes | FIXED: wall stamp taken at read, monotonic at arrival |
 | `cameras/v4l2_mailbox.py` | 791 | vehicle + other packages | yes | works; ioctl struct sizes checked; buffer-count text said four, it is sixteen |
-| `cameras/video_file.py` | 246 | vehicle + other packages | pending | tests pass; line read pending |
-| `cameras/webcam.py` | 218 | vehicle + other packages | pending | tests pass; line read pending |
+| `cameras/video_file.py` | 248 | vehicle + other packages | yes | FIXED: stamped before the pacing sleep (333 ms early at 0.1x) |
+| `cameras/webcam.py` | 220 | vehicle + other packages | yes | FIXED: exposure_us written raw into 100 us units (4 ms asked, 400 ms set) |
 | `config.py` | 186 | vehicle + other packages | yes | works; the Fantech is forward for colour, the Sonix downward for rate (measured 2026-11-18) |
 | `continuity.py` | 280 | none | pending | tools/studies only (written reason in the register) |
 | `detection/__init__.py` | 17 | vehicle + other packages | yes | works |
-| `detection/contours.py` | 159 | vehicle | pending | tests pass; line read pending |
-| `detection/detector.py` | 92 | vehicle + other packages | yes | CHANGED: class_names() removed from the interface (never called); stale text fixed |
-| `detection/factory.py` | 82 | vehicle | yes | works |
-| `detection/gpu.py` | 86 | vehicle + other packages | pending | tests pass; line read pending |
-| `detection/hailo.py` | 792 | vehicle | yes | FIXED: a box wholly in the letterbox bars became a zero-area target; warmup failure logged; class_names() removed |
-| `detection/hailo_device.py` | 249 | vehicle + other packages | pending | tests pass; line read pending |
-| `detection/hailo_seg.py` | 228 | vehicle | pending | FIXED: same zero-area skip; full read pending |
+| `detection/contours.py` | 159 | vehicle | yes | works |
+| `detection/detector.py` | 123 | vehicle + other packages | yes | CHANGED: holds allow_ids_for, the one allowlist rule |
+| `detection/factory.py` | 82 | vehicle | yes | works; the extension list is the one the resolver reads |
+| `detection/gpu.py` | 86 | vehicle + other packages | yes | works (dev box only) |
+| `detection/hailo.py` | 760 | vehicle | yes | CHANGED: allowlist rule moved to detector.allow_ids_for |
+| `detection/hailo_device.py` | 249 | vehicle + other packages | yes | works |
+| `detection/hailo_seg.py` | 253 | vehicle | yes | FIXED: decoded at conf so the association band was empty; an edge mask was squashed not cropped; nms_iou refused live. No seg HEF on Kutum: built, not run on the chip with our models |
 | `detection/hef_file.py` | 102 | vehicle | yes | works |
 | `detection/messages.py` | 224 | vehicle | yes | works; class ids derived from labels, so a model swap cannot merge classes |
-| `detection/rangecrop.py` | 138 | vehicle | pending | works; off by default (halves the field of view; offline-only measurement) |
-| `detection/seg_decode.py` | 306 | vehicle | pending | tests pass; line read pending |
-| `detection/yolo.py` | 337 | vehicle | pending | CHANGED: class_names() removed; default allowlist None; full read pending |
+| `detection/rangecrop.py` | 138 | vehicle | yes | works; off by default (halves the field of view; gain measured offline only) |
+| `detection/seg_decode.py` | 306 | vehicle | yes | works |
+| `detection/yolo.py` | 317 | vehicle | yes | FIXED: its own copy of the extension order; an all-unknown allowlist returned [] every frame (one rule now, detector.allow_ids_for) |
 | `detector_dual_node.py` | 478 | vehicle | yes | works; the vehicle process (both cameras, detectors, locks, flow) |
-| `detector_frames.py` | 182 | vehicle | pending | tests pass; line read pending |
+| `detector_frames.py` | 182 | vehicle | yes | works |
 | `detector_node.py` | 646 | vehicle | yes | works; stray comments cleaned |
-| `detector_params.py` | 80 | vehicle | pending | tests pass; line read pending |
+| `detector_params.py` | 83 | vehicle | yes | FIXED: a malformed model_conf pair was skipped and the live set reported success; now refused by name |
 | `detector_publish.py` | 181 | vehicle | yes | CHANGED: debug image signature trimmed to what it uses |
-| `detector_setup.py` | 482 | vehicle | pending | tests pass; line read pending |
+| `detector_setup.py` | 490 | vehicle | yes | FIXED: model_conf refused whole when malformed. Recorded: a multi-parameter set that fails part-way leaves the earlier ones applied (the DSL sets one at a time) |
 | `draw.py` | 44 | vehicle | yes | CHANGED: legacy aliases and a swallowing **kwargs removed; one entry point |
 | `draw_strip.py` | 437 | none | pending | tools/site only (written reason in the register); FIXED absent values drew as 0.0 |
 | `draw_video.py` | 315 | vehicle | yes | CHANGED: depth inset and depth borders removed |
@@ -190,7 +190,7 @@ files pass their tests and the sweeps but have not been read yet.
 | `flow/flow_math.py` | 541 | vehicle | yes | FIXED: the pixel distance path nothing ran is deleted; the refraction model is imported from optics only |
 | `flow/flow_node.py` | 435 | vehicle | yes | CHANGED: image yaw and scale rate start NaN, not 0.0; floor depth with no range warns |
 | `flow/flow_publish.py` | 142 | vehicle | yes | works; half-exposure term is 0 on the vehicle (exposure_us never set), now said |
-| `flow/flow_setup.py` | 440 | vehicle | yes | FIXED: distance with no heading at start is body-frame for the whole run |
+| `flow/flow_setup.py` | 442 | vehicle | yes | FIXED: an unstamped frame timed on the monotonic clock; exposure_us is microseconds |
 | `flow/flow_timing.py` | 449 | vehicle + other packages | yes | works; time-offset accuracy holds only for short flow intervals (see competition items) |
 | `flow/flow_velocity.py` | 210 | vehicle | yes | FIXED: a NaN height, focal length or dt published an ok=True NaN velocity |
 | `flow/scale_check.py` | 110 | vehicle | yes | FIXED: kept every pair since start; now only its window |
@@ -199,28 +199,28 @@ files pass their tests and the sweeps but have not been read yet.
 | `live_params.py` | 31 | vehicle + other packages | yes | works |
 | `lock_anchor.py` | 253 | vehicle | yes | FIXED B-118: anchor box scaled from backend 320x240 to camera pixels |
 | `lock_frames.py` | 245 | vehicle | yes | works; act_conf 0.45 rests on a retired model (re-derive per flown model) |
-| `lock_inputs.py` | 245 | vehicle | yes | FIXED B-117 caller; floor-height age constant moved here |
+| `lock_inputs.py` | 246 | vehicle | yes | FIXED: the closure offset measured at a 320x240 constant; now the bank grid centre. Open: _odom_t never read (stale odometry) |
 | `lock_node.py` | 349 | vehicle | yes | works; docstring said the score was trust x decay, it is the authority (#78) |
 | `lock_publish.py` | 244 | vehicle | yes | FIXED: field-of-view bearing used backend K on full-frame pixels |
-| `lock_setup.py` | 401 | vehicle | pending | CHANGED: comments sit by their own parameters; ladder bars are plain node parameters; read in part |
-| `lock_wiring.py` | 310 | vehicle | pending | CHANGED: loop-closure params read plainly; unused import removed; full read pending |
-| `optics.py` | 277 | vehicle + other packages | pending | tests pass; line read pending |
+| `lock_setup.py` | 408 | vehicle | yes | FIXED: releasing target_class stayed on the pinned class (the filter is latched and was dropped while pinned) |
+| `lock_wiring.py` | 311 | vehicle | yes | works; holds the last single-class filter |
+| `optics.py` | 276 | vehicle + other packages | yes | works; a redundant import removed |
 | `preflight.py` | 133 | vehicle + other packages | yes | works; stale reference to a deleted function removed |
 | `qos.py` | 81 | vehicle + other packages | yes | works |
 | `seeing.py` | 92 | vehicle | yes | works |
 | `stamps.py` | 66 | vehicle + other packages | yes | works |
-| `target_geometry.py` | 314 | vehicle + other packages | pending | works; per-class widths from the rulebooks, deck-overridable |
+| `target_geometry.py` | 317 | vehicle + other packages | yes | FIXED: an override width that is not a number was skipped without a word; now reported like an implausible one |
 | `tool_geometry.py` | 104 | other packages | yes | works; torpedo, dropper and grabber offsets UNMEASURED (warns at fire) |
 | `tracker_node.py` | 417 | vehicle | yes | FIXED: box-size smoothing was per frame (0.1 s at 30 Hz, 0.4 s at 10 fps), now on capture time; dead camera_info subscription removed; coasted-score comment corrected |
 | `tracking/__init__.py` | 9 | vehicle | yes | works |
-| `tracking/bytetrack.py` | 159 | vehicle | pending | tests pass; line read pending |
+| `tracking/bytetrack.py` | 159 | vehicle | yes | FIXED: a coasting track reported class_id 0 (fallback when trackers will not import; Kutum runs OC-SORT) |
 | `tracking/confidence.py` | 132 | vehicle | yes | works for the Kalman (nsa_factor); FIXED: authority() was never called, deleted |
 | `tracking/follower.py` | 267 | vehicle | yes | FIXED: drop() defined twice, the first shadowed |
 | `tracking/kalman.py` | 259 | vehicle | yes | works; Q re-discretised per interval, expiry in seconds |
 | `tracking/lock_state.py` | 335 | vehicle | yes | works; the ladder core (strict priority, decay from the last real detection) |
-| `tracking/roboflow_tracker.py` | 268 | vehicle | pending | works; a coasted box carries score 0.0 and a window in capture seconds |
+| `tracking/roboflow_tracker.py` | 267 | vehicle | yes | works; two values stored and never read removed |
 | `tracking/tracker.py` | 100 | vehicle | yes | works |
-| `tracking/visibility.py` | 206 | vehicle | pending | works; advisory only (no demand is scaled); stale re-ID text fixed |
+| `tracking/visibility.py` | 206 | vehicle | yes | works; advisory only (no demand is scaled); SLACK flag deleted. Silent when the anchor fails to load (K comes from the anchor grid) |
 | `trigger_stamps.py` | 130 | none | yes | waits on the board camera trigger (upstream); written reason in the register |
 | `underwater.py` | 119 | CLI tool | yes | works (characterisation only, no verdict); stale prediction table removed |
 | `utils/__init__.py` | 7 | vehicle | yes | works |
