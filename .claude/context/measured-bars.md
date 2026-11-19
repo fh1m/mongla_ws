@@ -8366,6 +8366,23 @@ inherited settings, moved one at a time (cosine bar 0.7, 0.76, 0.88, none;
 top_k 512, 2048; threshold 0.02, 0.1), are within a pair or two of the shipped
 0.82 / 1024 / 0.05 or worse.
 
+**Downstream: the loop-closure bar still holds.** `CLOSURE_INLIERS = 100`
+was set from section 24's near/far inlier separation under the old XFeat, and
+more surviving matches can move both. `floor_place_recognition.py` re-run on
+the same three downward clips (24 frames each, both versions, same pairs; the
+old one reproduces section 24 exactly):
+
+| floor | near p50, old / new | far pairs at 100 or more, old / new | far max, old / new |
+|---|---|---|---|
+| octagon_1 (caustics) | 76 / 90 | 0 % / 0 % | 53 / 71 |
+| octagon_Bottom | 168 / 168 | 0 % / 0 % | 107 / 111 |
+| bin | 192 / 228 | 8 % / 8 % | 262 / 301 |
+
+The share of different-place pairs clearing the bar is unchanged on every
+floor, and same-place pairs clear it more often (octagon_1 42 % to 50 %); the
+bin's 8 % is the revisit-or-alias tail section 24 already describes. The bar
+stays at 100.
+
 **Open.** LighterGlue is the one option that beats the shipped path on the
 anchor's own measure (+7.5 points on both fits), at 88.3 ms a pair for the
 matcher alone on two dev-box threads; how and where it can run is its own
