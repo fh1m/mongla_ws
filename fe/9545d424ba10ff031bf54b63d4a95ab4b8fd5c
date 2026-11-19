@@ -1,0 +1,43 @@
+.claude/context/packages/mongla_vision/audit.md
+  s_4af8d6f83b24e8::t_37d9690c0324e0 189,193
+.claude/context/packages/mongla_vision/README.md
+  s_4af8d6f83b24e8::t_bba5933b0412eb 190
+src/mongla_vision/mongla_vision/anchor/place_signature.py
+  s_4af8d6f83b24e8::t_c4aa58850dba7c 1-37,39-87,89-90
+  s_4af8d6f83b24e8::t_df9674a01d222d 38,88
+tools/studies/bank_shortlist_accuracy.py
+  s_4af8d6f83b24e8::t_4613c3326a1df3 78-90,153-155,227-233
+src/mongla_vision/test/test_place_signature.py
+  s_4af8d6f83b24e8::t_fbaf7c1ddb4acb 1-77
+src/mongla_vision/mongla_vision/anchor/bank.py
+  s_4af8d6f83b24e8::t_bba5933b0412eb 293
+  s_4af8d6f83b24e8::t_155a18e07fd171 63,84-87,95-97,101-103,374-379,381,581-584
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_bba5933b0412eb 4060-4105
+README.md
+  s_4af8d6f83b24e8::t_bba5933b0412eb 798
+src/mongla_vision/mongla_vision/anchor/bank_store.py
+  s_4af8d6f83b24e8::t_155a18e07fd171 64-65
+docs/index.html
+  s_4af8d6f83b24e8::t_bba5933b0412eb 1734,1736
+src/mongla_vision/setup.py
+  s_4af8d6f83b24e8::t_155a18e07fd171 14
+tools/studies/bank_scaling_bench.py
+  s_4af8d6f83b24e8::t_bba5933b0412eb 58-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "fe9545d424ba10ff031bf54b63d4a95ab4b8fd5c",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
