@@ -345,6 +345,39 @@ class DetectorSetupMixin:
 
     LIVE_PARAMS = LIVE_PARAMS
 
+    def _live_refusal(self, params) -> str:
+        """Why this live set must be refused, decided before anything is
+        applied; '' when nothing in it can be refused without a model."""
+        for p in params:
+            if p.name == 'active_model':
+                name = str(p.value).strip()
+                if not self._registry:
+                    # Single-model launch: naming the loaded model is a no-op
+                    # success (so ClassRef/use('<stem>') missions work); any
+                    # other name is an actionable reject (no 'registry' word,
+                    # so the DSL surfaces THIS message, not a generic wrap).
+                    if (name and self._single_model_name
+                            and _model_stem(name) == self._single_model_name):
+                        continue
+                    return (f"single-model launch loaded "
+                            f"{self._single_model_name!r}; cannot switch to "
+                            f"{name!r} live -- relaunch with model:={name} (or "
+                            f"models:=... for hot switching)")
+                name, _ = _split_active(name)
+                if self._resolve_model_key(name) is None:
+                    return (f"active_model={name!r} not found -- keys="
+                            f"{sorted(self._registry)} stems="
+                            f"{sorted(self._stem_to_key)}")
+            elif p.name == 'model_conf':
+                try:
+                    _parse_model_conf(str(p.value))
+                except ValueError as exc:
+                    return str(exc)
+            elif p.name == 'nms_iou' and float(p.value) <= 0.0:
+                return ('nms_iou 0.0 means "as compiled" and is a launch '
+                        'value; set a number in (0, 1] live')
+        return ''
+
     def _on_parameter_change(self, params):
         from rcl_interfaces.msg import SetParametersResult
         fixed = [p.name for p in params if p.name not in LIVE_PARAMS]
@@ -359,6 +392,22 @@ class DetectorSetupMixin:
                 f'{", ".join(fixed)}: read once at startup -- set it under '
                 f'`nodes:` in bringup.yaml and restart. Live here: '
                 f'{", ".join(LIVE_PARAMS)}'))
+        # rclpy rejects the whole set when this says no, so every refusal is
+        # decided before anything moves: first the checks that need nothing
+        # applied, then the NMS (the one change only a model can refuse), and
+        # only then the changes that cannot fail.
+        why = self._live_refusal(params)
+        if why:
+            return SetParametersResult(successful=False, reason=why)
+        nms = {('floor' if p.name == 'nms_floor' else 'iou'): float(p.value)
+               for p in params if p.name in ('nms_floor', 'nms_iou')}
+        if nms:
+            why = self._set_nms_live(**nms)
+            if why:
+                return SetParametersResult(successful=False, reason=why)
+            self.get_logger().info(
+                '[DET  ] ' + ', '.join(f'nms_{k} → {v:.3f}' for k, v in nms.items())
+                + ' (models configured again)')
         for p in params:
             if p.name == 'classes':
                 classes_str = str(p.value).strip()
@@ -376,30 +425,13 @@ class DetectorSetupMixin:
             elif p.name == 'active_model':
                 name = str(p.value).strip()
                 if not self._registry:
-                    # Single-model launch: set_model to the loaded model is a no-op
-                    # SUCCESS (so ClassRef/use('<stem>') missions work); any other
-                    # name is a clear, actionable reject (no 'registry' word, so the
-                    # DSL surfaces THIS message instead of a generic wrap).
-                    if (name and self._single_model_name
-                            and _model_stem(name) == self._single_model_name):
-                        self.get_logger().info(
-                            f"[DET  ] active_model {name!r} already loaded "
-                            f"(single-model launch) — no-op")
-                        continue
-                    return SetParametersResult(
-                        successful=False,
-                        reason=(f"single-model launch loaded "
-                                f"{self._single_model_name!r}; cannot switch to "
-                                f"{name!r} live -- relaunch with model:={name} (or "
-                                f"models:=... for hot switching)"))
+                    # `_live_refusal` let it through, so it names the loaded model.
+                    self.get_logger().info(
+                        f"[DET  ] active_model {name!r} already loaded "
+                        f"(single-model launch) — no-op")
+                    continue
                 name, extra_names = _split_active(name)
                 key = self._resolve_model_key(name)
-                if key is None:
-                    return SetParametersResult(
-                        successful=False,
-                        reason=(f"active_model={name!r} not found -- keys="
-                                f"{sorted(self._registry)} stems="
-                                f"{sorted(self._stem_to_key)}"))
                 self._det = self._registry[key]
                 self._active_name = key
                 self._set_extra(extra_names)
@@ -439,10 +471,6 @@ class DetectorSetupMixin:
             elif p.name == 'model_conf':
                 # Per-model override (CSV 'name=conf'); targets individual
                 # registry entries and persists across active_model switches.
-                try:
-                    _parse_model_conf(str(p.value))
-                except ValueError as exc:
-                    return SetParametersResult(successful=False, reason=str(exc))
                 self._pending_model_conf = str(p.value)
                 self._apply_model_conf(self._pending_model_conf)
 
@@ -464,20 +492,6 @@ class DetectorSetupMixin:
                     self.get_logger().warning(
                         f"[DET  ] masks → {want} IGNORED: no loaded model is a "
                         f"segmentation model. Contours will stay box corners.")
-
-            elif p.name in ('nms_floor', 'nms_iou'):
-                value = float(p.value)
-                if p.name == 'nms_iou' and value <= 0.0:
-                    return SetParametersResult(
-                        successful=False,
-                        reason='nms_iou 0.0 means "as compiled" and is a '
-                               'launch value; set a number in (0, 1] live')
-                why = self._set_nms_live(
-                    **{'floor' if p.name == 'nms_floor' else 'iou': value})
-                if why:
-                    return SetParametersResult(successful=False, reason=why)
-                self.get_logger().info(
-                    f"[DET  ] {p.name} → {value:.3f} (models configured again)")
 
             elif p.name == 'max_det':
                 new_max = int(p.value)
