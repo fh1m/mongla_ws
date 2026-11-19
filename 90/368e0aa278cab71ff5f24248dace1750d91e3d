@@ -1,0 +1,29 @@
+src/mongla_vision/mongla_vision/lock_publish.py
+  s_d9cd6692c91d8a::t_b144242deb9e72 212,217-222
+  s_d9cd6692c91d8a::t_f07d19d41d6f58 211
+src/mongla_vision/mongla_vision/lock_wiring.py
+  s_d9cd6692c91d8a::t_f07d19d41d6f58 65
+src/mongla_vision/test/test_lock_visibility_bearing.py
+  s_d9cd6692c91d8a::t_b144242deb9e72 32
+  s_d9cd6692c91d8a::t_c1a9bccbcb8535 50-77
+src/mongla_vision/mongla_vision/lock_inputs.py
+  s_d9cd6692c91d8a::t_b144242deb9e72 215,217-226
+.claude/context/packages/mongla_vision/audit.md
+  s_d9cd6692c91d8a::t_77b9ad1c770d1b 225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "90368e0aa278cab71ff5f24248dace1750d91e3d",
+  "prompts": {},
+  "sessions": {
+    "s_d9cd6692c91d8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb03970b-3052-4186-b267-0fc9971a0020",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
