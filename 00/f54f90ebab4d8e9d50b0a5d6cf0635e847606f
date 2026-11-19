@@ -1,0 +1,53 @@
+docs/index.html
+  s_4af8d6f83b24e8::t_e5f62cd4e1fd5b 1734,1736
+tools/studies/bank_shortlist_accuracy.py
+  s_4af8d6f83b24e8::t_5562f7a36e657c 34-35,137-147,149-157,160,163,165-170
+  s_4af8d6f83b24e8::t_0d5495e261e322 41-45
+  s_5703d126560b06::t_890887546097ea 250-260
+  s_4af8d6f83b24e8::t_a25e61c4a26bfe 193-215,218,221-230,233,238-249,261-283,287,290-302,304-314,319-327,332-337,348,350-351,364-365
+  s_4af8d6f83b24e8::t_f10a3032cbefd6 158
+  s_5703d126560b06::t_ae18bdd56d46bb 148
+  s_5703d126560b06::t_f2fe74dd6895d5 231-232,234-237
+  s_4af8d6f83b24e8::t_b45416475e1ce9 426-434
+  s_4af8d6f83b24e8::t_bd47fa80df7ee0 36-39,159,161
+  s_4af8d6f83b24e8::t_f2b833d9b9d27c 40,162,164,423
+  s_4af8d6f83b24e8::t_c6edab1d45652b 216-217,219-220,284-286,288-289,303,315-318,328-331
+  s_4af8d6f83b24e8::t_add7589f279b1b 46,48,58,171-173,188,366,390,424
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_67c9883ec9d309 4139-4155
+  s_4af8d6f83b24e8::t_73174238472448 4168-4222
+  s_4af8d6f83b24e8::t_e51d3d14004534 4106-4120
+  s_4af8d6f83b24e8::t_2285f8ac649a39 4156-4167
+  s_4af8d6f83b24e8::t_d164bd1c1a085e 4121-4138
+  s_4af8d6f83b24e8::t_e5f62cd4e1fd5b 4101-4102
+src/mongla_vision/mongla_vision/anchor/bank.py
+  s_4af8d6f83b24e8::t_0d5495e261e322 101,103-105
+README.md
+  s_4af8d6f83b24e8::t_e5f62cd4e1fd5b 798
+tools/bench/lighterglue_hailo_dfc.py
+  s_4af8d6f83b24e8::t_8fb7219800148e 95-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "00f54f90ebab4d8e9d50b0a5d6cf0635e847606f",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    },
+    "s_5703d126560b06": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "864c6f40-ce83-43da-b1dc-ee4171cd981b",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
