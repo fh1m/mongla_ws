@@ -212,10 +212,18 @@ class LockInputsMixin:
         no error and a plausible number. Same trap as the anchor's ROI.
         """
         k = list(msg.k)
-        if len(k) < 9 or k[0] <= 0.0 or self._anchor is None:
+        if len(k) < 9 or k[0] <= 0.0:
             return
-        sx = self._anchor._be.w / float(msg.width or 1)
-        sy = self._anchor._be.h / float(msg.height or 1)
+        # Without a bank (off, or it failed to load) K stays on the camera's
+        # own grid: the frame-edge warning needs it whether or not any
+        # reference was stored.
+        if self._anchor is not None:
+            grid = (float(self._anchor._be.w), float(self._anchor._be.h))
+        else:
+            grid = (float(msg.width or 1), float(msg.height or 1))
+        self._K_grid = grid
+        sx = grid[0] / float(msg.width or 1)
+        sy = grid[1] / float(msg.height or 1)
         K = np.array([[k[0] * sx, 0.0, k[2] * sx],
                       [0.0, k[4] * sy, k[5] * sy],
                       [0.0, 0.0, 1.0]], np.float64)

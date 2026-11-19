@@ -29,6 +29,7 @@ class _Node(LockPublishMixin):
         be_w, be_h, full_w, full_h, fx = 320, 240, 640, 480, 500.0
         s = be_w / full_w
         self._anchor = SimpleNamespace(_be=SimpleNamespace(w=be_w, h=be_h))
+        self._K_grid = (float(be_w), float(be_h))
         self._K = np.array([[fx * s, 0, 320 * s], [0, fx * s, 240 * s], [0, 0, 1]])
         self._K_rect = None
         self._gray = np.zeros((full_h, full_w), np.uint8)
@@ -42,6 +43,34 @@ class _Node(LockPublishMixin):
 
 def test_the_bearing_is_in_full_frame_pixels():
     n = _Node()
+    cx, cy = 320 + 300, 240
+    n._note_visibility(cx - 5, cy - 5, cx + 5, cy + 5)
+    assert n._vis_state.bearing_deg == pytest.approx(
+        math.degrees(math.atan(300 / 500.0)), abs=0.05)
+
+
+def test_the_warning_runs_without_an_anchor_bank():
+    """K was only ever built on the anchor backend's grid, so a lock whose
+    bank failed to load had no K and the frame-edge warning went silent.
+    With no bank, K stays on the camera's own grid."""
+    from types import SimpleNamespace as NS
+    from mongla_vision.lock_inputs import LockInputsMixin
+
+    class _N(LockInputsMixin, LockPublishMixin):
+        _anchor = None
+        _K = None
+        _medium = 'air'
+        _gray = np.zeros((480, 640), np.uint8)
+
+        def _gray_now(self):
+            return self._gray
+
+        def get_logger(self):
+            return NS(info=lambda *_: None, warn=lambda *_: None)
+
+    n = _N()
+    n._on_info(NS(k=[500.0, 0, 320, 0, 500.0, 240, 0, 0, 1], d=[],
+                  width=640, height=480))
     cx, cy = 320 + 300, 240
     n._note_visibility(cx - 5, cy - 5, cx + 5, cy + 5)
     assert n._vis_state.bearing_deg == pytest.approx(

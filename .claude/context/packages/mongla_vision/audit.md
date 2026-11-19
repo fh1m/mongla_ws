@@ -222,7 +222,7 @@ The read column says whether the file was read line by line in this audit. All 1
 | `tracking/lock_state.py` | 335 | vehicle | yes | works; the ladder core (strict priority, decay from the last real detection) |
 | `tracking/roboflow_tracker.py` | 267 | vehicle | yes | works; two values stored and never read removed |
 | `tracking/tracker.py` | 100 | vehicle | yes | works |
-| `tracking/visibility.py` | 206 | vehicle | yes | works; advisory only (no demand is scaled); SLACK flag deleted. Silent when the anchor fails to load (K comes from the anchor grid) |
+| `tracking/visibility.py` | 206 | vehicle | yes | works; advisory only (no demand is scaled); SLACK flag deleted. FIXED: it went silent when the anchor bank failed to load; K now stays on the camera grid without a bank |
 | `trigger_stamps.py` | 130 | none | yes | waits on the board camera trigger (upstream); written reason in the register |
 | `underwater.py` | 119 | CLI tool | yes | works (characterisation only, no verdict); stale prediction table removed |
 | `utils/__init__.py` | 7 | vehicle | yes | works |
