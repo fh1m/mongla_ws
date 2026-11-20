@@ -15,8 +15,8 @@ the length of a move while the telemetry and health timers keep running.
 executor each node used before. Humble has no events executor, so a dev box
 gets the classic one and says so once.
 
-It lives in `mongla_localization` for the reason `params_file` does: it is
-the one package every node package already depends on.
+It lives in `mongla_runtime`, which imports nothing from Mongla, so every
+node package can depend on it without a cycle.
 """
 from __future__ import annotations
 
@@ -58,7 +58,9 @@ def make_executor(logger=None, classic=None, env=None):
 def spin(*nodes, classic=None) -> None:
     """`rclpy.spin`, on the chosen executor, for one node or several."""
     ex, name = make_executor(nodes[0].get_logger(), classic)
+    from .tether import declare
     for n in nodes:
+        declare(n)                  # does this process survive the tether?
         ex.add_node(n)
     nodes[0].get_logger().info(f'[EXEC ] spinning on the {name} executor')
     from rclpy.executors import ExternalShutdownException

@@ -49,13 +49,27 @@ def test_the_check_catches_the_old_tether_pause():
     assert _board_verbs_before_arm(old.replace('pause', 'countdown')) == []
 
 
-def _countdown(monkeypatch, env):
+def _countdown(monkeypatch, env, bound_nodes=()):
+    import signal
+    from mongla_runtime import tether
     from mongla_planner.dsl_report import ReportMixin
     for k in ('SSH_CONNECTION', 'TMUX', 'STY'):
         monkeypatch.delenv(k, raising=False)
     for k, v in env.items():
         monkeypatch.setenv(k, v)
-    return ReportMixin()
+    # An interactive ssh shell: a controlling terminal, SIGHUP not ignored.
+    monkeypatch.setattr(tether, '_has_controlling_tty', lambda: True)
+    monkeypatch.setattr(signal, 'getsignal', lambda s: signal.SIG_DFL)
+    rm = ReportMixin()
+    rm._tether_bound_nodes = lambda: list(bound_nodes)
+    return rm
+
+
+def test_countdown_refuses_while_a_node_of_the_stack_is_tether_bound(monkeypatch):
+    rm = _countdown(monkeypatch, {'SSH_CONNECTION': '1 2 3 4', 'TMUX': '/tmp/t,1,0'},
+                    bound_nodes=[('mongla_manager', 'started from an ssh session')])
+    with pytest.raises(RuntimeError, match='mongla_manager'):
+        rm.countdown(1)
 
 
 def test_countdown_refuses_on_bare_ssh(monkeypatch):

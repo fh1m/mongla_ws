@@ -79,6 +79,15 @@ class Detector:
     def close(self) -> None:
         pass
 
+    def class_names(self) -> List[str]:
+        """Every class this model can emit, sorted; [] before it is loaded.
+
+        Not the allowlist: what the model CAN say, which is what a course or a
+        mission naming a class must be checked against.
+        """
+        names = getattr(self, '_names', None) or {}
+        return sorted({str(v) for v in names.values()})
+
     def __repr__(self) -> str:
         return f'<{self.__class__.__name__} name={self.name}>'
 

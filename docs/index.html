@@ -110,7 +110,7 @@
       <div class="tape" aria-hidden="true"><i></i><em>0</em><em>30 cm</em></div>
       <b>1.09 cm</b><span>worst error over a 30 cm slide, against a tape measure. The red sliver on the tape is that error, to scale.</span>
     </div>
-    <div class="f"><span class="silk">Tests</span><b>4 742</b><span>passing, none failing</span></div>
+    <div class="f"><span class="silk">Tests</span><b>5 391</b><span>passing, 4 failing</span></div>
     <div class="g warn"><span class="silk">In water</span><b>0 dives</b><span>The current platform, this stack on the SROT board and Kutum in the Mongla hull, has never been in water. Its predecessors competed at RoboSub 2025 and 2026 (<a href="https://github.com/fh1m/mongla_ws/blob/main/docs/evidence/lineage.md">lineage</a>).</span></div>
   </div>
  </div>
@@ -1571,6 +1571,145 @@
  </div>
 </section>
 
+<!-- 09d ─────────────────────────── -->
+<section id="where" data-chapter="where am I">
+ <div class="wrap">
+  <p class="mark">Play with it <i>//</i> the filter that was sure, and wrong</p>
+  <h2 class="col">Knowing where you are is half the job. Knowing how well you know it is the other half.</h2>
+  <p class="lede col quiet">Underwater there is no GPS and we fly no DVL, so the vehicle's position
+    is an argument between sensors: the IMU predicts, and the floor camera, the depth gauge, a
+    second of stillness and a prop whose place we taped each correct it. The filter keeps two
+    things, a guess and how sure it is of the guess. The guess is rarely what goes wrong. The
+    confidence is.</p>
+
+  <div class="lab">
+   <div class="lab__stage">
+    <canvas id="where-view" width="900" height="380" role="img"
+      aria-label="Top view of a pool route: the true path, the filter's estimate drifting with a flow scale error, the uncertainty it believes, and a correct prop fix arriving at the gate"></canvas>
+    <div class="lab__read">
+      <div><span class="silk silk--b">estimate is off by</span><b id="where-off">—</b></div>
+      <div><span class="silk silk--b">filter believes &plusmn;</span><b id="where-sig">—</b></div>
+      <div><span class="silk silk--b">the correct fix</span><b id="where-gate">—</b></div>
+      <div><span class="silk silk--b">go_to, 0.5 m</span><b id="where-goto">—</b></div>
+    </div>
+   </div>
+   <div class="lab__knobs">
+    <label class="knob"><span class="silk silk--b">flow scale error</span>
+      <input type="range" id="where-s" min="0" max="8" step="0.1" value="5">
+      <output id="where-s-o">5.0 %</output>
+      <em>The floor camera reads every metre a little long or short. In air, on a tape, ours read
+        up to <span class="num">3.6 %</span> long. It does not average out: 3 % long is 3 % long on
+        every frame.</em></label>
+    <label class="knob"><span class="silk silk--b">metres since the last fix</span>
+      <input type="range" id="where-d" min="1" max="30" step="0.5" value="15">
+      <output id="where-d-o">15.0 m</output>
+      <em>A fix off a taped prop resets the error to the fix's own, about
+        <span class="num">0.15 m</span>. Then the scale error builds again, metre by metre.</em></label>
+    <label class="knob"><span class="silk silk--b">scale error the filter allows for</span>
+      <input type="range" id="where-k" min="0" max="6" step="0.1" value="0">
+      <output id="where-k-o">0.0 %</output>
+      <em>Zero is how it shipped until 2026-11-20: its doubt came only from per-frame noise, which
+        grows like a square root. Ours now allows <span class="num">3.6 %</span> of distance.</em></label>
+    <div class="lab__presets">
+      <button class="key" type="button" data-where="5,15,0">before the fix</button>
+      <button class="key" type="button" data-where="5,15,3.6">as shipped</button>
+      <button class="key" type="button" data-where="2.5,15,0">the in-air error</button>
+      <button class="key" type="button" data-where="3.6,28,3.6">a long leg</button>
+    </div>
+   </div>
+  </div>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>Why a sure filter refuses the truth</h3>
+    <p class="quiet">Every correction passes a gate first. The filter asks how surprising the
+      measurement is, given how sure it already is: the squared miss, divided by the doubt the
+      two of them carry together. Past <span class="num">9.21</span>, the 99th percentile of
+      that ratio for a two-axis measurement, the measurement is thrown away. That gate is what
+      keeps one mislabelled prop from teleporting the vehicle a metre.</p>
+    <p class="quiet">It is also a trap. Drag the filter's allowance to zero: its doubt barely
+      grows across fifteen metres, because noise that averages out is all it knows about. The
+      scale error has put it 0.75 m off. A correct fix arrives, the miss looks enormous against
+      such certainty, and the gate throws away the one measurement that was right. Against a
+      route with exact truth this happened to the second fix <span class="num">3 times in 5</span>.
+      With the allowance, <span class="num">0 in 15</span>.</p>
+   </div>
+   <div>
+    <h3>Why it matters to everything that moves</h3>
+    <p class="quiet"><code>go_to(x, y)</code> drives to a point in the pool, and it refuses to
+      start when the filter cannot say where the hull is to within the arrival tolerance. A
+      filter that is sure and wrong passes that check, drives, and reports
+      <em>arrived</em>, three quarters of a metre from the goal. With honest doubt, the same
+      filter says <em>I don't know well enough</em>, and the mission takes a fix first.</p>
+    <p class="quiet">The cost is real and it is the right one: from a 0.15 m fix, the allowance
+      reaches the default 0.5 m tolerance after about 13 m. Past that, the vehicle has to look
+      at a prop again before it may claim to have arrived anywhere. So a route is planned with
+      a fix every ten metres or so, and <code>go_to</code> warns before it starts a leg longer
+      than the estimate can fly.</p>
+    <p class="quiet">Until this pass the filter answered nobody. Node plumbing other packages
+      needed lived inside it, image code lived inside it, and only one mission ever called it.
+      Now it is reached the way vision is: one state topic that says <em>usable</em> or why not,
+      <code>mongla locate</code> to read it, <code>go_to</code> and prop fixes to act on it, the
+      vision lock to predict a lost target from it, and <code>localization_check</code> to grade
+      it in water.</p>
+    <blockquote class="pull">Being wrong is survivable. Being <em>sure</em> and wrong locks out the
+      measurement that would have fixed it.</blockquote>
+   </div>
+  </div>
+
+  <h3 style="margin-top:var(--s5)">The fifteen numbers, and who is allowed to touch them</h3>
+  <p class="col quiet">This is the whole state, in the order <code>inekf.py</code> keeps it, and
+    each row is one kind of measurement with a cell lit wherever its Jacobian is not zero. Read
+    the last six columns: <em>nothing measures a bias</em>. The filter learns them only through
+    what they do to everything else, which is why the accelerometer's prior has to be wide
+    enough to hold the real one.</p>
+  <div class="sv" role="table" aria-label="Which measurement updates which of the fifteen filter states">
+   <div class="sv__row sv__head" role="row"><span role="columnheader"></span>
+    <span class="sv__grp" style="grid-column:span 3">attitude &theta;</span>
+    <span class="sv__grp" style="grid-column:span 3">velocity v</span>
+    <span class="sv__grp" style="grid-column:span 3">position p</span>
+    <span class="sv__grp" style="grid-column:span 3">gyro bias</span>
+    <span class="sv__grp" style="grid-column:span 3">accel bias</span>
+    <span class="sv__rate">rate</span></div>
+   <div class="sv__row sv__idx" role="row"><span></span>
+    <i>0</i><i>1</i><i>2</i><i>3</i><i>4</i><i>5</i><i>6</i><i>7</i><i>8</i><i>9</i><i>10</i><i>11</i><i>12</i><i>13</i><i>14</i><span></span></div>
+   <div class="sv__row" role="row"><span>board attitude</span>
+    <b></b><b></b><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">50 Hz</span></div>
+   <div class="sv__row" role="row"><span>floor flow, x and y</span>
+    <u></u><u></u><u></u><b></b><b></b><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">camera</span></div>
+   <div class="sv__row" role="row"><span>stillness (ZUPT)</span>
+    <u></u><u></u><u></u><b></b><b></b><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">1 Hz, still</span></div>
+   <div class="sv__row" role="row"><span>depth</span>
+    <s></s><s></s><u></u><u></u><u></u><u></u><u></u><u></u><b></b><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">board</span></div>
+   <div class="sv__row" role="row"><span>heading (anchor, floor)</span>
+    <s></s><s></s><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">when seen</span></div>
+   <div class="sv__row" role="row"><span>prop fix</span>
+    <s></s><s></s><s></s><u></u><u></u><u></u><b></b><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">when asked</span></div>
+   <p class="sv__key"><span><b></b> measured directly</span> <span><s></s> coupled: through the hull's distance from where it started for depth and a fix (<code>-skew(p)</code>), through roll and pitch for heading</span> <span><u></u> not touched</span></p>
+  </div>
+
+  <table class="ledger">
+   <thead><tr><th>what lied, or held</th><th>measured on</th><th>before</th><th>after</th></tr></thead>
+   <tbody>
+    <tr><td data-l="what lied, or held">accelerometer bias prior, 17&times; smaller than this board's</td><td data-l="measured on">the real bench recording, 1&times; on Kutum</td><td class="numr" data-l="before">15.5 cm in 90 s, still</td><td class="num" data-l="after">0.94 cm</td></tr>
+    <tr><td data-l="what lied, or held">doubt with no scale error in it</td><td data-l="measured on">a pool route with exact truth, 5 seeds</td><td class="numr" data-l="before">2 of 5 fixes taken</td><td class="num" data-l="after">5 of 5</td></tr>
+    <tr><td data-l="what lied, or held">a hull never commanded, waiting to be still</td><td data-l="measured on">the real bench recording</td><td class="numr" data-l="before">0.71 m in 2.7 s</td><td class="num" data-l="after">0.08 m</td></tr>
+    <tr><td data-l="what lied, or held">stillness switched off entirely</td><td data-l="measured on">the real bench recording</td><td class="numr" data-l="before">1665 m in 140 s</td><td class="num" data-l="after">0.94 cm, with it on</td></tr>
+    <tr><td data-l="what lied, or held">"aided" on a filter nothing had measured yet</td><td data-l="measured on">the real bench recording</td><td class="numr" data-l="before">20 s aided, 9 m run</td><td class="num" data-l="after">usable needs a measurement within 2 s</td></tr>
+    <tr><td data-l="what lied, or held">stillness read from the accelerometer&rsquo;s size, not its direction</td><td data-l="measured on">a shove sideways, in a test; then the real bench recording</td><td class="numr" data-l="before">0.4 m/s&sup2; across moves it 0.008: read as still</td><td class="num" data-l="after">per axis, gravity removed; 232 of 232 rests kept</td></tr>
+    <tr><td data-l="what lied, or held">a correct fix, refused in silence</td><td data-l="measured on">the code, read</td><td class="numr" data-l="before">a counter, and nothing said</td><td class="num" data-l="after">the miss logged; a streak warns</td></tr>
+    <tr><td data-l="what lied, or held">a zero quaternion from the board</td><td data-l="measured on">a test feeding one</td><td class="numr" data-l="before">a level hull, 0.5&deg; sure</td><td class="num" data-l="after">no attitude; the sample skipped</td></tr>
+    <tr><td data-l="what lied, or held">a 12 s blind stretch of floor, mid-cruise</td><td data-l="measured on">a pool route with exact truth</td><td class="num" data-l="before">8.8 cm, floor seen</td><td class="num" data-l="after">9.9 cm, 12 s blind</td></tr>
+   </tbody>
+  </table>
+  <p class="col quiet" style="margin-top:26px">None of this has been in water; each row was found
+    against something whose answer was known in advance, which is the only way to rank an
+    estimator. The first pool session runs <code>localization_check</code>: live, aided,
+    anchored, out, back, and last a prop fix the filter did not make, compared with where the
+    filter thinks it is.</p>
+ </div>
+</section>
+
 <section class="chapter">
  <div class="wrap" data-no="III">
   <div class="no">III</div>
@@ -1731,11 +1870,11 @@
   <p class="mark">Retractions <i>//</i> kept on purpose</p>
   <h2 class="col">The results we had to take back.</h2>
 <!-- ledger:begin -->
-  <p class="lede col quiet">The measurement ledger holds 139 entries and 1147 rows of numbers. 18 of those entries say, in their own title, that they took an earlier result back; 10 more measured an idea and the answer was to leave it off. They are kept where anyone can read them, because a project that quietly deletes its wrong answers is a project you cannot check. The full ledger is <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">here</a>.</p>
-  <figure class="core" aria-label="139 ledger entries in the order they were written; 18 taken back, 10 said no">
-   <ol class="core__cols"><li class="core--ok" style="--h:0.158" title="1. Vision — detection · 6 rows"></li><li class="core--ok" style="--h:0.184" title="2. Vision — continuity (the lock ladder) · 7 rows"></li><li class="core--ok" style="--h:0.158" title="3. Vision — pipeline · 6 rows"></li><li class="core--ok" style="--h:0.263" title="4. Control — srot link · 10 rows"></li><li class="core--ok" style="--h:0.132" title="5. Known gaps — measured, and open · 5 rows"></li><li class="core--ok" style="--h:0.040" title="Method rules these bars encode · 0 rows"></li><li class="core--no" style="--h:0.421" title="6. range_gain_floor — measured, and the answer is &quot;leave it off&quot; · 16 rows"></li><li class="core--ok" style="--h:0.342" title="7. Confidence-adaptive measurement noise — measured, live and on real data · 13 rows"></li><li class="core--no" style="--h:0.395" title="8. The feature backend for the anchor rung — benched, not chosen · 15 rows"></li><li class="core--ok" style="--h:0.447" title="9. Plane tilt from the anchor homography — correct, and only COARSE on real water · 17 rows"></li><li class="core--ok" style="--h:0.237" title="10. Optical-flow velocity — measured on the bench, global-shutter camera · 9 rows"></li><li class="core--ok" style="--h:0.579" title="11. The inertial data the board actually gives — measured, not assumed · 22 rows"></li><li class="core--ok" style="--h:0.342" title="12. De-rotation, calibrated on the rigid camera+IMU rig · 13 rows"></li><li class="core--ok" style="--h:0.105" title="13. The bottom camera AS A DVL — verified live against a tape, 2026-09-07 · 4 rows"></li><li class="core--ok" style="--h:0.079" title="14. Board-clock stamping — measured on the vehicle, 2026-09-07 · 3 rows"></li><li class="core--back" style="--h:0.158" title="15. The return leg — RETRACTING &quot;0.0 %&quot;, in both directions, 2026-09-07 · 6 rows"></li><li class="core--back" style="--h:0.447" title="16. Gyro-aided LK: MEASURED AND REJECTED. Rotation ripeness instead. 2026-09-07 · 17 rows"></li><li class="core--back" style="--h:0.079" title="17. The calibration was wired to the WRONG CAMERA, both ways. 2026-09-07 · 3 rows"></li><li class="core--ok" style="--h:0.132" title="18. The launch path reads 106.5 % of truth. Four wrong causes first. 2026-09-07 · 5 rows"></li><li class="core--ok" style="--h:0.079" title="18b. The original in-progress entry, kept · 3 rows"></li><li class="core--no" style="--h:0.105" title="19. De-rotation measured THREE WAYS on the vehicle: OFF wins. 2026-09-07 · 4 rows"></li><li class="core--back" style="--h:0.184" title="20. The de-rotation gains, re-derived on this mount. THE SIGN WAS WRONG. 2026-09-07 · 7 rows"></li><li class="core--back" style="--h:0.211" title="21. The fitted gains were REFUTED by the validation A/B. Default is 0. 2026-09-07 · 8 rows"></li><li class="core--back" style="--h:0.132" title="22. My own &quot;refused intervals lose travel&quot; fix — MEASURED AND WITHDRAWN. 2026-09-07 · 5 rows"></li><li class="core--ok" style="--h:0.342" title="23. Motion blur: the shutter, not the detector. Measured + SOTA. 2026-09-07 · 13 rows"></li><li class="core--no" style="--h:0.289" title="§24. THE RETURN LEG IS VISUALLY UNSUPPORTED — and three measurements said three different things · 11 rows"></li><li class="core--ok" style="--h:0.184" title="§25. THRUSTER TELEMETRY: 958 frames, every one exactly zero. 2026-09-07 · 7 rows"></li><li class="core--ok" style="--h:0.342" title="§26. THE SECOND BOARD, AND KILL = 0 MEANING TWO THINGS. 2026-09-07 · 13 rows"></li><li class="core--ok" style="--h:0.158" title="26. The actuator quantum — the bar every control gain is really tuned against · 6 rows"></li><li class="core--back" style="--h:0.263" title="27. Heading — THE EARLIER ENTRY WAS CONTAMINATED · 10 rows"></li><li class="core--ok" style="--h:0.342" title="Forward camera rate — pi_forward.fps 15 → 60 (2026-09-09) · 13 rows"></li><li class="core--ok" style="--h:0.263" title="Tool aim, and the Ruckig feasibility numbers (2026-09-10) · 10 rows"></li><li class="core--ok" style="--h:0.040" title="The standoff feature and its validity bound (2026-09-10) · 0 rows"></li><li class="core--ok" style="--h:0.105" title="The UPLINK bearing is a WATER bearing (2026-09-10) · 4 rows"></li><li class="core--ok" style="--h:0.211" title="The companion link and the board clock (2026-09-10) · 8 rows"></li><li class="core--ok" style="--h:0.237" title="Flat-port refraction in the METRIC POSE path (2026-09-09) · 9 rows"></li><li class="core--ok" style="--h:0.211" title="SAUVC constants — DERIVED FROM THE RULEBOOK, and two that are NOT measured (2026-09-09) · 8 rows"></li><li class="core--back" style="--h:0.289" title="§28. Phase correlation DELETED — the low-texture regime does not exist on real water (2026-09-09) · 11 rows"></li><li class="core--ok" style="--h:0.237" title="Hailo segmentation decode (2026-09-11, vehicle, yolov8n_seg 640×640) · 9 rows"></li><li class="core--ok" style="--h:0.105" title="Dense-field motion estimation (2026-09-11, vehicle, 300 pairs) · 4 rows"></li><li class="core--ok" style="--h:0.105" title="Mask coefficients as an identity descriptor (2026-09-11, vehicle) · 4 rows"></li><li class="core--ok" style="--h:0.132" title="Flow front-end: three estimators against TRUTH (2026-09-11, vehicle) · 5 rows"></li><li class="core--ok" style="--h:0.237" title="Do contours cost the pipeline anything? (2026-09-11, vehicle) · 9 rows"></li><li class="core--ok" style="--h:0.079" title="The mission launch ran BOTH detectors (2026-09-11, vehicle) · 3 rows"></li><li class="core--ok" style="--h:0.132" title="The stack over the real frame archive (2026-09-11, vehicle, 200 frames) · 5 rows"></li><li class="core--no" style="--h:0.040" title="Scouting: nemo_auv (2026-09-11) -- ADOPT NOTHING, KEEP THE FAILURES · 0 rows"></li><li class="core--ok" style="--h:0.263" title="The detector&#x27;s floor, and where the standoff should be (2026-09-11, vehicle) · 10 rows"></li><li class="core--ok" style="--h:0.184" title="SROT sensor health: the zeros that are not a reading (2026-09-11) · 7 rows"></li><li class="core--ok" style="--h:0.184" title="The invariant filter on the vehicle, stationary rig (2026-09-11) · 7 rows"></li><li class="core--ok" style="--h:0.132" title="Sun caustics on the floor: flow tracks the waves (2026-09-15, real archive) · 5 rows"></li><li class="core--back" style="--h:0.158" title="10. The actuation chain — measured on the board, and VISION_YAW_MIN_PCT is the WRONG MODEL · 6 rows"></li><li class="core--ok" style="--h:0.158" title="11. Hailo-8 throughput — the models we actually fly · 6 rows"></li><li class="core--ok" style="--h:0.368" title="11. The closed-loop bench — the plant, and what MOT_SPIN_MIN really costs · 14 rows"></li><li class="core--no" style="--h:0.184" title="12. Round 5 — INDI measured against the tuned cascade, and NOT CHOSEN · 7 rows"></li><li class="core--back" style="--h:0.289" title="13. Live-board checks, 2026-09-23 — a reported catastrophe RETRACTED, and two IMU traps · 11 rows"></li><li class="core--back" style="--h:0.632" title="14. &quot;The Hailo is running our models at a fifth of its capability&quot; — RETRACTED the same hour · 24 rows"></li><li class="core--ok" style="--h:0.474" title="15. The depth loop, closed for the first time · 18 rows"></li><li class="core--ok" style="--h:0.263" title="16. DEPTH_LOST_ASCENT — the escape, and the ballast limit it implies · 10 rows"></li><li class="core--back" style="--h:0.263" title="17. The camera chain, measured end to end — and &quot;the ROS graph costs 45 %&quot; RETRACTED · 10 rows"></li><li class="core--ok" style="--h:0.079" title="18. DINOv2 on the Pi, finally measured — 3 seconds per frame · 3 rows"></li><li class="core--ok" style="--h:0.500" title="19. Feature front-ends priced on OUR hardware — the incumbent wins on speed · 19 rows"></li><li class="core--ok" style="--h:1.000" title="20. How big can the checkpoint bank get? Measured, not assumed · 38 rows"></li><li class="core--ok" style="--h:0.342" title="21. A reference does NOT decay to death — and a correction · 13 rows"></li><li class="core--ok" style="--h:0.474" title="22. A preloaded bank said &quot;torpedo&quot; while looking at the gate · 18 rows"></li><li class="core--ok" style="--h:0.211" title="23. Approach-driven acquisition: the premise holds, but not monotonically · 8 rows"></li><li class="core--ok" style="--h:0.211" title="24. The downward camera CAN recognise a place — three bars, not one · 8 rows"></li><li class="core--ok" style="--h:0.263" title="25. The identity bar was derived on a configuration production does not use · 10 rows"></li><li class="core--ok" style="--h:0.316" title="26. XFeat&#x27;s settings, chosen on our own water — and the benchmark that lied · 12 rows"></li><li class="core--ok" style="--h:0.184" title="27. Preloading across SESSIONS: works for position, not for identity · 7 rows"></li><li class="core--ok" style="--h:0.868" title="28. XFeat runs on the Hailo-8 — 701 FPS, and the bottleneck moves · 33 rows"></li><li class="core--ok" style="--h:0.237" title="29. The bank was building ONE reference — three defects, found by looking · 9 rows"></li><li class="core--ok" style="--h:0.211" title="30. XFeat cannot arbitrate weak detections yet — and the reason names the fix · 8 rows"></li><li class="core--back" style="--h:0.237" title="31. §30 WITHDRAWN — the failure was the wrong detector, not the bounding box · 9 rows"></li><li class="core--ok" style="--h:0.237" title="32. XFeat and the detector CAN share the chip — and the anchor&#x27;s 3 Hz is obsolete · 9 rows"></li><li class="core--ok" style="--h:0.289" title="33. The bank ran the backbone FIVE TIMES per lookup · 11 rows"></li><li class="core--ok" style="--h:0.132" title="34. The bank runs on the VEHICLE — and two defects only hardware could find · 5 rows"></li><li class="core--ok" style="--h:0.105" title="35. THE WHOLE LADDER, ON THE VEHICLE, LOSING NOTHING · 4 rows"></li><li class="core--ok" style="--h:0.447" title="36. THE LADDER ON HARD INPUT — AND A FIXTURE THAT REPLACES A PERSON · 17 rows"></li><li class="core--ok" style="--h:0.211" title="37. WHAT THE BOARD&#x27;S IMU SAYS WHEN NOTHING IS MOVING · 8 rows"></li><li class="core--ok" style="--h:0.040" title="38. XFEAT SURVIVES INT8 ON THE HAILO-8 — THE ARM CLOSES YES · 0 rows"></li><li class="core--ok" style="--h:0.132" title="39. THE LOOP-CLOSURE DECISION LAYER — BUILT, GUARDED, NEVER FLOWN · 5 rows"></li><li class="core--ok" style="--h:0.211" title="40. EVERY SENSOR&#x27;S ROLE, WRITTEN DOWN WHERE IT CAN FAIL · 8 rows"></li><li class="core--ok" style="--h:0.105" title="41. THE LOOP-CLOSURE TRUTH TEST — THE BAR HOLDS ON REAL WATER · 4 rows"></li><li class="core--ok" style="--h:0.040" title="42. POSE PRECISION: 640 IS 2.74× MORE PRECISE THAN 320 — AND §19 STILL STANDS · 0 rows"></li><li class="core--ok" style="--h:0.040" title="43. TIME TO CONTACT, FOR A VEHICLE THAT IS ITSELF MOVING · 0 rows"></li><li class="core--ok" style="--h:0.040" title="44. THE FLOW SCALE HAS TWO INDEPENDENT WITNESSES — AND THEY HAD NEVER BEEN COMPARED · 0 rows"></li><li class="core--ok" style="--h:0.040" title="45. TURBIDITY AS CONFIDENCE CALIBRATION — BUILT, OFF, AND HONEST ABOUT ITS CONSTANT · 0 rows"></li><li class="core--ok" style="--h:0.040" title="46. THE APPROACH SETPOINT IS A BAND, NOT A MINIMUM RANGE · 0 rows"></li><li class="core--ok" style="--h:0.079" title="47. ROUND 7 — XFEAT FINE-TUNED ON OUR OWN WATER, AND THE CANARY FLIPPED · 3 rows"></li><li class="core--ok" style="--h:0.289" title="48. THE STANDING RULE: NO CAPABILITY SHIPS UNREACHABLE · 11 rows"></li><li class="core--ok" style="--h:0.105" title="49. TWO TRAINING RUNS KILLED SILENTLY — /tmp IS A RAM DISK · 4 rows"></li><li class="core--ok" style="--h:0.184" title="50. HOW LONG A REAL GAP LASTS — THE NUMBER THE LADDER WAS NEVER SIZED ON · 7 rows"></li><li class="core--back" style="--h:0.158" title="51. THE SAME MEASUREMENT ON REAL WATER — AND §50&#x27;S CANDIDATE IS WITHDRAWN · 6 rows"></li><li class="core--ok" style="--h:0.132" title="52. WHY THE FINE-TUNE FAILED: WE TRAINED AT A RESOLUTION WE NEVER RUN · 5 rows"></li><li class="core--ok" style="--h:0.040" title="53. ROUND 7 CLOSES **NO** — AND THE SCORER WAS THE DEFECT · 0 rows"></li><li class="core--ok" style="--h:0.040" title="54. 179 IDENTITY SWITCHES — AND WHY XFEAT IS THE FIX, NOT THE FAILURE · 0 rows"></li><li class="core--ok" style="--h:0.132" title="55. NEVER LOSING THE TARGET: THE CASCADE, AND THE ONE STAGE NOBODY ELSE HAS · 5 rows"></li><li class="core--ok" style="--h:0.132" title="56. THE DETECTOR SEES THE TARGET DURING 100 % OF ITS OWN GAPS · 5 rows"></li><li class="core--ok" style="--h:0.079" title="57. BEFORE THE MODEL RUNS: THE CAMERA IS ARGUING WITH ITSELF · 3 rows"></li><li class="core--back" style="--h:0.289" title="58. THE MODEL-FREE RUNG THAT CANNOT EXIST — four families REJECTED, one reason · 11 rows"></li><li class="core--ok" style="--h:0.158" title="59. THE VEHICLE SHIPS THE HALLUCINATING GATE MODEL, AND THE GOOD ONE IS ON DISK · 6 rows"></li><li class="core--back" style="--h:0.263" title="60. COLOUR IS NOT A RUNG, EVEN WHEN THE RULEBOOK FIXES IT — built, measured, DELETED · 10 rows"></li><li class="core--no" style="--h:0.105" title="61. REDUNDANCY IS NOT UNCONDITIONAL — the ensemble was measured and not chosen · 4 rows"></li><li class="core--ok" style="--h:0.132" title="62. TIME-TO-CONTACT FROM SCALE — the metres cancel, and the noise does not · 5 rows"></li><li class="core--back" style="--h:0.105" title="63. THE APPROACH BAND MATCHED NO CLASS — RETRACTED, a citation around an invented number · 4 rows"></li><li class="core--back" style="--h:0.211" title="64. THE LOOP-CLOSURE EVIDENCE WAS MEASURED ON A FILTER IN FREE FALL — RETRACTED AND RE-MEASURED · 8 rows"></li><li class="core--ok" style="--h:0.158" title="65. THE MIRROR-BRANCH TEST — slope 0 against slope 2, gated on its own standard error · 6 rows"></li><li class="core--ok" style="--h:0.105" title="66. THE SHIPPED GATE HEF WAS DEGRADED BY ITS OWN FINE-TUNE — level 2 lost 0.34 of confidence that level 0 kept (B-82, issue #47) · 4 rows"></li><li class="core--ok" style="--h:0.079" title="67. PLACING A PROP FROM SIGHTINGS — the hull&#x27;s error enters once, and it is the one that matters · 3 rows"></li><li class="core--ok" style="--h:0.184" title="68. THE VEHICLE&#x27;S LOOPS HOLD THEIR RATES — and a relative sleep does not · 7 rows"></li><li class="core--ok" style="--h:0.289" title="69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10) · 11 rows"></li><li class="core--ok" style="--h:0.132" title="70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10) · 5 rows"></li><li class="core--ok" style="--h:0.105" title="71. KUTUM&#x27;S CLOCK IN THE HEALTH REPORT — the RTC, and a wall clock that moves mid-session (2026-11-10) · 4 rows"></li><li class="core--ok" style="--h:0.421" title="72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10) · 16 rows"></li><li class="core--ok" style="--h:0.184" title="73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10) · 7 rows"></li><li class="core--ok" style="--h:0.132" title="74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10) · 5 rows"></li><li class="core--ok" style="--h:0.263" title="79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11) · 10 rows"></li><li class="core--no" style="--h:0.079" title="75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10) · 3 rows"></li><li class="core--ok" style="--h:0.421" title="82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; 3.0 GHz is slower under load; open bench only (2026-11-11) · 16 rows"></li><li class="core--ok" style="--h:0.447" title="83. THE HAILORT SERVICE DIES MID-RUN — back in 0.31 s, and its clients fail fast (2026-11-11) · 17 rows"></li><li class="core--no" style="--h:0.211" title="76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11) · 8 rows"></li><li class="core--no" style="--h:0.211" title="77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11) · 8 rows"></li><li class="core--ok" style="--h:0.079" title="78. CV_BRIDGE REPLACED — the same bytes, a frame read 75 times cheaper, and one copy fewer to send (2026-11-11) · 3 rows"></li><li class="core--ok" style="--h:0.237" title="80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11) · 9 rows"></li><li class="core--ok" style="--h:0.158" title="81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11) · 6 rows"></li><li class="core--ok" style="--h:0.158" title="84. THE OPERATOR&#x27;S VIDEO IS THE CAMERA&#x27;S OWN JPEG — 0.062 ms a frame, boxes drawn by the browser (2026-11-12) · 6 rows"></li><li class="core--ok" style="--h:0.184" title="85. GLOBAL-SHUTTER EXPOSURE AT SPEED — dynamic framerate on keeps 210 fps and a picture; off is black (2026-11-18) · 7 rows"></li><li class="core--ok" style="--h:0.289" title="86. THE SERVICE COSTS 6 MS AN INFERENCE — one vision process opening the chip directly detects 55 % more than one process per camera (2026-11-18) · 11 rows"></li><li class="core--ok" style="--h:0.263" title="87. THE WHOLE VISION GRAPH AT ONCE — both detectors, the lock ladder and flow live in one process: forward at the camera&#x27;s rate, downward 32 Hz, 2.7 GB free (2026-11-18) · 10 rows"></li><li class="core--ok" style="--h:0.289" title="88. TRACKERS AGAINST TRUTH — the shipped OC-SORT more than doubles recall at the vehicle&#x27;s bars, ByteTrack and track-before-detect are rejected, and the gate model loses 70 % of its recall in another pool (2026-11-18) · 11 rows"></li><li class="core--ok" style="--h:0.237" title="89. FLOW IN THE CAMERA&#x27;S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18) · 9 rows"></li><li class="core--ok" style="--h:0.105" title="90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18) · 4 rows"></li><li class="core--ok" style="--h:0.079" title="91. ODOMETRY ARRIVAL — the localiser&#x27;s 10 Hz never gaps past 105.76 ms, so loop closure refuses odometry older than 0.5 s (2026-11-19) · 3 rows"></li><li class="core--ok" style="--h:0.974" title="92. XFEAT AS ITS AUTHORS RUN IT — +38 % correct matches on warped frames, +8 % on real pairs; semi-dense is removed (2026-11-19) · 37 rows"></li><li class="core--ok" style="--h:0.158" title="93. LIGHTERGLUE ON THE ANCHOR&#x27;S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19) · 6 rows"></li><li class="core--ok" style="--h:0.132" title="94. VISUAL ODOMETRY FROM XFEAT — LK already does it better inside the same solver (2026-11-19) · 5 rows"></li><li class="core--ok" style="--h:0.395" title="95. ONE HAILO-8, THREE NETWORKS — XFeat at the anchor&#x27;s rate costs the detectors nothing, and scheduler priority buys nothing (2026-11-19) · 15 rows"></li><li class="core--ok" style="--h:0.158" title="96. STARK-LIGHTNING AS A LADDER RUNG — 6.7 ms a call on the Hailo-8, and no longer a hold than the follower (2026-11-20) · 6 rows"></li><li class="core--ok" style="--h:0.132" title="97. MONOCULAR DEPTH ON THE HAILO-8 — no network in the Model Zoo carries the floor&#x27;s scale, so none can give flow its height (2026-11-20) · 5 rows"></li></ol>
+  <p class="lede col quiet">The measurement ledger holds 141 entries and 1153 rows of numbers. 18 of those entries say, in their own title, that they took an earlier result back; 10 more measured an idea and the answer was to leave it off. They are kept where anyone can read them, because a project that quietly deletes its wrong answers is a project you cannot check. The full ledger is <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">here</a>.</p>
+  <figure class="core" aria-label="141 ledger entries in the order they were written; 18 taken back, 10 said no">
+   <ol class="core__cols"><li class="core--ok" style="--h:0.158" title="1. Vision — detection · 6 rows"></li><li class="core--ok" style="--h:0.184" title="2. Vision — continuity (the lock ladder) · 7 rows"></li><li class="core--ok" style="--h:0.158" title="3. Vision — pipeline · 6 rows"></li><li class="core--ok" style="--h:0.263" title="4. Control — srot link · 10 rows"></li><li class="core--ok" style="--h:0.132" title="5. Known gaps — measured, and open · 5 rows"></li><li class="core--ok" style="--h:0.040" title="Method rules these bars encode · 0 rows"></li><li class="core--no" style="--h:0.421" title="6. range_gain_floor — measured, and the answer is &quot;leave it off&quot; · 16 rows"></li><li class="core--ok" style="--h:0.342" title="7. Confidence-adaptive measurement noise — measured, live and on real data · 13 rows"></li><li class="core--no" style="--h:0.395" title="8. The feature backend for the anchor rung — benched, not chosen · 15 rows"></li><li class="core--ok" style="--h:0.447" title="9. Plane tilt from the anchor homography — correct, and only COARSE on real water · 17 rows"></li><li class="core--ok" style="--h:0.237" title="10. Optical-flow velocity — measured on the bench, global-shutter camera · 9 rows"></li><li class="core--ok" style="--h:0.579" title="11. The inertial data the board actually gives — measured, not assumed · 22 rows"></li><li class="core--ok" style="--h:0.342" title="12. De-rotation, calibrated on the rigid camera+IMU rig · 13 rows"></li><li class="core--ok" style="--h:0.105" title="13. The bottom camera AS A DVL — verified live against a tape, 2026-09-07 · 4 rows"></li><li class="core--ok" style="--h:0.079" title="14. Board-clock stamping — measured on the vehicle, 2026-09-07 · 3 rows"></li><li class="core--back" style="--h:0.158" title="15. The return leg — RETRACTING &quot;0.0 %&quot;, in both directions, 2026-09-07 · 6 rows"></li><li class="core--back" style="--h:0.447" title="16. Gyro-aided LK: MEASURED AND REJECTED. Rotation ripeness instead. 2026-09-07 · 17 rows"></li><li class="core--back" style="--h:0.079" title="17. The calibration was wired to the WRONG CAMERA, both ways. 2026-09-07 · 3 rows"></li><li class="core--ok" style="--h:0.132" title="18. The launch path reads 106.5 % of truth. Four wrong causes first. 2026-09-07 · 5 rows"></li><li class="core--ok" style="--h:0.079" title="18b. The original in-progress entry, kept · 3 rows"></li><li class="core--no" style="--h:0.105" title="19. De-rotation measured THREE WAYS on the vehicle: OFF wins. 2026-09-07 · 4 rows"></li><li class="core--back" style="--h:0.184" title="20. The de-rotation gains, re-derived on this mount. THE SIGN WAS WRONG. 2026-09-07 · 7 rows"></li><li class="core--back" style="--h:0.211" title="21. The fitted gains were REFUTED by the validation A/B. Default is 0. 2026-09-07 · 8 rows"></li><li class="core--back" style="--h:0.132" title="22. My own &quot;refused intervals lose travel&quot; fix — MEASURED AND WITHDRAWN. 2026-09-07 · 5 rows"></li><li class="core--ok" style="--h:0.342" title="23. Motion blur: the shutter, not the detector. Measured + SOTA. 2026-09-07 · 13 rows"></li><li class="core--no" style="--h:0.289" title="§24. THE RETURN LEG IS VISUALLY UNSUPPORTED — and three measurements said three different things · 11 rows"></li><li class="core--ok" style="--h:0.184" title="§25. THRUSTER TELEMETRY: 958 frames, every one exactly zero. 2026-09-07 · 7 rows"></li><li class="core--ok" style="--h:0.342" title="§26. THE SECOND BOARD, AND KILL = 0 MEANING TWO THINGS. 2026-09-07 · 13 rows"></li><li class="core--ok" style="--h:0.158" title="26. The actuator quantum — the bar every control gain is really tuned against · 6 rows"></li><li class="core--back" style="--h:0.263" title="27. Heading — THE EARLIER ENTRY WAS CONTAMINATED · 10 rows"></li><li class="core--ok" style="--h:0.342" title="Forward camera rate — pi_forward.fps 15 → 60 (2026-09-09) · 13 rows"></li><li class="core--ok" style="--h:0.263" title="Tool aim, and the Ruckig feasibility numbers (2026-09-10) · 10 rows"></li><li class="core--ok" style="--h:0.040" title="The standoff feature and its validity bound (2026-09-10) · 0 rows"></li><li class="core--ok" style="--h:0.105" title="The UPLINK bearing is a WATER bearing (2026-09-10) · 4 rows"></li><li class="core--ok" style="--h:0.211" title="The companion link and the board clock (2026-09-10) · 8 rows"></li><li class="core--ok" style="--h:0.237" title="Flat-port refraction in the METRIC POSE path (2026-09-09) · 9 rows"></li><li class="core--ok" style="--h:0.211" title="SAUVC constants — DERIVED FROM THE RULEBOOK, and two that are NOT measured (2026-09-09) · 8 rows"></li><li class="core--back" style="--h:0.289" title="§28. Phase correlation DELETED — the low-texture regime does not exist on real water (2026-09-09) · 11 rows"></li><li class="core--ok" style="--h:0.237" title="Hailo segmentation decode (2026-09-11, vehicle, yolov8n_seg 640×640) · 9 rows"></li><li class="core--ok" style="--h:0.105" title="Dense-field motion estimation (2026-09-11, vehicle, 300 pairs) · 4 rows"></li><li class="core--ok" style="--h:0.105" title="Mask coefficients as an identity descriptor (2026-09-11, vehicle) · 4 rows"></li><li class="core--ok" style="--h:0.132" title="Flow front-end: three estimators against TRUTH (2026-09-11, vehicle) · 5 rows"></li><li class="core--ok" style="--h:0.237" title="Do contours cost the pipeline anything? (2026-09-11, vehicle) · 9 rows"></li><li class="core--ok" style="--h:0.079" title="The mission launch ran BOTH detectors (2026-09-11, vehicle) · 3 rows"></li><li class="core--ok" style="--h:0.132" title="The stack over the real frame archive (2026-09-11, vehicle, 200 frames) · 5 rows"></li><li class="core--no" style="--h:0.040" title="Scouting: nemo_auv (2026-09-11) -- ADOPT NOTHING, KEEP THE FAILURES · 0 rows"></li><li class="core--ok" style="--h:0.263" title="The detector&#x27;s floor, and where the standoff should be (2026-09-11, vehicle) · 10 rows"></li><li class="core--ok" style="--h:0.184" title="SROT sensor health: the zeros that are not a reading (2026-09-11) · 7 rows"></li><li class="core--ok" style="--h:0.184" title="The invariant filter on the vehicle, stationary rig (2026-09-11) · 7 rows"></li><li class="core--ok" style="--h:0.132" title="Sun caustics on the floor: flow tracks the waves (2026-09-15, real archive) · 5 rows"></li><li class="core--back" style="--h:0.158" title="10. The actuation chain — measured on the board, and VISION_YAW_MIN_PCT is the WRONG MODEL · 6 rows"></li><li class="core--ok" style="--h:0.158" title="11. Hailo-8 throughput — the models we actually fly · 6 rows"></li><li class="core--ok" style="--h:0.368" title="11. The closed-loop bench — the plant, and what MOT_SPIN_MIN really costs · 14 rows"></li><li class="core--no" style="--h:0.184" title="12. Round 5 — INDI measured against the tuned cascade, and NOT CHOSEN · 7 rows"></li><li class="core--back" style="--h:0.289" title="13. Live-board checks, 2026-09-23 — a reported catastrophe RETRACTED, and two IMU traps · 11 rows"></li><li class="core--back" style="--h:0.632" title="14. &quot;The Hailo is running our models at a fifth of its capability&quot; — RETRACTED the same hour · 24 rows"></li><li class="core--ok" style="--h:0.474" title="15. The depth loop, closed for the first time · 18 rows"></li><li class="core--ok" style="--h:0.263" title="16. DEPTH_LOST_ASCENT — the escape, and the ballast limit it implies · 10 rows"></li><li class="core--back" style="--h:0.263" title="17. The camera chain, measured end to end — and &quot;the ROS graph costs 45 %&quot; RETRACTED · 10 rows"></li><li class="core--ok" style="--h:0.079" title="18. DINOv2 on the Pi, finally measured — 3 seconds per frame · 3 rows"></li><li class="core--ok" style="--h:0.500" title="19. Feature front-ends priced on OUR hardware — the incumbent wins on speed · 19 rows"></li><li class="core--ok" style="--h:1.000" title="20. How big can the checkpoint bank get? Measured, not assumed · 38 rows"></li><li class="core--ok" style="--h:0.342" title="21. A reference does NOT decay to death — and a correction · 13 rows"></li><li class="core--ok" style="--h:0.474" title="22. A preloaded bank said &quot;torpedo&quot; while looking at the gate · 18 rows"></li><li class="core--ok" style="--h:0.211" title="23. Approach-driven acquisition: the premise holds, but not monotonically · 8 rows"></li><li class="core--ok" style="--h:0.211" title="24. The downward camera CAN recognise a place — three bars, not one · 8 rows"></li><li class="core--ok" style="--h:0.263" title="25. The identity bar was derived on a configuration production does not use · 10 rows"></li><li class="core--ok" style="--h:0.316" title="26. XFeat&#x27;s settings, chosen on our own water — and the benchmark that lied · 12 rows"></li><li class="core--ok" style="--h:0.184" title="27. Preloading across SESSIONS: works for position, not for identity · 7 rows"></li><li class="core--ok" style="--h:0.868" title="28. XFeat runs on the Hailo-8 — 701 FPS, and the bottleneck moves · 33 rows"></li><li class="core--ok" style="--h:0.237" title="29. The bank was building ONE reference — three defects, found by looking · 9 rows"></li><li class="core--ok" style="--h:0.211" title="30. XFeat cannot arbitrate weak detections yet — and the reason names the fix · 8 rows"></li><li class="core--back" style="--h:0.237" title="31. §30 WITHDRAWN — the failure was the wrong detector, not the bounding box · 9 rows"></li><li class="core--ok" style="--h:0.237" title="32. XFeat and the detector CAN share the chip — and the anchor&#x27;s 3 Hz is obsolete · 9 rows"></li><li class="core--ok" style="--h:0.289" title="33. The bank ran the backbone FIVE TIMES per lookup · 11 rows"></li><li class="core--ok" style="--h:0.132" title="34. The bank runs on the VEHICLE — and two defects only hardware could find · 5 rows"></li><li class="core--ok" style="--h:0.105" title="35. THE WHOLE LADDER, ON THE VEHICLE, LOSING NOTHING · 4 rows"></li><li class="core--ok" style="--h:0.447" title="36. THE LADDER ON HARD INPUT — AND A FIXTURE THAT REPLACES A PERSON · 17 rows"></li><li class="core--ok" style="--h:0.211" title="37. WHAT THE BOARD&#x27;S IMU SAYS WHEN NOTHING IS MOVING · 8 rows"></li><li class="core--ok" style="--h:0.040" title="38. XFEAT SURVIVES INT8 ON THE HAILO-8 — THE ARM CLOSES YES · 0 rows"></li><li class="core--ok" style="--h:0.132" title="39. THE LOOP-CLOSURE DECISION LAYER — BUILT, GUARDED, NEVER FLOWN · 5 rows"></li><li class="core--ok" style="--h:0.211" title="40. EVERY SENSOR&#x27;S ROLE, WRITTEN DOWN WHERE IT CAN FAIL · 8 rows"></li><li class="core--ok" style="--h:0.105" title="41. THE LOOP-CLOSURE TRUTH TEST — THE BAR HOLDS ON REAL WATER · 4 rows"></li><li class="core--ok" style="--h:0.040" title="42. POSE PRECISION: 640 IS 2.74× MORE PRECISE THAN 320 — AND §19 STILL STANDS · 0 rows"></li><li class="core--ok" style="--h:0.040" title="43. TIME TO CONTACT, FOR A VEHICLE THAT IS ITSELF MOVING · 0 rows"></li><li class="core--ok" style="--h:0.040" title="44. THE FLOW SCALE HAS TWO INDEPENDENT WITNESSES — AND THEY HAD NEVER BEEN COMPARED · 0 rows"></li><li class="core--ok" style="--h:0.040" title="45. TURBIDITY AS CONFIDENCE CALIBRATION — BUILT, OFF, AND HONEST ABOUT ITS CONSTANT · 0 rows"></li><li class="core--ok" style="--h:0.040" title="46. THE APPROACH SETPOINT IS A BAND, NOT A MINIMUM RANGE · 0 rows"></li><li class="core--ok" style="--h:0.079" title="47. ROUND 7 — XFEAT FINE-TUNED ON OUR OWN WATER, AND THE CANARY FLIPPED · 3 rows"></li><li class="core--ok" style="--h:0.289" title="48. THE STANDING RULE: NO CAPABILITY SHIPS UNREACHABLE · 11 rows"></li><li class="core--ok" style="--h:0.105" title="49. TWO TRAINING RUNS KILLED SILENTLY — /tmp IS A RAM DISK · 4 rows"></li><li class="core--ok" style="--h:0.184" title="50. HOW LONG A REAL GAP LASTS — THE NUMBER THE LADDER WAS NEVER SIZED ON · 7 rows"></li><li class="core--back" style="--h:0.158" title="51. THE SAME MEASUREMENT ON REAL WATER — AND §50&#x27;S CANDIDATE IS WITHDRAWN · 6 rows"></li><li class="core--ok" style="--h:0.132" title="52. WHY THE FINE-TUNE FAILED: WE TRAINED AT A RESOLUTION WE NEVER RUN · 5 rows"></li><li class="core--ok" style="--h:0.040" title="53. ROUND 7 CLOSES **NO** — AND THE SCORER WAS THE DEFECT · 0 rows"></li><li class="core--ok" style="--h:0.040" title="54. 179 IDENTITY SWITCHES — AND WHY XFEAT IS THE FIX, NOT THE FAILURE · 0 rows"></li><li class="core--ok" style="--h:0.132" title="55. NEVER LOSING THE TARGET: THE CASCADE, AND THE ONE STAGE NOBODY ELSE HAS · 5 rows"></li><li class="core--ok" style="--h:0.132" title="56. THE DETECTOR SEES THE TARGET DURING 100 % OF ITS OWN GAPS · 5 rows"></li><li class="core--ok" style="--h:0.079" title="57. BEFORE THE MODEL RUNS: THE CAMERA IS ARGUING WITH ITSELF · 3 rows"></li><li class="core--back" style="--h:0.289" title="58. THE MODEL-FREE RUNG THAT CANNOT EXIST — four families REJECTED, one reason · 11 rows"></li><li class="core--ok" style="--h:0.158" title="59. THE VEHICLE SHIPS THE HALLUCINATING GATE MODEL, AND THE GOOD ONE IS ON DISK · 6 rows"></li><li class="core--back" style="--h:0.263" title="60. COLOUR IS NOT A RUNG, EVEN WHEN THE RULEBOOK FIXES IT — built, measured, DELETED · 10 rows"></li><li class="core--no" style="--h:0.105" title="61. REDUNDANCY IS NOT UNCONDITIONAL — the ensemble was measured and not chosen · 4 rows"></li><li class="core--ok" style="--h:0.132" title="62. TIME-TO-CONTACT FROM SCALE — the metres cancel, and the noise does not · 5 rows"></li><li class="core--back" style="--h:0.105" title="63. THE APPROACH BAND MATCHED NO CLASS — RETRACTED, a citation around an invented number · 4 rows"></li><li class="core--back" style="--h:0.211" title="64. THE LOOP-CLOSURE EVIDENCE WAS MEASURED ON A FILTER IN FREE FALL — RETRACTED AND RE-MEASURED · 8 rows"></li><li class="core--ok" style="--h:0.158" title="65. THE MIRROR-BRANCH TEST — slope 0 against slope 2, gated on its own standard error · 6 rows"></li><li class="core--ok" style="--h:0.105" title="66. THE SHIPPED GATE HEF WAS DEGRADED BY ITS OWN FINE-TUNE — level 2 lost 0.34 of confidence that level 0 kept (B-82, issue #47) · 4 rows"></li><li class="core--ok" style="--h:0.079" title="67. PLACING A PROP FROM SIGHTINGS — the hull&#x27;s error enters once, and it is the one that matters · 3 rows"></li><li class="core--ok" style="--h:0.184" title="68. THE VEHICLE&#x27;S LOOPS HOLD THEIR RATES — and a relative sleep does not · 7 rows"></li><li class="core--ok" style="--h:0.289" title="69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10) · 11 rows"></li><li class="core--ok" style="--h:0.132" title="70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10) · 5 rows"></li><li class="core--ok" style="--h:0.105" title="71. KUTUM&#x27;S CLOCK IN THE HEALTH REPORT — the RTC, and a wall clock that moves mid-session (2026-11-10) · 4 rows"></li><li class="core--ok" style="--h:0.421" title="72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10) · 16 rows"></li><li class="core--ok" style="--h:0.184" title="73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10) · 7 rows"></li><li class="core--ok" style="--h:0.132" title="74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10) · 5 rows"></li><li class="core--ok" style="--h:0.263" title="79. THE COMPILED SCORE THRESHOLD IS A DEFAULT — the floor is set when the model is configured (2026-11-11) · 10 rows"></li><li class="core--no" style="--h:0.079" title="75. RECTIFY THE IMAGE ONCE AT THE CAMERA — not chosen: 4.68 ms a frame against a 4 ms bar, and points cost 3.7 microseconds (2026-11-10) · 3 rows"></li><li class="core--ok" style="--h:0.421" title="82. THE ARM CLOCK AT 2.8 GHz — kept: +18.2 % CPU work and +13.8 % Hailo rate under full load, 67.5 C, never throttled; 3.0 GHz is slower under load; open bench only (2026-11-11) · 16 rows"></li><li class="core--ok" style="--h:0.447" title="83. THE HAILORT SERVICE DIES MID-RUN — back in 0.31 s, and its clients fail fast (2026-11-11) · 17 rows"></li><li class="core--no" style="--h:0.211" title="76. A REALTIME KERNEL — not chosen: the stock kernel wakes a loaded 50 Hz loop within 0.02 ms once the loop has a realtime priority (2026-11-11) · 8 rows"></li><li class="core--no" style="--h:0.211" title="77. NUMPY 2 AND A NEWER OPENCV ON KUTUM — not chosen: 10 to 16 % of the hot path, and cv_bridge stops converting (2026-11-11) · 8 rows"></li><li class="core--ok" style="--h:0.079" title="78. CV_BRIDGE REPLACED — the same bytes, a frame read 75 times cheaper, and one copy fewer to send (2026-11-11) · 3 rows"></li><li class="core--ok" style="--h:0.237" title="80. THE HAILORT SERVICE — two processes on one chip, at no cost a frame; built, measured, not installed (2026-11-11) · 9 rows"></li><li class="core--ok" style="--h:0.158" title="81. THE RTC IS NOT A CONTROL CLOCK — one-second steps, read with tens of milliseconds of jitter (2026-11-11) · 6 rows"></li><li class="core--ok" style="--h:0.158" title="84. THE OPERATOR&#x27;S VIDEO IS THE CAMERA&#x27;S OWN JPEG — 0.062 ms a frame, boxes drawn by the browser (2026-11-12) · 6 rows"></li><li class="core--ok" style="--h:0.184" title="85. GLOBAL-SHUTTER EXPOSURE AT SPEED — dynamic framerate on keeps 210 fps and a picture; off is black (2026-11-18) · 7 rows"></li><li class="core--ok" style="--h:0.289" title="86. THE SERVICE COSTS 6 MS AN INFERENCE — one vision process opening the chip directly detects 55 % more than one process per camera (2026-11-18) · 11 rows"></li><li class="core--ok" style="--h:0.263" title="87. THE WHOLE VISION GRAPH AT ONCE — both detectors, the lock ladder and flow live in one process: forward at the camera&#x27;s rate, downward 32 Hz, 2.7 GB free (2026-11-18) · 10 rows"></li><li class="core--ok" style="--h:0.289" title="88. TRACKERS AGAINST TRUTH — the shipped OC-SORT more than doubles recall at the vehicle&#x27;s bars, ByteTrack and track-before-detect are rejected, and the gate model loses 70 % of its recall in another pool (2026-11-18) · 11 rows"></li><li class="core--ok" style="--h:0.237" title="89. FLOW IN THE CAMERA&#x27;S PROCESS — the downward detector gains 37 %, flow keeps 110 frames a second, total CPU unchanged (2026-11-18) · 9 rows"></li><li class="core--ok" style="--h:0.105" title="90. RETRODICTION ON THE PI — 4 to 6 % of a core while moving, so it stays off until its benefit is measured (2026-11-18) · 4 rows"></li><li class="core--ok" style="--h:0.079" title="91. ODOMETRY ARRIVAL — the localiser&#x27;s 10 Hz never gaps past 105.76 ms, so loop closure refuses odometry older than 0.5 s (2026-11-19) · 3 rows"></li><li class="core--ok" style="--h:0.974" title="92. XFEAT AS ITS AUTHORS RUN IT — +38 % correct matches on warped frames, +8 % on real pairs; semi-dense is removed (2026-11-19) · 37 rows"></li><li class="core--ok" style="--h:0.158" title="93. LIGHTERGLUE ON THE ANCHOR&#x27;S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19) · 6 rows"></li><li class="core--ok" style="--h:0.132" title="94. VISUAL ODOMETRY FROM XFEAT — LK already does it better inside the same solver (2026-11-19) · 5 rows"></li><li class="core--ok" style="--h:0.395" title="95. ONE HAILO-8, THREE NETWORKS — XFeat at the anchor&#x27;s rate costs the detectors nothing, and scheduler priority buys nothing (2026-11-19) · 15 rows"></li><li class="core--ok" style="--h:0.158" title="96. STARK-LIGHTNING AS A LADDER RUNG — 6.7 ms a call on the Hailo-8, and no longer a hold than the follower (2026-11-20) · 6 rows"></li><li class="core--ok" style="--h:0.132" title="97. MONOCULAR DEPTH ON THE HAILO-8 — no network in the Model Zoo carries the floor&#x27;s scale, so none can give flow its height (2026-11-20) · 5 rows"></li><li class="core--ok" style="--h:0.079" title="98. THE DETECTOR FAMILY — yolov8n matches yolo11n after INT8 and runs 3.3x faster on the Hailo-8 (2026-11-20) · 3 rows"></li><li class="core--ok" style="--h:0.079" title="99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20) · 3 rows"></li></ol>
    <div class="core__axis"><span>first entry</span><span>newest</span></div>
-   <figcaption><span class="core__k core--back">taken back · 18</span><span class="core__k core--no">measured, answer was no · 10</span><span class="core__k core--ok">stands · 111</span><br>One column per entry, in the order the file was written; height is how many numbers it holds. The colour is what each entry says about <em>itself</em> in its title, counted by <code>tools/site/ledger_strip.py</code> &mdash; so it can miss a retraction that is not in a title, but it cannot invent one.</figcaption>
+   <figcaption><span class="core__k core--back">taken back · 18</span><span class="core__k core--no">measured, answer was no · 10</span><span class="core__k core--ok">stands · 113</span><br>One column per entry, in the order the file was written; height is how many numbers it holds. The colour is what each entry says about <em>itself</em> in its title, counted by <code>tools/site/ledger_strip.py</code> &mdash; so it can miss a retraction that is not in a title, but it cannot invent one.</figcaption>
   </figure>
   <!-- ledger:end -->
 
@@ -1807,7 +1946,7 @@
     <div><span class="silk">Blind</span><b>175</b><span>frames held with no detector</span></div>
     <div><span class="silk">Velocity</span><b>1.09 cm</b><span>worst error, 30 cm slide</span></div>
     <div><span class="silk">Mesh</span><b>0.9 mm</b><span>hull tessellation in the viewer</span></div>
-    <div class="wide"><span class="silk silk--lit">Suites</span><b>4 742</b><span>passing across six suites; 0 failed</span></div>
+    <div class="wide"><span class="silk silk--lit">Suites</span><b>5 391</b><span>passing across 8 suites; 4 failed</span></div>
   </div>
   <p class="col quiet" style="margin-top:34px">Each of these lives in a ledger with its method, its
     conditions and the bar it had to clear — and the tests read that file, so a number cannot drift
@@ -1822,7 +1961,7 @@
  <div class="wrap">
   <p class="mark">The language <i>//</i> how a machine is asked to do something</p>
   <h2 class="col">A mission should read like an instruction, not a state machine.</h2>
-  <p class="lede col quiet">One action, twenty-three verbs, two of them vision primitives. The vision verbs never
+  <p class="lede col quiet">One action, twenty-five verbs: two vision primitives, two on the localization estimate. The vision verbs never
     raise — they return where and how they finished, so a mission branches on reality instead of on
     an exception.</p>
   <div class="split">
@@ -2970,6 +3109,133 @@
     b.addEventListener('click', function(){
       var p = b.dataset.late.split(',');
       el.lat.value = p[0]; el.v.value = p[1]; el.yaw.value = p[2]; draw();
+    });
+  });
+  draw();
+})();
+
+(function(){
+  /* The sure, wrong filter. One straight leg from a fix at the origin. Truth
+     ends at d; the estimate, flown on flow reading s long, ends at (1+s)d.
+     The filter's doubt is sqrt(n(d) + (k d)^2): n(d) is what per-frame flow
+     noise alone gives, fitted to the truth study (0.150 m -> 0.153 m over
+     15 m, measured-bars 99), and k the scale error it allows for. A correct
+     fix lands on the truth with its own sigma 0.15 m, and the gate is the
+     filter's own: accept while miss^2 <= 9.21 (sigma^2 + sigma_fix^2), the
+     two-axis chi-square 99th percentile in inekf.py. The gate circle drawn
+     round the estimate is exactly that radius. */
+  var cv = document.getElementById('where-view');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), DPR = 2, W = 900, H = 380;
+  cv.width = W * DPR; cv.height = H * DPR; ctx.scale(DPR, DPR);
+  var SF = 0.15, N0 = 0.15 * 0.15, NQ = (0.153 * 0.153 - 0.15 * 0.15) / 15, GATE = 9.21, TOL = 0.5;
+  var el = {s: document.getElementById('where-s'), d: document.getElementById('where-d'),
+            k: document.getElementById('where-k')};
+  var out = {s: document.getElementById('where-s-o'), d: document.getElementById('where-d-o'),
+             k: document.getElementById('where-k-o'), off: document.getElementById('where-off'),
+             sig: document.getElementById('where-sig'), gate: document.getElementById('where-gate'),
+             go: document.getElementById('where-goto')};
+  var css = getComputedStyle(document.documentElement);
+  var INK3 = css.getPropertyValue('--ink-3').trim() || '#7b8598',
+      RED = css.getPropertyValue('--signal-text').trim() || '#ff2a14',
+      SEA = css.getPropertyValue('--medium-text').trim() || '#5a8dff',
+      OK = css.getPropertyValue('--state-water').trim() || '#22d3c5',
+      SUNK = css.getPropertyValue('--d0').trim() || '#000';
+
+  function draw(){
+    var s = +el.s.value / 100, d = +el.d.value, k = +el.k.value / 100;
+    var off = s * d;
+    var sig = Math.sqrt(N0 + NQ * d + (k * d) * (k * d));
+    var gateR = Math.sqrt(GATE * (sig * sig + SF * SF));
+    var nis = off * off / (sig * sig + SF * SF);
+    var taken = nis <= GATE;
+
+    /* the view: the end of the leg, where everything happens, zoomed so the
+       doubt and the gate are visible; the whole leg goes in an inset */
+    var span = Math.max(2.2 * gateR + 0.6, off + 2 * gateR + 0.4, 1.6);
+    var sc = (W - 300) / span;
+    var cx = d + off / 2, ox = W / 2 + 40 - cx * sc, oy = H / 2 + 10;
+    function X(x){ return ox + x * sc; }
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
+
+    // the pool floor: 0.5 m tiles, so the scale is the floor itself
+    ctx.strokeStyle = 'rgba(255,255,255,.05)'; ctx.lineWidth = 1;
+    var g0 = Math.floor((cx - span) / 0.5) * 0.5;
+    for (var gx = g0; gx < cx + span; gx += 0.5){
+      ctx.beginPath(); ctx.moveTo(X(gx), 0); ctx.lineTo(X(gx), H); ctx.stroke();
+    }
+    for (var gy = -span; gy < span; gy += 0.5){
+      ctx.beginPath(); ctx.moveTo(0, oy + gy * sc); ctx.lineTo(W, oy + gy * sc); ctx.stroke();
+    }
+    // the leg: truth, and the estimate laid a hair beside it so both read
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.75)';
+    ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(X(d), oy); ctx.stroke();
+    ctx.setLineDash([5, 4]); ctx.strokeStyle = 'rgba(255,42,20,.55)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, oy - 3); ctx.lineTo(X(d + off), oy - 3); ctx.stroke();
+    ctx.setLineDash([]);
+
+    function ring(x, r, col, dash, width){
+      ctx.beginPath(); ctx.setLineDash(dash || []); ctx.arc(X(x), oy, r * sc, 0, 6.3);
+      ctx.strokeStyle = col; ctx.lineWidth = width || 1.5; ctx.stroke(); ctx.setLineDash([]);
+    }
+    function dot(x, col, r){
+      ctx.beginPath(); ctx.arc(X(x), oy, r, 0, 6.3); ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = SUNK; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    ring(d + off, gateR, 'rgba(255,255,255,.35)', [3, 4], 1);
+    ctx.fillStyle = 'rgba(255,42,20,.10)';
+    ctx.beginPath(); ctx.arc(X(d + off), oy, sig * sc, 0, 6.3); ctx.fill();
+    ring(d + off, sig, RED, [], 1.5);
+    ring(d, SF, taken ? OK : SEA, [2, 3], 1);
+    dot(d, '#ffffff', 5);
+    dot(d + off, RED, 6);
+    dot(d, taken ? OK : SEA, 3);
+
+    var key = [['rgba(255,255,255,.75)', 'where the vehicle really is'],
+               [RED, 'where the filter says it is, and how sure it is'],
+               ['rgba(255,255,255,.35)', 'the gate: a fix outside this ring is thrown away'],
+               [taken ? OK : SEA, 'a correct fix off a taped prop, ±0.15 m: ' + (taken ? 'taken' : 'REFUSED')]];
+    ctx.font = '11px ui-monospace, monospace';
+    key.forEach(function(q, i){
+      var ky = 26 + i * 18;
+      ctx.fillStyle = q[0]; ctx.beginPath(); ctx.arc(24, ky - 4, 4, 0, 6.3); ctx.fill();
+      ctx.fillStyle = i ? INK3 : 'rgba(255,255,255,.8)'; ctx.fillText(q[1], 36, ky);
+    });
+    var barM = span > 4 ? 1 : 0.5;
+    ctx.strokeStyle = INK3; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(W - 40 - barM * sc, H - 26); ctx.lineTo(W - 40, H - 26); ctx.stroke();
+    ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText(barM + ' m', W - 40 - barM * sc, H - 36);
+
+    // inset: the whole leg from the fix, so the zoom has a context
+    var iw = 170, ih = 64, ix = W - iw - 22, iy = 22;
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(ix, iy, iw, ih);
+    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.strokeRect(ix, iy, iw, ih);
+    var isc = (iw - 30) / (d * (1 + s) + 0.01), iox = ix + 12, ioy = iy + ih / 2 - 4;
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(iox, ioy); ctx.lineTo(iox + d * isc, ioy); ctx.stroke();
+    ctx.fillStyle = SEA; ctx.beginPath(); ctx.arc(iox, ioy, 3, 0, 6.3); ctx.fill();
+    ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText('first fix, then ' + d.toFixed(1) + ' m', ix + 8, iy + ih - 8);
+
+    out.s.textContent = (s * 100).toFixed(1) + ' %';
+    out.d.textContent = d.toFixed(1) + ' m';
+    out.k.textContent = (k * 100).toFixed(1) + ' %';
+    out.off.textContent = (off * 100).toFixed(0) + ' cm';
+    out.sig.textContent = (sig * 100).toFixed(0) + ' cm';
+    out.gate.textContent = (taken ? 'taken' : 'refused') + ', ' + nis.toFixed(1) + ' / 9.21';
+    out.gate.style.color = taken ? '' : RED;
+    var go = sig > TOL ? 'refuses: fix first'
+           : off > TOL ? 'ARRIVED, ' + (off * 100).toFixed(0) + ' cm out'
+           : 'arrives, honestly';
+    out.go.textContent = go;
+    out.go.style.color = (sig <= TOL && off > TOL) ? RED : '';
+  }
+  ['s', 'd', 'k'].forEach(function(n){ el[n].addEventListener('input', draw); });
+  document.querySelectorAll('[data-where]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var p = b.dataset.where.split(',');
+      el.s.value = p[0]; el.d.value = p[1]; el.k.value = p[2]; draw();
     });
   });
   draw();

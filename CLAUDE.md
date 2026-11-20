@@ -157,12 +157,12 @@ look, the second to decide.
 
 ### Where each verb runs
 
-23 verbs; the generated list is [`reference/commands.md`](.claude/context/reference/commands.md).
+25 verbs; the generated list is [`reference/commands.md`](.claude/context/reference/commands.md).
 
 | Group | Verbs | Where it runs |
 |---|---|---|
 | On the board | `move_forward` `move_back` `move_left` `move_right` `yaw_left` `yaw_right` `turn` `set_depth` `stop` `pause` `style_roll` | one `SROT_MOVE`, braked on the board |
-| Host | `arm` `disarm` `set_mode` `head` `surface` `mission_reset` `calibrate_depth` `calc_distance` `fire` `motor_test` `vision_align` `vision_move` | a loop here, or one message |
+| Host | `arm` `disarm` `set_mode` `head` `surface` `mission_reset` `calibrate_depth` `calc_distance` `fire` `motor_test` `vision_align` `vision_move` `locate` `go_to` | a loop here, or one message |
 
 The board holds heading and depth at 500 Hz, so there is no host heading lock and no
 distance-closed move: those verbs needed a host-side heading source or a DVL and went with the
@@ -186,7 +186,7 @@ surface**.
 
 ```
 [mongla CLI] ─┐
-[mission]    ─┼── /mongla/move (one action, 23 verbs) ──► auv_manager_node ──USB-C──► SROT board
+[mission]    ─┼── /mongla/move (one action, 25 verbs) ──► auv_manager_node ──USB-C──► SROT board
 [run_plan]   ─┘                                              │                         (500 Hz)
                                                              └──► /mongla/state, /mongla/imu,
                                                                   /mongla/esc_rpm, /mongla/demand,
@@ -196,10 +196,11 @@ surface**.
 
 **Exactly one node touches the board**: `auv_manager_node`. Everything else is a client.
 
-Seven packages, one page each in [`.claude/context/packages/`](.claude/context/packages/README.md):
+Eight packages, one page each in [`.claude/context/packages/`](.claude/context/packages/README.md):
 `mongla_control` (verbs + the board driver) · `mongla_manager` (the node) ·
 `mongla_vision` · `mongla_localization` · `mongla_planner` (CLI, DSL, missions) ·
-`mongla_interfaces` (one action, one state topic) · `mongla_batighor` (the operator
+`mongla_interfaces` (one action, one state topic) · `mongla_runtime` (how every node
+runs: spin, parameters, launch defaults, restarts) · `mongla_batighor` (the operator
 center: Lichtblick served from Kutum, `batighor:=true`).
 
 **Every command, generated from the code**:

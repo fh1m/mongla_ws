@@ -1,4 +1,4 @@
-"""Every node main spins through `mongla_localization.spin`, or says why not.
+"""Every node main spins through `mongla_runtime.spin`, or says why not.
 
 The events executor delivers a callback for 0.037 ms of CPU against 0.251 ms
 (measured-bars 73). One helper chooses it, so a node that calls `rclpy.spin`
@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-from mongla_localization import spin
+from mongla_runtime import spin
 
 SRC = pathlib.Path(__file__).resolve().parents[2]
 
@@ -33,12 +33,12 @@ def _node_mains():
 def test_no_node_main_spins_on_its_own():
     bad = []
     for rel, text in _node_mains():
-        if rel in OWN_EXECUTOR or rel.endswith('mongla_localization/spin.py'):
+        if rel in OWN_EXECUTOR or rel.endswith('mongla_runtime/spin.py'):
             continue
         if re.search(r'\brclpy\.spin\(', text) or 'make_executor' not in text:
             bad.append(rel)
     assert not bad, ('these node mains pick their own executor; use '
-                     f'mongla_localization.spin, or add the reason: {bad}')
+                     f'mongla_runtime.spin, or add the reason: {bad}')
 
 
 def test_every_exemption_still_exists():

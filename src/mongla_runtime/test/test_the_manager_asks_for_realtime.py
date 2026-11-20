@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from mongla_localization import realtime
+from mongla_runtime import realtime
 
 MANAGER = (Path(__file__).resolve().parents[2]
            / 'mongla_manager/mongla_manager/auv_manager_node.py')

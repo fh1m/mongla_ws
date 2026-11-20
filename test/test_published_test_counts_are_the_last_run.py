@@ -52,3 +52,15 @@ def test_a_failing_run_is_published_red():
     s = json.loads(json.dumps(pc.load()))
     s['failed'] = 2
     assert pc._badge(s).endswith('-red') and '2%20failing' in pc._badge(s)
+
+
+def test_every_package_with_tests_is_a_published_suite():
+    """A full run publishes only when the suites it ran are exactly SUITE_NAMES.
+
+    `mongla_runtime` and `mongla_batighor` arrived with tests and were never
+    added, so from then on no run was full by this definition, nothing was
+    published, and the guard above kept comparing the pages with a frozen file.
+    """
+    have = {p.parent.name for p in (ROOT / 'src').glob('*/test')
+            if any(p.glob('test_*.py'))}
+    assert have <= set(pc.SUITE_NAMES), sorted(have - set(pc.SUITE_NAMES))

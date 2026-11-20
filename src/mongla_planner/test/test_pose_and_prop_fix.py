@@ -7,6 +7,7 @@ covered only by a reachability test that greps for their names, and a grep
 passes whether or not the body raises.
 """
 import math
+import time
 
 from unittest.mock import MagicMock
 
@@ -32,6 +33,11 @@ def _mission(odom=None, warned=None):
     m = MagicMock()
     m._odom = odom
     m._odom_sub = object()          # already subscribed: skip the ROS path
+    # A live estimate: its stamp moved just now. Freshness itself is driven
+    # for real in test_a_stopped_localiser_gives_no_pose.py; here the fake
+    # answers the same question from the same field.
+    m._odom_moved = time.monotonic()
+    m._odom_fresh = lambda timeout: odom is not None
     m._pose_frame_warned = False
     m.log = MagicMock()
     return m
@@ -360,4 +366,12 @@ def test_commit_writes_the_deck_course(tmp_path, monkeypatch):
     got = MonglaMission.place_prop(m, 'bucket', samples=4, timeout=2.0, commit=True)
     assert got.ok
     back = course_map.load_course('t').prop('bucket')
-    assert back.measured and back.x_m == pytest.approx(6.0)
+    assert back.x_m == pytest.approx(6.0)
+    # A placement is not a tape survey: written unmeasured, with its sigma, so
+    # one drifted pose cannot freeze itself into the course for good.
+    assert not back.measured and 'sigma' in back.note
+    # ...and the next run, from a better pose, refines it.
+    nxt = _placer(course_map.load_course('t'), hull=(3.0, 0.0))
+    again = MonglaMission.place_prop(nxt, 'bucket', samples=4, timeout=2.0, commit=True)
+    assert again.ok
+    assert course_map.load_course('t').prop('bucket').x_m == pytest.approx(7.0)

@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(SRC / 'mongla_localization'))
+sys.path.insert(0, str(SRC / 'mongla_runtime'))
 
 # Every node `vision_pi.launch.py` starts, and the vision nodes run alone.
 NODES = [
@@ -26,14 +26,14 @@ NODES = [
     'mongla_vision/mongla_vision/lock_node.py',
     'mongla_vision/mongla_vision/flow/flow_node.py',
     'mongla_vision/mongla_vision/calibration/calibrate_node.py',
-    'mongla_localization/mongla_localization/pnp_node.py',
-    'mongla_localization/mongla_localization/pose_fuse_node.py',
+    'mongla_vision/mongla_vision/pnp_node.py',
+    'mongla_vision/mongla_vision/pose_fuse_node.py',
     'mongla_localization/mongla_localization/localization_node.py',
 ]
 
 
 def test_after_the_call_a_ctrl_c_does_not_raise():
-    from mongla_localization.spin import deaf_to_ctrl_c
+    from mongla_runtime.spin import deaf_to_ctrl_c
     before = signal.getsignal(signal.SIGINT)
     try:
         deaf_to_ctrl_c()

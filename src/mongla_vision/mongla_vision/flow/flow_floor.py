@@ -32,7 +32,7 @@ class FlowFloorMixin:
         if self._tile_m <= 0.0:
             return
         try:
-            from mongla_localization.tile_grating import measure
+            from mongla_vision.flow.tile_grating import measure
         except Exception:                       # noqa: BLE001
             self._tile_m = 0.0                  # not installed: stop asking
             return
@@ -107,7 +107,7 @@ class FlowFloorMixin:
         """
         try:
             import cv2
-            from mongla_localization.pool_lines import detect
+            from mongla_vision.flow.pool_lines import detect
         except Exception:                       # noqa: BLE001
             self._lane_lines = False            # not installed: stop asking
             return

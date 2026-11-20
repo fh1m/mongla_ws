@@ -200,7 +200,7 @@ def test_a_frame_where_IPPE_returns_NaN_is_solved_by_SQPnP_not_refused():
 def test_the_wire_carries_both_branches_only_when_they_exist():
     """`to_msg` scrubs NaN to 0.0, so the flag is the only truth about the
     alternate. Falsified if a one-branch pose arrives with branches_valid."""
-    from mongla_localization.pnp_node import to_msg
+    from mongla_vision.pnp_node import to_msg
     from mongla_vision.anchor.pose import TargetPose as TP
     two = to_msg(TP(ok=True, yaw_deg=25.0, alt_yaw_deg=-25.0, bearing_deg=3.0,
                     range_m=3.0))
@@ -210,7 +210,7 @@ def test_the_wire_carries_both_branches_only_when_they_exist():
 
 
 def _node_with(pub_sink):
-    from mongla_localization.pose_fuse_node import PoseFuseNode
+    from mongla_vision.pose_fuse_node import PoseFuseNode
     n = PoseFuseNode.__new__(PoseFuseNode)
     n._cluster = PoseCluster()
     n._yaw_hist = []
@@ -219,7 +219,7 @@ def _node_with(pub_sink):
 
 
 def _feed_node(n, samples):
-    from mongla_localization.pnp_node import to_msg
+    from mongla_vision.pnp_node import to_msg
     from mongla_vision.anchor.pose import TargetPose as TP
     from std_msgs.msg import Header
     for s in samples:

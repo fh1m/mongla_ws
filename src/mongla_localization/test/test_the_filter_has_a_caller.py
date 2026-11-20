@@ -58,7 +58,7 @@ def test_the_filter_is_actually_constructed_by_the_node():
     """Guards against the node importing the filter and never using it, which
     is what a refactor does when it moves logic out and forgets to move it in."""
     src = code_of_file(PKG / 'mongla_localization' / 'localization_node.py')
-    assert 'RIEKF()' in src
+    assert 'RIEKF(' in src and 'self._filter = RIEKF(' in src
     for method in ('predict', 'update_depth', 'update_body_velocity_xy',
                    'update_position', 'update_attitude',
                    'update_zero_velocity'):
@@ -128,7 +128,7 @@ def test_every_floor_instrument_is_published_AND_consumed():
     node = code_of_file(PKG / 'mongla_localization' / 'localization_node.py')
     for module, topic, knob in (('tile_grating', 'floor_grid_deg', 'tile_m'),
                                 ('pool_lines', 'lane_heading_deg', 'lane_lines')):
-        assert f'mongla_localization.{module} import' in flow, module
+        assert f'mongla_vision.flow.{module} import' in flow, module
         assert f"/{topic}'" in flow and f"/{topic}'" in node, topic
         assert f"'{knob}'" in launch, knob
 
