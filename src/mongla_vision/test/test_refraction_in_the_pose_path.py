@@ -220,7 +220,7 @@ def test_a_non_finite_solution_is_refused_not_published():
 def _pnp(medium='water', **params):
     import rclpy
     from rclpy.parameter import Parameter
-    from mongla_localization.pnp_node import PnPNode
+    from mongla_vision.pnp_node import PnPNode
     started = not rclpy.ok()
     if started:
         rclpy.init()

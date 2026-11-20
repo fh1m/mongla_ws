@@ -20,8 +20,8 @@ from mongla_interfaces.msg import FloorHeading, MonglaState
 
 from mongla_localization.command_velocity import (BLOCKED)
 from mongla_localization import frames
-from mongla_localization.inekf import _wrap180
-from mongla_localization.tile_grating import snap_to_grid
+from mongla_localization.inekf import GRAVITY, _wrap180
+from mongla_localization.heading_anchor import snap_to_grid
 
 # A dt longer than this is a GAP, not a long step. Integrating one 2 s
 # interval as a single Euler step is not the same estimate as 100 steps of
@@ -40,7 +40,8 @@ STILL_GYRO_RAD_S = 0.02
 # Peak-to-peak of |specific force| over the window. Gravity is included in the
 # reading, so a tilted hull shows a large CONSTANT; only variation is motion.
 STILL_ACCEL_SPREAD = 0.25          # m/s^2
-STILL_WINDOW = 50                  # 1.0 s at the board's 50 Hz
+IMU_HZ = 50                        # ATTITUDE and SCALED_IMU2, pinned (measured-bars: 51.6 Hz)
+STILL_WINDOW = IMU_HZ              # 1.0 s
 # Stillness needs a command too (issue #25). The IMU test above cannot tell
 # "still" from "cruising at constant velocity": heading held, no acceleration,
 # |a| = g. Flow drops out mid-transit (bare floor, turbidity), and the ZUPT then
@@ -81,7 +82,6 @@ def _now_or(t_newest, fallback: float) -> float:
     return t_newest if t_newest is not None else fallback
 
 
-
 def _Rz(deg: float) -> np.ndarray:
     """Yaw about world z (NED down): positive turns north toward east."""
     a = math.radians(float(deg))
@@ -96,16 +96,19 @@ def _R_from_quat(w, x, y, z):
     slightly off unit length produces a matrix with determinant != 1, and
     `so3_log` of that is not a rotation vector. The filter would take the
     resulting garbage as a real innovation.
+
+    None for a quaternion with no length or a non-finite part: that is no
+    attitude at all, and the identity it used to return is a level hull facing
+    the boot heading, fused at the board's 0.5 deg sigma.
     """
     n = math.sqrt(w * w + x * x + y * y + z * z)
-    if n == 0.0:
-        return np.eye(3)
+    if not (math.isfinite(n) and n > 1e-9):
+        return None
     w, x, y, z = w / n, x / n, y / n, z / n
     return np.array([
         [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
         [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
         [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
-
 
 
 class LocalizationInputsMixin:
@@ -116,14 +119,31 @@ class LocalizationInputsMixin:
 
         `t=None` means the input carries no stamp: it is applied at the newest
         event time, which is what on-arrival meant all along.
+
+        False when the measurement was NOT USED: older than the replay
+        horizon, or refused by the filter itself (an update returns False on a
+        chi-square rejection or the B-56 gate). Every counter that says a
+        channel was fused, and the NO VELOCITY AIDING warning that reads them,
+        rests on this; it used to return True for anything handed over. A
+        replay may run `fn` again later, so the answer kept is the first run's,
+        the one made for this call.
         """
+        said = []
+
+        def run(f):
+            r = fn(f)
+            if not said:
+                said.append(r)
+            return r
         retro = getattr(self, '_retro', None)
         if retro is None:
-            fn(self._filter)
-            return True
-        if t is None:
-            t = _now_or(retro.newest_t(), self._last_imu_t or 0.0)
-        return retro.run(float(t), fn, span=span, make=make)
+            run(self._filter)
+        else:
+            if t is None:
+                t = _now_or(retro.newest_t(), self._last_imu_t or 0.0)
+            if not retro.run(float(t), run, span=span, make=make):
+                return False
+        return not said or said[0] is not False
 
     def _on_imu(self, msg: Imu) -> None:
         t = _stamp_s(msg.header)
@@ -165,6 +185,7 @@ class LocalizationInputsMixin:
         self._last_accel = np.asarray(accel, float)
         self._n['imu'] += 1
         self._last_input_t = t
+        self._note_seen('imu', time.monotonic())
 
         # The split, enforced here. The board owns attitude; without this
         # line the companion propagates its own and DIVERGES -- measured on
@@ -180,9 +201,11 @@ class LocalizationInputsMixin:
         # a backend that cannot supply attitude must not be given a fabricated
         # one -- it would be better to diverge visibly than to converge to a
         # number nobody measured.
-        if msg.orientation_covariance[0] >= 0.0:
-            self._board_R = _R_from_quat(msg.orientation.w, msg.orientation.x,
-                                         msg.orientation.y, msg.orientation.z)
+        R_board = (_R_from_quat(msg.orientation.w, msg.orientation.x,
+                                msg.orientation.y, msg.orientation.z)
+                   if msg.orientation_covariance[0] >= 0.0 else None)
+        if R_board is not None:
+            self._board_R = R_board
             # Into the pool frame before the filter sees it. The board's yaw
             # is boot-relative; once anchored, handing it over raw pins the
             # filter back to boot axes at 50 Hz while `frame_id` says `pool`.
@@ -211,14 +234,19 @@ class LocalizationInputsMixin:
                         f.update_attitude(R, sigma_deg=s))
             self._n['att'] += 1
 
-        # Stationarity evidence for the ZUPT, kept per sample. |a| rather than
-        # the vector, because the gravity component is what makes the raw axes
-        # attitude-dependent while its magnitude is not.
-        a = msg.linear_acceleration
+        # Stationarity evidence for the ZUPT, kept per sample: the body's own
+        # acceleration, gravity removed with this sample's board attitude, per
+        # axis. It was |a|, the magnitude, chosen because tilt cannot change
+        # it -- and neither, to first order, can a horizontal push: 0.4 m/s^2
+        # sideways moves |a| by 0.008, so a hull shoved along with the gyro
+        # quiet read as still (test_the_unrun_branches). Without an attitude
+        # the raw axes stand in; the gyro gate bounds the tilt they can see.
+        a = np.array([msg.linear_acceleration.x, msg.linear_acceleration.y,
+                      msg.linear_acceleration.z], dtype=float)
+        if R_board is not None:
+            a = a + R_board.T @ GRAVITY
         w = msg.angular_velocity
-        self._still.append((
-            max(abs(w.x), abs(w.y), abs(w.z)),
-            math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z)))
+        self._still.append((max(abs(w.x), abs(w.y), abs(w.z)), a))
         if self._zupt_enabled:
             self._maybe_zupt()
 
@@ -229,6 +257,8 @@ class LocalizationInputsMixin:
             ok = self._apply(t, lambda f, d=depth, s=self._depth_sigma:
                              f.update_depth(d, sigma=s))
             self._n['depth' if ok else 'depth_refused'] += 1
+            if ok:
+                self._note_seen('depth', time.monotonic())
         yaw = float(msg.yaw_deg)
         # NaN is the documented absence sentinel, and on srot it is now what a
         # board with an unhealthy BNO actually publishes. Feeding NaN into the
@@ -240,6 +270,11 @@ class LocalizationInputsMixin:
             ok = self._apply(t, lambda f, y=yaw, s=self._yaw_sigma_deg:
                              f.update_yaw(y, sigma_deg=s))
             self._n['yaw' if ok else 'yaw_refused'] += 1
+
+    def _note_seen(self, key: str, t: float) -> None:
+        """Arrival of a fused sample, for the state message's input ages."""
+        seen = self.__dict__.setdefault('_seen', {})
+        seen[key] = t
 
     def _flow_now(self, t_meas, vx: float, vy: float, var_x: float,
                   var_y: float):
@@ -305,14 +340,16 @@ class LocalizationInputsMixin:
                            lambda f, vx=vx_now, vy=vy_now, a=max(var_x, 1e-6),
                            b=max(var_y, 1e-6), r=self._flow_lever_arm:
                            f.update_body_velocity_xy(vx, vy, a, b, lever_arm=r)):
-            # Older than the replay horizon: NOT fused, so not counted as
-            # fused -- the aiding diagnostic read refused samples as aid.
+            # Older than the replay horizon, or rejected by the filter: NOT
+            # fused, so not counted as fused -- the aiding diagnostic read
+            # refused samples as aid.
             self._n['flow_refused'] += 1
             return
         self._n['flow'] += 1
         now = time.monotonic()
         dt = min(now - self._last_flow_t, 0.25) if self._last_flow_t > 0.0 else 0.0
         self._last_flow_t = now
+        self._note_seen('flow', now)
         state = self._motion.observe(self._model, v.x, v.y, dt)
         # Never learn from a hull that is not moving as told: a pinned hull
         # would teach the model that thrust makes no speed.
@@ -331,6 +368,12 @@ class LocalizationInputsMixin:
         # that cannot be read has not said the position is observable.
         observed, unread = False, 'this filter has no observability gate'
         probe = getattr(self._filter, '_velocity_is_observed', None)
+        if getattr(self, '_last_input_t', 0.0) <= 0.0:
+            # Nothing fused yet: the initial covariance is not an observation.
+            # The gate read "aided" here, and the node logged "aiding restored"
+            # with no input at all (seen on the bench replay, BUGS B-131).
+            # Say nothing until there is something to say.
+            return
         if probe is not None:
             try:
                 observed, unread = bool(probe()), ''
@@ -392,8 +435,15 @@ class LocalizationInputsMixin:
                    and max(abs(x), abs(y)) < DEMAND_CENTRE_EPS)
         if not centred:
             self._centred_since = None
+            if math.isfinite(x) and math.isfinite(y):
+                self._thrust_seen = True
         elif getattr(self, '_centred_since', None) is None:
-            self._centred_since = now
+            # The settle lets a hull coast to a stop after thrust. One never
+            # commanded since start has nothing to coast out of: waiting 3 s
+            # there dead-reckoned 0.71 m on the real bench recording before the
+            # first ZUPT (measured-bars 99). Settled from the start instead.
+            self._centred_since = (now if getattr(self, '_thrust_seen', False)
+                                   else -math.inf)
 
     def _maybe_model_aid(self) -> None:
         """When flow has gone quiet, aid velocity from the learned demand model.
@@ -406,13 +456,13 @@ class LocalizationInputsMixin:
             return
         if time.monotonic() - self._last_flow_t < FLOW_FRESH_S:
             return
-        if self._last_demand_t is None or time.monotonic() - self._last_demand_t > 0.5:
+        if self._last_demand_t is None or time.monotonic() - self._last_demand_t > DEMAND_FRESH_S:
             return
         p = self._model.predict()
         if p is None:
             return
-        self._apply(None, lambda f, p=p: f.update_body_velocity_xy(p[0], p[1], p[2], p[3]))
-        self._n['model'] += 1
+        if self._apply(None, lambda f, p=p: f.update_body_velocity_xy(p[0], p[1], p[2], p[3])):
+            self._n['model'] += 1
 
     def _maybe_zupt(self) -> None:
         """Stand still and the filter learns from it -- but only if it IS still.
@@ -443,20 +493,21 @@ class LocalizationInputsMixin:
         if (since is None or self._last_demand_t is None
                 or now - self._last_demand_t > DEMAND_FRESH_S):
             return
-        settle = max(STILL_WINDOW / 50.0,
+        settle = max(STILL_WINDOW / IMU_HZ,
                      DEMAND_SETTLE_TAUS * float(self._model.tau_s))
         if now - since < settle:
             return
         gyro = [g for g, _ in self._still]
-        acc = [a for _, a in self._still]
         if max(gyro) > STILL_GYRO_RAD_S:
             return
-        # The SPREAD of specific force, not its magnitude -- gravity is in
-        # there and a tilted hull reads a large constant. Variation is motion.
-        if (max(acc) - min(acc)) > STILL_ACCEL_SPREAD:
+        # The SPREAD on each axis, not a level -- a constant (a tilt the
+        # attitude got slightly wrong, a bias) is not motion. Variation is.
+        acc = np.array([a for _, a in self._still])
+        if float(np.max(acc.max(axis=0) - acc.min(axis=0))) > STILL_ACCEL_SPREAD:
             return
-        self._apply(None, lambda f, s=self._zupt_sigma: f.update_zero_velocity(sigma=s))
-        self._n['zupt'] += 1
+        if self._apply(None, lambda f, s=self._zupt_sigma: f.update_zero_velocity(sigma=s)):
+            self._n['zupt'] += 1
+            self._note_seen('zupt', now)
         self._still.clear()
 
     def _on_flow_calibration(self, msg) -> None:
@@ -523,6 +574,9 @@ class LocalizationInputsMixin:
             return
         self._yaw_offset_deg = offset
         self._n['yaw'] += 1
+        # A new anchor is a new truth: each floor feature re-reads its constant
+        # residual against it (`_bound_yaw`).
+        self._floor_ref = {}
         if not self._anchored:
             self._anchored = True
             # Connect `pool` to the hull, once. The same claim the odometry
@@ -575,19 +629,33 @@ class LocalizationInputsMixin:
         the replayed update, against the yaw the filter had at that instant:
         during a turn the heading of now is somewhere else, and comparing the
         two pulled yaw toward where the hull had been (BUGS B-91).
+
+        The bound holds the residual CONSTANT, not zero. The angle is the
+        feature in the image: it differs from the pool heading by the camera's
+        mount yaw, the image-angle convention (a lane along the hull reads 90)
+        and the feature's own direction in the pool, none of them known here.
+        So the first read after each anchor, when yaw is the anchor's, records
+        that residual, and later reads bound drift against it. Holding it at
+        zero refused every lane line along the pool's x axis and pulled a
+        grid under any mount not square to the hull (BUGS B-133).
         """
         if not self._anchored:
             return
-        refused = []
+        refs = self.__dict__.setdefault('_floor_ref', {})
+        refused, referenced = [], []
 
         def bound(f, a=angle_deg, s=self._grid_sigma_deg):
-            snapped = snap_to_grid(f.X.yaw_deg(), a,
+            if key not in refs:
+                refs[key] = _wrap_period(f.X.yaw_deg() - a, period_deg)
+                referenced.append(True)
+                return True                      # referenced, nothing to correct
+            snapped = snap_to_grid(f.X.yaw_deg(), a + refs[key],
                                    max_correction_deg=self._grid_max_corr_deg,
                                    period_deg=period_deg)
             if snapped is None:
                 refused.append(True)
-                return
-            f.update_yaw(snapped, sigma_deg=s)
+                return None
+            return f.update_yaw(snapped, sigma_deg=s)
 
         before = self._filter.X.yaw_deg()
         if not self._apply(t, bound) or refused:
@@ -595,6 +663,8 @@ class LocalizationInputsMixin:
             # drift: the wrong grid line, never applied.
             self._n[f'{key}_refused'] += 1
             return
+        if referenced:
+            return                               # a reference is not a correction
         # What the floor moved goes into the offset, or it is undone. The
         # next board attitude, 20 ms later, would pull yaw straight back to
         # board + offset: a drift bound that bounds nothing. Folding the
@@ -621,5 +691,22 @@ class LocalizationInputsMixin:
         if not self._apply(_opt_stamp(msg),
                            lambda f, xy=(msg.point.x, msg.point.y), s=sigma:
                            f.update_position(xy, sigma=s)):
-            return                      # older than the replay horizon: refused
+            # Older than the replay horizon, or refused by the chi-square gate.
+            # Said out loud: the caller of fix_from_prop believes it worked.
+            self._n['fix_refused'] += 1
+            p = self._filter.X.p
+            self.get_logger().warning(
+                f'[LOCAL] position fix ({msg.point.x:+.2f}, {msg.point.y:+.2f}) '
+                f'sigma {sigma:.2f} m REFUSED against the estimate '
+                f'({p[0]:+.2f}, {p[1]:+.2f}) sigma '
+                f'{math.sqrt(max(self._filter.P[6, 6], self._filter.P[7, 7])):.2f} m: '
+                f'the gate or the replay horizon; a wrong prop, or a filter '
+                f'certain and wrong')
+            return
         self._n['fix'] += 1
+
+
+def _wrap_period(deg: float, period: float) -> float:
+    """`deg` wrapped to (-period/2, period/2]."""
+    r = float(deg) % period
+    return r - period if r > period / 2.0 else r

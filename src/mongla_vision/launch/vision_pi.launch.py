@@ -37,8 +37,8 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
-from mongla_localization import launch_defaults
-from mongla_localization.launch_respawn import respawning
+from mongla_runtime import launch_defaults
+from mongla_runtime.launch_respawn import respawning
 
 # Framework chatter off, our own nodes at info. Same convention as the other
 # launch files: a process default of `warn` with per-logger `info` pins.
@@ -509,7 +509,7 @@ def generate_launch_description():
         hitting.
         """
         return Node(
-            package='mongla_localization', executable='pnp_node',
+            package='mongla_vision', executable='pnp_node',
             name=f'mongla_pnp_{camera_name}', output='screen',
             parameters=[{
                 'camera': camera_name,
@@ -533,7 +533,7 @@ def generate_launch_description():
         evidence.
         """
         return Node(
-            package='mongla_localization', executable='pnp_node',
+            package='mongla_vision', executable='pnp_node',
             name=f'mongla_pnp_near_{camera_name}', output='screen',
             parameters=[{
                 'camera':        camera_name,
@@ -554,7 +554,7 @@ def generate_launch_description():
         becomes visible.
         """
         return Node(
-            package='mongla_localization', executable='pose_fuse_node',
+            package='mongla_vision', executable='pose_fuse_node',
             name=f'mongla_pose_fuse_{camera_name}', output='screen',
             parameters=[{'camera': camera_name}],
             condition=IfCondition(LaunchConfiguration('lock')),

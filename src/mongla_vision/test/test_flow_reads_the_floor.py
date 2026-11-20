@@ -83,7 +83,7 @@ import numpy as np                                              # noqa: E402
 import pytest                                                   # noqa: E402
 
 pytest.importorskip('rclpy')
-pytest.importorskip('mongla_localization.tile_grating')
+pytest.importorskip('mongla_vision.flow.tile_grating')
 
 
 @pytest.fixture(scope='module', autouse=True)

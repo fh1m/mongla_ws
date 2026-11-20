@@ -1,6 +1,6 @@
 # Command reference — every verb on `/mongla/move`
 
-One action, twenty-three verbs. This page says what each one does, what it takes, and — the part
+One action, twenty-five verbs. This page says what each one does, what it takes, and — the part
 that matters on this vehicle — **where it actually runs**.
 
 The canonical list is the `COMMANDS` registry in
@@ -30,7 +30,7 @@ generated from the registry, so a new verb appears in it with no extra code.
 | Group | Verbs |
 |---|---|
 | **On the board** | `move_forward` `move_back` `move_left` `move_right` `yaw_left` `yaw_right` `turn` `set_depth` `stop` `pause` `style_roll` |
-| **Host loop or single message** | `arm` `disarm` `set_mode` `head` `surface` `mission_reset` `calibrate_depth` `calc_distance` `fire` `motor_test` `vision_align` `vision_move` |
+| **Host loop or single message** | `arm` `disarm` `set_mode` `head` `surface` `mission_reset` `calibrate_depth` `calc_distance` `fire` `motor_test` `vision_align` `vision_move` `locate` `go_to` |
 
 There is no third group. A verb the board cannot run does not exist: the manager answers
 `Unknown command` and nothing reaches the wire. A missing low-level capability is a firmware

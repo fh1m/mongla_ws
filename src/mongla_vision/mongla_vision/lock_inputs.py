@@ -8,11 +8,8 @@ from geometry_msgs.msg import PointStamped
 from mongla_vision.anchor import loop_closure as _lc
 from mongla_vision.anchor import health as _health
 
-# /mongla/odom comes from the localiser's 10 Hz timer: worst gap 105.76 ms on
-# Kutum under the whole vision graph (measured-bars section 91), and a live
-# filter's stamp moves with every one. Five periods without a new stamp means
-# the localiser or its inputs stopped, not jitter.
-ODOM_MAX_AGE_S = 0.5
+from mongla_localization.localization_publish import ODOM_MAX_AGE_S
+
 
 class LockInputsMixin:
     """Methods of `LockNode`; see `lock_node.py` for the node."""

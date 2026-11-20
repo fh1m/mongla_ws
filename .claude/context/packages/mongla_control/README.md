@@ -152,6 +152,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `errors.py` | Verb-layer exceptions. |
 | `geometric_allocation.py` | Allocate a wrench to thrusters using the hull's real geometry. |
 | `hydrodynamics.py` | What the hull's SHAPE implies, before anybody weighs anything. |
+| `localization_verbs.py` | Localization verbs for the Mongla facade: `locate` and `go_to`. |
 | `mongla.py` | one method per verb. |
 | `motion_rates.py` | The vision loops' tick rate and log throttle. |
 | `motion_writers.py` | What the vision loops write to the board, and how they wait. |
