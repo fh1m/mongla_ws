@@ -41,3 +41,35 @@ def test_a_live_change_the_tracker_cannot_apply_is_refused():
     from mongla_vision.tracker_node import TrackerNode
     res = TrackerNode._on_param_change(object(), [_P('track_buffer', 90)])
     assert res.successful is False and 'restart' in res.reason
+
+
+def test_the_shipped_defaults_do_not_warn_and_an_asked_value_above_the_floor_does(monkeypatch):
+    """Every launch printed "high_conf_det_threshold 0.60 is above the detector
+    floor 0.45 -- clamped": the node's default disagreed with the detector it
+    is launched beside, so the warning meant nothing and trained the operator
+    to skip warnings (seen on Kutum, 2026-11-19). Unset now means the floor."""
+    rclpy = pytest.importorskip('rclpy')
+    from rclpy.impl.rcutils_logger import RcutilsLogger
+    from rclpy.parameter import Parameter as P
+    from mongla_vision.tracker_node import TrackerNode
+    said = []
+    real = RcutilsLogger.warning
+
+    def spy(self, msg, *a, **k):
+        said.append(str(msg))
+        return real(self, msg, *a, **k)
+    monkeypatch.setattr(RcutilsLogger, 'warning', spy)
+    monkeypatch.setattr(RcutilsLogger, 'warn', spy, raising=False)
+    started = not rclpy.ok()
+    if started:
+        rclpy.init()
+    try:
+        for overrides, expect in (({'detector_conf': 0.45}, False),
+                                  ({'detector_conf': 0.45, 'high_conf_det_threshold': 0.6}, True)):
+            said.clear()
+            n = TrackerNode(parameter_overrides=[P(k, value=v) for k, v in overrides.items()])
+            n.destroy_node()
+            assert any('clamped' in m for m in said) is expect, (overrides, said)
+    finally:
+        if started:
+            rclpy.shutdown()

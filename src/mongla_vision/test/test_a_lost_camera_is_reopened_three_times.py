@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import types
 
-from mongla_localization.launch_respawn import MAX_RESTARTS
+from mongla_runtime.launch_respawn import MAX_RESTARTS
 from mongla_vision import camera_node
 from mongla_vision.cameras.reopen import (
     ABSENT, GAVE_UP, LOST_AFTER_S, OK, REOPEN, WAITING, CameraWatch)

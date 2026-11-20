@@ -239,6 +239,13 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         self._tile_m = float(self.get_parameter('tile_m').value)
         self._tile_period_s = float(self.get_parameter('tile_period_s').value)
         self._tile_decimate = int(self.get_parameter('tile_decimate').value)
+        if self._tile_m > 0.0 and self._tile_decimate < 2:
+            # Not slower, blind: at full resolution a blurred, noisy grid's
+            # peak spreads past the share the grating demands, and it refused
+            # every angle 0-85 deg; x2 and x3 read every one within 0.2 deg
+            # (measured-bars 99).
+            raise ValueError(f'tile_decimate={self._tile_decimate}: the tile grating '
+                             f'needs 2 or more; at 1 it refuses every real floor')
         self._tile_next_t = 0.0
         self._tile_height = None          # last height read off the floor
         self._tile_angle = None           # grid orientation, absolute mod 90
@@ -408,14 +415,14 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
 
 
 def main(args=None):
-    from mongla_localization.orphan import die_with_parent
+    from mongla_runtime.orphan import die_with_parent
     die_with_parent()        # an orphan holds devices and duplicates topics
     rclpy.init(args=args)
     node = FlowVelocityNode()
-    from mongla_localization.params_file import refuse_unknown
+    from mongla_runtime.params_file import refuse_unknown
     refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
-        from mongla_localization.spin import spin
+        from mongla_runtime.spin import spin
         spin(node)
     except KeyboardInterrupt:
         pass
@@ -427,6 +434,8 @@ def main(args=None):
         # as a crash in the sensor you are about to trust.
         pass
     finally:
+        from mongla_runtime.spin import deaf_to_ctrl_c
+        deaf_to_ctrl_c()      # a second Ctrl-C must not interrupt the teardown
         node.destroy_node()
         try:
             rclpy.shutdown()

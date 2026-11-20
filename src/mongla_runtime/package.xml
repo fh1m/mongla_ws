@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mongla_runtime</name>
+  <version>0.1.0</version>
+  <description>
+    How every Mongla process runs, and nothing else: the executor and its clean
+    Ctrl-C, dying with the parent, the bringup.yaml parameters and launch
+    defaults, the restart policy, and the realtime priority. It imports nothing
+    from Mongla, so every node package can depend on it without a cycle. It used
+    to live in mongla_localization, which made vision, the manager and Batighor
+    depend on the estimator for their plumbing.
+  </description>
+  <maintainer email="fh1m.dev@gmail.com">Muhammad Fahim Faisal</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

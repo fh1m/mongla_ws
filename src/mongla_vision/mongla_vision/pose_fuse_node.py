@@ -1,0 +1,189 @@
+"""Subscribe single-frame poses, publish the one the support agrees on.
+
+A SEPARATE topic, deliberately. `/target_pose` stays exactly what it is -- one
+frame's answer, published by whichever estimator produced it -- and the fused
+answer lands beside it on `/target_pose_fused`. A consumer that wants the
+latest reading and one that wants the settled reading are different consumers,
+and collapsing them would remove the ability to compare an estimator against
+its own fused output, which is how a regression in either becomes visible.
+
+The decision rule lives in `pose_cluster`, tested against constructed bimodal
+distributions with no ROS. This node is the wiring: subscribe, stamp, fuse,
+publish.
+"""
+from __future__ import annotations
+
+import bisect
+from collections import deque
+
+import rclpy
+from rclpy.node import Node
+
+from mongla_interfaces.msg import MonglaState, TargetPose
+
+from mongla_localization.pose_cluster import (
+    CLUSTER_TOL_DEG, MIN_POSES, WINDOW_S, PoseCluster, PoseSample,
+)
+from mongla_vision.stamps import capture_monotonic
+
+
+# The fused message's float fields. The fuse computes yaw, range and the
+# spread, and nothing else; every other float is NaN, this stack's absence.
+# They used to keep the message default 0.0, so Batighor plotted a fused
+# bearing and reprojection of exactly zero, and yaw and range of zero while
+# undecided, as if measured.
+_FLOATS = ('yaw_deg', 'pitch_deg', 'roll_deg', 'range_m', 'yaw_spread_deg',
+           'pitch_spread_deg', 'off_axis_deg', 'reproj_px', 'ambiguity',
+           'alt_yaw_deg', 'bearing_deg')
+
+
+def fused_message(out, fused, header, label):
+    """Fill `out` (a TargetPose) from one `PoseCluster.fuse` result."""
+    out.header = header
+    out.target_label = label
+    for f in _FLOATS:
+        setattr(out, f, float('nan'))
+    out.ok = bool(fused.decided)
+    if fused.decided:
+        out.yaw_deg = float(fused.yaw_deg)
+        out.range_m = float(fused.range_m)
+        # `n_points` is the support count here, not RANSAC inliers: a fused
+        # pose is fitted from FRAMES, and a consumer reading "how much
+        # evidence" wants that number. `yaw_spread_deg` keeps its meaning --
+        # the width of the answer, now across frames instead of branches.
+        out.n_points = int(fused.support)
+        out.yaw_spread_deg = float(fused.spread_deg)
+        # WHICH test decided is not decoration: 'viewpoint' survives a
+        # detector that reports the wrong branch more often, 'support' does
+        # not, and an operator reading a pose needs to know which they have.
+        out.reason = fused.rule
+    else:
+        # The disagreement goes on the wire, not into a vote. An
+        # unresolved mirror pair publishes ok=False with BOTH candidate
+        # yaws in `reason` and their separation in `yaw_spread_deg`, so a
+        # consumer can see what was refused and why (issue #55).
+        out.reason = fused.reason
+        if len(fused.candidates) == 2:
+            a, b = fused.candidates
+            out.yaw_spread_deg = float(abs(((a - b + 180.0) % 360.0) - 180.0))
+    return out
+
+
+class PoseFuseNode(Node):
+    def __init__(self, **kw):
+        super().__init__('mongla_pose_fuse', **kw)
+        cam = str(self.declare_parameter('camera', 'forward').value)
+        ns = f'/mongla/vision/{cam}'
+        # Every knob exposed: re-fusing a bag with a different window or floor
+        # is the whole reason the per-frame evidence is published at all, and a
+        # mission can reach these through `set_node('posefuse', ...)`.
+        self._cluster = PoseCluster(
+            window_s=float(self.declare_parameter('window_s', WINDOW_S).value),
+            tol_deg=float(self.declare_parameter('tol_deg', CLUSTER_TOL_DEG).value),
+            min_poses=int(self.declare_parameter('min_poses', MIN_POSES).value),
+            max_ambiguity=float(self.declare_parameter('max_ambiguity', 0.9).value),
+            max_reproj_px=float(self.declare_parameter('max_reproj_px', 10.0).value),
+        )
+        from mongla_vision.live_params import apply_live
+        c = self._cluster
+        apply_live(self, {
+            'window_s':      lambda v: setattr(c, 'window_s', float(v)),
+            'tol_deg':       lambda v: setattr(c, 'tol_deg', float(v)),
+            'min_poses':     lambda v: setattr(c, 'min_poses', int(v)),
+            'max_ambiguity': lambda v: setattr(c, 'max_ambiguity', float(v)),
+            'max_reproj_px': lambda v: setattr(c, 'max_reproj_px', float(v)),
+        })
+        self._pub = self.create_publisher(TargetPose, f'{ns}/target_pose_fused', 10)
+        self.create_subscription(TargetPose, f'{ns}/target_pose', self._on_pose, 10)
+        # The hull's own heading, which is what turns counting into evidence:
+        # the true branch's pose yaw moves OPPOSITE the hull's and the mirrored
+        # one moves with it. `/mongla/state` publishes ON CHANGE plus a ~1 Hz
+        # heartbeat, so the heading in effect at a pose's capture instant is the
+        # LAST state stamped at or before it -- not the latest to arrive, which
+        # during a turn is a heading from after the frame was taken.
+        self._yaw_deg = None
+        self._yaw_hist: deque = deque(maxlen=256)     # (capture-domain t, yaw)
+        self.create_subscription(MonglaState, '/mongla/state', self._on_state, 10)
+        self.get_logger().info(
+            f'[FUSE ] {cam}: {ns}/target_pose -> {ns}/target_pose_fused '
+            f'(window {self._cluster.window_s:.0f}s, '
+            f'min {self._cluster.min_poses} agreeing)')
+
+    def _on_state(self, msg: MonglaState) -> None:
+        yaw = float(getattr(msg, 'yaw_deg', float('nan')))
+        # NaN is this stack's "missing numeric" convention, and feeding one in
+        # would poison the regression with a silent NaN slope.
+        self._yaw_deg = None if yaw != yaw else yaw
+        t, _ = capture_monotonic(getattr(msg, 'header', None))
+        self._yaw_hist.append((t, self._yaw_deg))
+
+    def yaw_at(self, t: float):
+        """Heading in effect at `t`: the last state stamped at or before it.
+
+        SORT by the stamp only. `sorted(self._yaw_hist)` sorted whole tuples, so
+        on a stamp TIE it fell through to comparing the second element -- and that
+        element is `None` whenever the board's yaw is absent, because `_on_state`
+        maps this stack's NaN convention onto None. `None < float` raises, inside a
+        subscription callback, so a detection was lost and the executor thread took
+        a TypeError. REPRODUCED with three entries: (100.0, 12.5), (100.5, None),
+        (100.5, 30.0).
+
+        Ties are not exotic here: `/mongla/state` is published by TWO timers --
+        `telemetry_tick` at 2 Hz and `_fast_state_tick` at 20 Hz -- in two
+        different callback groups, so two messages can carry the same capture
+        stamp. A missing yaw is not exotic either; it is the documented value
+        before the board's AHRS is healthy, which is exactly when a mission is
+        starting up.
+
+        The sort stays (the two publishers give no ordering guarantee), and
+        `key=` makes it total regardless of what the second element is.
+        """
+        hist = sorted(self._yaw_hist, key=lambda h: h[0])
+        i = bisect.bisect_right([h[0] for h in hist], t)
+        return hist[i - 1][1] if i else None
+
+    def _on_pose(self, msg: TargetPose) -> None:
+        # A pose the solver already disowned carries no vote. Publishing the
+        # refusal onward would let a consumer count it as evidence of a fork.
+        if not msg.ok:
+            return
+        # Frames vote only with frames of the SAME target. A new label starts
+        # a new vote: fusing a gate's poses with a torpedo board's would
+        # publish an answer about neither (#76).
+        label = getattr(msg, 'target_label', '')
+        if label != getattr(self, '_label', None):
+            self._label = label
+            self._cluster.reset()
+        t, _ = capture_monotonic(getattr(msg, 'header', None))
+        both = bool(getattr(msg, 'branches_valid', False))
+        self._cluster.add(PoseSample(
+            t=t, yaw_deg=float(msg.yaw_deg), range_m=float(msg.range_m),
+            ambiguity=float(msg.ambiguity), reproj_px=float(msg.reproj_px),
+            n_points=int(msg.n_points), vehicle_yaw_deg=self.yaw_at(t),
+            alt_yaw_deg=float(msg.alt_yaw_deg) if both else None,
+            bearing_deg=float(msg.bearing_deg) if both else None))
+
+        out = fused_message(TargetPose(), self._cluster.fuse(now=t), msg.header, label)
+        self._pub.publish(out)
+
+
+def main():
+    from mongla_runtime.orphan import die_with_parent
+    die_with_parent()        # an orphan holds devices and duplicates topics
+    rclpy.init()
+    node = PoseFuseNode()
+    from mongla_runtime.params_file import refuse_unknown
+    refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
+    try:
+        from mongla_runtime.spin import spin
+        spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        from mongla_runtime.spin import deaf_to_ctrl_c
+        deaf_to_ctrl_c()      # a second Ctrl-C must not interrupt the teardown
+        node.destroy_node()
+        try:
+            rclpy.shutdown()
+        except Exception:
+            pass

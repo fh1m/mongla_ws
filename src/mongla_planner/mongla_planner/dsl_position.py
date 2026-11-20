@@ -20,6 +20,24 @@ from .dsl_detections import SeeMixin
 UNCALIBRATED_BEARING_SIGMA_DEG = 1.264
 
 
+def reach_m(sigma_m: float, tolerance_m: float, scale_sigma: float) -> float:
+    """How far the hull can fly on flow before its position sigma passes
+    `tolerance_m`, from `sigma_m` now. Pure.
+
+    The filter floors its horizontal sigma at
+    sqrt(sigma_fix^2 + (scale_sigma x distance)^2) (B-136), and `go_to`
+    stops LOST when that passes the tolerance. This is the scale term alone,
+    so it is the most the hull gets: per-frame noise only shortens it. From a
+    0.15 m fix at the 0.5 m default, 13.2 m.
+    """
+    import math
+    if not (math.isfinite(sigma_m) and scale_sigma > 0.0):
+        return float('nan')
+    if sigma_m >= tolerance_m:
+        return 0.0
+    return math.sqrt(tolerance_m ** 2 - sigma_m ** 2) / scale_sigma
+
+
 class WhereMixin:
     # In-water horizontal FOV per camera, used ONLY when that camera has not
     # published a calibrated CameraInfo. Derived from the committed calibration
@@ -244,24 +262,18 @@ class WhereMixin:
         diagnostic that genuinely wants to watch the filter converge. It is
         opt-in precisely so it cannot be the thing a mission does by accident.
 
+        And None when the estimate has stopped moving: the localiser gone (it
+        restarts three times, then stays down), or its inputs gone. The node
+        publishes on a timer whether or not anything arrives, so the age runs
+        from the last time the STAMP moved, under the same bound the lock's
+        loop closure uses (`ODOM_MAX_AGE_S`). Without it the last pose ever
+        received was returned for the rest of the run.
+
         Pairs with `fix_position()` / `fix_from_prop()`, which push a resected
         position INTO the filter; this reads the fused result back out.
         """
         import math
-        import time as _t
-        from nav_msgs.msg import Odometry
-        node = self.client.node
-        if self._odom_sub is None:
-            def _keep(msg):
-                self._odom = msg
-            self._odom_sub = node.create_subscription(
-                Odometry, '/mongla/odom', _keep, 10)
-        deadline = _t.monotonic() + float(timeout)
-        # Pump rather than sleep: the mission thread owns this executor, so a
-        # bare sleep here would spin the clock and receive nothing.
-        while self._odom is None and _t.monotonic() < deadline:
-            rclpy.spin_once(node, timeout_sec=0.05)
-        if self._odom is None:
+        if not self._odom_fresh(timeout):
             return None
         frame = str(self._odom.header.frame_id)
         if frame != 'pool' and not any_frame:
@@ -279,6 +291,135 @@ class WhereMixin:
         # /mongla/odom is NED: z is +depth, and this API returns depth negative.
         return (float(p.x), float(p.y), -float(p.z), yaw)
 
+    def _odom_fresh(self, timeout: float) -> bool:
+        """True when `self._odom` is a live estimate, waiting up to `timeout`.
+
+        Pumps the executor every call, so a newer message waiting in the queue
+        replaces the cached one before anything reads it.
+        """
+        import time as _t
+        from nav_msgs.msg import Odometry
+        from mongla_localization.localization_publish import ODOM_MAX_AGE_S
+        node = self.client.node
+        if self._odom_sub is None:
+            self._odom_moved = None
+
+            def _keep(msg):
+                st = msg.header.stamp
+                stamp = (int(st.sec), int(st.nanosec))
+                if self._odom is None or stamp != getattr(self, '_odom_stamp', None):
+                    self._odom_stamp = stamp
+                    self._odom_moved = _t.monotonic()
+                self._odom = msg
+            self._odom_sub = node.create_subscription(
+                Odometry, '/mongla/odom', _keep, 10)
+
+        def fresh():
+            moved = getattr(self, '_odom_moved', None)
+            return (self._odom is not None and moved is not None
+                    and _t.monotonic() - moved <= ODOM_MAX_AGE_S)
+
+        # Pump rather than sleep: the mission thread owns this executor, so a
+        # bare sleep here would spin the clock and receive nothing.
+        rclpy.spin_once(node, timeout_sec=0.0)
+        deadline = _t.monotonic() + float(timeout)
+        while not fresh() and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        return fresh()
+
+    def localization(self, *, timeout: float = 1.0):
+        """The localization state, or None when the localiser is not publishing.
+
+            s = mongla.localization()
+            if s is None or not s.usable:
+                log(f'localization not usable: {s.reason if s else "not running"}')
+
+        The fields are `LocalizationState`'s: `usable` and `reason` answer "can
+        I steer on it"; `x_m`, `y_m`, `depth_m`, `yaw_deg` in `frame`;
+        `sigma_xy_m`; `aiding`; `motion`; the input ages and counts. Read
+        straight from the topic (no action goal), fresh by arrival under
+        `ODOM_MAX_AGE_S`: a localiser that stopped reads None, not its last word.
+        """
+        import time as _t
+        from mongla_interfaces.msg import LocalizationState
+        from mongla_localization.localization_publish import ODOM_MAX_AGE_S
+        node = self.client.node
+        if getattr(self, '_loc_sub', None) is None:
+            self._loc, self._loc_rx = None, 0.0
+
+            def _keep(msg):
+                self._loc, self._loc_rx = msg, _t.monotonic()
+            self._loc_sub = node.create_subscription(
+                LocalizationState, '/mongla/localization/state', _keep, 10)
+
+        def fresh():
+            return (self._loc is not None
+                    and _t.monotonic() - self._loc_rx <= ODOM_MAX_AGE_S)
+        rclpy.spin_once(node, timeout_sec=0.0)
+        deadline = _t.monotonic() + float(timeout)
+        while not fresh() and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        return self._loc if fresh() else None
+
+    def go_to(self, x_m: float, y_m: float, *, tolerance: float = 0.5,
+              duration: float = 60.0, gain: float = 30.0):
+        """Drive to pool point (x_m, y_m) on the localization estimate.
+
+        Returns the Move result: `.success` is arrived, `.final_value` the
+        metres left. Refused before any thrust when localization is not usable
+        or its position is not known to within `tolerance` -- anchor first,
+        and fix position from a prop if the sigma has grown.
+
+        Plan a fix every ~10 m: the sigma grows with distance since the last
+        one (`reach_m`), and a leg longer than the reach starts and then stops
+        LOST partway. That is warned here, before any thrust, not refused: a
+        fix taken on the way resets it.
+        """
+        import math
+        from mongla_localization.inekf import FLOW_SCALE_SIGMA
+        here = self.localization(timeout=0.0)
+        if here is not None and here.usable and math.isfinite(here.x_m):
+            leg = math.hypot(float(x_m) - here.x_m, float(y_m) - here.y_m)
+            reach = reach_m(here.sigma_xy_m, float(tolerance), FLOW_SCALE_SIGMA)
+            if math.isfinite(reach) and leg > reach:
+                self.log.warning(
+                    f'[LOCAL] go_to: a {leg:.1f} m leg from sigma '
+                    f'{here.sigma_xy_m:.2f} m reaches at most {reach:.1f} m '
+                    f'before the {float(tolerance):.2f} m tolerance stops it '
+                    f'LOST; fix position from a prop on the way')
+        return self._send('go_to', x_m=float(x_m), y_m=float(y_m),
+                          tolerance_m=float(tolerance),
+                          duration=float(duration), gain=float(gain))
+
+    def go_to_prop(self, prop: str, *, standoff: float = 1.0,
+                   tolerance: float = 0.5, duration: float = 60.0,
+                   gain: float = 30.0):
+        """Drive to `standoff` metres short of a course prop, along the line
+        from here. Refuses a prop with no position (`position_of` raises) and
+        needs a usable estimate for "here"; returns the Move result, or None
+        when either is missing (logged).
+        """
+        import math
+        course = getattr(self, '_course', None)
+        if course is None:
+            self.log.warning('[LOCAL] go_to_prop: use_course(<name>) first')
+            return None
+        try:
+            px, py = course.position_of(prop)
+        except (KeyError, ValueError) as exc:
+            self.log.warning(f'[LOCAL] go_to_prop({prop!r}): {exc}')
+            return None
+        here = self.localization()
+        if here is None or not here.usable:
+            self.log.warning(f'[LOCAL] go_to_prop({prop!r}): localization not '
+                             f'usable: {here.reason if here else "not running"}')
+            return None
+        dx, dy = px - here.x_m, py - here.y_m
+        d = math.hypot(dx, dy)
+        k = max(d - float(standoff), 0.0) / d if d > 0.0 else 0.0
+        return self.go_to(here.x_m + k * dx, here.y_m + k * dy,
+                          tolerance=tolerance, duration=duration, gain=gain)
+
     def motion(self, *, timeout: float = 1.0):
         """Is the hull moving the way it is being told to?
 
@@ -295,6 +436,10 @@ class WhereMixin:
         `'unknown'` is common and honest: no flow, no learned model, or a board
         primitive running (the host does not know its demand). Treat unknown as
         "no evidence", never as "ok".
+
+        The topic is latched and published on change, so the last word of a
+        localiser that has since died would read forever. The answer is given
+        only while `/mongla/odom` is live (`pose()`'s freshness rule).
         """
         import time as _t
         from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
@@ -314,6 +459,8 @@ class WhereMixin:
             rclpy.spin_once(node, timeout_sec=0.05)
         # Pump once more so a change since the last call is seen.
         rclpy.spin_once(node, timeout_sec=0.0)
+        if self._motion is None or not self._odom_fresh(timeout):
+            return None
         return self._motion
 
     def floor_height(self, *, max_age_s: float = 1.0, timeout: float = 1.0):
@@ -595,10 +742,12 @@ class WhereMixin:
         that disagrees with the placement beyond its 99 % ellipse is logged as
         a disagreement and left alone. Overwriting would let a drifted pose
         rewrite the one thing that can correct it, and the next `fix_from_prop`
-        would agree with the drift. An UNMEASURED prop (unset, or a rulebook
-        nominal) takes the placement for the rest of the run. With
-        `commit=True` it is also written to the deck course file through
-        `course_survey`, so the next run starts from it.
+        would agree with the drift. An UNMEASURED prop (unset, a rulebook
+        nominal, or an earlier placement) takes the placement for the rest of
+        the run. With `commit=True` it is also written to the deck course file
+        through `course_survey`, still as unmeasured and with its sigma in the
+        note, so the next run starts from it and may refine it; only a tape
+        survey makes a prop measured.
 
         Returns a `Placement` (`ok`, `x_m`, `y_m`, `cov`, `sigma_m`,
         `prior_offset_m`, `prior_disagrees`, `reason`).
@@ -672,7 +821,9 @@ class WhereMixin:
         self.log.info(f'[PLACE] {key}: placed at {where}{moved}')
         if commit:
             from mongla_localization.course_survey import survey
-            path = survey(course.name, key, {'x': res.x_m, 'y': res.y_m})
+            path = survey(course.name, key, {'x': res.x_m, 'y': res.y_m},
+                          measured=False,
+                          note=f'placed from {res.n} sightings, sigma {res.sigma_m:.2f} m')
             self.log.info(f'[PLACE] {key}: written to {path}')
         return res
 

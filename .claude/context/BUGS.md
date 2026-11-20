@@ -507,6 +507,245 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-123: a Ctrl-C interrupted every node's teardown, inside the Hailo's release `SEEN ON KUTUM 2026-11-19` **FIXED 2026-11-19**
+
+**What.** The first full `vision_pi` run on Kutum after the second read,
+stopped the way an operator stops it, printed a KeyboardInterrupt traceback
+from every Python node (the detector, both trackers, four pose solvers, both
+pose fuses), and each exited -2, which the launch reported as a death with
+"restart 1/3". A terminal Ctrl-C reaches every process twice (the terminal
+signals the process group and `ros2 launch` forwards its own); the first
+stopped the spin, the second landed inside `destroy_node()`. In the detector
+it landed inside the Hailo VDevice's `__exit__`, part-way through releasing
+the chip the next start needs. The same run showed every launch warning that
+the tracker's `high_conf_det_threshold` (0.6) was clamped to the detector's
+0.45: a clamp the shipped defaults caused themselves, printed as a WARN on
+every start, which teaches an operator to read past warnings.
+
+**Fix.** `mongla_runtime.spin.deaf_to_ctrl_c()` is the first line of
+every node's teardown in `mongla_vision` and of the three localization nodes
+the vision launch starts; the launch still escalates to SIGTERM and SIGKILL
+if a teardown hangs. The tracker's threshold defaults to NaN, meaning the
+detector's floor, and only an operator's value above the floor warns. Guards:
+`test_ctrl_c_twice_is_a_clean_stop.py` and `test_tracker_settings_are_honest.py`,
+both injection-verified. On Kutum, a process-group SIGINT now ends all nine
+processes "finished cleanly" with no traceback and no clamp warning, and the
+next start brings both detectors back (56.8 and 15.0 Hz). The manager,
+planner and Batighor mains have the same shape and are left for their own
+audits; the manager's Ctrl-C is its disarm path.
+
+### B-126: a mission read a stopped localiser's last pose and last motion verdict forever `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `pose()` cached the first `/mongla/odom` it heard and, once one existed, neither
+pumped for a newer one nor asked its age. The localiser restarts three times and then stays
+down, so every later `pose()` answered with where the hull had been. `motion()` reads a
+latched topic published on change, so a dead localiser's last `'ok'` read forever.
+
+**Fix.** Both answer None unless the odometry STAMP moved within `ODOM_MAX_AGE_S` (0.5 s,
+five periods of the 10 Hz timer), the rule the lock's loop closure already used; the bound
+now lives once, beside the timer, in `localization_publish.py`. Guard:
+`test_a_stopped_localiser_gives_no_pose.py`, a real publisher with a frozen stamp;
+injection-verified. BUILT, NEVER FLOWN.
+
+### B-127: a vision placement froze itself into the course as a tape survey `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `place_prop(commit=True)` wrote through `course_survey.survey`, which always set
+`measured: true`. A measured prop is only ever checked, never overwritten, so one placement
+from a drifted pose became permanent, and the next run's placements could only log that
+they disagreed with it.
+
+**Fix.** `survey(measured=...)`: the CLI's tape survey writes true; a placement writes
+false, with its sigma in the note, so a later placement refines it. Guard: the commit test
+in `test_pose_and_prop_fix.py`, which asserted the defect before.
+
+### B-129: on a headless Kutum the viewer took the whole vision launch down `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `vision_dual` defaulted `viewer:=true` and shuts the launch when the viewer exits
+(on a desk, `q` quits everything). Kutum has no screen: the viewer aborted (exit -6) and
+cameras, detectors and trackers stopped 5.5 s after start, cleanly, so the log read like an
+operator Ctrl-C. Every footage run there ended before a frame was detected.
+
+**Fix.** `viewer` defaults to whether there is a LOCAL screen (`launch_defaults.has_screen`:
+a DISPLAY of the form `:N`, or WAYLAND_DISPLAY), in both vision launch files; `viewer:=true`
+typed still wins. An `ssh -X` display (`localhost:10.0`) is not local: it goes over the
+tether, and pulling the tether would take the viewer down with it. And only a CLEAN viewer
+exit (code 0, the operator pressing `q`) ends the launch (`viewer_quit_shuts_launch`); a
+viewer that crashes takes only itself. Guards: `test_a_headless_launch_starts_no_viewer.py`,
+`test_only_a_clean_viewer_quit_ends_the_launch.py`, both failing on the old code. Re-run
+on Kutum with the viewer off: forward 24.9 Hz of `gate` detections on recorded footage.
+
+### B-131: a stack started over ssh died with the tether `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** A run is tetherless: start over the tether, count down, pull it. A process started
+in the foreground of an ssh shell, outside tmux, is hung up when the session goes.
+Reproduced on Kutum: a process in an interactive ssh shell died when the ssh client was
+killed; the same process inside tmux lived. Nothing in the stack knew or said so, and the
+countdown went ahead.
+
+**Fix.** `mongla_runtime.tether.tether_bound()` says why a process would stop ('' when it
+would not: no ssh, tmux/screen, nohup, or no controlling terminal). `spin()` declares it on
+every node as the read-only parameter `tether_bound` and warns at start-up; the DSL
+`countdown()` asks every `mongla*` node and refuses while any is bound, naming it. Checked
+on Kutum: the ssh shell reads bound, a tmux shell reads ''. Guards:
+`test_a_process_knows_if_the_tether_kills_it.py` and the countdown tests in
+`test_no_board_verb_before_arm.py`.
+
+### B-132: the localiser said "aided" before any input, and a never-thrust hull waited 3 s to ZUPT `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** Replaying the real bench-rest recording: the node logged "aiding restored" before
+its first IMU sample (the cold covariance read as an observation), and the first ZUPT came
+only after the 3 tau coast settle, although nothing had been commanded since start, so
+there was nothing to coast out of: 0.71 m dead-reckoned in the first 2.7 s (1x replay),
+0.08 m with the fix.
+
+**Fix.** No aiding verdict until an input has been fused; the settle applies only after a
+non-zero demand has been seen. Guards in `test_localization_node.py`
+(`test_aiding_is_not_reported_before_any_input`,
+`test_a_hull_never_thrust_is_settled_from_the_start`), both injection-verified. Numbers:
+measured-bars 99.
+
+### B-133: the floor drift bounds held a constant residual at zero `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `_on_floor_grid`'s docstring says the residual between heading and grid is
+constant; `snap_to_grid` was handed the raw image angle and so pinned that residual at
+zero. It is zero only when the camera mount, the image-angle convention (a lane along
+the hull reads 90) and the feature's pool direction cancel. Rendered through the real
+detectors: every lane read along the pool's x axis was refused, and under a 37 deg mount
+the grid was refused too. The existing tests fed the filter its own yaw as the "image"
+angle, so they measured agreement and could not see it.
+
+**Fix.** The first floor read after each anchor records the residual; later reads bound
+drift against it, and a reference is not counted as a correction. Truth test
+`test_a_rendered_floor_bounds_drift_under_any_mount` (lane and grid), failing with the
+residual held at zero.
+
+### B-134: the uplink tick stalled the manager's telemetry for 10 s `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `_vision_uplink_tick` called `_vision_state_for`, whose first build waits up to
+10 s for a detection, on `timer_group`, shared with `telemetry_tick`, `_health_tick` and
+`board_link_tick`. Setting `vision_uplink_camera` froze `/mongla/state` for 10 s. The
+heartbeat thread was not affected.
+
+**Fix.** The uplink builds its VisionState with `preflight=False`; vision verbs keep the
+warm-up. Guard `test_the_uplink_builds_without_the_preflight_wait`.
+
+### B-135: the accelerometer-bias prior was 17 sigma off the board's measured bias `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `RIEKF` used one prior, `P0_bias = 0.01`, for both biases. The ledger's static
+IMU table measures this board's accelerometer bias at 0.167 m/s^2, so the filter could not
+learn it, and every ZUPT corrected the same biased velocity again. On the real bench
+recording, replayed at 1x on Kutum, a still hull walked 15.5 cm in 90 s.
+
+**Fix.** `P0_accel_bias` is its own argument; the node passes `ACCEL_BIAS_PRIOR = 0.2`.
+Walk 0.94 cm on the same replay, and no worse in motion on the truth study (measured-bars
+99). Guard `test_the_accel_bias_prior_covers_the_measured_bias`, failing at 0.01.
+
+### B-136: one fix in, the filter was certain and wrong, and refused the next correct fix `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** Flow's sigma is per-sample noise; integrated, it grows like a square root of time.
+A flow scale error grows with distance. With nothing modelling the second, the position
+sigma after a 0.15 m fix stayed at 0.153 m across 15 m of 5 %-scale flow while the estimate
+drifted 0.5-0.7 m, and the chi-square gate refused the next correct fix 3 times in 5
+(`tools/studies/localization_candidates.py`, against exact truth). `go_to` would have
+arrived at the wrong place reporting 0.15 m.
+
+**Fix.** `odometry_scale_sigma`: the horizontal position sigma is held at no less than
+sqrt(sigma_at_last_fix^2 + (k x distance since)^2), with k = `FLOW_SCALE_SIGMA` = 0.036,
+the worst slide in measured-bars 13 (first shipped as 0.035, a hand-rounded second copy of
+mongla_vision's `FLOW_SCALE_SIGMA_FRAC`; one constant now, `test_one_scale_error.py`). 15 of 15 accepted. Guard
+`test_scale_error_floor.py`, failing with the floor removed. Not covered: a sloping floor's
+scale error (bead es5.7).
+
+### B-137: a refused position fix was silent `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `_on_fix` returned without a word when the gate or the replay horizon refused a
+fix. `fix_from_prop` had already reported success, so a mission believed it had fixed
+position, and the counter was the only place the truth showed.
+
+**Fix.** A `fix_refused` counter in the diagnostic line (`fix=accepted/offered`) and a
+warning naming the fix, the estimate and both sigmas. Guard
+`test_a_refused_fix_is_counted_and_said`.
+
+### B-138: a zero quaternion was fused as a level hull `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `_R_from_quat` returned the identity for a quaternion of zero length, and the
+node fused it at the board's 0.5 deg attitude sigma: a level hull facing the boot heading,
+from a message that carried no attitude at all. Found by line coverage; no test had sent one.
+
+**Fix.** It returns None for a zero or non-finite quaternion, and the sample is skipped
+like one whose covariance says "no orientation". Guard
+`test_a_zero_quaternion_is_no_attitude_not_a_level_hull` (injection-verified).
+
+### B-139: a hull pushed along with the gyro quiet read as still `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** The ZUPT's accelerometer veto took the spread of |a|, the magnitude, chosen
+because tilt cannot change it. Neither, to first order, can a horizontal push: +-0.4 m/s^2
+across moves |a| by 0.008, so a hull shoved along a line with the gyro quiet was declared
+still and its real velocity zeroed. The branch had never run in a test.
+
+**Fix.** The spread is taken per axis on the body's own acceleration, gravity removed with
+that sample's board attitude. A/B on the real bench recording on Kutum (zupt on, 240 s):
+232 and 232 ZUPTs, still-hull walk 9.3 and 9.4 mm, so no cost at rest. Guard
+`test_a_hull_shaking_without_turning_is_not_still`, which failed against the old code.
+
+### B-140: the published test counts froze when two packages arrived `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** A full run publishes `docs/stats.json` only when the suites it ran equal
+`published_counts.SUITE_NAMES`. `mongla_runtime` and `mongla_batighor` came with tests and
+were never added, so from then on no run counted as full and nothing was published. The
+guard kept comparing the README and the site with that frozen file and passed: the pages
+said 4 742 tests long after the suite held more than 5 300.
+
+**Fix.** Both suites are listed. Guard `test_every_package_with_tests_is_a_published_suite`
+fails when a package's tests are not a published suite; it failed with the two names removed.
+
+### B-130: the old-host guard matched `mongla.localization()` `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `test_kutum_has_one_name` grepped a fixed string, so the DSL call
+`mongla.localization()` read as the retired host name.
+
+**Fix.** It matches the name with no identifier character after it; a file naming the
+real old host still fails it (injection-verified).
+
+### B-128: course and frames files silently dropped what they did not recognise `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `bearing: 90` for `bearing_deg: 90` loaded as "bearing unset", and the anchor
+refused later naming the right key; `downwards_cam:` loaded as "not measured" and a taped
+lever arm was never applied; a quoted `measured: "false"` read as True.
+
+**Fix.** Both loaders refuse an unknown key (naming the nearest known one) and a
+non-boolean `measured`. Guard: `test_a_misspelt_course_key_is_refused.py`, four of seven
+failing on the old code.
+
+### B-124: the localiser counted a refused measurement as fused, and could stay silent while unaided `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `LocalizationInputsMixin._apply` dropped the update's own answer and
+returned True for anything it handed the filter. A flow sample the chi-square
+gate rejected, a depth or yaw the B-56 observability gate refused, a ZUPT or a
+model aid the filter rejected: each was counted as fused. The diagnostic line
+over-reported every channel, and the one operator warning that matters, "NO
+VELOCITY AIDING", is computed from the flow and ZUPT counters, so a stream of
+rejected flow kept it silent while nothing aided velocity.
+
+**Fix.** `_apply` returns False when the update returned False (or the sample
+was older than the replay horizon); the answer kept is the first run's, since
+a later replay may run the same update again. Every counter, and the floor
+grid and lane line, count on it. Guard:
+`test_a_refused_update_is_not_counted_as_fused.py`, four of its five tests
+failing on the old code, with and without retrodiction. BUILT, NEVER FLOWN.
+
+### B-125: the fused target pose published zeros for what it never fused `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `pose_fuse_node` filled yaw, range and the spread and left every
+other float of `TargetPose` at its default 0.0. Batighor plots the fused
+`bearing_deg` and `reproj_px`, so the operator saw a bearing of exactly zero on
+every fused pose, and a yaw and range of zero whenever the fuse was undecided.
+Missions were safe: `dsl_heading` reads only a pose with `ok` set.
+
+**Fix.** `fused_message` sets every float the fuse does not compute to NaN.
+Guard: `test_fused_pose_says_nothing_it_did_not_fuse.py`, which also fails if
+a float is added to the message without a decision here; injection-verified.
+
 ### B-122: loop closure could not start, and the anchor pose put the object's origin outside the target `READ 2026-11-19` **FIXED 2026-11-19**
 
 **What.** Two defects found by the second line-by-line read of `mongla_vision`.
@@ -577,6 +816,36 @@ injection-verified for each behaviour); the study's `--self-test`.
 **How it survived.** Every earlier XFeat number was an inlier count, which
 rises with any change that makes matches agree with each other, right or not.
 The comment that justified bilinear compared it only with nearest.
+
+### B-141: `?layout=` opened a personal Default on a browser's first visit `REPRODUCED 2026-11-19` **FIXED 2026-11-20**
+
+**What.** `http://kutum:8000/?layout=chain` in a browser profile that had never
+opened Batighor showed a personal "Default" layout; the organisation's chain
+layout was listed and had to be opened by hand. A second visit opened it.
+
+**Cause.** Upstream, Lichtblick 1.30.0 `CurrentLayoutProvider`: the `layout=`
+name is matched against the layouts the app already holds, and it waits only
+if the layout manager is busy. `LayoutManagerProvider` syncs only while the
+tab is visible. A link opened in a background tab on a fresh profile has no
+sync running, so the organisation's layouts are absent, the match fails and a
+personal "Default" is made and selected. The sync stores the layouts when the
+tab is shown, which is why the second visit works. A foreground tab on
+localhost, even with 150 ms of emulated latency, did not reproduce it.
+
+**Fix.** `serve.FIRST_VISIT_HEAD`, served in the app page: when the named
+layout is not in the app's layout database at load, it waits for the sync to
+store it and loads the page once more (a session flag stops a loop; 15 s cap).
+A browser that already holds the layout is untouched. The database is opened
+only after the app has created it, because opening it first would create it
+empty and the app's upgrade would never make its store.
+
+**Measured** (fresh headless Chrome profile, the link opened in a background
+tab, then shown; Kutum's Lichtblick 1.30.0 served from this tree): without the
+fix the app selected a personal Default; with it the page reloaded once and
+opened chain. The unused personal Default is still created by the first load.
+
+**Guards.** `test_serve_and_fetch.py`: the page carries the script inside its
+head, and the script never opens the database before the app has made it.
 
 ### B-142: every test launch left a parameter file in /tmp, forever `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
 
@@ -790,7 +1059,7 @@ healthy camera as well.
 
 **Fix.** The owner set the policy: restart 2 s after the death, three times,
 then stay down and say so; the mission keeps running and nothing acts on the
-loss alone. `mongla_localization/launch_respawn.py` implements it once,
+loss alone. `mongla_runtime/launch_respawn.py` implements it once,
 because Humble's launch has no restart limit. Every process in `bringup`,
 `vision_pi` and `vision` uses it except the operator display, and
 `test/test_every_launched_process_restarts.py` fails a bare node.

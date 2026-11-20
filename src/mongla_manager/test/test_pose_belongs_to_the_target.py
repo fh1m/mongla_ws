@@ -56,7 +56,7 @@ def test_no_class_asked_keeps_the_old_behaviour():
 
 
 def test_pnp_passes_the_label_through_on_success_and_refusal():
-    from mongla_localization import pnp_node
+    from mongla_vision import pnp_node
     sent = []
     fake = SimpleNamespace(_pub=SimpleNamespace(publish=sent.append), _cam='forward',
                            _K_full=None)
@@ -68,7 +68,7 @@ def test_pnp_passes_the_label_through_on_success_and_refusal():
 
 
 def test_the_fuse_node_never_votes_across_targets():
-    from mongla_localization import pose_fuse_node
+    from mongla_vision import pose_fuse_node
     from mongla_localization.pose_cluster import PoseCluster
     sent = []
     fake = SimpleNamespace(

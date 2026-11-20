@@ -5,7 +5,7 @@ On Jazzy, SIGINT shuts the context down and the executor raises
 KeyboardInterrupt exits 1 with a traceback, and the vision launch then
 reports the process as died and RESTARTS it: on Kutum a normal Ctrl-C left
 the detector process running past 30 s. The shared
-`mongla_localization.spin.spin` handles it; a module that spins an executor
+`mongla_runtime.spin.spin` handles it; a module that spins an executor
 itself must handle it too.
 """
 import pathlib

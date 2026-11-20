@@ -46,7 +46,7 @@ def readers() -> dict[str, bool]:
 
 def test_the_scan_finds_the_consumers_we_know():
     found = readers()
-    for known in ('mongla_localization/mongla_localization/pnp_node.py',
+    for known in ('mongla_vision/mongla_vision/pnp_node.py',
                   'mongla_vision/mongla_vision/lock_inputs.py',
                   'mongla_planner/mongla_planner/dsl_detections.py',
                   'mongla_manager/mongla_manager/vision_state.py'):

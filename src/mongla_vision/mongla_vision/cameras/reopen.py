@@ -26,7 +26,7 @@ lead out there is nothing to try, and the watch waits for it to come back.
 """
 from __future__ import annotations
 
-from mongla_localization.launch_respawn import MAX_RESTARTS
+from mongla_runtime.launch_respawn import MAX_RESTARTS
 
 #: Source kinds that are a physical device and can come back after a reopen.
 DEVICE_KINDS = frozenset({'v4l2_mailbox', 'webcam'})

@@ -39,15 +39,79 @@ class HeadingMixin:
 
         course = self._course = load_course(name)
         unmeasured = course.unmeasured()
+        unset = [n for n in unmeasured if not course.props[n].has_position]
+        guessed = [n for n in unmeasured if n not in unset]
         self.log.info(f'[CRSE ] {course.name} loaded from {course.source} '
                       f'({len(course.props)} props)')
-        if unmeasured:
+        if unset:
             self.log.warning(
-                f'[CRSE ] NOT measured for this pool: {", ".join(unmeasured)}. '
-                f'Those props refuse a dead-reckon and the mission must search '
-                f'for them.')
+                f'[CRSE ] no position for: {", ".join(unset)}. Those props refuse '
+                f'a dead-reckon and the mission must search for them.')
+        if guessed:
+            self.log.warning(
+                f'[CRSE ] NOT taped for this pool: {", ".join(guessed)}. Their '
+                f'positions are a nominal or a placement, and a dead-reckon to '
+                f'one arrives only as near as that guess.')
         self._course_floor_to_flow(course)
+        self._check_course_classes()
         return course
+
+    def model_classes(self, camera: str, *, timeout: float = 0.5):
+        """The classes the running model(s) on `camera` can emit, or None.
+
+        From the detector's latched `model_classes` topic: what the model CAN
+        say, not the allowlist. None when no detector on that camera has said
+        (not launched, or still loading).
+        """
+        import time as _t
+        from rclpy.qos import (QoSDurabilityPolicy, QoSProfile,
+                               QoSReliabilityPolicy)
+        from std_msgs.msg import String
+        node = self.client.node
+        subs = self.__dict__.setdefault('_model_classes', {})
+        if camera not in subs:
+            subs[camera] = None
+            latched = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                                 durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+
+            def _keep(msg, c=camera):
+                subs[c] = {s for s in msg.data.split(',') if s} or None
+            self.__dict__.setdefault('_model_class_subs', []).append(
+                node.create_subscription(String, f'/mongla/vision/{camera}/model_classes',
+                                         _keep, latched))
+        deadline = _t.monotonic() + float(timeout)
+        rclpy.spin_once(node, timeout_sec=0.0)
+        while subs[camera] is None and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        return subs[camera]
+
+    def _check_course_classes(self) -> list:
+        """Warn on every course prop no running model can emit. Returns them.
+
+        A course naming `red_pipe` while the model emits `gate` and `shark`
+        gives a mission that searches, aligns and anchors on a class that
+        never arrives, and reports each as "not seen". Checked when the course
+        loads and again on every model switch.
+        """
+        course = getattr(self, '_course', None)
+        if course is None:
+            return []
+        known = [self.model_classes(c) for c in ('forward', 'downward')]
+        known = [k for k in known if k]
+        if not known:
+            self.log.info('[CRSE ] no detector has published its classes yet: '
+                          'the course classes are not checked against a model')
+            return []
+        emits = set().union(*known)
+        blind = sorted(n for n, p in course.props.items()
+                       if (p.detect_class or n) not in emits)
+        if blind:
+            self.log.warning(
+                f'[CRSE ] {course.name}: no running model emits '
+                + ', '.join(f'{n} ({course.props[n].detect_class or n})' for n in blind)
+                + f'. The models emit {sorted(emits)}. set_model a model that '
+                f'does, or fix detect_class in the course.')
+        return blind
 
     def _course_floor_to_flow(self, course) -> None:
         pool = course.pool_depth()

@@ -240,7 +240,7 @@ ros2 run mongla_planner mongla fire --fire_channel 9           # BOARD channel N
 `fire` drives board channel N — the same N as `SERVOn_ROLE`. There is no
 host-side map; read the role off `connect --watch` first.
 
-A name that is not one of the 23 verbs fails at the node with `Unknown command`, and nothing
+A name that is not one of the 25 verbs fails at the node with `Unknown command`, and nothing
 reaches the board. Every flag of every verb:
 `ros2 run mongla_planner mongla <verb> -h`.
 
@@ -369,4 +369,4 @@ A restarted manager that finds the board armed refuses every verb except
 localization reports no pool position until it is anchored again. The only
 process that does not restart is the operator display. The rule is
 `test/test_every_launched_process_restarts.py`; why each restart is safe is in
-`mongla_localization/launch_respawn.py`.
+`mongla_runtime/launch_respawn.py`.
