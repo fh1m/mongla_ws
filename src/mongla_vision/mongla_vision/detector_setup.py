@@ -229,6 +229,7 @@ class DetectorSetupMixin:
             det.update_allowlist(pending)
         self._apply_assoc_conf(det)
         self._det = det  # atomic publish under CPython GIL — _infer_loop sees it next tick
+        self._publish_model_classes()   # now the names are known
         # Re-apply a per-model conf override that was set before the model landed
         # (startup or an early live set_conf): _apply_model_conf ran against a None
         # detector then, so replay it now the single model exists.
