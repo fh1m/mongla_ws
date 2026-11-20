@@ -4,7 +4,7 @@
 > `python3 tools/ci/gen_reference.py`. A test fails if it has drifted from the source.
 > Every row below was read out of the file named beside it, never written from memory.
 
-**23 verbs.** On the SROT board **11** run as one `SROT_MOVE` primitive, which the board runs *and brakes* itself; the rest are host-side loops or single messages.
+**25 verbs.** On the SROT board **11** run as one `SROT_MOVE` primitive, which the board runs *and brakes* itself; the rest are host-side loops or single messages.
 
 ## 1. Verbs — `mongla_control/commands.py`
 
@@ -15,7 +15,9 @@
 | `calibrate_depth` | — | — | host | Re-zero the barometer at the surface so depth reads 0 before a dive. DISARMED + surface only; verifies the re-zero took. Auto-run by mission_reset; also standalone. |
 | `disarm` | `timeout` | `timeout=20.0` | host | Disarm and confirm it took on the board's HEARTBEAT. Signals abort first, so a running verb stops. |
 | `fire` | `fire_channel` | `fire_channel=0.0` | host | Activate payload BOARD channel N (1..16) -- the same n as SERVO{n}_ROLE, no host-side map. The board decides: a SWITCH channel fires, a PWM/SERVO channel is REFUSED (it is the on-board arm). `mongla_manager connect` lists which is which. |
+| `go_to` | `x_m`, `y_m`, `tolerance_m`, `duration`, `gain` | `tolerance_m=0.5`, `duration=60.0`, `gain=30.0` | host | Drive to pool point (x_m, y_m) on the localization estimate: surge and sway in STABILIZE, depth and heading held by the board. Refused before anything moves unless localization is usable and its sigma is within tolerance_m; stops if it goes bad or motion reads blocked. final_value = metres left. |
 | `head` | — | — | host | Read current heading (degrees) at execution time. Result is in final_value. Also works as a magic value in other CLI commands: --target head resolves to the live heading the moment the command runs. |
+| `locate` | — | — | host | Is localization usable, and where does it put the hull? success = usable; the message says why not, and gives the pool position, sigma, aiding and motion. final_value = the horizontal sigma in metres. Works disarmed. |
 | `mission_reset` | — | — | host | Clear the abort flag, zero the demand, and re-zero depth if disarmed at the surface. First line of every mission. |
 | `motor_test` | `target`, `gain`, `duration` | `target=1.0`, `gain=20.0`, `duration=2.0` | host | Spin ONE thruster (1-8) at `gain` percent for `duration` s. Requires ARMED. The board expires the test and DISARMS within 3 s of the last keep-alive, which is the safety mechanism -- there is no stop command. PROPS OFF OR VEHICLE RESTRAINED. |
 | `move_back` | `duration`, `gain`, `settle` | `gain=80.0`, `settle=0.0` | on the board | Drive backward for `duration` s at `gain` percent thrust. |
@@ -46,8 +48,6 @@
 | `ros2 run mongla_batighor views` | `mongla_batighor.views:main` |
 | `ros2 run mongla_batighor chain` | `mongla_batighor.chain:main` |
 | `ros2 run mongla_localization localization_node` | `mongla_localization.localization_node:main` |
-| `ros2 run mongla_localization pnp_node` | `mongla_localization.pnp_node:main` |
-| `ros2 run mongla_localization pose_fuse_node` | `mongla_localization.pose_fuse_node:main` |
 | `ros2 run mongla_localization course_survey` | `mongla_localization.course_survey:main` |
 | `ros2 run mongla_manager start` | `mongla_manager.auv_manager_node:main` |
 | `ros2 run mongla_manager auv_manager` | `mongla_manager.auv_manager_node:main` |
@@ -61,6 +61,8 @@
 | `ros2 run mongla_vision detector_dual_node` | `mongla_vision.detector_dual_node:main` |
 | `ros2 run mongla_vision tracker_node` | `mongla_vision.tracker_node:main` |
 | `ros2 run mongla_vision lock_node` | `mongla_vision.lock_node:main` |
+| `ros2 run mongla_vision pnp_node` | `mongla_vision.pnp_node:main` |
+| `ros2 run mongla_vision pose_fuse_node` | `mongla_vision.pose_fuse_node:main` |
 | `ros2 run mongla_vision vision_check` | `mongla_vision.utils.check_pipeline:main` |
 | `ros2 run mongla_vision water_check` | `mongla_vision.utils.water_check:main` |
 | `ros2 run mongla_vision vision_thrust_check` | `mongla_vision.utils.check_thrust:main` |
@@ -210,7 +212,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `max_det` | `100` | Post-NMS detection cap (runtime; lower toward ~10 if NMS is the FPS bottleneck on busy frames). |
 | `paused` | `false` | Start the detector paused (resume_detector(camera) per task) |
 | `debug_image_hz` | `10.0` | Annotated image_debug publish rate (raise toward inference FPS for a smoother vision_display picture) |
-| `viewer` | `true` | Open the OpenCV vision_display HUD (viewer:=false = headless) |
+| `viewer` | `` | Open the OpenCV vision_display HUD. Default: only when there is a screen (DISPLAY or WAYLAND_DISPLAY), so a headless Kutum keeps running |
 | `tracking` | `true` | Start tracker_node (Roboflow OC-SORT/ByteTrack + Kalman) |
 | `tracker_type` | `ocsort` | Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack |
 | `flow` | `false` | Start flow_node on the downward camera (velocity, and calc_distance start/stop). |
@@ -240,7 +242,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `max_det` | `100` | Post-NMS detection cap, both detectors (runtime; lower toward ~10 if NMS is the FPS bottleneck on busy frames). |
 | `paused` | `true` | Start both detectors paused (resume_detector per task) |
 | `debug_image_hz` | `10.0` | Annotated image_debug publish rate (the browser-stream smoothness knob; raise toward inference FPS for a web viewer) |
-| `viewer` | `true` |  |
+| `viewer` | `` |  |
 | `tracking` | `true` |  |
 | `tracker_type` | `ocsort` | Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack |
 | `fwd_topic` | `` | Subscribe this ROS image topic instead of a webcam (a replayed bag, for one). |
@@ -314,6 +316,7 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked *not shipped* 
 | `demo_move_see` | minimal open-loop + vision demo (two-verb). | — | `move_back`, `move_forward`, `set_depth`, `yaw_left` |
 | `demo_pursue` | torpedo-style approach using align() then move(). | — | `move_back`, `move_forward`, `set_depth`, `stop`, `yaw_right` |
 | `demo_square` | the classic shakedown mission. | — | `move_forward`, `pause`, `set_depth`, `yaw_right` |
+| `localization_check` | is localization working, stage by stage, in water. | — | `pause`, `set_depth` |
 | `out_and_back` | dive, swim straight, turn clockwise, swim back. Control only. | — | `move_forward`, `set_depth`, `yaw_right` |
 | `pool_day_practice` | Pool day practice run: Gate → Slalom → Torpedo → Bin. | `bin_fire_blood`, `gate_sharks`, `slalom_red_pipe` (not shipped), `torpedo_blood_hole` (not shipped) | `move_forward`, `pause`, `set_depth`, `stop`, `turn` |
 | `pool_day_torpedo` | Pool day torpedo practice: align → approach → fine-lock → fire. | `torpedo_blood_hole` (not shipped) | `move_forward`, `set_depth`, `stop`, `turn` |
@@ -366,26 +369,6 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `demand_aid` | `True` |
 | `retrodict` | `False` |
 | `retro_horizon_s` | `2.0` |
-
-**`mongla_localization/pnp_node.py`** — 4 parameters
-
-| parameter | default |
-|---|---|
-| `camera` | `'forward'` |
-| `medium` | `'water'` |
-| `max_reproj_px` | `MAX_REPROJ_PX` |
-| `variant` | `''` |
-
-**`mongla_localization/pose_fuse_node.py`** — 6 parameters
-
-| parameter | default |
-|---|---|
-| `camera` | `'forward'` |
-| `window_s` | `WINDOW_S` |
-| `tol_deg` | `CLUSTER_TOL_DEG` |
-| `min_poses` | `MIN_POSES` |
-| `max_ambiguity` | `0.9` |
-| `max_reproj_px` | `10.0` |
 
 **`mongla_manager/auv_manager_node.py`** — 16 parameters
 
@@ -477,9 +460,9 @@ manager's `vision.*` gains are declared from a table and are listed in
 |---|---|
 | `camera` | `'downward'` |
 | `direct_feed` | `False` |
-| `pool_depth_m` | `float('nan'` |
-| `pool_depth_min_m` | `float('nan'` |
-| `pool_depth_max_m` | `float('nan'` |
+| `pool_depth_m` | `nan` |
+| `pool_depth_min_m` | `nan` |
+| `pool_depth_max_m` | `nan` |
 | `medium` | `'water'` |
 | `focal_air_px` | `_F_AIR_PX` |
 | `focal_water_px` | `_F_WATER_PX` |
@@ -531,7 +514,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `loop_closure` | `False` |
 | `place_period_s` | `_lc.PLACE_PERIOD_S` |
 | `place_travel_m` | `_lc.PLACE_TRAVEL_M` |
-| `pool_depth_m` | `float('nan'` |
+| `pool_depth_m` | `nan` |
 | `act_conf` | `0.45` |
 | `publish_hz` | `0.0` |
 | `anchor_hz` | `4.5` |
@@ -539,6 +522,26 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `zero_authority_s` | `ZERO_AUTHORITY_S` |
 | `medium` | `'water'` |
 | `direct_feed` | `False` |
+
+**`mongla_vision/pnp_node.py`** — 4 parameters
+
+| parameter | default |
+|---|---|
+| `camera` | `'forward'` |
+| `medium` | `'water'` |
+| `max_reproj_px` | `MAX_REPROJ_PX` |
+| `variant` | `''` |
+
+**`mongla_vision/pose_fuse_node.py`** — 6 parameters
+
+| parameter | default |
+|---|---|
+| `camera` | `'forward'` |
+| `window_s` | `WINDOW_S` |
+| `tol_deg` | `CLUSTER_TOL_DEG` |
+| `min_poses` | `MIN_POSES` |
+| `max_ambiguity` | `0.9` |
+| `max_reproj_px` | `10.0` |
 
 **`mongla_vision/tracker_node.py`** — 14 parameters
 
@@ -550,7 +553,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `min_hits` | `1` |
 | `iou_threshold` | `0.2` |
 | `track_activation_threshold` | `0.40` |
-| `high_conf_det_threshold` | `0.6` |
+| `high_conf_det_threshold` | `nan` |
 | `detector_conf` | `0.0` |
 | `classes` | `''` |
 | `enable_kalman` | `True` |

@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from collections import deque
 
+import math
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import (QoSDurabilityPolicy, QoSProfile,
@@ -52,23 +53,34 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32, String
 
-from mongla_interfaces.msg import FloorHeading, MonglaState
+from mongla_interfaces.msg import FloorHeading, LocalizationState, MonglaState
 
 from mongla_localization.command_velocity import (CommandVelocityModel,
                                                   MotionCheck)
 from mongla_localization import frames
-from mongla_localization.inekf import RIEKF
+from mongla_localization.inekf import FLOW_SCALE_SIGMA, RIEKF
 from mongla_localization.retro import Retrodictor
 
 from .localization_inputs import STILL_WINDOW, LocalizationInputsMixin
-from .localization_publish import LocalizationPublishMixin
+from .localization_publish import PUBLISH_PERIOD_S, LocalizationPublishMixin
+
+
+# The accelerometer bias prior, 1 sigma, m/s^2: wide enough for the 0.167
+# measured on this board. At 0.01 the filter could not learn it, and a still
+# hull walked 15.5 cm in 90 s; at 0.2, 0.94 cm (measured-bars 99).
+ACCEL_BIAS_PRIOR = 0.2
+# FLOW_SCALE_SIGMA (inekf.py) floors the horizontal sigma by distance since
+# the last fix. Without it a filter one fix in held 0.15 m across 15 m of
+# 5 %-scale flow and refused the next correct fix 3 times in 5; with it, 0 in
+# 15 (measured-bars 99).
 
 
 class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
     def __init__(self, **kw):
         super().__init__('mongla_localization', **kw)
 
-        self._filter = RIEKF()
+        self._filter = RIEKF(P0_accel_bias=ACCEL_BIAS_PRIOR,
+                             odometry_scale_sigma=FLOW_SCALE_SIGMA)
         self._last_imu_t: float | None = None
         self._last_accel = None          # body specific force, latest IMU
         self._imu_gap_warned = False
@@ -77,7 +89,7 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
         # of zero on one input is invisible in the pose itself.
         self._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0,
                    'flow_refused': 0, 'depth_refused': 0, 'yaw_refused': 0,
-                   'fix': 0, 'zupt': 0, 'grid': 0, 'grid_refused': 0,
+                   'fix': 0, 'fix_refused': 0, 'zupt': 0, 'grid': 0, 'grid_refused': 0,
                    'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0,
                    # World-frame updates the observability gate refused. A
                    # non-zero count is not an error -- it is the gate doing its
@@ -102,6 +114,9 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
         # The latest RAW board attitude, the partner the anchor is paired with.
         self._board_R = None
         self._last_input_t = 0.0
+        # Host-monotonic arrival of the last FUSED sample per input, for the
+        # state message's ages: link silence, so host time, not board time.
+        self._seen: dict[str, float] = {}
         self._aided_at_last_diag = -1
 
         cam = str(self.declare_parameter('flow_camera', 'downward').value)
@@ -156,6 +171,7 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
                 horizon_s=float(self.declare_parameter('retro_horizon_s', 2.0).value))
         self._last_demand_t = None
         self._centred_since = None       # when the demand last became centred
+        self._thrust_seen = False        # any non-zero demand since start
         self._motion = MotionCheck()
         self._motion_state = None
 
@@ -228,25 +244,32 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
         # looking healthy, which is exactly why this has to be said out loud.
         self._pub_aiding = self.create_publisher(
             String, '/mongla/localization/aiding', latched)
-        self.create_timer(0.1, self._publish)
+        # Everything above in one message, on the same tick as the pose.
+        self._pub_state = self.create_publisher(
+            LocalizationState, '/mongla/localization/state', 10)
+        self.create_timer(PUBLISH_PERIOD_S, self._publish)
         self.create_timer(5.0, self._diagnose)
         self.get_logger().info(
             f'[LOCAL] invariant filter up: imu=/mongla/imu '
-            f'flow=/mongla/vision/{cam}/velocity use_yaw={self._use_yaw}')
+            f'flow=/mongla/vision/{cam}/velocity use_yaw={self._use_yaw} '
+            f'accel_bias_prior={math.sqrt(self._filter.P[12, 12]):.3f} m/s^2')
+
 
 def main(args=None):
-    from mongla_localization.orphan import die_with_parent
+    from mongla_runtime.orphan import die_with_parent
     die_with_parent()        # an orphan holds devices and duplicates topics
     rclpy.init(args=args)
     node = LocalizationNode()
-    from mongla_localization.params_file import refuse_unknown
+    from mongla_runtime.params_file import refuse_unknown
     refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
-        from mongla_localization.spin import spin
+        from mongla_runtime.spin import spin
         spin(node)
     except KeyboardInterrupt:
         pass
     finally:
+        from mongla_runtime.spin import deaf_to_ctrl_c
+        deaf_to_ctrl_c()      # a second Ctrl-C must not interrupt the teardown
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

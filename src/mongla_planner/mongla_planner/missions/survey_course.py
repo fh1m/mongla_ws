@@ -11,7 +11,8 @@ It trusts the hull, so the hull must be trustworthy. Run it from a known
 station, right after `anchor_on`, before the pose has had time to drift. A
 surveyed (`measured: true`) prop is only ever checked, never overwritten, so
 a run from a bad pose cannot rewrite a good survey -- it logs a disagreement
-instead.
+instead. Its own placements are written unmeasured, so a later run from a
+better pose refines them; only the tape makes a prop measured.
 
 It never translates: arm, one depth, then turns and alignments in place.
 Fill the four tunables, then:
@@ -42,7 +43,13 @@ def run(mongla, log):
     mongla.arm()
     mongla.set_depth(DEPTH_M, timeout=30.0)
     try:
-        mongla.anchor_on(ANCHOR_PROP)
+        anchor = mongla.anchor_on(ANCHOR_PROP)
+        if not anchor.ok:
+            # Every placement would be refused (bearings relative to boot),
+            # so the route would be flown for nothing. Say why and come up.
+            log(f'survey_course: heading not anchored on {ANCHOR_PROP}: '
+                f'{anchor.reason} -- nothing placed')
+            return
         placed = []
         for name in SURVEY_PROPS:
             cls = course.prop(name).detect_class or name

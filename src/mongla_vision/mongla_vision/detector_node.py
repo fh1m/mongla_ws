@@ -314,6 +314,8 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         # the allowlist beside it.
         self._pub_vinfo = self.create_publisher(
             VisionInfo, f'{ns_out}/vision_info', qos.LATCHED)
+        self._pub_model_classes = self.create_publisher(
+            String, f'{ns_out}/model_classes', qos.LATCHED)
         self._model_epoch = 0
         self._publish_dbg = bool(self.get_parameter('publish_debug_image').value)
         if self._publish_dbg:
@@ -397,6 +399,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         # name and a baseline to compare against, rather than silence
         # until the first switch.
         self._publish_vision_info()
+        self._publish_model_classes()
 
     def _on_infer_failure(self, exc) -> None:
         """A node that cannot do its job must stop claiming to be up.
@@ -647,18 +650,20 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         return detections
 
 def main():
-    from mongla_localization.orphan import die_with_parent
+    from mongla_runtime.orphan import die_with_parent
     die_with_parent()        # holds the accelerator
     rclpy.init()
     node = DetectorNode()
-    from mongla_localization.params_file import refuse_unknown
+    from mongla_runtime.params_file import refuse_unknown
     refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
-        from mongla_localization.spin import spin
+        from mongla_runtime.spin import spin
         spin(node)
     except KeyboardInterrupt:
         pass
     finally:
+        from mongla_runtime.spin import deaf_to_ctrl_c
+        deaf_to_ctrl_c()      # a second Ctrl-C must not interrupt the teardown
         node.destroy_node()
         try:
             rclpy.shutdown()

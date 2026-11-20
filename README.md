@@ -10,7 +10,7 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-4%20742%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![water](https://img.shields.io/badge/water-RoboSub%202025%20%C2%B7%202026%20%7C%20this%20platform%3A%20not%20yet-orange)](docs/evidence/lineage.md) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-5%20391%20passing%2C%204%20failing-red)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![water](https://img.shields.io/badge/water-RoboSub%202025%20%C2%B7%202026%20%7C%20this%20platform%3A%20not%20yet-orange)](docs/evidence/lineage.md) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **Lineage.** The stack this repository began as competed at **RoboSub 2026** (8th of 58,
 6 234 points) on the programme's Pixhawk vehicle, a year after the author's vision stack did
@@ -61,7 +61,7 @@ success while doing nothing.
 > automatic mode every move uses. If you are here to judge whether the software works underwater, the honest answer is
 > that nobody knows yet, and this page will not pretend otherwise.
 
-That is also why there is a [ledger of retractions](#the-ledger): 137 measurement entries, of
+That is also why there is a [ledger of retractions](#the-ledger): 141 measurement entries, of
 which 18 say in their own title that they took an earlier result back, and 10 more measured an idea
 and concluded it should stay switched off.
 
@@ -75,7 +75,7 @@ Take yours.
 | If you are… | Start here | Then |
 |---|---|---|
 | **judging this project** (a professor, a competition judge, a reviewer) | [What is true today](#what-is-true-today) · [Capability map](https://fh1m.github.io/mongla_ws/capability-map.html) — every capability with its evidence and an honest state | [The ledger](#the-ledger), including everything we got wrong |
-| **thinking of contributing** | [Run it](#run-it) · [The seven packages](#the-seven-packages) | [Adding a verb](#adding-a-verb-is-two-edits) — it is two edits, and `.claude/context/` has a page per package |
+| **thinking of contributing** | [Run it](#run-it) · [The eight packages](#the-eight-packages) | [Adding a verb](#adding-a-verb-is-two-edits) — it is two edits, and `.claude/context/` has a page per package |
 | **an embedded / firmware engineer** | [What crosses the cable](#what-crosses-the-cable-44-bytes) · [The four repositories](#four-repositories-one-wire) | [`fc/srot_protocol.py`](src/mongla_control/mongla_control/fc/srot_protocol.py) — our single copy of the wire contract, and the [asks we have sent upstream](.claude/context/upstream/README.md) |
 | **learning robotics** (you have never built one of these) | [The fundamentals](#the-fundamentals) — control loops, PID, state estimation, optical flow, detection, underwater optics, from first principles | the **[interactive explainers](https://fh1m.github.io/mongla_ws/#pid)** on the site, where you can turn the gains yourself and watch it fail |
 | **here for the story** | [Three acts](#three-acts) | [Why keep going](#why-keep-going) |
@@ -88,7 +88,7 @@ Most of it runs without the vehicle. The vision pipeline replays real footage or
 bag, the missions run against the real DSL in the test suite, and only the verbs need the board.
 
 ```bash
-# 1. build (mirrors ~/models and ~/missions in, then builds all seven packages)
+# 1. build (mirrors ~/models and ~/missions in, then builds all eight packages)
 ./build_mongla.sh && source install/setup.bash
 
 # 2. no hardware: the full vision pipeline on recorded footage
@@ -98,7 +98,7 @@ ros2 launch mongla_vision video.launch.py fwd_video:=/path/to/gate.mp4
 ros2 launch mongla_manager bringup.launch.py vision:=true
 ros2 run mongla_planner mongla arm
 ros2 run mongla_planner mongla move_forward --duration 3 --gain 40
-ros2 run mongla_planner mongla --help          # all 23 verbs, generated from one table
+ros2 run mongla_planner mongla --help          # all 25 verbs, generated from one table
 ```
 
 With the board attached, these two answer the only two questions that matter before you put
@@ -116,10 +116,10 @@ The first **reports**. The second **grades and gates** — it is the one that re
 
 ```bash
 git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
-./build_mongla.sh                      # colcon build, seven packages
+./build_mongla.sh                      # colcon build, eight packages
 source install/setup.bash
 
-# the tests (6 suites, 4 749 of them, ~5 minutes)
+# the tests (8 suites, 5 405 of them, ~5 minutes)
 python3 -m pytest -q                   # all six; a full run rewrites docs/stats.json
 ```
 </details>
@@ -209,7 +209,7 @@ thinking on the Pi.**
 flowchart TB
     subgraph PI["Raspberry Pi 5 + Hailo-8 · the thinking half"]
         direction TB
-        CLI["mongla CLI<br/>23 verbs"] --> ACT
+        CLI["mongla CLI<br/>25 verbs"] --> ACT
         MIS["mission scripts<br/>Python DSL"] --> ACT
         ACT["/mongla/move<br/>one ROS action"] --> MGR
         MGR["auv_manager_node<br/>the ONLY node that talks to the board"]
@@ -384,22 +384,28 @@ output in between — which is why the rate changes behaviour even when the gain
 
 **You would expect** one good sensor to answer that. There is no such sensor underwater: the IMU
 is fast and drifts, depth is exact but in one axis, the camera sees the floor move, and the
-compass inside an aluminium hull is a random number generator.
+compass inside an aluminium hull is a random number generator. Radio does not reach through
+water, and we fly no DVL.
 
 ```mermaid
 flowchart LR
     IMU["IMU · board<br/>fast, drifts"] -->|predict| EKF
     DEP["depth<br/>exact, 1 axis"] -->|correct| EKF
     FLOW["floor camera<br/>velocity"] -->|correct| EKF
-    HDG["heading priors"] -->|correct| EKF
-    EKF["right-invariant EKF<br/>late data replayed<br/>at its own instant"] --> ODOM["/mongla/odom"]
+    ZUPT["a second of stillness<br/>velocity is zero"] -->|correct| EKF
+    HDG["heading: a prop's bearing,<br/>lane lines, floor tiles"] -->|correct| EKF
+    FIX["a prop whose place<br/>was measured"] -->|"correct, gated"| EKF
+    EKF["right-invariant EKF<br/>15 numbers"] --> STATE["/mongla/localization/state<br/>usable, or why not"]
+    EKF --> ODOM["/mongla/odom"]
+    STATE --> USE["go_to · the vision lock<br/>motion() · localization_check"]
 ```
 
 So a filter blends them: predict forward on the IMU, then correct with whatever else arrived.
-Two details carry it. It is **right-invariant** — the maths lives on the rotation group, so
-there is no Euler-angle singularity near vertical. And with `retrodict:=true` a measurement
-that arrives late is **replayed at the instant it describes**: a detection that took 18 ms is
-evidence about where the vehicle *was*. It is a switch, off by default, until a water run
+Two details carry it. It is **right-invariant**: the maths lives on the group of rigid
+motions, so its error behaves the same whichever way the hull points, and there is no
+Euler-angle singularity near vertical. And with `retrodict:=true` a measurement that arrives
+late is **replayed at the instant it describes**: a detection that took 18 ms is evidence
+about where the vehicle *was*. That one is a switch, off by default, until a water run
 measures what it buys.
 
 <details>
@@ -408,10 +414,70 @@ measures what it buys.
 Predict `x̂⁻ = f(x̂, u)`, `P⁻ = F P Fᵀ + Q`; correct with gain `K = P⁻Hᵀ(HP⁻Hᵀ + R)⁻¹`. The
 invariant form defines the error on the group itself (`η = X̂·X⁻¹`), which makes the error
 dynamics independent of the state for this class of system — the property Barrau & Bonnabel
-prove, and the reason it converges where a textbook EKF can diverge.
+prove, and the reason it converges where a textbook EKF can diverge. Each correction first
+passes a chi-square gate: the squared miss over the doubt the two carry together, refused past
+9.21 for two axes.
 </details>
 
-**See it yourself:** `ros2 topic echo /mongla/odom` with `localization:=true` · the package page,
+**What it was, and what it is now.** Until 2026-11-20 the package was a filter with nothing
+asking it anything. Node plumbing that vision and the manager needed lived inside it, two
+vision nodes and two image readers lived inside it, and only one mission called it; nothing
+could ask whether it was working. Now the plumbing is its own package (`mongla_runtime`), the
+image code is in `mongla_vision`, localization imports no OpenCV, and it is reached the way
+vision is: a state anyone can read, verbs that act on it, and a mission that checks it.
+
+| Way in | What it does |
+|---|---|
+| `/mongla/localization/state` | 10 Hz, whether or not anything feeds it: `usable`, and the reason when not, in the order an operator fixes them (no IMU, IMU silent, heading not anchored, position unaided), plus position, heading, sigma, the age of every input |
+| `mongla locate` | that state on one line; works disarmed |
+| `go_to(x, y)` · `go_to_prop(prop)` | drive to a pool point, the board holding depth and heading; refused before any thrust unless the state is usable and the sigma within tolerance |
+| `use_course` · `anchor_on` · `fix_from_prop` · `place_prop` | where each prop is, which way is north, a position from a prop, a prop from a position |
+| the vision lock · `motion()` | where a lost target went, from how the hull moved; moving, or stuck |
+| mission `localization_check` | the water test, in six stages, ending on a prop fix the filter did not make |
+| Batighor | the localization view: usable and reason beside aiding and motion |
+
+**The dangerous half is the confidence.** A filter carries a guess and how sure it is of the
+guess. Wrong and unsure, it takes the next correction. Wrong and *sure*, it refuses it: the
+gate that keeps a mislabelled prop out cannot tell a correct-but-surprising fix from a bad one.
+Every row below was found against something whose answer was known, then fixed:
+
+| What lied | Measured | Now |
+|---|---|---|
+| the accelerometer bias, assumed 17x smaller than this board's | a still hull walked **15.5 cm in 90 s** of the real bench recording | **0.94 cm** |
+| flow's sigma, which grows like a square root while a scale error grows with distance | one fix in, the next correct fix **refused 3 times in 5** on a pool route with known truth | **0 in 15** |
+| a refused fix, which only incremented a counter | a run could end 0.75 m off and say nothing | refused fixes are logged with the miss, and a streak warns |
+| "aided" on a cold filter | 20 s of "aided" while the estimate ran 9 m | usable needs flow or a zero-velocity update in the last 2 s |
+| stillness read from the accelerometer's *magnitude* | a sideways push of 0.4 m/s² changes it by 0.008, so a shoved hull read as still and its speed was zeroed | stillness is per axis, gravity removed; on the real recording it costs nothing (232 against 232 updates) |
+| a zero quaternion from the board | fused as a level hull at 0.5° of certainty | no attitude, and the sample is skipped |
+
+And the one that is not a lie: told "you are still" for a second whenever the thrusters rest,
+the filter holds centimetres. Without it the same recording ran to **1665 m in 140 s**.
+
+**How far one fix carries.** Flow's scale error is 3.6 % of distance, so the doubt grows with
+every metre. From a 0.15 m fix it passes `go_to`'s 0.5 m tolerance after about **13 m** (7 m at
+0.3 m), and `go_to` stops there rather than claim an arrival it cannot see. **Plan a route with
+a prop fix every ten metres or so**; `go_to` warns before it starts a longer leg.
+
+**How it was checked.** Every file read line by line, and every line executed: 99 % of the
+package runs under its tests, the rest is the node's `main()`, which runs every time the stack
+starts. The real node is built through ROS in a test, so a renamed topic cannot pass. Six
+defects were found and fixed this way (`BUGS.md` B-133 and B-135 to B-139).
+
+**What we checked it against.** Top teams carry a DVL; no DVL-free pool vehicle publishes
+better than about 2-4 % of distance; visual-inertial odometry fails on bare pool floors; the
+open-source OpenMantaClaus, a low-cost competition vehicle with no DVL, dead-reckons on its
+thruster commands and calls that model its largest source of drift. So the design stays, and
+each ranked candidate was tested, shipped or discarded
+([the audit](.claude/context/packages/mongla_localization/audit.md#every-candidate-and-what-happened-to-it)).
+
+**State:** BUILT, NEVER FLOWN. What only water can settle is written down with its bar before
+the run: flow scale against a taped target (2 % mean), the six stages of `localization_check`,
+`go_to`'s speed ramp, the camera-to-IMU lag (needs the board on Kutum), and a floor-depth map
+for a sloping pool.
+
+**See it yourself:** `ros2 topic echo /mongla/localization/state` with `localization:=true` ·
+`ros2 run mongla_planner mongla locate` · [the chapter on the site](https://fh1m.github.io/mongla_ws/#where) ·
+`python3 tools/studies/localization_candidates.py` (truth, before water) · the package page,
 [`mongla_localization`](.claude/context/packages/mongla_localization/README.md).
 
 ### 3. The DVL we do not have
@@ -594,19 +660,20 @@ rather than a desk, so they are written to be reused:
 
 ---
 
-## The seven packages
+## The eight packages
 
 | package | what it owns | Python LOC | test files |
 |---|---|---:|---:|
-| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 561 | 125 |
-| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 645 | 65 |
-| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 706 | 42 |
-| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 8 021 | 67 |
-| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 5 077 | 31 |
+| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 26 727 | 152 |
+| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 11 038 | 68 |
+| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 8 260 | 49 |
+| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 8 729 | 72 |
+| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors, heading anchor | 3 921 | 32 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
+| [`mongla_runtime`](.claude/context/packages/mongla_runtime/README.md) | how every node runs: executor, clean Ctrl-C, `bringup.yaml`, restarts, realtime | 600 | 5 |
 | [`mongla_batighor`](.claude/context/packages/mongla_batighor/README.md) | Batighor, the operator center: Lichtblick served from Kutum, on our layouts | 267 | 2 |
 
-**330 test files against the source.** The ROS surface really is that small: one action
+**373 test files against the source.** The ROS surface really is that small: one action
 `/mongla/move` carrying one verb per goal, and one topic `/mongla/state` publishing on change,
 where an absent value is `NaN` and never `0.0`.
 
@@ -623,7 +690,7 @@ where an absent value is `NaN` and never `0.0`.
 ```
 
 The CLI, the action server and the Python client all read that one table, so `--help`, argument
-parsing and dispatch follow automatically. **23 verbs** today.
+parsing and dispatch follow automatically. **25 verbs** today.
 
 **Warning: There is no verb the board cannot run.** A host heading lock and distance-closed moves
 existed for the old backend; the board holds heading itself
@@ -795,10 +862,10 @@ the kind of thing that goes stale — `test_doc_drift.py` fails any doc that sta
 > it's wrong."* — Richard Feynman
 
 [`measured-bars.md`](.claude/context/measured-bars.md) is the file this project is really built
-on: **137 entries, 1,112 rows of numbers**, each with the method, the conditions and the bar it had
+on: **141 entries, 1,153 rows of numbers**, each with the method, the conditions and the bar it had
 to clear. Tests read it. A constant that drifts from it fails CI.
 
-**18 of those 137 entries say in their own title that they took an earlier result back.** 10
+**18 of those 141 entries say in their own title that they took an earlier result back.** 10
 more measured an idea and concluded it should stay switched off. The retractions live in the
 same file as the results that stand, in the middle rather than in an appendix:
 
@@ -813,14 +880,16 @@ is how a team finds out at the venue.
 
 <!-- stats:table:begin -->
 ```
-mongla_control       1 201 passed        the verbs, the wire, the refusals
-mongla_vision        1 544 passed        detection, the lock ladder, optics, flow
-mongla_manager         802 passed        the node, bring-up gates, the docs contract
-mongla_planner         447 passed        the CLI, the DSL, the missions
-mongla_localization    413 passed        the filter, retrodiction, course priors
-test/ (repo-wide)      335 passed        nothing unreachable, the retired stack stays retired
+mongla_control       1 272 passed        the verbs, the wire, the refusals
+mongla_vision        1 645 passed        detection, the lock ladder, optics, flow
+mongla_manager         895 passed        the node, bring-up gates, the docs contract
+mongla_planner         490 passed        the CLI, the DSL, the missions
+mongla_localization    402 passed        the filter, retrodiction, course priors
+mongla_runtime          33 passed        how every node runs, restarts and stops
+mongla_batighor        162 passed        the operator center
+test/ (repo-wide)      492 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
-                     4 742 passed, 0 failed
+                     5 391 passed, 4 failed
 ```
 <!-- stats:table:end -->
 
@@ -840,7 +909,7 @@ Some of those tests are unusual enough to be worth naming:
 ```mermaid
 flowchart LR
     DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file<br/>+ the doc guards on a doc edit"]
-    HOOK --> UNIT["6 suites · 4 742 tests"]
+    HOOK --> UNIT["8 suites · 5 391 tests"]
     UNIT --> GUARD["the drift guards"]
     GUARD --> G1["test_doc_drift<br/>docs vs code"]
     GUARD --> G2["test_srot_protocol_drift<br/>our wire copy vs THEIR headers"]
@@ -926,7 +995,7 @@ constant the code no longer holds. The [command reference](.claude/context/refer
 is generated from the code, and the test counts on this page and the site are rewritten by
 every full test run ([`tools/ci/published_counts.py`](tools/ci/published_counts.py)).
 
-Read them in order as **[the Mongla book](.claude/context/README.md)** — 67 chapters in nine parts,
+Read them in order as **[the Mongla book](.claude/context/README.md)** — 69 chapters in nine parts,
 from why the vehicle exists to every number it has measured. Or dip in:
 
 **Start here**
@@ -938,7 +1007,7 @@ from why the vehicle exists to every number it has measured. Or dip in:
 | [`ROADMAP.md`](.claude/context/ROADMAP.md) | **the one status file** — where we are, what is left, what is blocked |
 | [`measured-bars.md`](.claude/context/measured-bars.md) | every shipped constant with the measurement behind it, retractions included |
 | [`BUGS.md`](.claude/context/BUGS.md) | the single defect register |
-| [`reference/commands.md`](.claude/context/reference/commands.md) | **generated from the code**: all 23 verbs with their fields and defaults, which ones run on the board, every executable, launch argument, node parameter and wire constant |
+| [`reference/commands.md`](.claude/context/reference/commands.md) | **generated from the code**: all 25 verbs with their fields and defaults, which ones run on the board, every executable, launch argument, node parameter and wire constant |
 
 <details>
 <summary>**The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 15 documents</summary>
@@ -971,7 +1040,7 @@ from why the vehicle exists to every number it has measured. Or dip in:
 <details>
 <summary>**Missions** — [`.claude/context/missions/`](.claude/context/missions/) · 7 documents</summary>
 
-`command-reference` (all 23 verbs) · `client-and-dsl-api` · `mission-cookbook` · `detected-paradigm` ·
+`command-reference` (all 25 verbs) · `client-and-dsl-api` · `mission-cookbook` · `detected-paradigm` ·
 `precision-alignment` · `vision-results` · `verbs-srot-unlocks`
 
 </details>

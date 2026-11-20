@@ -37,7 +37,7 @@ def test_the_child_is_terminated_when_its_parent_dies(tmp_path):
         child = subprocess.Popen([sys.executable, '-c', {textwrap.dedent(f"""
             import sys, time, os
             sys.path.insert(0, {SRC!r})
-            from mongla_localization.orphan import die_with_parent
+            from mongla_runtime.orphan import die_with_parent
             die_with_parent()
             open({str(pidfile)!r}, 'w').write(str(os.getpid()))
             time.sleep(60)
@@ -71,7 +71,7 @@ def test_every_long_running_node_asks_for_it():
                  'mongla_vision.tracker_node', 'mongla_vision.flow.flow_node',
                  'mongla_vision.utils.display_node',
                  'mongla_localization.localization_node',
-                 'mongla_localization.pnp_node',
-                 'mongla_localization.pose_fuse_node'):
+                 'mongla_vision.pnp_node',
+                 'mongla_vision.pose_fuse_node'):
         mod = importlib.import_module(name)
         assert 'die_with_parent()' in code_of(mod.main), name

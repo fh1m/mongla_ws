@@ -73,6 +73,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `hailo_service_drill.py` | What happens to a vision process when the HailoRT service dies. |
 | `hailo_share.py` | What XFeat costs the detectors when the three share one Hailo-8. |
 | `hailo_stages.py` | Where does a Hailo detector call go? Per stage, one or two detectors at once. |
+| `hef_map.py` | mAP50 of a compiled HEF on a labelled YOLO split, run on the real Hailo. |
 | `hef_vs_cpu.py` | Does XFeat still MATCH after INT8? The gate that makes the HEF a result. |
 | `hull_stations.py` | Read EXACT thruster stations out of an Onshape GLB export. |
 | `imu_rest_stats.py` | What the board's IMU says when the vehicle is NOT moving. |
@@ -180,6 +181,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `continuity_from_bag.py` | Run `continuity.analyse` on a RECORDED session -- the measurement it waits for. |
 | `continuity_from_video.py` | Gap distribution on REAL UNDERWATER FOOTAGE, with a real competition model. |
 | `cross_model_gate.py` | Two models, one class: does AGREEMENT kill the false positives? The situation nobody acted on. |
+| `depth_scale_check.py` | Does a monocular depth network on the Hailo-8 know the floor's SCALE? Flow refuses without the height above the floor (V-9), and a network that reads height off one image would remove that input ... |
 | `detection_continuity.py` | How often do we lose the target in real water, and for how long? The question nobody has answered. |
 | `detector_viewpoint_check.py` | Score a detector on a viewpoint it was not trained for -- honestly. |
 | `domain_gap.py` | The same model on STILLS it was trained from, and on VIDEO of the same run. |
@@ -189,6 +191,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `gap_distribution.py` | The detection-gap distribution, measured at NATIVE FRAME RATE. |
 | `gap_recovery_potential.py` | Is there anything to recover inside a gap? Measured, before building on it. |
 | `held_rung_score.py` | Does the HELD rung put the lock where the target is, and only there? HELD lets a box under the acting bar keep a lock the bar acquired, when it lands near where the lock already is ... |
+| `localization_candidates.py` | Score the localization candidates against exact truth, before any water. |
 | `loop_closure_truth.py` | Does a loop closure fire at a REVISIT, and nowhere else? The gates in `anchor/loop_closure.py` are unit-tested against synthetic poses. |
 | `model_select.py` | Rank candidate models by what deployment actually needs. |
 | `negative_clip_check.py` | What does the model say when the prop is NOT there? The gap this closes. |
@@ -198,6 +201,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `recall_matrix.py` | REAL RECALL -- against ground truth labels, per water regime. |
 | `return_check.py` | A2 -- RETURN: 2,882 raw frames + 302 labelled. |
 | `rung_independence.py` | Do the ladder's two carried rungs fail TOGETHER? Redundancy of two, or of one? The question nobody asked. |
+| `stark_rung.py` | Would STARK-Lightning on the Hailo-8 carry a box through a detection gap longer than the follower does? The follower (`tracking/follower.py`) carries the last box on sparse LK and refuses when its ... |
 | `tau_from_scale.py` | Rank the four scale sources against a KNOWN-CONSTANT-SPEED approach. |
 | `tracker_ab.py` | Which tracker closes more gaps on REAL competition footage? The question this settles, with numbers rather than an argument: the coast layer exists to bridge detection gaps, and nobody has ever ... |
 | `truth/` | Hand-labelled truth for the studies: when a target is really in view, labelled by eye from the frames and independently of any model, so a tracker or detector can be scored rather than compared with ... |

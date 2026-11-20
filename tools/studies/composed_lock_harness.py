@@ -179,7 +179,7 @@ def main() -> int:
 
             # The executor the vehicle's composed node would pick
             # (MONGLA_EXECUTOR), so both can be compared on one clip.
-            from mongla_localization.spin import make_executor
+            from mongla_runtime.spin import make_executor
             ex, ex_name = make_executor(classic=MultiThreadedExecutor)
             for n in nodes:
                 ex.add_node(n)

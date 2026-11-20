@@ -8,7 +8,7 @@ import pytest
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument
 
-from mongla_localization import launch_defaults as LD
+from mongla_runtime import launch_defaults as LD
 
 
 def _args():
@@ -157,7 +157,7 @@ def test_a_nodes_shape_ros_would_misread_stops_the_launch(settings, body, match)
 def test_node_actions_hand_the_section_to_ros_in_its_own_form(settings, monkeypatch):
     import yaml
     from launch_ros.actions import SetParametersFromFile
-    from mongla_localization.params_file import APPLIED_ENV
+    from mongla_runtime.params_file import APPLIED_ENV
     settings('nodes:\n  mongla_manager:\n    vision.kp_yaw: 80.0\n')
     acts = LD.node_actions()
     assert any(isinstance(a, SetParametersFromFile) for a in acts)
@@ -182,7 +182,7 @@ def _node_with(tmp_path, monkeypatch, section, *, inline=None):
     import yaml
     from rclpy.node import Node
     from rclpy.parameter import Parameter
-    from mongla_localization.params_file import APPLIED_ENV
+    from mongla_runtime.params_file import APPLIED_ENV
     f = tmp_path / 'nodes.yaml'
     f.write_text(yaml.safe_dump({'probe': {'ros__parameters': section}}))
     monkeypatch.setenv(APPLIED_ENV, str(f))
@@ -202,7 +202,7 @@ def _close(node, ctx):
 
 
 def test_a_real_node_accepts_a_declared_parameter(tmp_path, monkeypatch):
-    from mongla_localization.params_file import refuse_unknown
+    from mongla_runtime.params_file import refuse_unknown
     node, ctx = _node_with(tmp_path, monkeypatch, {'kp_yaw': 80.0})
     try:
         refuse_unknown(node)
@@ -212,7 +212,7 @@ def test_a_real_node_accepts_a_declared_parameter(tmp_path, monkeypatch):
 
 
 def test_a_real_node_refuses_a_misspelt_parameter(tmp_path, monkeypatch):
-    from mongla_localization.params_file import refuse_unknown
+    from mongla_runtime.params_file import refuse_unknown
     node, ctx = _node_with(tmp_path, monkeypatch, {'kp_yaww': 80.0})
     try:
         with pytest.raises(RuntimeError, match="'kp_yaww'.*did you mean 'kp_yaw'"):
@@ -224,7 +224,7 @@ def test_a_real_node_refuses_a_misspelt_parameter(tmp_path, monkeypatch):
 def test_a_real_node_refuses_a_value_the_launch_overrode(tmp_path, monkeypatch):
     """Launch passes its own values after the file. The file's value loses
     without a word, so the node says so and names the fix."""
-    from mongla_localization.params_file import refuse_unknown
+    from mongla_runtime.params_file import refuse_unknown
     node, ctx = _node_with(tmp_path, monkeypatch, {'mixer_aware': False},
                            inline={'mixer_aware': True})
     try:
@@ -235,6 +235,6 @@ def test_a_real_node_refuses_a_value_the_launch_overrode(tmp_path, monkeypatch):
 
 
 def test_without_bringup_nothing_is_checked(monkeypatch):
-    from mongla_localization.params_file import APPLIED_ENV, refuse_unknown
+    from mongla_runtime.params_file import APPLIED_ENV, refuse_unknown
     monkeypatch.delenv(APPLIED_ENV, raising=False)
     refuse_unknown(object())         # never touches the node

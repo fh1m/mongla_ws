@@ -171,6 +171,8 @@ with no summary line shows as *(no summary)* until it gets one.
 | `lock_setup.py` | LockNode's setup: parameters, the anchor and the bank, and live retuning. |
 | `lock_wiring.py` | The steps LockNode.__init__ runs, in order: what it locks onto, the inputs, |
 | `optics.py` | Flat-port refraction -- the ONE place the water refractive index lives. |
+| `pnp_node.py` | One PnP solver for every evidence source. Subscribe correspondences, publish a pose. |
+| `pose_fuse_node.py` | Subscribe single-frame poses, publish the one the support agrees on. |
 | `preflight.py` | Vision preflight -- block until the perception pipeline is alive. |
 | `qos.py` | One QoS table for the vision topics, imported by every end of every link. |
 | `seeing.py` | Can this camera see at all? A blinded camera and an empty scene look alike. |
@@ -226,7 +228,9 @@ with no summary line shows as *(no summary)* until it gets one.
 | `flow/flow_setup.py` | FlowVelocityNode, part 1 of 5: parameters, camera intrinsics, and the input callbacks. |
 | `flow/flow_timing.py` | Timing. The thing that decides whether de-rotation helps or hurts. |
 | `flow/flow_velocity.py` | Optical flow -> BODY VELOCITY. The observation an estimator can actually use. |
+| `flow/pool_lines.py` | The lane line is a surveyed straight edge. Read a heading off it. |
 | `flow/scale_check.py` | Is the height that scales every flow velocity actually right? |
+| `flow/tile_grating.py` | The pool floor is a surveyed 2-D grating. Read it like an optical encoder. |
 | `tracking/bytetrack.py` | ByteTrack wrapper using supervision.ByteTrack. |
 | `tracking/confidence.py` | Detection confidence as the vehicle's measure of how much to trust a box. |
 | `tracking/follower.py` | The fast rung: carry a box across the frames the detector has nothing for. |

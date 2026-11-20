@@ -146,7 +146,7 @@ def render_example() -> str:
          '#     ros2 launch mongla_manager bringup.launch.py',
          '# uses them. `name:=value` on the command line still wins over this file.',
          '# A key that is not listed here stops the launch (a typo cannot vanish).',
-         '# How it works: src/mongla_localization/mongla_localization/launch_defaults.py',
+         '# How it works: src/mongla_runtime/mongla_runtime/launch_defaults.py',
          '#',
          '# Each line shows the repository default.', '']
     for _, name, default, desc in launch_args(BRINGUP):
@@ -230,8 +230,12 @@ def node_params() -> dict[str, list[tuple[str, str]]]:
                       for f in [py] + mixin_files(py))
         if 'declare_parameter' not in src:
             continue
-        found = [(m.group(1), re.sub(r'\s+', ' ', m.group(2)).strip())
-                 for m in re.finditer(r"declare_parameter\(\s*'([\w.]+)'\s*,\s*([^,\)]+)", src)]
+        # A default may itself be a call (`float('nan')`), so one level of
+        # brackets is allowed inside it; NaN reads as the launch rows read it.
+        found = [(m.group(1), re.sub(r'\s+', ' ', m.group(2)).strip()
+                  .replace("float('nan')", 'nan'))
+                 for m in re.finditer(r"declare_parameter\(\s*'([\w.]+)'\s*,\s*((?:[^,()]|\([^()]*\))+)",
+                                      src)]
         if found:
             pkg_dir = next(q for q in py.parents if q.parent.name.startswith('mongla_')
                            and q.name == q.parent.name)
@@ -332,8 +336,10 @@ def render() -> str:
     return '\n'.join(L) + '\n'
 
 
-PKGS = ('mongla_control', 'mongla_manager', 'mongla_vision', 'mongla_localization',
-        'mongla_planner', 'mongla_batighor')
+# Every package with Python modules, found rather than listed: a hand-kept
+# list is how a new package ends up with no module map.
+PKGS = tuple(sorted(p.name for p in (ROOT / 'src').iterdir()
+                    if (p / p.name / '__init__.py').is_file()))
 MAP_BEGIN, MAP_END = '<!-- modules:begin -->', '<!-- modules:end -->'
 
 

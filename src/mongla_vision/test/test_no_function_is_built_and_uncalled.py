@@ -73,20 +73,14 @@ DEFERRED_FUNCTIONS = {
         'signed-RPM stall detection; needs non-zero ESC RPM on the wire, and '
         '958/958 frames read exactly 0 with nothing attached (CLAUDE.md §2). '
         'Its consumer is the manager health report once thrusters are fitted',
-    'src/mongla_localization/mongla_localization/course_map.py:position_of':
-        'refusing lookup of a surveyed prop position; waits for the first '
-        'mission or fix that resolves a prop by name rather than iterating',
-    'src/mongla_localization/mongla_localization/pool_lines.py:cross_track_m':
+    'src/mongla_vision/mongla_vision/flow/pool_lines.py:cross_track_m':
         'metres from a lane line; needs a height source on the lane-line path, '
         'which the tile grating provides once lane_lines and the grating run '
         'together in water',
-    'src/mongla_localization/mongla_localization/resection.py:on_danger_circle':
-        'the resection degeneracy check; waits for resection itself to be fused '
-        '(three simultaneous prop sightings, never yet recorded)',
-    'src/mongla_localization/mongla_localization/tile_grating.py:usable_height_m':
+    'src/mongla_vision/mongla_vision/flow/tile_grating.py:usable_height_m':
         'the instrument envelope; waits for the tile size of the venue pool, '
         'which is a measurement on the day',
-    'src/mongla_localization/mongla_localization/tile_grating.py:shift_from_phase':
+    'src/mongla_vision/mongla_vision/flow/tile_grating.py:shift_from_phase':
         'phase-based displacement, the grating as a velocity sensor; blocked '
         'on the same pool-floor footage as usable_height_m',
     'src/mongla_manager/mongla_manager/health_reporters.py:target_lock':

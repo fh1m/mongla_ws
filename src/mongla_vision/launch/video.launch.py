@@ -53,7 +53,7 @@ from launch.actions import (
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
-from mongla_localization import launch_defaults
+from mongla_runtime import launch_defaults
 
 
 def _setup(context, *_args, **_kwargs):

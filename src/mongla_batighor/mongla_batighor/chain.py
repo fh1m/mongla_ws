@@ -186,8 +186,8 @@ def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
 
 def main(args=None):
     import rclpy
-    from mongla_localization.params_file import refuse_unknown
-    from mongla_localization.spin import spin
+    from mongla_runtime.params_file import refuse_unknown
+    from mongla_runtime.spin import spin
     rclpy.init(args=args)
     node = ChainNode()
     refuse_unknown(node)

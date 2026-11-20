@@ -840,7 +840,7 @@ class TestFloorHeightIsPublished:
         try:
             n._pub_floor_h = mock.MagicMock()
             n._pub_floor_h.publish.side_effect = out.append
-            with mock.patch('mongla_localization.tile_grating.measure',
+            with mock.patch('mongla_vision.flow.tile_grating.measure',
                             return_value=grating):
                 n._read_the_floor(np.zeros((360, 640), np.uint8), 1234.5)
         finally:
@@ -1034,3 +1034,12 @@ class TestTracksForAViewer:
             n._pub_tracks.publish.assert_not_called()
         finally:
             n.destroy_node()
+
+
+def test_a_full_resolution_grating_is_refused_at_start_up():
+    """measured-bars 99: at tile_decimate 1 the grating refused a blurred,
+    noisy grid at every angle, so the node must not start blind."""
+    with pytest.raises(ValueError, match='tile_decimate'):
+        _make(tile_m=0.15, tile_decimate=1)
+    n = _make(tile_m=0.15, tile_decimate=3)
+    n.destroy_node()

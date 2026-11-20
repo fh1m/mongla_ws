@@ -15,6 +15,58 @@ from nav_msgs.msg import Odometry
 from mongla_localization import frames
 from mongla_localization.inekf import RIEKF, skew
 
+# `/mongla/odom` is published on this timer.
+PUBLISH_PERIOD_S = 0.1
+# How old a consumer may let it get. The worst gap on Kutum under the whole
+# vision graph was 105.76 ms (measured-bars section 91), so five periods
+# without a new STAMP means the localiser or its inputs stopped, not jitter.
+# Read by the lock's loop closure and by the mission's pose() and motion().
+ODOM_MAX_AGE_S = 0.5
+
+
+# How long since a velocity MEASUREMENT (flow or ZUPT) before position counts as
+# dead reckoning. Twice FLOW_FRESH_S: a still hull ZUPTs about once a second
+# (232 in 240 s on the bench recording, measured-bars 99), so this allows one
+# missed window. The observability gate alone is not enough: it reads aided on
+# a cold filter by design, and did for 20 s while the position ran 9 m.
+AID_MAX_AGE_S = 2.0
+
+
+def verdict(*, imu_age_s: float, anchored: bool, aiding: str | None,
+            aid_age_s: float) -> str:
+    """Why the estimate is not usable, or '' when it is. Pure.
+
+    Usable means a mission may steer on the pool position: the inertial stream
+    is live (the filter is predicting, not frozen), the heading is in the pool
+    frame, and horizontal velocity is observed. The order is the order an
+    operator fixes them in, so the first reason is the one to act on.
+    """
+    if not math.isfinite(imu_age_s):
+        return 'no IMU sample yet (is the manager running and the board healthy?)'
+    if imu_age_s > ODOM_MAX_AGE_S:
+        return f'IMU silent for {imu_age_s:.1f} s'
+    if not anchored:
+        return 'heading not anchored: anchor_on(<prop>) first'
+    if not (aiding or '').startswith('aided'):
+        return ('unaided: no flow and no ZUPT fused, so horizontal position '
+                'is dead reckoning')
+    if not (math.isfinite(aid_age_s) and aid_age_s <= AID_MAX_AGE_S):
+        since = ('ever' if not math.isfinite(aid_age_s)
+                 else f'{aid_age_s:.1f} s')
+        return (f'unaided: no flow or ZUPT fused for {since}, so horizontal '
+                f'position is dead reckoning')
+    return ''
+
+
+def _horizontal_sigmas(msg: Odometry) -> tuple[float, float]:
+    """(worse-axis horizontal sigma m, yaw sigma deg) from a filled message."""
+    c = msg.pose.covariance
+    a, b, d = c[0], c[1], c[7]
+    # Largest eigenvalue of the 2x2 xy block: the worse direction, whichever
+    # way the ellipse lies.
+    lam = 0.5 * (a + d) + math.sqrt(max(0.25 * (a - d) ** 2 + b * b, 0.0))
+    return math.sqrt(max(lam, 0.0)), math.degrees(math.sqrt(max(c[35], 0.0)))
+
 
 def _quat_from_R(R):
     """(w, x, y, z) from a rotation matrix, via the largest-diagonal branch.
@@ -84,7 +136,6 @@ def _fill_covariance(msg: Odometry, filt: RIEKF) -> None:
             msg.twist.covariance[r * 6 + c] = float(Pv_body[r, c])
 
 
-
 class LocalizationPublishMixin:
     # ---- output ---------------------------------------------------------
 
@@ -96,8 +147,10 @@ class LocalizationPublishMixin:
         # No input yet: the filter holds its initial state, which describes
         # nothing. Publishing it would hand every consumer (the lock's loop
         # closure, the manager's uplink) a confident pose at the origin, with a
-        # stamp that moves; silence is what "no estimate" looks like.
+        # stamp that moves; silence is what "no estimate" looks like. The
+        # state message still goes out, saying exactly that.
         if self._last_input_t <= 0.0:
+            self._publish_state(None)
             return
         st = self._filter.X
         m = Odometry()
@@ -135,6 +188,7 @@ class LocalizationPublishMixin:
         m.twist.twist.linear.z = float(v_body[2])
         _fill_covariance(m, self._filter)
         self._pub.publish(m)
+        self._publish_state(m)
         # The same pose as the tree's one moving edge. ALWAYS from odom_ned:
         # after the anchor the filter is in pool axes, and `map -> odom` (sent
         # once, at the anchor) is what makes `pool` reachable -- see frames.py.
@@ -145,6 +199,44 @@ class LocalizationPublishMixin:
                 (float(st.p[0]), float(st.p[1]), float(st.p[2])),
                 (qx, qy, qz, qw)), m.header.stamp)
             tf.sendTransform(t)
+
+    def _publish_state(self, odom) -> None:
+        """`/mongla/localization/state`: the one answer to "is it working"."""
+        pub = getattr(self, '_pub_state', None)
+        if pub is None:
+            return
+        import time
+        from mongla_interfaces.msg import LocalizationState
+        now = time.monotonic()
+        seen = getattr(self, '_seen', {})
+
+        def age(key):
+            t = seen.get(key)
+            return float(now - t) if t is not None else math.nan
+        s = LocalizationState()
+        nan = math.nan
+        s.x_m = s.y_m = s.depth_m = s.yaw_deg = nan
+        s.sigma_xy_m = s.sigma_yaw_deg = nan
+        if odom is not None:
+            s.header = odom.header
+            s.frame = odom.header.frame_id
+            p = odom.pose.pose.position
+            s.x_m, s.y_m, s.depth_m = float(p.x), float(p.y), -float(p.z)
+            s.yaw_deg = float(self._filter.X.yaw_deg())
+            s.sigma_xy_m, s.sigma_yaw_deg = _horizontal_sigmas(odom)
+        s.anchored = bool(self._anchored)
+        s.aiding = self._aiding_state or ''
+        s.motion = self._motion_state or ''
+        s.imu_age_s, s.depth_age_s, s.flow_age_s = age('imu'), age('depth'), age('flow')
+        s.flow_fused = int(self._n['flow'])
+        s.flow_refused = int(self._n['flow_refused'])
+        s.fixes = int(self._n['fix'])
+        aid = [a for a in (age('flow'), age('zupt')) if math.isfinite(a)]
+        s.reason = verdict(imu_age_s=s.imu_age_s, anchored=s.anchored,
+                           aiding=s.aiding,
+                           aid_age_s=min(aid) if aid else math.nan)
+        s.usable = not s.reason
+        pub.publish(s)
 
     def _diagnose(self) -> None:
         n = self._n
@@ -171,7 +263,7 @@ class LocalizationPublishMixin:
             f"zupt={n['zupt']} depth={n['depth']} "
             f"yaw={n['yaw']} grid={n['grid']}/{n['grid'] + n['grid_refused']} "
             f"lane={n['lane']}/{n['lane'] + n['lane_refused']} "
-            f"model={n['model']} fix={n['fix']} gaps={n['gap']} "
+            f"model={n['model']} fix={n['fix']}/{n['fix'] + n['fix_refused']} gaps={n['gap']} "
             f"gated={self._filter.gated} "
             f"rej={self._filter.rejected} brk={self._filter.lockout_breaks} "
             + (f"late={self._retro.late} replay={self._retro.replayed} "
