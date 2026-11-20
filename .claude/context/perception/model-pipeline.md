@@ -30,7 +30,7 @@ works in a pool it has never seen. Every step below is ordered by that question.
 | 5 | Write the bar file **before** training | `BAR.md` beside the split | its timestamp precedes the run |
 | 6 | Train | `yolo detect train`, from the last `best.pt` | held-out mAP50 and false positives per minute against the previous model |
 | 7 | Compile, level 2, fine-tune off | `tools/bench/hailo_compile.sh` | the applied script matches the template; yolov8n reports one context |
-| 8 | Score the HEF on the chip | `tools/bench/hef_map.py`, `tools/bench/hailo_int8_shift.py` | held-out mAP50 on the chip; INT8 shift under the refusal bar |
+| 8 | Score the HEF on the chip, then look at the boxes | `tools/bench/hef_map.py`, `tools/bench/hailo_int8_shift.py` | held-out mAP50 on the chip; INT8 shift under the refusal bar; a sheet of unmatched detections and missed labels read by a person before the number is believed |
 | 9 | Set the sidecar bar | `tools/studies/conf_bar.py` | `recommended_conf` measured on held-out frames, written in the ledger |
 | 10 | Deploy the weights and sidecar together; keep the previous pair | `kutum/deploy.sh` | the previous pair is on the vehicle and the rollback was rehearsed |
 
@@ -80,6 +80,21 @@ enhancement before detection (measured in 17 configurations, never positive).
 
 ## Results
 
-The first held-out run (bead 5ew.2) trains yolov8n and yolo11n on the same split. Its bar is in
-`mongla_data/holdout/<source>/BAR.md`, and its numbers go into [measured-bars](../measured-bars.md)
-when it finishes. Until then this chapter claims no held-out number.
+The first held-out run (bead 5ew.2), yolov8n, 20 epochs, ten other sources in train and one
+team's own test split held out (237 images). The bar is in `mongla_data/holdout/<source>/BAR.md`,
+written before training.
+
+| test set | mAP50 | gate | flare | drum |
+|---|---|---|---|---|
+| held-out team | 0.764 | 0.988 | 0.327 | 0.976 |
+| in-pool: nine other teams' own test splits, mean / median | 0.886 / 0.964 | | | |
+
+By the bar as written the premise is confirmed: 0.12 below the in-pool mean. **Looking at the
+boxes reverses most of it.** A sheet of 16 unmatched flare detections on the held-out frames shows
+about 11 real flares the held-out team did not label, and 3 where our box sits inside a wider
+labelled one. The flare score measures their missing labels, not the model. Gate and drum transfer
+to the unseen pool at their in-pool level; flare cannot be scored on this set.
+
+**Key point: audit the labels before believing a held-out number.** A sheet of the unmatched boxes
+(and of the missed labels) is now part of step 8; it took five minutes and changed the conclusion.
+yolo11n on the same split (bead 5ew.1) is still training.
