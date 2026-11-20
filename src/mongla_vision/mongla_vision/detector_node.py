@@ -314,6 +314,8 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         # the allowlist beside it.
         self._pub_vinfo = self.create_publisher(
             VisionInfo, f'{ns_out}/vision_info', qos.LATCHED)
+        self._pub_model_classes = self.create_publisher(
+            String, f'{ns_out}/model_classes', qos.LATCHED)
         self._model_epoch = 0
         self._publish_dbg = bool(self.get_parameter('publish_debug_image').value)
         if self._publish_dbg:

@@ -270,6 +270,8 @@ class DetectorMixin:
         self.log.info(f'[DSL  ] {node} active_model → {name!r}')
         if confirm_s > 0.0:
             self._confirm_model(cam, str(name), before, float(confirm_s))
+        if getattr(self, '_course', None) is not None:
+            self._check_course_classes()
 
     def use(self, model: str, classes: str | list | None = None, *,
             camera: str | None = None, node: str | None = None) -> None:
