@@ -65,7 +65,7 @@ Launch's `name=` and `parameters=` are PROCESS-WIDE remappings (`__node:=`,
 parameters arrive here `fwd_`/`dwn_`-prefixed on this launcher and are handed
 down as `parameter_overrides` rather than declared per node by launch.
 
-The executor comes from `mongla_localization.spin`. Live, each camera hands
+The executor comes from `mongla_runtime.spin`. Live, each camera hands
 its frames to its detector on the camera's own capture thread, so the executor
 carries only timers, services and small topics, and the single-threaded events
 executor is enough. In replay the frames arrive as image callbacks, and
@@ -347,7 +347,7 @@ def _no_detector_left(launcher):
 
 
 def main():
-    from mongla_localization.orphan import die_with_parent
+    from mongla_runtime.orphan import die_with_parent
     die_with_parent()        # holds the cameras and the Hailo VDevice
     rclpy.init()
     launcher = _Launcher()
@@ -449,10 +449,10 @@ def main():
             launcher.get_logger().warning(
                 f'[COMP ] DEGRADED: {live[0]} only. The chip is uncontended, '
                 f'so this camera runs at full rate.')
-        from mongla_localization.params_file import refuse_unknown
+        from mongla_runtime.params_file import refuse_unknown
         for n in nodes:
             refuse_unknown(n)     # bringup.yaml `nodes:` typos stop here
-        from mongla_localization.spin import make_executor
+        from mongla_runtime.spin import make_executor
         ex, which = make_executor(launcher.get_logger(), classic=MultiThreadedExecutor)
         launcher.get_logger().info(f'[COMP ] spinning on the {which} executor')
         for n in nodes:
@@ -463,7 +463,7 @@ def main():
         # launch report this process died and restart it on a normal stop.
         pass
     finally:
-        from mongla_localization.spin import deaf_to_ctrl_c
+        from mongla_runtime.spin import deaf_to_ctrl_c
         deaf_to_ctrl_c()      # a second Ctrl-C must not interrupt the teardown
         for n in nodes:
             try:

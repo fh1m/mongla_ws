@@ -79,6 +79,7 @@ MIN_PEAK_RADIUS_BINS = 5
 # harmonic. Placeholder until swept against both controls (see _fundamental).
 SUBHARMONIC_FRACTION = 0.25
 
+
 # And a period longer than this cannot be seen twice in a frame, so its
 # "periodicity" is one edge and a coincidence.
 def _max_period_px(shape) -> float:
@@ -90,9 +91,8 @@ class Grating:
     """What one frame of floor says about itself."""
     period_px: float          # dominant spatial period
     angle_deg: float          # grid orientation, wrapped to [0, 90)
-    phase: Tuple[float, float]   # carrier phase along each axis, radians
+    phase: float              # dominant carrier's phase, radians
     strength: float           # dominant peak's share of spectral energy
-    second_period_px: Optional[float] = None   # the orthogonal axis, if found
 
     def height_m(self, focal_px: float, tile_m: float) -> float:
         """Metres above the floor, from the tile's known size.
@@ -118,47 +118,6 @@ class Grating:
         saying so beats inventing the bit.
         """
         return (self.angle_deg - float(mount_yaw_deg)) % 90.0
-
-
-def snap_to_grid(current_yaw_deg: float, grid_angle_deg: float,
-                 *, max_correction_deg: float = 20.0,
-                 period_deg: float = 90.0) -> Optional[float]:
-    """Pull a drifting yaw back onto the floor's grid. None if it is too far.
-
-    This is the half that matters, and it is not a heading source -- it is a
-    Drift bound. The grid gives orientation modulo 90 degrees, so it cannot
-    tell you which way you are facing; a square floor looks identical from four
-    directions. What it CAN do is say that whatever your heading is, its
-    residual against the grid should be constant -- so any accumulated gyro
-    drift shows up as that residual moving, and can be removed.
-
-    A free-running BNO drifts without bound. With this, it cannot drift further
-    than half a grid cell (45 degrees) before the correction is unambiguous,
-    and in practice `max_correction_deg` keeps it far tighter than that. No
-    magnetometer, which our hull deliberately does not fuse because of the
-    thrusters; no prop in view; no detection.
-
-    `max_correction_deg` is the safety. A correction larger than this means the
-    estimate and the floor disagree about which grid line is which -- a
-    four-fold aliasing error -- and applying it would snap the hull 90 degrees
-    onto the wrong branch. Refusing is the only safe answer: a wrong heading is
-    worse than a drifting one, because a drifting one is still roughly right.
-
-    `period_deg` is the feature's symmetry: 90 for a square grid, 180 for a
-    lane line (identical from both ends). Same bound, half the aliasing.
-    """
-    if grid_angle_deg is None or current_yaw_deg is None:
-        return None
-    if not (math.isfinite(current_yaw_deg) and math.isfinite(grid_angle_deg)):
-        return None
-    period = float(period_deg)
-    # Residual of the current estimate against the feature, wrapped to +/-P/2.
-    resid = (float(current_yaw_deg) - float(grid_angle_deg)) % period
-    if resid > period / 2.0:
-        resid -= period
-    if abs(resid) > float(max_correction_deg):
-        return None
-    return float(current_yaw_deg) - resid
 
 
 def measure(gray, *, decimate: int = 3,
@@ -200,10 +159,8 @@ def measure(gray, *, decimate: int = 3,
     g = detect(small, min_strength=min_strength)
     if g is None or decimate == 1:
         return g
-    second = (None if g.second_period_px is None
-              else g.second_period_px * decimate)
     return Grating(period_px=g.period_px * decimate, angle_deg=g.angle_deg,
-                   phase=g.phase, strength=g.strength, second_period_px=second)
+                   phase=g.phase, strength=g.strength)
 
 
 def usable_height_m(focal_px: float, tile_m: float, frame_px: int) -> tuple:
@@ -328,14 +285,9 @@ def detect(gray: np.ndarray, *, min_strength: float = MIN_PEAK_FRACTION
         return None
 
     angle = math.degrees(math.atan2(fy_cpp, fx_cpp)) % 90.0
-
-    # The orthogonal axis, if the pattern is a grid rather than stripes. Its
-    # presence is what separates a tiled floor from a lane line.
-    second = _orthogonal_period(mag, cy, cx, fy, fx)
-
     ph = float(np.angle(spec[iy, ix]))
-    return Grating(period_px=period, angle_deg=angle, phase=(ph, ph),
-                   strength=strength, second_period_px=second)
+    return Grating(period_px=period, angle_deg=angle, phase=ph,
+                   strength=strength)
 
 
 def _fundamental(mag, iy: int, ix: int, cy: int, cx: int) -> Tuple[int, int]:
@@ -375,8 +327,6 @@ def _fundamental(mag, iy: int, ix: int, cy: int, cx: int) -> Tuple[int, int]:
             return iy, ix
 
 
-
-
 def _parabolic(line: np.ndarray, i: int) -> float:
     """Sub-bin offset of a peak from a 3-point parabolic fit.
 
@@ -395,26 +345,6 @@ def _parabolic(line: np.ndarray, i: int) -> float:
     return float(off) if abs(off) <= 1.0 else 0.0
 
 
-def _orthogonal_period(mag, cy, cx, fy, fx) -> Optional[float]:
-    """Look for a peak ~90 degrees from the dominant one."""
-    h, w = mag.shape
-    best, best_val = None, 0.0
-    base = math.atan2(fy, fx)
-    for sign in (1.0, -1.0):
-        ang = base + sign * math.pi / 2.0
-        for r in range(4, int(min(h, w) / 2) - 1):
-            yy = int(round(cy + r * math.sin(ang)))
-            xx = int(round(cx + r * math.cos(ang)))
-            if not (0 <= yy < h and 0 <= xx < w):
-                break
-            v = float(mag[yy, xx])
-            if v > best_val:
-                best_val, best = v, r
-    if best is None or best <= 0:
-        return None
-    return float(mag.shape[0]) / float(best)
-
-
 def shift_from_phase(before: Grating, after: Grating) -> Optional[float]:
     """Displacement along the carrier, in PIXELS, from the phase difference.
 
@@ -428,6 +358,6 @@ def shift_from_phase(before: Grating, after: Grating) -> Optional[float]:
         return None
     if abs(before.period_px - after.period_px) > 0.25 * before.period_px:
         return None                 # the height changed; not the same carrier
-    d = after.phase[0] - before.phase[0]
+    d = after.phase - before.phase
     d = (d + math.pi) % (2.0 * math.pi) - math.pi
     return float(d / (2.0 * math.pi) * before.period_px)

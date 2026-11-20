@@ -143,8 +143,8 @@ def main(args=None):
             self.record(op='command', cmd=cmd, fields=fields_json, ok=True,
                         message='sent from the terminal')
 
-    from mongla_localization.params_file import refuse_unknown
-    from mongla_localization.spin import spin
+    from mongla_runtime.params_file import refuse_unknown
+    from mongla_runtime.spin import spin
     rclpy.init(args=args)
     node = Deck()
     refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here

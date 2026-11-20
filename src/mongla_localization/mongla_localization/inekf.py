@@ -74,11 +74,13 @@ import numpy as np
 # replayed through 50 s of real board data at rest, that ran to 583 m; NED,
 # 0.036 m. At rest the accelerometer reads (0, 0, -g) level.
 from mongla_localization.frames import ned_z_from_altitude  # noqa: E402
+from mongla_localization.heading_anchor import _wrap180  # noqa: E402
 
 
 def _dup(v):
     """A copy where the value is mutable (state, arrays, dicts), else itself."""
     return v.copy() if hasattr(v, 'copy') else v
+
 
 GRAVITY = np.array([0.0, 0.0, 9.80665])
 
@@ -125,13 +127,6 @@ class State:
     bg: np.ndarray = field(default_factory=lambda: np.zeros(3))   # gyro bias
     ba: np.ndarray = field(default_factory=lambda: np.zeros(3))   # accel bias
 
-    def matrix(self) -> np.ndarray:
-        X = np.eye(5)
-        X[:3, :3] = self.R
-        X[:3, 3] = self.v
-        X[:3, 4] = self.p
-        return X
-
     def yaw_deg(self) -> float:
         return math.degrees(math.atan2(self.R[1, 0], self.R[0, 0]))
 
@@ -144,6 +139,15 @@ class State:
 # filter actually uses are listed, so a new measurement of an unlisted width
 # raises a KeyError instead of silently picking a wrong threshold.
 CHI2_99 = {1: 6.635, 2: 9.210, 3: 11.345}
+
+# Flow's scale error, 1 sigma, as a fraction of distance flown: the worst of
+# three taped 30 cm slides read 3.6 % long (measured-bars 13). The same
+# measurement is `FLOW_SCALE_SIGMA_FRAC` in mongla_vision's flow constants,
+# which this package does not import (it pulls in cv2), so
+# test_one_scale_error compares the two. Here, not in the node, because the
+# planner reads it too: how far `go_to` can drive before its sigma passes the
+# tolerance (measured-bars 99).
+FLOW_SCALE_SIGMA = 0.036
 
 # The gate's own failure mode, and it is worse than no gate.
 # A filter that has become CONFIDENTLY WRONG rejects every measurement that
@@ -179,12 +183,15 @@ class RIEKF:
                  sigma_gyro_bias: float = 1e-4, sigma_accel_bias: float = 1e-3,
                  P0_attitude: float = 0.3, P0_velocity: float = 0.5,
                  P0_position: float = 1.0, P0_bias: float = 0.01,
-                 vel_sigma_gate: float = 1.0):
+                 P0_accel_bias: Optional[float] = None,
+                 vel_sigma_gate: float = 1.0,
+                 odometry_scale_sigma: float = 0.0):
         self.X = state.copy() if state is not None else State()
+        pa = P0_bias if P0_accel_bias is None else float(P0_accel_bias)
         self.P = np.diag(np.concatenate([
             np.full(3, P0_attitude ** 2), np.full(3, P0_velocity ** 2),
             np.full(3, P0_position ** 2), np.full(3, P0_bias ** 2),
-            np.full(3, P0_bias ** 2)]))
+            np.full(3, pa ** 2)]))
         self.Q = np.diag(np.concatenate([
             np.full(3, sigma_gyro ** 2), np.full(3, sigma_accel ** 2),
             np.zeros(3),
@@ -211,6 +218,16 @@ class RIEKF:
         # The observability gate -- see `_velocity_is_observed` (B-56).
         self.vel_sigma_gate = float(vel_sigma_gate)
         self.gated = 0
+        # A velocity sensor's SCALE error is systematic: position error from
+        # it grows with distance flown, not with the square root of time as
+        # the white per-sample sigma integrates. Without this the filter,
+        # after one fix, believed itself to 0.15 m across 15 m of 5 %-scale
+        # flow and refused the next correct fix (measured-bars 99). So the
+        # horizontal position sigma is held at no less than
+        # sqrt(sigma_at_last_fix^2 + (k * distance_since)^2). 0 = off.
+        self.odometry_scale_sigma = float(odometry_scale_sigma)
+        self._odo_ref_var = float(P0_position) ** 2
+        self._odo_dist = 0.0
 
     # ── replay ───────────────────────────────────────────────────────────────
     # Every attribute a predict or an update can change, named in one place
@@ -220,8 +237,9 @@ class RIEKF:
     # `vel_sigma_gate`); a test walks `vars()` and fails on an attribute that is
     # in neither list, so the next counter cannot be missed the same way.
     REPLAY_STATE = ('X', 'P', 'accepted', 'rejected', 'reject_streak',
-                    'lockout_breaks', 'gated', '_gyro')
-    CONFIGURATION = ('Q', 'vel_sigma_gate')
+                    'lockout_breaks', 'gated', '_gyro', '_odo_ref_var',
+                    '_odo_dist')
+    CONFIGURATION = ('Q', 'vel_sigma_gate', 'odometry_scale_sigma')
 
     def replay_state(self) -> dict:
         """A copy of everything a replay must restore."""
@@ -274,6 +292,23 @@ class RIEKF:
         Qd = self._adapt_noise(R, v0, p0) * dt
         self.P = Phi @ self.P @ Phi.T + Qd
         self.P = 0.5 * (self.P + self.P.T)      # keep it symmetric
+        if self.odometry_scale_sigma > 0.0:
+            self._odo_dist += math.hypot(v0[0], v0[1]) * dt
+            self._hold_position_floor()
+
+    def _hold_position_floor(self) -> None:
+        """Widen horizontal position to the scale-error floor, if under it.
+
+        A congruence on the two position states only (as the lockout break
+        does), so P stays positive semidefinite and nothing else moves.
+        """
+        floor = self._odo_ref_var + (self.odometry_scale_sigma * self._odo_dist) ** 2
+        d = np.ones(self.DIM)
+        for i in (6, 7):
+            if 0.0 < self.P[i, i] < floor:
+                d[i] = math.sqrt(floor / self.P[i, i])
+        if d[6] != 1.0 or d[7] != 1.0:
+            self.P = self.P * np.outer(d, d)
 
     def coast(self, dt: float) -> None:
         """Advance `dt` with NO inertial data: constant velocity, the process
@@ -562,8 +597,13 @@ class RIEKF:
         # is the measured outcome, not a structural guarantee.
         if self._velocity_is_observed():
             H[:, 0:3] = -skew(self.X.p)[:2]   # same coupling as update_depth
-        return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2),
-                           kind='position')
+        ok = self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2),
+                         kind='position')
+        if ok:
+            # The scale-error floor restarts from what this fix left.
+            self._odo_ref_var = float(max(self.P[6, 6], self.P[7, 7]))
+            self._odo_dist = 0.0
+        return ok
 
     def update_attitude(self, R_meas, sigma_deg: float = 1.0) -> bool:
         """Consume the BNO's own fused attitude instead of propagating to it.
@@ -671,11 +711,10 @@ class RIEKF:
             seen = np.any(H != 0.0, axis=0)
             d = np.where(seen, math.sqrt(REJECT_INFLATION), 1.0)
             self.P = self.P * np.outer(d, d)
+            # H D = sqrt(k) H, because D scales exactly the columns H reads, so
+            # the new S is k H P H^T + R: invertible whenever the first was.
             S = H @ self.P @ H.T + R_noise
-            try:
-                S_inv = np.linalg.inv(S)
-            except np.linalg.LinAlgError:
-                return False
+            S_inv = np.linalg.inv(S)
         self.reject_streak[kind] = 0
         K = self.P @ H.T @ S_inv
         dx = K @ y
@@ -708,10 +747,3 @@ class RIEKF:
         self.X.p = dR @ self.X.p + dp
         self.X.bg = self.X.bg + dx[9:12]
         self.X.ba = self.X.ba + dx[12:15]
-
-
-def _wrap180(deg: float) -> float:
-    d = math.fmod(float(deg) + 180.0, 360.0)
-    if d <= 0.0:
-        d += 360.0
-    return d - 180.0

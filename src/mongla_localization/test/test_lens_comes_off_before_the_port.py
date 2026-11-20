@@ -86,7 +86,7 @@ def _image(medium):
 def _pnp(medium):
     import rclpy
     from rclpy.parameter import Parameter
-    from mongla_localization.pnp_node import PnPNode
+    from mongla_vision.pnp_node import PnPNode
     started = not rclpy.ok()
     if started:
         rclpy.init()

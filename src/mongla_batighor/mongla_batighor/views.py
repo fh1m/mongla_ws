@@ -256,7 +256,9 @@ def localization(v: View):
     return row(
         (50, col((3, v('nav', scene())), (2, v('navigation', instrument('Navigation'))))),
         (50, col(
-            (2, v('aiding', states(series('/mongla/localization/aiding.data', 'aided by', True),
+            (2, v('aiding', states(series('/mongla/localization/state.usable', 'usable', True),
+                                   series('/mongla/localization/state.reason', 'why not', True),
+                                   series('/mongla/localization/aiding.data', 'aided by', True),
                                    series('/mongla/localization/motion.data', 'motion', True),
                                    series('/mongla/state.mode', 'mode')))),
             (3, v('pos', plot(series('/mongla/odom.pose.pose.position.x', 'x m'),
@@ -356,6 +358,7 @@ NOT_SHOWN = {
     'image_raw': 'the raw frame; every view shows the same frame as stream/compressed',
     'image_debug': "the detector's own drawn frame; the browser draws over the camera's JPEG",
     'classes_filter': "the allowlist; the Control Center shows it (helm_state, detector settings)",
+    'model_classes': 'what the model can emit, for the mission DSL to check a course against',
     'imu_rates': 'the body rates again at the board rate, for the filter; /mongla/imu is plotted',
     'distance_control': 'a command to the flow distance bracket, not an observation',
     'video_seek_frame': "a replay command from the display node",

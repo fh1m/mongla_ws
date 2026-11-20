@@ -40,9 +40,12 @@ never positive.
 ## 2. Train
 
 ```bash
-yolo train data=datasets/<task>/<task>.yaml model=yolo11n.pt epochs=100 imgsz=640
+yolo train data=datasets/<task>/<task>.yaml model=yolov8n.pt epochs=100 imgsz=640
 cp runs/detect/train/weights/best.pt src/mongla_vision/models/<stem>.pt
 ```
+
+yolov8n, not yolo11n: equal accuracy after INT8, one context instead of three, and
+3.3x the chip rate (measured-bars 98), which is what two 120 fps cameras need.
 
 ## 3. Write the sidecar
 

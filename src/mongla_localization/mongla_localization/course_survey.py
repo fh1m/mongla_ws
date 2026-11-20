@@ -10,8 +10,8 @@ The loader reads the deck copy first, so no rebuild is needed.
     course_survey --course sauvc26 --prop final_gate --x 16.0 --y 0.0 --bearing 0
     course_survey --course sauvc26 --prop flare_red --x 9.5 --y 2.1 --depth -0.8
 
-The file is re-read through `load_course` after writing, so a malformed value is
-caught here rather than in the water.
+The CLI re-reads the file through `load_course` after writing, so a malformed
+value is caught here rather than in the water.
 """
 from __future__ import annotations
 
@@ -33,8 +33,16 @@ def deck_dir() -> pathlib.Path:
 
 
 def survey(course: str, prop: str, values: dict, *, detect_class: str = '',
-           out_dir: pathlib.Path | None = None) -> pathlib.Path:
-    """Set measured fields on one prop in the deck copy; return the file written."""
+           out_dir: pathlib.Path | None = None, measured: bool = True,
+           note: str = '') -> pathlib.Path:
+    """Set fields on one prop in the deck copy; return the file written.
+
+    `measured` says where the numbers came from. True (the CLI) is a tape
+    survey: from then on a vision placement only checks it. False is a
+    vision placement (`place_prop(commit=True)`), which a later placement may
+    refine. Writing a placement as measured froze one pose's drift into the
+    course for good, because nothing overwrites a measured prop.
+    """
     out_dir = pathlib.Path(out_dir) if out_dir else deck_dir()
     out = out_dir / f'{course}.yaml'
     if out.is_file():
@@ -57,7 +65,9 @@ def survey(course: str, prop: str, values: dict, *, detect_class: str = '',
             body[field] = float(v)
     if detect_class:
         body['detect_class'] = detect_class
-    body['measured'] = True
+    body['measured'] = bool(measured)
+    if note:
+        body['note'] = str(note)
     props[key] = body
     out_dir.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix('.yaml.tmp')

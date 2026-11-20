@@ -423,6 +423,10 @@ class SetupMixin:
         # single-camera / no-distance runs never create the service clients).
         self._distance_state = None
 
+        # Subscribed now, not on first use: a lazily built bridge has heard
+        # nothing yet, so the first `locate` would always read "no state".
+        from .localization_state import LocalizationBridge
+        self._localization_bridge = LocalizationBridge(self)
         self.mongla = Mongla(
             self.fc,
             log=self.get_logger(),
@@ -430,7 +434,14 @@ class SetupMixin:
             vision_state_provider=self._vision_state_for,
             distance_provider=self._distance_state_for,
             payload=self._payload,
+            localization_provider=self._localization_state,
         )
+
+    def _localization_state(self):
+        """The newest fresh LocalizationState, or None. Injected into Mongla
+        as localization_provider."""
+        bridge = getattr(self, '_localization_bridge', None)
+        return bridge.latest() if bridge is not None else None
 
     def _distance_state_for(self):
         """Return (build on first call) the DistanceState bridge to the downward

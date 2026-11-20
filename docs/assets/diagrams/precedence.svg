@@ -26,7 +26,7 @@
 <line x1="32" y1="254" x2="1100" y2="254" stroke="#1a2030" stroke-width="1"/>
 <text x="32.0" y="282.0" class="v" text-anchor="start">THE DEFAULT</text>
 <text x="32.0" y="298.0" class="l" text-anchor="start">written in bringup.launch.py</text>
-<text x="400.0" y="290.0" class="l" text-anchor="middle">false</text>
+<text x="400.0" y="290.0" class="l" text-anchor="middle">true</text>
 <text x="600.0" y="290.0" class="l" text-anchor="middle">nan</text>
 <text x="800.0" y="290.0" class="l" text-anchor="middle">water</text>
 <rect x="930.0" y="268" width="140" height="34" fill="none" stroke="#ff2a14" stroke-width="1.6"/>

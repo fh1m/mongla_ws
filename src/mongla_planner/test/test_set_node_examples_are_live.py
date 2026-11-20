@@ -22,8 +22,8 @@ NODE_FILES = {
     'camera':   ['mongla_vision/mongla_vision/camera_node.py'],
     'tracker':  ['mongla_vision/mongla_vision/tracker_node.py'],
     'lock':     ['mongla_vision/mongla_vision/lock_setup.py'],
-    'pnp':      ['mongla_localization/mongla_localization/pnp_node.py'],
-    'posefuse': ['mongla_localization/mongla_localization/pose_fuse_node.py'],
+    'pnp':      ['mongla_vision/mongla_vision/pnp_node.py'],
+    'posefuse': ['mongla_vision/mongla_vision/pose_fuse_node.py'],
     'flow':     ['mongla_vision/mongla_vision/flow/flow_node.py'],
     'manager':  ['mongla_manager/mongla_manager/node_setup.py'],
 }
