@@ -23,7 +23,7 @@ from mongla_manager.auv_manager_node import AUVManagerNode      # noqa: E402
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of_file  # noqa: E402  (issue #22)
 
 # The node is one class in several files (auv_manager_node.py says which part
 # holds what); the uplink spans the core, setup and the vision link.

@@ -18,7 +18,6 @@ import struct
 import sys
 from pathlib import Path
 
-import pytest
 import os
 os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 from pymavlink import mavutil

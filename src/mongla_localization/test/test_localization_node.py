@@ -19,7 +19,7 @@ from mongla_localization.inekf import RIEKF, State
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of  # noqa: E402  (issue #22)
 
 
 class _NullLogger:
@@ -389,7 +389,6 @@ def test_flow_z_is_NOT_treated_as_a_measurement():
 def test_the_flow_nodes_own_covariance_is_used():
     """A constant sigma tells the filter a bare floor is as good as a textured
     one. The flow node computes the variance per sample; use it."""
-    n = _node()
 
     def _twist(var):
         t = type('T', (), {})()
@@ -838,7 +837,6 @@ def test_the_lane_line_is_ignored_until_anchored():
 def test_the_refusal_is_visible_in_the_diagnostic():
     """A channel that silently refuses half its measurements looks exactly like
     one that is not running."""
-    import inspect
     src = code_of(ln.LocalizationNode._diagnose)
     assert 'grid' in src
 

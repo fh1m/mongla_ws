@@ -23,7 +23,7 @@ from mongla_control.motion_vision import (           # noqa: E402
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of  # noqa: E402  (issue #22)
 
 
 class _Writers(_FakeWriters):
@@ -111,7 +111,6 @@ def test_verify_off_is_the_old_behaviour_exactly():
 def test_the_verification_and_the_controller_ask_the_SAME_question():
     """One copy of the centring error: the helper the loop uses is the one the
     re-measurement uses. Falsified if either inlines its own formula again."""
-    import inspect
     from mongla_control import motion_vision as mv
     src = code_of(mv._Align)   # align_loop runs its tick in _Align
     # one per controlled axis: lat, yaw, and the downward camera's surge

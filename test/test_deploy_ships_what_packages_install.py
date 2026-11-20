@@ -7,7 +7,6 @@ copy ... zed-mono-extended.woff2" (2026-11-18), on the machine Batighor is
 served from. This runs rsync with deploy.sh's own filters, dry, and checks
 that each data file a setup.py names would arrive.
 """
-import ast
 import re
 import shutil
 import subprocess
