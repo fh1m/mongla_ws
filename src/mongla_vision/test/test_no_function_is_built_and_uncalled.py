@@ -74,9 +74,6 @@ DEFERRED_FUNCTIONS = {
         'signed-RPM stall detection; needs non-zero ESC RPM on the wire, and '
         '958/958 frames read exactly 0 with nothing attached (CLAUDE.md §2). '
         'Its consumer is the manager health report once thrusters are fitted',
-    'src/mongla_localization/mongla_localization/course_map.py:position_of':
-        'refusing lookup of a surveyed prop position; waits for the first '
-        'mission or fix that resolves a prop by name rather than iterating',
     'src/mongla_vision/mongla_vision/flow/pool_lines.py:cross_track_m':
         'metres from a lane line; needs a height source on the lane-line path, '
         'which the tile grating provides once lane_lines and the grating run '

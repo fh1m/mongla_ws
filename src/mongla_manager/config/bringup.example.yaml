@@ -307,7 +307,7 @@
 #     max_det: 100
 #     paused: false
 #     debug_image_hz: 10.0
-#     viewer: true
+#     viewer: ''
 #     tracking: true
 #     tracker_type: ocsort
 #     flow: false
@@ -333,7 +333,7 @@
 #     max_det: 100
 #     paused: true
 #     debug_image_hz: 10.0
-#     viewer: true
+#     viewer: ''
 #     tracking: true
 #     tracker_type: ocsort
 #     fwd_topic: ''

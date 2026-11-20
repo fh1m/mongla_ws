@@ -46,36 +46,50 @@ so a new package cannot go without a module map.
 | — | `use_course` said every unmeasured prop "refuses a dead-reckon"; only an unset one does | fixed: unset and nominal are logged apart |
 | — | `pose_cluster`'s paired path took the newest heading that was not None, so a NaN one gave `decided=True` with a NaN yaw (unreachable from today's node, which maps NaN to None) | fixed, as the legacy path already did |
 | — | `on_danger_circle` checked a three-prop solve that was never built | deleted with its tests and register entry |
-| open | a course naming a class the live model cannot emit is caught by nothing (robosub26 names four) | bead under `mongla_ws-es5`: needs the detector to publish its classes |
+| open | a course naming a class the live model cannot emit is caught by nothing (robosub26 names four) | in progress: the detector publishes its classes |
 
-## How a mission reaches it, today
+## How a mission reaches it
 
-| DSL call | What it does | Used by a shipped mission |
+Localization is used the way vision is: a state anyone can read, verbs that act on it, and a
+mission that checks it. Before 2026-11-20 only `survey_course` called it and nothing could
+ask whether it was working; that is what this section replaced.
+
+**The state.** `/mongla/localization/state` (`LocalizationState`), 10 Hz, published whether
+or not anything feeds the filter. `usable` is the one answer and `reason` says why not, in
+the order an operator fixes them: no IMU, IMU silent, heading not anchored, position
+unaided. It also carries the pool position, depth, heading, the worse-axis horizontal sigma
+(attitude terms included), aiding, motion, the age of each input and the flow
+fused/refused counts. Batighor's localization view plots `usable` and `reason` beside
+aiding and motion.
+
+| Interface | What it does | State |
 |---|---|---|
-| `use_course(name)` | loads the priors; gives flow the venue's floor depth | `survey_course` |
-| `anchor_on(prop)` | heading zero from a prop's fused pose and its course bearing; tells the filter | `survey_course` |
-| `place_prop(prop, commit=)` | a prop's position from sightings | `survey_course` |
-| `pose()` · `motion()` | read the filter: pool position (None until anchored or once stale); `ok` / `blocked` / `unknown` | none |
-| `fix_position()` · `fix_from_prop()` | push a resected position into the filter | none |
-| `absolute_heading()` · `absolute_to_relative()` | turn world headings into the hull's relative `turn()` | none |
+| `mongla locate` (CLI) · `locate` verb | the state on one line; `success` = usable; works disarmed | BUILT, NEVER FLOWN |
+| `mongla go_to --x_m X --y_m Y` · `go_to` verb | surge and sway to a pool point in STABILIZE; the board holds depth and heading. Refused before any thrust unless usable and sigma within `tolerance_m`; stops when the estimate goes bad or motion reads blocked | BUILT, NEVER FLOWN |
+| `mongla.localization()` | the state, from the topic; None once the localiser stops | BUILT, NEVER FLOWN |
+| `mongla.go_to(x, y)` · `mongla.go_to_prop(prop, standoff=)` | the verb; to a course prop's position, short of it | BUILT, NEVER FLOWN |
+| `use_course` · `anchor_on` · `fix_from_prop` · `fix_position` · `place_prop` | priors, heading, position fixes, placement | BUILT, NEVER FLOWN |
+| `pose()` · `motion()` | the bare tuple and the motion verdict | BUILT, NEVER FLOWN |
+| mission `localization_check` | the six-stage check below | BUILT, NEVER FLOWN |
+| mission `survey_course` | places props from one station | BUILT, NEVER FLOWN |
 
-**Key point:** no competition mission reads the filter yet. The vehicle's own consumers are
-the vision lock's loop closure and the manager's velocity and position uplinks, which the
-board does not consume yet (producer only). So the filter is **BUILT, NEVER FLOWN**, and its
-first water job is to be watched, not obeyed.
+`go_to`'s speed ramp (`GO_TO_FULL_SPEED_M`, full gain at 1 m of error) is a starting value,
+not a measurement; the first pool run sets it.
 
-## Ready for the first water test
+## The water test: `localization_check`
 
-What water has to decide, in order, all with the stack as it is:
+One mission, one verdict per stage, the first failure being the one to fix:
 
-1. Bring up with `localization:=true` (the default) and record a bag. The 5 s diagnostic line
-   must show flow and ZUPT fused, not refused; a refused count that climbs is the B-124 case
-   now made visible.
-2. Tape `frames.yaml` (both lever arms and the baro offset): until then flow is fused without
-   its lever arm, and the manager's frames health line says DEGRADED.
-3. Anchor on one prop with a taped bearing and check `/mongla/odom` switches to `pool`.
-4. Drive a taped straight line and compare the filter's distance with the tape: the truth
-   test that ranks it, the one no bench run can.
+1. **live**: the state publishes, before arming.
+2. **aided**: hovering, flow or ZUPT is fused (`aiding` = aided), within 10 s.
+3. **anchored**: `anchor_on` puts the estimate in the pool frame.
+4. **out** and 5. **back**: `go_to` a point 1.5 m ahead and back. This is the filter
+   agreeing with itself, which is necessary and is not evidence.
+6. **truth**: a range-and-bearing fix off the anchor prop, an observation the filter did not
+   make, agrees with the filter's position to 0.5 m. This is the stage that ranks it.
+
+Before it: tape `frames.yaml` (both lever arms and the baro offset; until then flow is
+fused without its lever arm and the frames health line says DEGRADED), and record a bag.
 
 ## Read, and judged sound
 

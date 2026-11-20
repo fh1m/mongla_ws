@@ -52,7 +52,7 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32, String
 
-from mongla_interfaces.msg import FloorHeading, MonglaState
+from mongla_interfaces.msg import FloorHeading, LocalizationState, MonglaState
 
 from mongla_localization.command_velocity import (CommandVelocityModel,
                                                   MotionCheck)
@@ -102,6 +102,9 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
         # The latest RAW board attitude, the partner the anchor is paired with.
         self._board_R = None
         self._last_input_t = 0.0
+        # Host-monotonic arrival of the last FUSED sample per input, for the
+        # state message's ages: link silence, so host time, not board time.
+        self._seen: dict[str, float] = {}
         self._aided_at_last_diag = -1
 
         cam = str(self.declare_parameter('flow_camera', 'downward').value)
@@ -228,6 +231,9 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
         # looking healthy, which is exactly why this has to be said out loud.
         self._pub_aiding = self.create_publisher(
             String, '/mongla/localization/aiding', latched)
+        # Everything above in one message, on the same tick as the pose.
+        self._pub_state = self.create_publisher(
+            LocalizationState, '/mongla/localization/state', 10)
         self.create_timer(PUBLISH_PERIOD_S, self._publish)
         self.create_timer(5.0, self._diagnose)
         self.get_logger().info(

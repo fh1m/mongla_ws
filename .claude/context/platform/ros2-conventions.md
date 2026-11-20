@@ -79,10 +79,10 @@ selector** — no backend, heading-source or connection-mode parameter.
 
 ## 2. The verbs
 
-23 verbs: 11 run on the board as one `SROT_MOVE` each (`move_*`, `yaw_*`, `turn`,
-`set_depth`, `stop`, `pause`, `style_roll`); 12 run on the host (`arm`, `disarm`, `set_mode`,
+25 verbs: 11 run on the board as one `SROT_MOVE` each (`move_*`, `yaw_*`, `turn`,
+`set_depth`, `stop`, `pause`, `style_roll`); 14 run on the host (`arm`, `disarm`, `set_mode`,
 `head`, `surface`, `mission_reset`, `calibrate_depth`, `calc_distance`, `fire`, `motor_test`,
-`vision_align`, `vision_move`). Fields, defaults and which side each runs on:
+`vision_align`, `vision_move`, `locate`, `go_to`). Fields, defaults and which side each runs on:
 [`reference/commands.md` §1](../reference/commands.md); behaviour and the traps:
 [`command-reference.md`](../missions/command-reference.md).
 

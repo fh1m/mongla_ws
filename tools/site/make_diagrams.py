@@ -231,7 +231,7 @@ def package_map():
 
     # the road: one action, one state topic
     box(400, 100, 250, 130, 'mongla_interfaces', ['one action:  /mongla/move', 'one topic:   /mongla/state'],
-        RED, '23 verbs, one goal at a time')
+        RED, '25 verbs, one goal at a time')
     arrow(332, 165, 396, 165, RED_L)
     o.append(f'<path d="M332,310 H690 V200 H712" fill="none" stroke="{SEA_L}" stroke-width="1.6"/>'
              f'<path d="M716,200 l-9,-4 v8 z" fill="{SEA_L}"/>')
