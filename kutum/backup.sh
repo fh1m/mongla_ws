@@ -13,6 +13,12 @@
 #                    nowhere but the vehicle.
 #   ~/.mongla        the deck's own config: bringup.yaml, courses, geometry
 #   ~/calib_*        the calibration captures the guide resumes from
+#   ~/hailort_src, ~/hailort_drivers, ~/hailo_dkms
+#                    HailoRT 4.24 and its PCIe driver, built from source. The
+#                    Hailo-8 track is frozen on 4.x and setup.sh clones a tag
+#                    from GitHub; a deleted tag would strand a driver rebuild
+#                    after a kernel update. Build trees are left behind: they
+#                    are the rebuild's output, not its input.
 #
 # --runs adds ~/mongla_runs and ~/data (bags, logs, clips; gigabytes).
 #
@@ -25,13 +31,13 @@ host="${TARGET#*@}"; host="${host%%.*}"
 DEST="${KUTUM_BACKUP:-$HOME/kutum-backup}/$host"
 mkdir -p "$DEST"
 
-what=(hailo_models .mongla 'calib_*')
+what=(hailo_models .mongla 'calib_*' hailort_src hailort_drivers hailo_dkms)
 [ "${2:-}" = "--runs" ] && what+=(mongla_runs data)
 
 for w in "${what[@]}"; do
   # A glob is expanded on the vehicle; a name that is absent there is skipped.
   for src in $(ssh -o BatchMode=yes "$TARGET" "cd ~ && ls -d $w 2>/dev/null"); do
-    rsync -a --info=stats0 "$TARGET:~/$src" "$DEST/"
+    rsync -a --info=stats0 --exclude '/*/build*/' "$TARGET:~/$src" "$DEST/"
     echo "  ok   ~/$src -> $DEST/$src ($(du -sh "$DEST/$src" | cut -f1))"
   done
 done
