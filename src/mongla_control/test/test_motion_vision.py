@@ -17,8 +17,7 @@ from mongla_control.motion_vision import (
     align_loop, move_loop, _fill, _clamp, _present, _freshness, _range_gain,
     _coast_authority, _authority,
     VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S, VISION_FRESH_ZERO_MAX_S,
-    VISION_RANGE_GAIN_FILL_LO, VISION_RANGE_GAIN_FILL_HI, VISION_LOCK_GATE_NORM,
-    FWD_BAND,
+    VISION_RANGE_GAIN_FILL_LO, VISION_RANGE_GAIN_FILL_HI, FWD_BAND,
     ALIGNED, LOST, TIMEOUT, NO_CAMERA, COMMIT_UNVERIFIED,
 )
 
@@ -651,7 +650,6 @@ def test_align_brake_fires_after_sustained_strafe():
     # A lat align that drives hard one way and then reaches the band must emit a
     # REVERSE-sign lateral brake kick (opposite the drive) before going neutral,
     # so the hull stops square instead of coasting sideways.
-    from mongla_control.motion_vision import VISION_BRAKE_MIN_PCT
     # Off-centre for a while (drives +lat), then snaps into band -> ALIGNED.
     # 10 strafe frames = 0.2 s at the fake's 50 Hz tick: the strafe the brake
     # was tuned on (4 frames at 20 Hz). The EMA is in seconds, so is this.

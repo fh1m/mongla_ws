@@ -31,7 +31,6 @@ import sys
 import threading
 import time
 
-import pytest
 
 
 def _run(reporter, iterations=1500):

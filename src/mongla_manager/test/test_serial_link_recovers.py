@@ -8,7 +8,6 @@ yaw read NaN -- never a frozen value -- for 7.7 s (88.0-94.5 s, first good
 sample 95.7 s), and the board came back DISARMED.
 """
 import serial
-import pytest
 
 from mongla_manager.auv_manager_node import _is_dead_port
 

@@ -12,11 +12,9 @@ operator hit Ctrl-C:
 """
 
 import os
-import signal
 import subprocess
 import sys
 import textwrap
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest

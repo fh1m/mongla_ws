@@ -460,9 +460,9 @@ manager's `vision.*` gains are declared from a table and are listed in
 |---|---|
 | `camera` | `'downward'` |
 | `direct_feed` | `False` |
-| `pool_depth_m` | `float('nan'` |
-| `pool_depth_min_m` | `float('nan'` |
-| `pool_depth_max_m` | `float('nan'` |
+| `pool_depth_m` | `nan` |
+| `pool_depth_min_m` | `nan` |
+| `pool_depth_max_m` | `nan` |
 | `medium` | `'water'` |
 | `focal_air_px` | `_F_AIR_PX` |
 | `focal_water_px` | `_F_WATER_PX` |
@@ -514,7 +514,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `loop_closure` | `False` |
 | `place_period_s` | `_lc.PLACE_PERIOD_S` |
 | `place_travel_m` | `_lc.PLACE_TRAVEL_M` |
-| `pool_depth_m` | `float('nan'` |
+| `pool_depth_m` | `nan` |
 | `act_conf` | `0.45` |
 | `publish_hz` | `0.0` |
 | `anchor_hz` | `4.5` |
@@ -553,7 +553,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `min_hits` | `1` |
 | `iou_threshold` | `0.2` |
 | `track_activation_threshold` | `0.40` |
-| `high_conf_det_threshold` | `0.6` |
+| `high_conf_det_threshold` | `nan` |
 | `detector_conf` | `0.0` |
 | `classes` | `''` |
 | `enable_kalman` | `True` |

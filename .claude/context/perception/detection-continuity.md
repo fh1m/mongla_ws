@@ -55,7 +55,10 @@ looks healthy — the same shape as the truncated-coast bug in
 
 The fix is structural: the gates are **clamped to the detector's live `conf`**,
 wired through all three launch files. A detection the detector chose to publish
-must be allowed to start a track. It is a ceiling, never an assignment.
+must be allowed to start a track. It is a ceiling, never an assignment. Unset,
+the node's own threshold is now that floor (its default is NaN), so a launch
+no longer warns about a clamp it caused itself; only an operator's value above
+the floor warns (`test_tracker_settings_are_honest.py`).
 
 Live confirmation: `/tracks` now publishes at **51.95 Hz**. It published
 nothing before.

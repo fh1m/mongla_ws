@@ -185,3 +185,38 @@ def test_the_hailort_service_keeps_the_one_capability_it_needs():
     assert lines.get('User') == 'hailort'
     assert lines.get('AmbientCapabilities') == 'CAP_KILL'
     assert lines.get('CapabilityBoundingSet') == 'CAP_KILL'
+
+
+def _pin_grader():
+    """The Python the doctor runs to compare kutum/requirements.txt with what is installed."""
+    s = (ROOT / 'kutum' / 'doctor.sh').read_text()
+    start = s.index("import importlib.metadata as md, re, sys")
+    return s[start:s.index('\nPY\n', start)]
+
+
+def test_the_doctor_fails_a_pin_the_machine_does_not_have(tmp_path):
+    """deploy.sh never installs the pins (setup.sh does), so the doctor it runs
+    from the staged release is what refuses a release whose pins the vehicle
+    lacks. Verified on Kutum 2026-11-20: onnxruntime==1.32.0 against an
+    installed 1.31.1 is a FAIL, and the four real pins pass."""
+    import importlib.metadata as md
+    import sys
+    have = md.version('pytest')
+    req = tmp_path / 'requirements.txt'
+    req.write_text(f'pytest=={have}   # comment\nnot-a-real-pkg-mongla==1.0\n'
+                   'pytest[testing]==0.0.1\n# pinned==9.9\n')
+    script = tmp_path / 'grade.py'
+    script.write_text(_pin_grader())
+    out = subprocess.run([sys.executable, str(script), str(req)], capture_output=True,
+                         text=True, check=True).stdout.splitlines()
+    assert out[0] == f'ok pytest=={have}'
+    assert out[1] == 'DIFF not-a-real-pkg-mongla==1.0, installed missing'
+    assert out[2] == f'DIFF pytest==0.0.1, installed {have}'
+    assert len(out) == 3
+
+
+def test_the_pin_check_runs_before_the_switch():
+    doctor = (ROOT / 'kutum' / 'doctor.sh').read_text()
+    assert 'DIFF) fail "pin' in doctor
+    deploy = (ROOT / 'kutum' / 'deploy.sh').read_text()
+    assert deploy.index('kutum/doctor.sh" ||') < deploy.index('release.sh activate')

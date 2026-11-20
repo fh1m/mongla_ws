@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 cv2 = pytest.importorskip('cv2')
 
 from mongla_vision.underwater import (        # noqa: E402
-    WaterStats, analyse_frames, frame_stats,
+    analyse_frames,
 )
 
 

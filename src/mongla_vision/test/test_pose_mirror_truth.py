@@ -259,7 +259,6 @@ def test_the_DSL_hands_back_the_refusal_with_both_candidates():
     """`anchor_heading` used to wait for ok=True and time out as 'no fused
     pose', throwing the reason away. Falsified if the mission log cannot see
     which two headings were in dispute."""
-    from mongla_interfaces.msg import TargetPose as Msg
     from mongla_planner.mongla_dsl import MonglaMission
     out = []
     n = _node_with(out)

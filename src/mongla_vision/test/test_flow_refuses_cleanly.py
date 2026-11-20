@@ -22,7 +22,6 @@ import ast
 import pathlib
 from unittest.mock import MagicMock
 
-import pytest
 
 _NODE = (pathlib.Path(__file__).resolve().parents[1]
          / 'mongla_vision' / 'flow' / 'flow_node.py')
@@ -57,7 +56,6 @@ def _refusals_not_followed_by_return() -> list[int]:
     tree = ast.parse(_NODE.read_text())
     bad: list[int] = []
     for parent in ast.walk(tree):
-        body = getattr(parent, 'body', None)
         for attr in ('body', 'orelse', 'finalbody'):
             block = getattr(parent, attr, None)
             if not isinstance(block, list):

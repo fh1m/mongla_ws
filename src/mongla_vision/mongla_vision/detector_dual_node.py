@@ -463,6 +463,8 @@ def main():
         # launch report this process died and restart it on a normal stop.
         pass
     finally:
+        from mongla_runtime.spin import deaf_to_ctrl_c
+        deaf_to_ctrl_c()      # a second Ctrl-C must not interrupt the teardown
         for n in nodes:
             try:
                 n.destroy_node()

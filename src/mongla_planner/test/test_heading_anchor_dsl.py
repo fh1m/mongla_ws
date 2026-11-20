@@ -11,7 +11,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from mongla_planner.mongla_dsl import MonglaMission
-from mongla_localization.heading_anchor import Anchor
 from mongla_localization.pose_cluster import RULE_VIEWPOINT, Fused
 
 

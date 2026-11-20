@@ -507,6 +507,33 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-123: a Ctrl-C interrupted every node's teardown, inside the Hailo's release `SEEN ON KUTUM 2026-11-19` **FIXED 2026-11-19**
+
+**What.** The first full `vision_pi` run on Kutum after the second read,
+stopped the way an operator stops it, printed a KeyboardInterrupt traceback
+from every Python node (the detector, both trackers, four pose solvers, both
+pose fuses), and each exited -2, which the launch reported as a death with
+"restart 1/3". A terminal Ctrl-C reaches every process twice (the terminal
+signals the process group and `ros2 launch` forwards its own); the first
+stopped the spin, the second landed inside `destroy_node()`. In the detector
+it landed inside the Hailo VDevice's `__exit__`, part-way through releasing
+the chip the next start needs. The same run showed every launch warning that
+the tracker's `high_conf_det_threshold` (0.6) was clamped to the detector's
+0.45: a clamp the shipped defaults caused themselves, printed as a WARN on
+every start, which teaches an operator to read past warnings.
+
+**Fix.** `mongla_runtime.spin.deaf_to_ctrl_c()` is the first line of
+every node's teardown in `mongla_vision` and of the three localization nodes
+the vision launch starts; the launch still escalates to SIGTERM and SIGKILL
+if a teardown hangs. The tracker's threshold defaults to NaN, meaning the
+detector's floor, and only an operator's value above the floor warns. Guards:
+`test_ctrl_c_twice_is_a_clean_stop.py` and `test_tracker_settings_are_honest.py`,
+both injection-verified. On Kutum, a process-group SIGINT now ends all nine
+processes "finished cleanly" with no traceback and no clamp warning, and the
+next start brings both detectors back (56.8 and 15.0 Hz). The manager,
+planner and Batighor mains have the same shape and are left for their own
+audits; the manager's Ctrl-C is its disarm path.
+
 ### B-126: a mission read a stopped localiser's last pose and last motion verdict forever `READ 2026-11-20` **FIXED 2026-11-20**
 
 **What.** `pose()` cached the first `/mongla/odom` it heard and, once one existed, neither

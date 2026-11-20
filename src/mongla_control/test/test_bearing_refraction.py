@@ -64,7 +64,7 @@ def test_the_uncorrected_bearing_is_a_THIRD_too_large():
     """The defect, pinned as a number. If the correction is reverted this is
     what comes back."""
     K, d = _K()
-    fx, cx = K[0], K[2]
+    cx = K[2]
     w, h = d['image_width'], d['image_height']
     air = bearing_from_pixels(cx + 300.0, h / 2, 40, 40,
                               width=w, height=h, K=K, n_medium=1.0)

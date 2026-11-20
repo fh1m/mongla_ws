@@ -182,7 +182,7 @@ def worker():
     bfilt = BearingFilter()
     period = 1.0 / max(A.hz, 1.0)
     t_loop = time.perf_counter()
-    hz_ema = det_ema = 0.0
+    hz_ema = 0.0
     n_det = 0
     while not _stop.is_set():
         t0 = time.perf_counter()
