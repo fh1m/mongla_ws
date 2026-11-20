@@ -47,7 +47,6 @@ import time as _time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable, Optional
 
-import rclpy
 
 from .client import MoveFailed, MoveRejected
 from .model_context import ClassRef

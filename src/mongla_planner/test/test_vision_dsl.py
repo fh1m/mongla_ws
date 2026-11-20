@@ -277,7 +277,6 @@ def _ready_mission(monkeypatch, dd, camera='forward'):
 
 def test_detected_is_case_insensitive(monkeypatch):
     import mongla_planner.mongla_dsl as dd
-    import mongla_planner.dsl_support as ds
     m = _ready_mission(monkeypatch, dd)
     # Drive the real callback so _det_seen is populated the way ROS would.
     m._on_detections('forward', _fake_msg('gate'))
@@ -292,7 +291,6 @@ def test_detected_survives_single_frame_flicker(monkeypatch):
     # as present within the recency window, so `while not detected()` reacquires
     # the instant it reappears instead of chasing per-frame dropouts.
     import mongla_planner.mongla_dsl as dd
-    import mongla_planner.dsl_support as ds
     clock = {'t': 100.0}
     monkeypatch.setattr(dd._time, 'monotonic', lambda: clock['t'])
     m = _ready_mission(monkeypatch, dd)
@@ -308,7 +306,6 @@ def test_detected_survives_single_frame_flicker(monkeypatch):
 
 def test_detected_false_after_window_expires(monkeypatch):
     import mongla_planner.mongla_dsl as dd
-    import mongla_planner.dsl_support as ds
     clock = {'t': 50.0}
     monkeypatch.setattr(dd._time, 'monotonic', lambda: clock['t'])
     m = _ready_mission(monkeypatch, dd)
@@ -322,7 +319,6 @@ def test_where_reflects_latest_frame_not_seen_window(monkeypatch):
     # where()/where_offset() must read the LATEST frame, never the last-seen
     # memory -- bearing has to be the target's current position, not a stale one.
     import mongla_planner.mongla_dsl as dd
-    import mongla_planner.dsl_support as ds
     clock = {'t': 0.0}
     monkeypatch.setattr(dd._time, 'monotonic', lambda: clock['t'])
     m = _ready_mission(monkeypatch, dd)
@@ -341,7 +337,6 @@ def test_where_reflects_latest_frame_not_seen_window(monkeypatch):
 #  Pure core: _eval_where (no ROS)                          #
 # --------------------------------------------------------------------------- #
 def test_eval_where_left_center_right():
-    import mongla_planner.mongla_dsl as dd
     import mongla_planner.dsl_support as ds
     W = 640.0
     # cx=64 -> offset -0.8 -> left; cx=320 -> 0 -> center; cx=576 -> +0.8 -> right
@@ -351,7 +346,6 @@ def test_eval_where_left_center_right():
 
 
 def test_eval_where_largest_area_wins():
-    import mongla_planner.mongla_dsl as dd
     import mongla_planner.dsl_support as ds
     # Two gates: a tiny one on the left, a big one on the right -> right wins.
     recs = [_rec('gate', cx=50.0,  w=10.0, h=10.0),
@@ -362,7 +356,6 @@ def test_eval_where_largest_area_wins():
 
 
 def test_eval_where_unknown_when_no_width_or_absent():
-    import mongla_planner.mongla_dsl as dd
     import mongla_planner.dsl_support as ds
     assert ds._eval_where([_rec('gate')], 'gate', 0.0, 0.15) == ('unknown', None)
     assert ds._eval_where([], 'gate', 640.0, 0.15) == ('unknown', None)
@@ -371,7 +364,6 @@ def test_eval_where_unknown_when_no_width_or_absent():
 
 def test_wait_for_returns_true_when_target_appears(monkeypatch):
     import mongla_planner.mongla_dsl as dd
-    import mongla_planner.dsl_support as ds
     m = _ready_mission(monkeypatch, dd)
     # Target absent for the first 2 polls; on the 3rd the pump lands a frame.
     state = {'n': 0}
@@ -385,7 +377,6 @@ def test_wait_for_returns_true_when_target_appears(monkeypatch):
 
 def test_wait_for_returns_false_on_timeout(monkeypatch):
     import mongla_planner.mongla_dsl as dd
-    import mongla_planner.dsl_support as ds
     m = _ready_mission(monkeypatch, dd)   # pump stubbed; no frame ever lands
     assert m.wait_for('gate', timeout=0.2) is False
 
@@ -393,7 +384,6 @@ def test_wait_for_returns_false_on_timeout(monkeypatch):
 def test_where_returns_label_from_cache(monkeypatch):
     import time as _t
     import mongla_planner.mongla_dsl as dd
-    import mongla_planner.dsl_support as ds
     m = dd.MonglaMission(MagicMock(), MagicMock(), camera='forward')
     monkeypatch.setattr(m, '_pump_detections', lambda *a, **k: None)
     m._img_size['forward'] = (640.0, 480.0)
@@ -407,7 +397,6 @@ def test_detector_node_derivation():
     # Single naming rule: /mongla_detector_<camera>, camera defaults to the
     # mission's sticky camera; explicit node always wins.
     import mongla_planner.mongla_dsl as dd
-    import mongla_planner.dsl_support as ds
     m = dd.MonglaMission(MagicMock(), MagicMock(), camera='forward')
     assert m._detector_node() == '/mongla_detector_forward'
     assert m._detector_node('downward') == '/mongla_detector_downward'
@@ -472,7 +461,6 @@ def test_align_lock_off_by_default():
 def test_param_value_types():
     # bool is checked before int (bool subclasses int) so a paused flag never
     # gets coerced to an integer parameter.
-    import mongla_planner.mongla_dsl as dd
     import mongla_planner.dsl_support as ds
     assert ds._param_value(True).type == ds.ParameterType.PARAMETER_BOOL
     assert ds._param_value(True).bool_value is True
@@ -487,7 +475,6 @@ def test_ensure_detector_aborts_loudly_when_node_absent():
     # The whole point of the fix: a missing detector node is a LOUD abort
     # (RuntimeError) with an actionable launch hint, not a swallowed warning.
     import mongla_planner.mongla_dsl as dd
-    import mongla_planner.dsl_support as ds
     client = MagicMock()
     client.node.create_client.return_value.wait_for_service.return_value = False
     m = dd.MonglaMission(client, MagicMock(), camera='forward')
@@ -519,7 +506,6 @@ def test_set_detector_param_sends_typed_param(monkeypatch):
 
 def test_set_detector_param_raises_on_rejection(monkeypatch):
     import mongla_planner.mongla_dsl as dd
-    import mongla_planner.dsl_support as ds
     client = MagicMock()
     m = dd.MonglaMission(client, MagicMock(), camera='forward')
     monkeypatch.setattr(m, '_ensure_detector', lambda *a, **k: None)

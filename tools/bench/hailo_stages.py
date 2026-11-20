@@ -32,7 +32,6 @@ import sys
 import threading
 import time
 
-import numpy as np
 
 sys.path.insert(0, os.path.expanduser('~/mongla_ws/src/mongla_vision'))
 import cv2  # noqa: E402

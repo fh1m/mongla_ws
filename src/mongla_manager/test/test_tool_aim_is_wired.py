@@ -7,7 +7,6 @@ Twice this session a knob was declared, documented, mapped and never passed --
 import sys
 from pathlib import Path
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -15,7 +14,7 @@ _CTL = Path(__file__).resolve().parents[2] / 'mongla_control' / 'mongla_control'
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of_file  # noqa: E402  (issue #22)
 _VV = code_of_file(_CTL / 'vision_verbs.py')
 _MV = code_of_file(_CTL / 'motion_vision')
 _VS = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
@@ -120,7 +119,6 @@ def test_the_warning_is_once_per_tool_not_per_call():
 #  Driving the real method against a fake is what closes that gap.
 # --------------------------------------------------------------------------
 import sys as _sys
-import types as _types
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'mongla_control'))
 from mongla_control.vision_verbs import VisionVerbs      # noqa: E402

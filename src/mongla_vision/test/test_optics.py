@@ -11,7 +11,6 @@ The test that bites varies the constant. That is also why the transforms read
 `N_WATER` at CALL time rather than as a default argument.
 """
 
-import math
 
 import pytest
 

@@ -1,6 +1,5 @@
 """Pure-function tests for the SROT wire-constant module. No ROS/MAVLink needed."""
 
-import pytest
 
 from mongla_control.fc import srot_protocol as sp
 

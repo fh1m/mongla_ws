@@ -16,11 +16,9 @@ Approaching is the dangerous direction. `fire_max_tilt_deg` already holds the
 SHOT for obliquity; nothing held the APPROACH, so the hull could arrive too
 close and then correctly refuse to fire.
 """
-import ast
 import inspect
 import math
 import pathlib
-import re
 
 import pytest
 

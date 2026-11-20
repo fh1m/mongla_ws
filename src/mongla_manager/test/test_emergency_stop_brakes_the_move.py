@@ -20,7 +20,6 @@ import inspect
 import pathlib
 import sys
 
-import pytest
 
 import mongla_control.fc.srot_protocol as sp
 
