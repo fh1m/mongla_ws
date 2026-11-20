@@ -73,6 +73,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `hailo_service_drill.py` | What happens to a vision process when the HailoRT service dies. |
 | `hailo_share.py` | What XFeat costs the detectors when the three share one Hailo-8. |
 | `hailo_stages.py` | Where does a Hailo detector call go? Per stage, one or two detectors at once. |
+| `hef_map.py` | mAP50 of a compiled HEF on a labelled YOLO split, run on the real Hailo. |
 | `hef_vs_cpu.py` | Does XFeat still MATCH after INT8? The gate that makes the HEF a result. |
 | `hull_stations.py` | Read EXACT thruster stations out of an Onshape GLB export. |
 | `imu_rest_stats.py` | What the board's IMU says when the vehicle is NOT moving. |
