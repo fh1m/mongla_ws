@@ -62,7 +62,11 @@ at rest (measured-bars, the static IMU table). Integrated, that is 8 m of phanto
 prior is now 0.2 (B-135), and the same recording walks 0.94 cm.
 
 **Zero velocity.** When the hull is still (no demand on the thrusters, and the IMU quiet for
-a second) the filter is told its velocity is exactly zero. That one fact observes the
+a second) the filter is told its velocity is exactly zero. Quiet means the gyro under
+0.02 rad/s and the body's acceleration, gravity removed with the board's attitude, varying
+less than 0.25 m/s^2 on every axis. It was the magnitude of the accelerometer, which a
+sideways push barely moves (0.4 m/s^2 across changes it by 0.008), so a hull shoved along
+with the gyro quiet read as still (B-139). That one fact observes the
 velocity error, and through it the bias. With it off, the same bench recording ran away
 to 1665 m in 140 s. A hull that has never been commanded is still from the first sample
 (B-132).
@@ -74,10 +78,14 @@ flown. A filter that knows only the first kind, one fix in, believed itself to 0
 15 m that had put it 0.6 m off, and refused the next correct fix (B-136). So the
 horizontal sigma is now held at no less than
 
-    sqrt(sigma_at_last_fix^2 + (0.035 x distance_since_fix)^2)
+    sqrt(sigma_at_last_fix^2 + (0.036 x distance_since_fix)^2)
 
-0.035 is the worst of the three tape-measured slides. The cost is honest: `go_to` refuses
-about 13 m after a 0.15 m fix, until the next one.
+0.036 is the worst of the three tape-measured slides, the same number flow publishes its
+covariance with (`FLOW_SCALE_SIGMA`, in `inekf.py`; a test holds the two equal). The cost
+is honest: from a 0.15 m fix the sigma passes `go_to`'s 0.5 m default after about 13 m
+(7 m at 0.3 m), and `go_to` stops there until the next fix. **Plan a route with a fix
+every ten metres or so.** The DSL's `go_to` warns before it starts a leg longer than
+`reach_m` gives, so a mission learns this at the dock, not halfway across the pool.
 
 **The observability gate.** A depth or heading correction also nudges attitude, and
 while nothing measures horizontal velocity that nudge rotates a velocity nobody is

@@ -20,7 +20,7 @@ from mongla_interfaces.msg import FloorHeading, MonglaState
 
 from mongla_localization.command_velocity import (BLOCKED)
 from mongla_localization import frames
-from mongla_localization.inekf import _wrap180
+from mongla_localization.inekf import GRAVITY, _wrap180
 from mongla_localization.heading_anchor import snap_to_grid
 
 # A dt longer than this is a GAP, not a long step. Integrating one 2 s
@@ -96,10 +96,14 @@ def _R_from_quat(w, x, y, z):
     slightly off unit length produces a matrix with determinant != 1, and
     `so3_log` of that is not a rotation vector. The filter would take the
     resulting garbage as a real innovation.
+
+    None for a quaternion with no length or a non-finite part: that is no
+    attitude at all, and the identity it used to return is a level hull facing
+    the boot heading, fused at the board's 0.5 deg sigma.
     """
     n = math.sqrt(w * w + x * x + y * y + z * z)
-    if n == 0.0:
-        return np.eye(3)
+    if not (math.isfinite(n) and n > 1e-9):
+        return None
     w, x, y, z = w / n, x / n, y / n, z / n
     return np.array([
         [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
@@ -197,9 +201,11 @@ class LocalizationInputsMixin:
         # a backend that cannot supply attitude must not be given a fabricated
         # one -- it would be better to diverge visibly than to converge to a
         # number nobody measured.
-        if msg.orientation_covariance[0] >= 0.0:
-            self._board_R = _R_from_quat(msg.orientation.w, msg.orientation.x,
-                                         msg.orientation.y, msg.orientation.z)
+        R_board = (_R_from_quat(msg.orientation.w, msg.orientation.x,
+                                msg.orientation.y, msg.orientation.z)
+                   if msg.orientation_covariance[0] >= 0.0 else None)
+        if R_board is not None:
+            self._board_R = R_board
             # Into the pool frame before the filter sees it. The board's yaw
             # is boot-relative; once anchored, handing it over raw pins the
             # filter back to boot axes at 50 Hz while `frame_id` says `pool`.
@@ -228,14 +234,19 @@ class LocalizationInputsMixin:
                         f.update_attitude(R, sigma_deg=s))
             self._n['att'] += 1
 
-        # Stationarity evidence for the ZUPT, kept per sample. |a| rather than
-        # the vector, because the gravity component is what makes the raw axes
-        # attitude-dependent while its magnitude is not.
-        a = msg.linear_acceleration
+        # Stationarity evidence for the ZUPT, kept per sample: the body's own
+        # acceleration, gravity removed with this sample's board attitude, per
+        # axis. It was |a|, the magnitude, chosen because tilt cannot change
+        # it -- and neither, to first order, can a horizontal push: 0.4 m/s^2
+        # sideways moves |a| by 0.008, so a hull shoved along with the gyro
+        # quiet read as still (test_the_unrun_branches). Without an attitude
+        # the raw axes stand in; the gyro gate bounds the tilt they can see.
+        a = np.array([msg.linear_acceleration.x, msg.linear_acceleration.y,
+                      msg.linear_acceleration.z], dtype=float)
+        if R_board is not None:
+            a = a + R_board.T @ GRAVITY
         w = msg.angular_velocity
-        self._still.append((
-            max(abs(w.x), abs(w.y), abs(w.z)),
-            math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z)))
+        self._still.append((max(abs(w.x), abs(w.y), abs(w.z)), a))
         if self._zupt_enabled:
             self._maybe_zupt()
 
@@ -487,12 +498,12 @@ class LocalizationInputsMixin:
         if now - since < settle:
             return
         gyro = [g for g, _ in self._still]
-        acc = [a for _, a in self._still]
         if max(gyro) > STILL_GYRO_RAD_S:
             return
-        # The SPREAD of specific force, not its magnitude -- gravity is in
-        # there and a tilted hull reads a large constant. Variation is motion.
-        if (max(acc) - min(acc)) > STILL_ACCEL_SPREAD:
+        # The SPREAD on each axis, not a level -- a constant (a tilt the
+        # attitude got slightly wrong, a bias) is not motion. Variation is.
+        acc = np.array([a for _, a in self._still])
+        if float(np.max(acc.max(axis=0) - acc.min(axis=0))) > STILL_ACCEL_SPREAD:
             return
         if self._apply(None, lambda f, s=self._zupt_sigma: f.update_zero_velocity(sigma=s)):
             self._n['zupt'] += 1
@@ -665,7 +676,6 @@ class LocalizationInputsMixin:
         self._yaw_offset_deg = _wrap180(self._yaw_offset_deg + moved)
         self._n[key] += 1
 
-
     def _on_fix(self, msg: PointStamped) -> None:
         """A pool-frame position, from `fix_position()` or `fix_from_prop()`.
 
@@ -694,6 +704,7 @@ class LocalizationInputsMixin:
                 f'certain and wrong')
             return
         self._n['fix'] += 1
+
 
 def _wrap_period(deg: float, period: float) -> float:
     """`deg` wrapped to (-period/2, period/2]."""

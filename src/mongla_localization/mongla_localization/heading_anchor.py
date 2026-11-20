@@ -58,6 +58,8 @@ class Anchor:
 
 
 def _wrap180(deg: float) -> float:
+    """Fold an angle into (-180, 180]. The package's one copy: the filter,
+    resection and pose clustering import it from here."""
     d = math.fmod(float(deg) + 180.0, 360.0)
     if d <= 0.0:
         d += 360.0

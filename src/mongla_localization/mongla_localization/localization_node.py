@@ -58,7 +58,7 @@ from mongla_interfaces.msg import FloorHeading, LocalizationState, MonglaState
 from mongla_localization.command_velocity import (CommandVelocityModel,
                                                   MotionCheck)
 from mongla_localization import frames
-from mongla_localization.inekf import RIEKF
+from mongla_localization.inekf import FLOW_SCALE_SIGMA, RIEKF
 from mongla_localization.retro import Retrodictor
 
 from .localization_inputs import STILL_WINDOW, LocalizationInputsMixin
@@ -69,11 +69,10 @@ from .localization_publish import PUBLISH_PERIOD_S, LocalizationPublishMixin
 # measured on this board. At 0.01 the filter could not learn it, and a still
 # hull walked 15.5 cm in 90 s; at 0.2, 0.94 cm (measured-bars 99).
 ACCEL_BIAS_PRIOR = 0.2
-# The flow's scale error, 1 sigma, as a fraction of distance flown: the worst
-# of the three 30 cm slides read 3.6 % long (measured-bars 13). Without it a
-# filter one fix in held 0.15 m across 15 m of 5 %-scale flow and refused the
-# next correct fix 3 times in 5; with it, 0 in 15 (measured-bars 99).
-FLOW_SCALE_SIGMA = 0.035
+# FLOW_SCALE_SIGMA (inekf.py) floors the horizontal sigma by distance since
+# the last fix. Without it a filter one fix in held 0.15 m across 15 m of
+# 5 %-scale flow and refused the next correct fix 3 times in 5; with it, 0 in
+# 15 (measured-bars 99).
 
 
 class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):

@@ -46,7 +46,8 @@ import numpy as np
 _LOC = Path(__file__).resolve().parents[2] / 'src' / 'mongla_localization'
 sys.path.insert(0, str(_LOC))
 
-from mongla_localization.inekf import GRAVITY, RIEKF, State, so3_exp, so3_log  # noqa: E402
+from mongla_localization.inekf import (  # noqa: E402
+    FLOW_SCALE_SIGMA, GRAVITY, RIEKF, State, so3_exp, so3_log)
 
 
 def _node_constant(name: str) -> float:
@@ -56,7 +57,6 @@ def _node_constant(name: str) -> float:
     return float(re.search(rf'^{name} = ([0-9.]+)', src, re.M).group(1))
 
 
-FLOW_SCALE_SIGMA = _node_constant('FLOW_SCALE_SIGMA')
 ACCEL_BIAS_PRIOR = _node_constant('ACCEL_BIAS_PRIOR')
 
 IMU_HZ = 50.0          # measured: SCALED_IMU2 at 50.05 Hz

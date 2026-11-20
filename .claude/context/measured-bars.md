@@ -8801,7 +8801,7 @@ of 10^6 m. Every number above is from a run with 0 gaps and no player left after
   | A2 flow scale 0 / 2.5 / 5 % | final 0.58 / 1.65 / 3.46 % of distance | characterisation |
   | A3 one fix at 6 s, 5 % scale, second correct fix at 59 s, **no floor** | **accepted 2 of 5**; believed 0.153 m, was 0.5-0.7 m off | after <= own error + 5 cm: **FAIL** |
   | A3 the same, fix at 20 s, no floor | accepted 4 of 5 | **FAIL** |
-  | A3 both, **`FLOW_SCALE_SIGMA` 0.035** | **accepted 5 of 5, and 5 of 5**; believed 0.58 / 0.38 m | **PASS** |
+  | A3 both, **`FLOW_SCALE_SIGMA` 0.036** | **accepted 5 of 5, and 5 of 5**; believed 0.59 / 0.39 m | **PASS** |
   | A4 12 s flow dropout mid-cruise | 0.099 m at its end, against 0.088 m with no dropout | characterisation |
 
   The bar first written for A3, "under 0.30 m after the fix", failed in every arm including
@@ -8809,17 +8809,29 @@ of 10^6 m. Every number above is from a run with 0 gaps and no player left after
   own, so that bar scored the fix's noise, not the filter. Kept here; the bar meant was
   "accepted, and no worse than the fix's own error plus 5 cm".
 
-  **Shipped: `FLOW_SCALE_SIGMA = 0.035`** (`localization_node.py`), the worst of the three
-  §13 slides (3.6 %): after a fix the horizontal sigma is held at no less than
-  sqrt(sigma_fix^2 + (0.035 x distance)^2). Without it the filter's position sigma came from
+  **Shipped: `FLOW_SCALE_SIGMA = 0.036`** (`inekf.py`), the worst of the three §13 slides,
+  the same value as mongla_vision's `FLOW_SCALE_SIGMA_FRAC` (`test_one_scale_error.py`
+  holds them equal; it first shipped as a hand-rounded 0.035, and the table above was re-run
+  at 0.036 with the same verdicts): after a fix the horizontal sigma is held at no less than
+  sqrt(sigma_fix^2 + (0.036 x distance)^2). Without it the filter's position sigma came from
   per-sample flow noise only, which integrates like a square root while a scale error grows
   with distance; a filter one fix in was certain and wrong, and refused the correction.
   A1, A2 and A4 are unchanged by it to the millimetre. `test_scale_error_floor.py` fails
   with the floor removed. Consequence for `go_to`: from a 0.15 m fix, sigma reaches the
-  0.5 m default tolerance after about 13.6 m, and `go_to` then refuses until the next fix,
-  which is the honest answer.
+  0.5 m default tolerance after about 13.2 m (7.2 m at 0.3 m), and `go_to` then stops until
+  the next fix, which is the honest answer. The DSL's `go_to` warns before a leg longer than
+  that (`reach_m`, `test_go_to_reach.py`), so a route is planned with a fix every ~10 m.
 
-  Not covered by 0.035: a sloping floor. Flow scale is height above the floor; the course
+  Not covered by 0.036: a sloping floor. Flow scale is height above the floor; the course
   file's floor goes from 1.28 to 2.0 m, so one assumed depth is up to 30 % wrong at 0.5 m
   hull depth. A floor-depth map is bead es5.7.
+
+- **ZUPT stillness, magnitude against per axis (B-139), 2026-11-20.** Bar, written first: on
+  the real bench recording (1x on Kutum, zupt on, anchor at 120 s, 240 s), the per-axis
+  veto applies no fewer ZUPTs and walks no further at rest than the magnitude veto it
+  replaces, within 1 mm. Result: 232 and 232 ZUPTs; still-hull walk 5-95 s 9.3 and 9.4 mm;
+  after the anchor 9.3 and 8.9 mm. **PASS**. The case it exists for, +-0.4 m/s^2 sideways
+  with the gyro quiet, applied 3 ZUPTs in 3 s under the magnitude veto and none per axis
+  (`test_a_hull_shaking_without_turning_is_not_still`). `STILL_ACCEL_SPREAD` 0.25 m/s^2 is
+  unchanged; it now bounds each axis.
 

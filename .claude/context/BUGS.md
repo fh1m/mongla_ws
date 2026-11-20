@@ -623,8 +623,9 @@ drifted 0.5-0.7 m, and the chi-square gate refused the next correct fix 3 times 
 arrived at the wrong place reporting 0.15 m.
 
 **Fix.** `odometry_scale_sigma`: the horizontal position sigma is held at no less than
-sqrt(sigma_at_last_fix^2 + (k x distance since)^2), with k = `FLOW_SCALE_SIGMA` = 0.035,
-the worst slide in measured-bars 13. 15 of 15 accepted. Guard
+sqrt(sigma_at_last_fix^2 + (k x distance since)^2), with k = `FLOW_SCALE_SIGMA` = 0.036,
+the worst slide in measured-bars 13 (first shipped as 0.035, a hand-rounded second copy of
+mongla_vision's `FLOW_SCALE_SIGMA_FRAC`; one constant now, `test_one_scale_error.py`). 15 of 15 accepted. Guard
 `test_scale_error_floor.py`, failing with the floor removed. Not covered: a sloping floor's
 scale error (bead es5.7).
 
@@ -637,6 +638,28 @@ position, and the counter was the only place the truth showed.
 **Fix.** A `fix_refused` counter in the diagnostic line (`fix=accepted/offered`) and a
 warning naming the fix, the estimate and both sigmas. Guard
 `test_a_refused_fix_is_counted_and_said`.
+
+### B-138: a zero quaternion was fused as a level hull `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `_R_from_quat` returned the identity for a quaternion of zero length, and the
+node fused it at the board's 0.5 deg attitude sigma: a level hull facing the boot heading,
+from a message that carried no attitude at all. Found by line coverage; no test had sent one.
+
+**Fix.** It returns None for a zero or non-finite quaternion, and the sample is skipped
+like one whose covariance says "no orientation". Guard
+`test_a_zero_quaternion_is_no_attitude_not_a_level_hull` (injection-verified).
+
+### B-139: a hull pushed along with the gyro quiet read as still `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** The ZUPT's accelerometer veto took the spread of |a|, the magnitude, chosen
+because tilt cannot change it. Neither, to first order, can a horizontal push: +-0.4 m/s^2
+across moves |a| by 0.008, so a hull shoved along a line with the gyro quiet was declared
+still and its real velocity zeroed. The branch had never run in a test.
+
+**Fix.** The spread is taken per axis on the body's own acceleration, gravity removed with
+that sample's board attitude. A/B on the real bench recording on Kutum (zupt on, 240 s):
+232 and 232 ZUPTs, still-hull walk 9.3 and 9.4 mm, so no cost at rest. Guard
+`test_a_hull_shaking_without_turning_is_not_still`, which failed against the old code.
 
 ### B-130: the old-host guard matched `mongla.localization()` `READ 2026-11-20` **FIXED 2026-11-20**
 

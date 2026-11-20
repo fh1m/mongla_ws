@@ -20,6 +20,24 @@ from .dsl_detections import SeeMixin
 UNCALIBRATED_BEARING_SIGMA_DEG = 1.264
 
 
+def reach_m(sigma_m: float, tolerance_m: float, scale_sigma: float) -> float:
+    """How far the hull can fly on flow before its position sigma passes
+    `tolerance_m`, from `sigma_m` now. Pure.
+
+    The filter floors its horizontal sigma at
+    sqrt(sigma_fix^2 + (scale_sigma x distance)^2) (B-136), and `go_to`
+    stops LOST when that passes the tolerance. This is the scale term alone,
+    so it is the most the hull gets: per-frame noise only shortens it. From a
+    0.15 m fix at the 0.5 m default, 13.2 m.
+    """
+    import math
+    if not (math.isfinite(sigma_m) and scale_sigma > 0.0):
+        return float('nan')
+    if sigma_m >= tolerance_m:
+        return 0.0
+    return math.sqrt(tolerance_m ** 2 - sigma_m ** 2) / scale_sigma
+
+
 class WhereMixin:
     # In-water horizontal FOV per camera, used ONLY when that camera has not
     # published a calibrated CameraInfo. Derived from the committed calibration
@@ -351,7 +369,24 @@ class WhereMixin:
         metres left. Refused before any thrust when localization is not usable
         or its position is not known to within `tolerance` -- anchor first,
         and fix position from a prop if the sigma has grown.
+
+        Plan a fix every ~10 m: the sigma grows with distance since the last
+        one (`reach_m`), and a leg longer than the reach starts and then stops
+        LOST partway. That is warned here, before any thrust, not refused: a
+        fix taken on the way resets it.
         """
+        import math
+        from mongla_localization.inekf import FLOW_SCALE_SIGMA
+        here = self.localization(timeout=0.0)
+        if here is not None and here.usable and math.isfinite(here.x_m):
+            leg = math.hypot(float(x_m) - here.x_m, float(y_m) - here.y_m)
+            reach = reach_m(here.sigma_xy_m, float(tolerance), FLOW_SCALE_SIGMA)
+            if math.isfinite(reach) and leg > reach:
+                self.log.warning(
+                    f'[LOCAL] go_to: a {leg:.1f} m leg from sigma '
+                    f'{here.sigma_xy_m:.2f} m reaches at most {reach:.1f} m '
+                    f'before the {float(tolerance):.2f} m tolerance stops it '
+                    f'LOST; fix position from a prop on the way')
         return self._send('go_to', x_m=float(x_m), y_m=float(y_m),
                           tolerance_m=float(tolerance),
                           duration=float(duration), gain=float(gain))

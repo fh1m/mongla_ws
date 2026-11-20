@@ -32,6 +32,8 @@ import math
 from dataclasses import dataclass
 from typing import Dict, Sequence, Tuple
 
+from mongla_localization.heading_anchor import _wrap180
+
 # Two bearings that differ by less than this cross at a shallow angle, and the
 # crossing point slides a long way for a small bearing error. A geometric
 # condition, not a tuned threshold: at 10 deg of separation, 1 deg of bearing
@@ -48,18 +50,6 @@ class Fix:
     residual_m: float = float('nan')  # how far the fix misses the bearing lines
     separation_deg: float = float('nan')  # widest angle between sightings
     reason: str = ''
-
-
-def _wrap360(deg: float) -> float:
-    d = math.fmod(float(deg), 360.0)
-    return d + 360.0 if d < 0.0 else d
-
-
-def _wrap180(deg: float) -> float:
-    d = math.fmod(float(deg) + 180.0, 360.0)
-    if d <= 0.0:
-        d += 360.0
-    return d - 180.0
 
 
 def _unit(bearing_deg: float) -> Tuple[float, float]:
