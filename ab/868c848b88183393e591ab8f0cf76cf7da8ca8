@@ -1,0 +1,23 @@
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_f64be27da9054f 581-610
+src/mongla_batighor/mongla_batighor/serve.py
+  s_4af8d6f83b24e8::t_ddbcba0a4000b8 58-89,91-93
+src/mongla_batighor/test/test_serve_and_fetch.py
+  s_4af8d6f83b24e8::t_deb149e1949b06 32,108-109,291-315
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "ab868c848b88183393e591ab8f0cf76cf7da8ca8",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
