@@ -120,6 +120,12 @@ kutum/backup.sh fh1m@kutum.local --runs        # ... and the runs and footage (g
 ssh fh1m@kutum.local bash -s < kutum/doctor.sh # the doctor, from here
 ```
 
+**A Python pin is not deployed, it is installed.** `deploy.sh` copies, builds and gates; it
+never installs `kutum/requirements.txt`, which `setup.sh` installs into `~/.local`, shared by
+every release. So the doctor compares each pin with what is installed and fails a release
+whose pins the machine does not have, before the switch. After a pin changes, run the user
+half on the vehicle from the new tree (`kutum/setup.sh`, no sudo), then deploy.
+
 On the vehicle, every shell already has ROS and the workspace (`env.sh`), so:
 
 ```bash

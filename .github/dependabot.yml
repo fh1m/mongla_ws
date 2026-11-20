@@ -62,7 +62,9 @@ updates:
 
   # The vehicle's exact pins. Minor and patch only: a major version changes
   # behaviour on the vehicle and is proposed by hand after a Kutum build.
-  # Even these merge only after kutum/deploy.sh passes on the vehicle.
+  # Even these merge only after the pin is installed on the vehicle
+  # (kutum/setup.sh, the user half) and kutum/deploy.sh then passes: deploy.sh
+  # never installs pins, and its doctor fails any pin the machine lacks.
   - package-ecosystem: pip
     directory: /kutum
     schedule:
