@@ -15,8 +15,8 @@ the length of a move while the telemetry and health timers keep running.
 executor each node used before. Humble has no events executor, so a dev box
 gets the classic one and says so once.
 
-It lives in `mongla_localization` for the reason `params_file` does: it is
-the one package every node package already depends on.
+It lives in `mongla_runtime`, which imports nothing from Mongla, so every
+node package can depend on it without a cycle.
 """
 from __future__ import annotations
 

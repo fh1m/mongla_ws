@@ -21,7 +21,7 @@ from mongla_interfaces.msg import FloorHeading, MonglaState
 from mongla_localization.command_velocity import (BLOCKED)
 from mongla_localization import frames
 from mongla_localization.inekf import _wrap180
-from mongla_localization.tile_grating import snap_to_grid
+from mongla_localization.heading_anchor import snap_to_grid
 
 # A dt longer than this is a GAP, not a long step. Integrating one 2 s
 # interval as a single Euler step is not the same estimate as 100 steps of

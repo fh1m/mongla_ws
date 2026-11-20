@@ -17,6 +17,7 @@
   <depend>vision_msgs</depend>
   <depend>mongla_control</depend>
   <depend>mongla_interfaces</depend>
+  <depend>mongla_runtime</depend>
   <depend>mongla_localization</depend>  <!-- params_file: the bringup.yaml `nodes:` check -->
   <depend>mongla_vision</depend>
 

@@ -39,13 +39,19 @@ class HeadingMixin:
 
         course = self._course = load_course(name)
         unmeasured = course.unmeasured()
+        unset = [n for n in unmeasured if not course.props[n].has_position]
+        guessed = [n for n in unmeasured if n not in unset]
         self.log.info(f'[CRSE ] {course.name} loaded from {course.source} '
                       f'({len(course.props)} props)')
-        if unmeasured:
+        if unset:
             self.log.warning(
-                f'[CRSE ] NOT measured for this pool: {", ".join(unmeasured)}. '
-                f'Those props refuse a dead-reckon and the mission must search '
-                f'for them.')
+                f'[CRSE ] no position for: {", ".join(unset)}. Those props refuse '
+                f'a dead-reckon and the mission must search for them.')
+        if guessed:
+            self.log.warning(
+                f'[CRSE ] NOT taped for this pool: {", ".join(guessed)}. Their '
+                f'positions are a nominal or a placement, and a dead-reckon to '
+                f'one arrives only as near as that guess.')
         self._course_floor_to_flow(course)
         return course
 

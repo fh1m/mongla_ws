@@ -8,7 +8,7 @@ pose, and a yaw and range of zero while the fuse was undecided.
 import math
 
 from mongla_localization.pose_cluster import Fused
-from mongla_localization.pose_fuse_node import _FLOATS, fused_message
+from mongla_vision.pose_fuse_node import _FLOATS, fused_message
 
 
 class _Msg:

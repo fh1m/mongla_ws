@@ -60,9 +60,9 @@ duty cycle. A model that takes 2 ms of NPU time still costs ~11 ms wall clock.
 **Already built on the geometry side, and it matters for Q5**:
 `anchor/geometry.py` already decomposes the anchor homography to plane tilt/normal;
 `anchor/pose.py` already does metric 6-DoF via IPPE + SQPnP;
-`mongla_localization/tile_grating.py` reads the tiled floor as a 2-D grating (FFT phase
+`mongla_vision/flow/tile_grating.py` reads the tiled floor as a 2-D grating (FFT phase
 demodulation → heading mod 90°, height, sub-tile phase);
-`mongla_localization/pool_lines.py` reads a lane line (heading mod 180°, lateral offset).
+`mongla_vision/flow/pool_lines.py` reads a lane line (heading mod 180°, lateral offset).
 
 ---
 
@@ -463,7 +463,7 @@ hardware, not a Pi 5.
 
 ### 4.2 What this means given what we already built
 
-`mongla_localization/tile_grating.py` already takes the correct position on this, and states it
+`mongla_vision/flow/tile_grating.py` already takes the correct position on this, and states it
 in its own docstring: *"Phase is absolute only modulo the tile pitch — it bounds drift to one
 tile, it does not localise the vehicle in the pool. Counting which tile you are on needs
 continuity."*

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """How long the vehicle is blind while its vision process starts: frame and detection.
 
-The restart policy (`mongla_localization/launch_respawn.py`, measured-bars
+The restart policy (`mongla_runtime/launch_respawn.py`, measured-bars
 "The restart policy") claims the mission keeps running after a vision process
 dies. The cost is the blind time: the restart delay plus how long the process
 takes from exec to its first frame and first detection. This measures the

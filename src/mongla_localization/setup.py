@@ -14,19 +14,14 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Muhammad Fahim Faisal',
-    description='Estimation: invariant filter, heading anchor, resection, pose fusion.',
+    description='Estimation: invariant filter, course priors, heading anchor, resection.',
     license='MIT',
     package_data={package_name: ['courses/*.yaml', 'frames.yaml']},
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            # Both produce a POSE, which is why they live here and not beside
-            # the detector. The launch files still start them; only the
-            # package they are fetched from changed.
             'localization_node = mongla_localization.localization_node:main',
-            'pnp_node       = mongla_localization.pnp_node:main',
-            'pose_fuse_node = mongla_localization.pose_fuse_node:main',
-            'course_survey  = mongla_localization.course_survey:main',
+            'course_survey     = mongla_localization.course_survey:main',
         ],
     },
 )

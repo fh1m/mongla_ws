@@ -61,7 +61,7 @@ from mongla_localization.inekf import RIEKF
 from mongla_localization.retro import Retrodictor
 
 from .localization_inputs import STILL_WINDOW, LocalizationInputsMixin
-from .localization_publish import LocalizationPublishMixin
+from .localization_publish import PUBLISH_PERIOD_S, LocalizationPublishMixin
 
 
 class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
@@ -228,21 +228,22 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
         # looking healthy, which is exactly why this has to be said out loud.
         self._pub_aiding = self.create_publisher(
             String, '/mongla/localization/aiding', latched)
-        self.create_timer(0.1, self._publish)
+        self.create_timer(PUBLISH_PERIOD_S, self._publish)
         self.create_timer(5.0, self._diagnose)
         self.get_logger().info(
             f'[LOCAL] invariant filter up: imu=/mongla/imu '
             f'flow=/mongla/vision/{cam}/velocity use_yaw={self._use_yaw}')
 
+
 def main(args=None):
-    from mongla_localization.orphan import die_with_parent
+    from mongla_runtime.orphan import die_with_parent
     die_with_parent()        # an orphan holds devices and duplicates topics
     rclpy.init(args=args)
     node = LocalizationNode()
-    from mongla_localization.params_file import refuse_unknown
+    from mongla_runtime.params_file import refuse_unknown
     refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
-        from mongla_localization.spin import spin
+        from mongla_runtime.spin import spin
         spin(node)
     except KeyboardInterrupt:
         pass

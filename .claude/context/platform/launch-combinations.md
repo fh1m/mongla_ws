@@ -369,4 +369,4 @@ A restarted manager that finds the board armed refuses every verb except
 localization reports no pool position until it is anchored again. The only
 process that does not restart is the operator display. The rule is
 `test/test_every_launched_process_restarts.py`; why each restart is safe is in
-`mongla_localization/launch_respawn.py`.
+`mongla_runtime/launch_respawn.py`.

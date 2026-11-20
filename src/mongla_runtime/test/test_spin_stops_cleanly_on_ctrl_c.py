@@ -13,7 +13,7 @@ import pytest
 pytest.importorskip('rclpy')
 from rclpy.executors import ExternalShutdownException   # noqa: E402
 
-from mongla_localization import spin as S                # noqa: E402
+from mongla_runtime import spin as S                # noqa: E402
 
 
 def test_an_external_shutdown_returns_from_spin(monkeypatch):

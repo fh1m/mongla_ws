@@ -18,8 +18,8 @@ kernel has nothing left to remove at a 20 ms period.
 not permit a realtime priority (a dev box, or a Kutum whose limits file is not
 installed) keeps the short switch interval and says so once.
 
-It lives in `mongla_localization` for the reason `params_file` does: every node
-package already depends on it.
+It lives in `mongla_runtime`, which imports nothing from Mongla, so every
+node package can depend on it without a cycle.
 """
 from __future__ import annotations
 

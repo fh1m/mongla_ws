@@ -215,7 +215,7 @@ def test_an_unknown_pose_quality_reaches_the_wire_as_a_refusal():
     reprojection as "a perfect fit"."""
     pytest.importorskip('rclpy')
     from mongla_vision.anchor.pose import TargetPose
-    from mongla_localization.pnp_node import to_msg
+    from mongla_vision.pnp_node import to_msg
     m = to_msg(TargetPose(ok=True, ambiguity=float('nan'),
                           reproj_px=float('nan')))
     assert m.ambiguity == 1.0
@@ -223,3 +223,21 @@ def test_an_unknown_pose_quality_reaches_the_wire_as_a_refusal():
     c = PoseCluster()
     assert not (m.ambiguity <= c.max_ambiguity)
     assert not (m.reproj_px <= c.max_reproj_px)
+
+
+def test_a_newer_frame_with_a_NaN_heading_cannot_turn_a_decision_into_NaN():
+    """The paired path took the newest heading that was not None, so a NaN one
+    (this stack's absent) made a DECIDED answer with a NaN yaw: a decision with
+    no number. The legacy path already required a finite heading."""
+    from mongla_localization.pose_cluster import PoseCluster, PoseSample
+    pc = PoseCluster()
+    theta = 10.0
+    for k, beta in enumerate([-12.0, -6.0, 0.0, 6.0, 12.0, 18.0]):
+        pc.add(PoseSample(t=100.0 + k * 0.2, yaw_deg=theta,
+                          alt_yaw_deg=2.0 * beta - theta, bearing_deg=beta,
+                          vehicle_yaw_deg=0.0, reproj_px=1.0, range_m=3.0))
+    assert pc.fuse(now=101.0).decided
+    pc.add(PoseSample(t=101.2, yaw_deg=theta, vehicle_yaw_deg=float('nan'),
+                      reproj_px=1.0, range_m=3.0))
+    got = pc.fuse(now=101.2)
+    assert got.decided and got.yaw_deg == pytest.approx(theta, abs=0.5)

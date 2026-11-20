@@ -127,7 +127,7 @@ to decide.
 | `health.py` · `health_reporters.py` | subsystem health, reported rather than assumed |
 | `kutum_health.py` | Kutum, the Pi and its Hailo-8, as one group in the same report: `kutum.pi_temperature` (the Pi firmware's 80 and 85 C), `kutum.pi_power`, `kutum.hailo` (graded by the zones and throttling levels the chip reports), `kutum.disk`, and `kutum.clock` (the RTC cell, the RTC against the system clock, and any wall-clock move during the session), the Pi power and disk rows with the preflight's own grades. Sampled every 10 s on its own thread, because `vcgencmd` can take as long as the executor's stall limit. Report-only: nothing acts on these rows |
 | `connection_config.py` | connection profiles and network constants |
-| `mongla_localization/launch_defaults.py` | reads `~/.mongla/bringup.yaml` for bringup and every other launch file (it lives in the package they all depend on) |
+| `mongla_runtime/launch_defaults.py` | reads `~/.mongla/bringup.yaml` for bringup and every other launch file (it lives in the package they all depend on) |
 | `yaw_source.py` | heading, read off the board's own fused attitude |
 | `estimator/thrust_model.py` | eight signed ESC RPMs to a body-frame acceleration, for the estimator |
 | `flare_order_send.py` | `ros2 run mongla_manager flare_order R-B-Y` -- tells the vehicle the flare order |

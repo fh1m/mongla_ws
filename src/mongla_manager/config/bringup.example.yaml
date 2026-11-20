@@ -7,7 +7,7 @@
 #     ros2 launch mongla_manager bringup.launch.py
 # uses them. `name:=value` on the command line still wins over this file.
 # A key that is not listed here stops the launch (a typo cannot vanish).
-# How it works: src/mongla_localization/mongla_localization/launch_defaults.py
+# How it works: src/mongla_runtime/mongla_runtime/launch_defaults.py
 #
 # Each line shows the repository default.
 

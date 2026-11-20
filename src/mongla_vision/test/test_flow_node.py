@@ -840,7 +840,7 @@ class TestFloorHeightIsPublished:
         try:
             n._pub_floor_h = mock.MagicMock()
             n._pub_floor_h.publish.side_effect = out.append
-            with mock.patch('mongla_localization.tile_grating.measure',
+            with mock.patch('mongla_vision.flow.tile_grating.measure',
                             return_value=grating):
                 n._read_the_floor(np.zeros((360, 640), np.uint8), 1234.5)
         finally:

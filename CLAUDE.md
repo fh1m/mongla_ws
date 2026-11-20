@@ -196,10 +196,11 @@ surface**.
 
 **Exactly one node touches the board**: `auv_manager_node`. Everything else is a client.
 
-Seven packages, one page each in [`.claude/context/packages/`](.claude/context/packages/README.md):
+Eight packages, one page each in [`.claude/context/packages/`](.claude/context/packages/README.md):
 `mongla_control` (verbs + the board driver) · `mongla_manager` (the node) ·
 `mongla_vision` · `mongla_localization` · `mongla_planner` (CLI, DSL, missions) ·
-`mongla_interfaces` (one action, one state topic) · `mongla_batighor` (the operator
+`mongla_interfaces` (one action, one state topic) · `mongla_runtime` (how every node
+runs: spin, parameters, launch defaults, restarts) · `mongla_batighor` (the operator
 center: Lichtblick served from Kutum, `batighor:=true`).
 
 **Every command, generated from the code**:

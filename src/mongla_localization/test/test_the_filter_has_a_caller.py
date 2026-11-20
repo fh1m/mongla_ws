@@ -128,7 +128,7 @@ def test_every_floor_instrument_is_published_AND_consumed():
     node = code_of_file(PKG / 'mongla_localization' / 'localization_node.py')
     for module, topic, knob in (('tile_grating', 'floor_grid_deg', 'tile_m'),
                                 ('pool_lines', 'lane_heading_deg', 'lane_lines')):
-        assert f'mongla_localization.{module} import' in flow, module
+        assert f'mongla_vision.flow.{module} import' in flow, module
         assert f"/{topic}'" in flow and f"/{topic}'" in node, topic
         assert f"'{knob}'" in launch, knob
 

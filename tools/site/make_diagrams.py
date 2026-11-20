@@ -200,9 +200,9 @@ def package_map():
     leaves it down one cable. Counts are deliberately absent -- they live in
     .claude/context/packages/README.md, the one copy."""
     W, H = 1160, 600
-    o = [head(W, H, 'Six packages: every command is one goal on one action, and one node talks to the board')]
+    o = [head(W, H, 'The packages: every command is one goal on one action, and one node talks to the board')]
     o.append(f'<rect width="{W}" height="{H}" fill="#05070a"/>')   # shown on GitHub too, either theme
-    o.append(txt(32, 46, 'Six packages, and the one road between them', 'h'))
+    o.append(txt(32, 46, 'The packages, and the one road between them', 'h'))
     o.append(txt(32, 68, 'EVERY COMMAND IS ONE GOAL ON ONE ACTION · EXACTLY ONE NODE TOUCHES THE BOARD'))
 
     def box(x, y, w, h, title, lines, col, code=None):
