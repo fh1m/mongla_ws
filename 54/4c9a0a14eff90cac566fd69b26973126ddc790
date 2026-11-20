@@ -1,0 +1,27 @@
+kutum/README.md
+  s_4af8d6f83b24e8::t_b01f48a1cc46e6 123-128
+.github/dependabot.yml
+  s_4af8d6f83b24e8::t_9362ac3cbf7b80 65-67
+CLAUDE.md
+  s_4af8d6f83b24e8::t_0f6403822a6761 443-445
+kutum/doctor.sh
+  s_4af8d6f83b24e8::t_e152751ccb45d1 137-166
+test/test_kutum.py
+  s_4af8d6f83b24e8::t_1e093789b76d3f 188-222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "544c9a0a14eff90cac566fd69b26973126ddc790",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
