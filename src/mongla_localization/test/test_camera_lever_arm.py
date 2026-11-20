@@ -29,7 +29,6 @@ from above) is +z in FRD -- a ~90 deg clockwise turn moved heading +87.5 deg,
 and `SCALED_IMU2.zgyro` agreed in sign with d(heading)/dt in 33 of 35 moving
 samples.
 """
-import math
 
 import numpy as np
 import pytest

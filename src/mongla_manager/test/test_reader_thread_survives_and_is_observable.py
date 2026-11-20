@@ -24,7 +24,6 @@ the stack, which is why it gets its own entry rather than a line in that one.
 import threading
 import time
 
-import pytest
 
 from mongla_manager import health_reporters as hr
 from mongla_manager.health import State
