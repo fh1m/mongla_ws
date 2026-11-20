@@ -167,6 +167,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `anchor_lifetime.py` | How long does ONE XFeat reference stay usable? The bank refreshes a checkpoint when the best one decays, but "decays" needed a timescale. |
 | `anchor_roi_bars.py` | Re-derive the identity bar for the references PRODUCTION actually builds. |
 | `approach_band.py` | Where does confidence actually peak, in the unit the CONTROLLER uses? The gap this closes. |
+| `aqualoc_replay.py` | Replay real underwater data through the shipped filter and flow chain. |
 | `attenuation_range.py` | Is the WATER ITSELF a rangefinder? Turbidity as signal, not noise. |
 | `bag_gaps.py` | Read a recorded session and report what it is WORTH as a fixture. |
 | `bank_scaling_bench.py` | How large can the checkpoint bank get before it stops fitting the budget? `CheckpointBank` ships a capacity of 5, ported from a prototype gallery rather than measured. |
@@ -195,6 +196,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `model_select.py` | Rank candidate models by what deployment actually needs. |
 | `negative_clip_check.py` | What does the model say when the prop is NOT there? The gap this closes. |
 | `pipeline_visual_check.py` | Render what the ladder SEES, frame by frame, so it can be checked by eye. |
+| `pool_holdout.py` | Hold one pool out: does a detector work in water it has never seen? Why this exists. |
 | `pose_precision.py` | How PRECISELY does XFeat recover a pose at 320x240 versus 640x480? Recall and precision are different questions, and this project has only ever measured the first. |
 | `recall_matrix.py` | REAL RECALL -- against ground truth labels, per water regime. |
 | `return_check.py` | A2 -- RETURN: 2,882 raw frames + 302 labelled. |
