@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 600" width="1160" height="600" role="img" aria-label="Six packages: every command is one goal on one action, and one node talks to the board"><style>text{font-family:Zed Mono,ui-monospace,monospace}.l{font-size:9.5px;fill:#788294;letter-spacing:.14em}.v{font-size:11px;fill:#e4e8ef}.r{font-size:10px;fill:#ff2a14;letter-spacing:.06em}.b{font-size:10px;fill:#5a8dff;letter-spacing:.06em}.h{font-size:17px;fill:#fff;font-weight:700;letter-spacing:-.02em}.big{font-size:30px;fill:#fff;font-weight:700;letter-spacing:-.04em}</style>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 600" width="1160" height="600" role="img" aria-label="The packages: every command is one goal on one action, and one node talks to the board"><style>text{font-family:Zed Mono,ui-monospace,monospace}.l{font-size:9.5px;fill:#788294;letter-spacing:.14em}.v{font-size:11px;fill:#e4e8ef}.r{font-size:10px;fill:#ff2a14;letter-spacing:.06em}.b{font-size:10px;fill:#5a8dff;letter-spacing:.06em}.h{font-size:17px;fill:#fff;font-weight:700;letter-spacing:-.02em}.big{font-size:30px;fill:#fff;font-weight:700;letter-spacing:-.04em}</style>
 <rect width="1160" height="600" fill="#05070a"/>
-<text x="32.0" y="46.0" class="h" text-anchor="start">Six packages, and the one road between them</text>
+<text x="32.0" y="46.0" class="h" text-anchor="start">The packages, and the one road between them</text>
 <text x="32.0" y="68.0" class="l" text-anchor="start">EVERY COMMAND IS ONE GOAL ON ONE ACTION · EXACTLY ONE NODE TOUCHES THE BOARD</text>
 <rect x="32" y="100" width="300" height="130" fill="#0a0d13" stroke="#788294" stroke-width="1"/>
 <text x="48.0" y="124.0" class="v" text-anchor="start">mongla_planner</text>

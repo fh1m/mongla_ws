@@ -25,6 +25,7 @@ Pure loading and validation. No ROS.
 """
 from __future__ import annotations
 
+import difflib
 import math
 import os
 import pathlib
@@ -39,6 +40,13 @@ _PKG_COURSES = pathlib.Path(__file__).resolve().parent / 'courses'
 # venue, and a course must be re-measurable without a colcon build.
 _ENV = 'MONGLA_COURSE_DIR'
 _HOME = pathlib.Path.home() / '.mongla' / 'courses'
+
+# Every key a course file may hold. Anything else is refused: a typo such as
+# `bearing:` for `bearing_deg:` would otherwise load as "unset" and surface
+# minutes later as a refusal that names the right key, on the venue's day.
+TOP_KEYS = ('course', 'frame', 'pool', 'props')
+PROP_KEYS = ('x_m', 'y_m', 'depth_m', 'bearing_deg', 'detect_class', 'measured', 'note')
+POOL_KEYS = ('depth_m', 'depth_min_m', 'depth_max_m')
 
 
 @dataclass(frozen=True)
@@ -144,9 +152,18 @@ def load_course(name: str) -> Course:
         if not path.is_file():
             continue
         raw = yaml.safe_load(path.read_text()) or {}
+        _refuse_unknown(raw, TOP_KEYS, path, 'the top level')
+        _refuse_unknown(raw.get('pool') or {}, POOL_KEYS, path, 'pool')
         props = {}
         for key, body in (raw.get('props') or {}).items():
             body = body or {}
+            _refuse_unknown(body, PROP_KEYS, path, f'props.{key}')
+            measured = body.get('measured', False)
+            if not isinstance(measured, bool):
+                raise ValueError(
+                    f'{path}: props.{key}.measured is {measured!r}; write true or '
+                    f'false unquoted. A quoted "false" is a string, and a string '
+                    f'reads as measured.')
             props[str(key).strip().lower()] = Prop(
                 name=str(key).strip().lower(),
                 x_m=_opt_float(body.get('x_m')),
@@ -154,7 +171,7 @@ def load_course(name: str) -> Course:
                 depth_m=_opt_float(body.get('depth_m')),
                 bearing_deg=_opt_float(body.get('bearing_deg')),
                 detect_class=str(body.get('detect_class', '') or ''),
-                measured=bool(body.get('measured', False)),
+                measured=measured,
                 note=str(body.get('note', '') or ''))
         pool = {k: _opt_float((raw.get('pool') or {}).get(k))
                 for k in ('depth_m', 'depth_min_m', 'depth_max_m')}
@@ -162,6 +179,18 @@ def load_course(name: str) -> Course:
     raise FileNotFoundError(
         f'no course {stem!r}. Looked in: '
         f'{[str(d) for d in _search_dirs()]}')
+
+
+def _refuse_unknown(section, allowed, path, where) -> None:
+    """Raise on a key the loader does not read, naming the nearest it does."""
+    if not isinstance(section, dict):
+        raise ValueError(f'{path}: {where} must be a mapping, got {section!r}')
+    for k in section:
+        if k not in allowed:
+            near = difflib.get_close_matches(str(k), allowed, n=1)
+            hint = f'; did you mean {near[0]!r}?' if near else ''
+            raise ValueError(f'{path}: {where} has {k!r}, which nothing reads{hint} '
+                             f'Known: {", ".join(allowed)}')
 
 
 def _opt_float(v):

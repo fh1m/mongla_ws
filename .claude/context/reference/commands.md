@@ -46,8 +46,6 @@
 | `ros2 run mongla_batighor views` | `mongla_batighor.views:main` |
 | `ros2 run mongla_batighor chain` | `mongla_batighor.chain:main` |
 | `ros2 run mongla_localization localization_node` | `mongla_localization.localization_node:main` |
-| `ros2 run mongla_localization pnp_node` | `mongla_localization.pnp_node:main` |
-| `ros2 run mongla_localization pose_fuse_node` | `mongla_localization.pose_fuse_node:main` |
 | `ros2 run mongla_localization course_survey` | `mongla_localization.course_survey:main` |
 | `ros2 run mongla_manager start` | `mongla_manager.auv_manager_node:main` |
 | `ros2 run mongla_manager auv_manager` | `mongla_manager.auv_manager_node:main` |
@@ -61,6 +59,8 @@
 | `ros2 run mongla_vision detector_dual_node` | `mongla_vision.detector_dual_node:main` |
 | `ros2 run mongla_vision tracker_node` | `mongla_vision.tracker_node:main` |
 | `ros2 run mongla_vision lock_node` | `mongla_vision.lock_node:main` |
+| `ros2 run mongla_vision pnp_node` | `mongla_vision.pnp_node:main` |
+| `ros2 run mongla_vision pose_fuse_node` | `mongla_vision.pose_fuse_node:main` |
 | `ros2 run mongla_vision vision_check` | `mongla_vision.utils.check_pipeline:main` |
 | `ros2 run mongla_vision water_check` | `mongla_vision.utils.water_check:main` |
 | `ros2 run mongla_vision vision_thrust_check` | `mongla_vision.utils.check_thrust:main` |
@@ -367,26 +367,6 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `retrodict` | `False` |
 | `retro_horizon_s` | `2.0` |
 
-**`mongla_localization/pnp_node.py`** — 4 parameters
-
-| parameter | default |
-|---|---|
-| `camera` | `'forward'` |
-| `medium` | `'water'` |
-| `max_reproj_px` | `MAX_REPROJ_PX` |
-| `variant` | `''` |
-
-**`mongla_localization/pose_fuse_node.py`** — 6 parameters
-
-| parameter | default |
-|---|---|
-| `camera` | `'forward'` |
-| `window_s` | `WINDOW_S` |
-| `tol_deg` | `CLUSTER_TOL_DEG` |
-| `min_poses` | `MIN_POSES` |
-| `max_ambiguity` | `0.9` |
-| `max_reproj_px` | `10.0` |
-
 **`mongla_manager/auv_manager_node.py`** — 16 parameters
 
 | parameter | default |
@@ -539,6 +519,26 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `zero_authority_s` | `ZERO_AUTHORITY_S` |
 | `medium` | `'water'` |
 | `direct_feed` | `False` |
+
+**`mongla_vision/pnp_node.py`** — 4 parameters
+
+| parameter | default |
+|---|---|
+| `camera` | `'forward'` |
+| `medium` | `'water'` |
+| `max_reproj_px` | `MAX_REPROJ_PX` |
+| `variant` | `''` |
+
+**`mongla_vision/pose_fuse_node.py`** — 6 parameters
+
+| parameter | default |
+|---|---|
+| `camera` | `'forward'` |
+| `window_s` | `WINDOW_S` |
+| `tol_deg` | `CLUSTER_TOL_DEG` |
+| `min_poses` | `MIN_POSES` |
+| `max_ambiguity` | `0.9` |
+| `max_reproj_px` | `10.0` |
 
 **`mongla_vision/tracker_node.py`** — 14 parameters
 

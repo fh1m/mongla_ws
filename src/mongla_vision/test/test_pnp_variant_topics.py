@@ -18,11 +18,9 @@ import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
 from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
-# The node moved to this package (it produces a POSE); the launch that starts
-# it still lives with the vision stack, so the two paths differ on purpose.
 _HERE = pathlib.Path(__file__).resolve().parents[1]
-_NODE = _HERE / 'mongla_localization' / 'pnp_node.py'
-_LAUNCH = (_HERE.parent / 'mongla_vision' / 'launch' / 'vision_pi.launch.py')
+_NODE = _HERE / 'mongla_vision' / 'pnp_node.py'
+_LAUNCH = _HERE / 'launch' / 'vision_pi.launch.py'
 
 
 def test_the_node_suffixes_its_topic_with_the_variant():

@@ -15,6 +15,14 @@ from nav_msgs.msg import Odometry
 from mongla_localization import frames
 from mongla_localization.inekf import RIEKF, skew
 
+# `/mongla/odom` is published on this timer.
+PUBLISH_PERIOD_S = 0.1
+# How old a consumer may let it get. The worst gap on Kutum under the whole
+# vision graph was 105.76 ms (measured-bars section 91), so five periods
+# without a new STAMP means the localiser or its inputs stopped, not jitter.
+# Read by the lock's loop closure and by the mission's pose() and motion().
+ODOM_MAX_AGE_S = 0.5
+
 
 def _quat_from_R(R):
     """(w, x, y, z) from a rotation matrix, via the largest-diagonal branch.

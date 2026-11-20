@@ -16,8 +16,8 @@ from launch import LaunchDescription, LaunchService
 from launch.actions import ExecuteProcess, TimerAction
 from launch.actions import Shutdown
 
-from mongla_localization import launch_respawn
-from mongla_localization.launch_respawn import respawning
+from mongla_runtime import launch_respawn
+from mongla_runtime.launch_respawn import respawning
 
 
 def _starts(tmp_path: Path, exit_code: int, *, sleep_s: float = 0.0,

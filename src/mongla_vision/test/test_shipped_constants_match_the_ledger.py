@@ -41,7 +41,7 @@ _LEDGER = (pathlib.Path(__file__).resolve().parents[3]
 # module path -> attribute -> (expected value, a string the ledger must contain
 # near it, and why the number is what it is).
 LEDGER_BOUND = {
-    'mongla_vision.lock_inputs': {
+    'mongla_localization.localization_publish': {
         'ODOM_MAX_AGE_S': (0.5, '105.76 ms',
                             's; five periods of the localiser\'s 10 Hz timer, '
                             'whose worst gap under the vision graph was 105.76 ms'),
@@ -78,7 +78,7 @@ LEDGER_BOUND = {
                           'this much before it is a fault'),
     },
     # §69: two owner decisions and one derived wait, each with its reason.
-    'mongla_localization.launch_respawn': {
+    'mongla_runtime.launch_respawn': {
         'MAX_RESTARTS': (3, '**3** restarts',
                          'owner decision: rides out a transient, stops '
                          'hiding a real fault'),

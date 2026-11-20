@@ -9,8 +9,7 @@ copy, publishing the same topics. Asking the kernel to SIGTERM us when the
 parent exits makes the orphan impossible; rclpy turns SIGTERM into an ordinary clean shutdown, which closes
 the camera and releases the chip.
 
-Lives here because mongla_localization is the one Python package that both
-the vision and localization nodes depend on. The manager does NOT use this: it must disarm on the way out, and guards
+Lives in `mongla_runtime`, which every node package depends on. The manager does NOT use this: it must disarm on the way out, and guards
 against the signal arriving while its parent is still alive
 (`auv_manager_node._orphan_guard`).
 """

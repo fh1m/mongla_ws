@@ -726,7 +726,7 @@ altitude measurement.
 
 ### 5a-bis. We already have a second, independent height instrument — and it is not in `sota-vo-depth.md` §5
 
-`src/mongla_localization/mongla_localization/tile_grating.py` recovers height from the
+`src/mongla_vision/mongla_vision/flow/tile_grating.py` recovers height from the
 **spatial period of the pool's floor tiles**: `h = f_px · tile_m / pitch_px` — the same
 pinhole relation, run backwards, with the tile pitch as the known length. `usable_height_m()`
 bounds where it works (`MIN_PERIOD_PX`, frame size). There is a companion

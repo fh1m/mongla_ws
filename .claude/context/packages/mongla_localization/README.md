@@ -9,6 +9,9 @@ This package is the answer to that: build a position estimate from the sensors w
 the board's IMU, its depth reading, the downward camera, and the things we recognise in the
 water.
 
+What every file does, what was moved out and why, the defects found and what water has
+to decide first: [the audit](audit.md).
+
 ---
 
 ## First principles: why an IMU alone is not enough
@@ -53,12 +56,10 @@ measurement is, not with the length of the log.
 | `retro.py` | the event log and replay for late measurements |
 | `command_velocity.py` | motion predicted from the demand we sent |
 | `floor_plane.py` | range to a point on a known plane — one pixel is enough |
-| `tile_grating.py` | the pool floor's tile pattern read as a two-dimensional encoder |
-| `pool_lines.py` | heading from lane lines |
+| `heading_anchor.py` · `snap_to_grid` | the floor's grid or lane-line angle as a drift bound on heading (measured in the image by `mongla_vision/flow/tile_grating.py` and `pool_lines.py`) |
 | `heading_anchor.py` | absolute heading from a prop of known bearing |
 | `resection.py` | position from bearings to two known props |
-| `pose_cluster.py` · `pose_fuse_node.py` | many single-frame pose estimates → one |
-| `pnp_node.py` | the pose of a prop, from its detected corners |
+| `pose_cluster.py` | many single-frame pose estimates → one, never averaged across the mirror (its node, `pose_fuse_node`, is in `mongla_vision`) |
 | `course_map.py` + `courses/*.yaml` | what the venue contains, and where |
 | `course_survey.py` | measure the real venue and write it into your own copy |
 | `prop_placement.py` | where a prop really is, from several sightings; the hull's error enters once, not divided by the count ([ledger §67](../../measured-bars.md)) |
@@ -131,21 +132,11 @@ with no summary line shows as *(no summary)* until it gets one.
 | `frames.py` | Frames: the names, the sensor offsets, and the conversions -- one owner. |
 | `heading_anchor.py` | Recover an ABSOLUTE heading from a prop whose world bearing is known. |
 | `inekf.py` | Right-invariant EKF on SE_2(3): where the hull is, from what it can feel. |
-| `launch_defaults.py` | Bringup settings from a file, so a pool day is a file and not a long command. |
-| `launch_respawn.py` | Restart a vehicle process that dies mid-run, three times, then leave it down. |
 | `localization_inputs.py` | What the localization node does with each measurement as it arrives. |
 | `localization_node.py` | The vehicle's own answer to "where am I", fused from every sensor it has. |
 | `localization_publish.py` | What the localization node publishes: the odometry and its diagnostic line. |
-| `orphan.py` | Every long-running node dies with its parent. |
-| `params_file.py` | The node half of `~/.mongla/bringup.yaml`: a typo in `nodes:` stops the node. |
-| `pnp_node.py` | One PnP solver for every evidence source. Subscribe correspondences, publish a pose. |
-| `pool_lines.py` | The lane line is a surveyed straight edge. Read a heading off it. |
 | `pose_cluster.py` | Fuse a stream of single-frame poses into one answer, with its support. |
-| `pose_fuse_node.py` | Subscribe single-frame poses, publish the one the support agrees on. |
 | `prop_placement.py` | Where a prop is, from several sightings of it taken from where we think we are. |
-| `realtime.py` | Give a process that streams commands a realtime priority and a short lock. |
 | `resection.py` | Absolute position from bearings to props whose positions we know. |
 | `retro.py` | Apply every filter event at the instant it describes, not the instant it arrived. |
-| `spin.py` | One place that decides which rclpy executor a Mongla node spins on. |
-| `tile_grating.py` | The pool floor is a surveyed 2-D grating. Read it like an optical encoder. |
 <!-- modules:end -->

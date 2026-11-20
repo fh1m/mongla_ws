@@ -305,8 +305,10 @@ class PoseCluster:
         if len(paired) >= self.min_poses:
             # The answer is for NOW: the newest heading in the window,
             # which may belong to a frame that carried only one branch.
+            # Finite, as in the legacy path: a NaN heading is absent too.
             psi_now = next(s.vehicle_yaw_deg for s in reversed(live)
-                           if s.vehicle_yaw_deg is not None)
+                           if s.vehicle_yaw_deg is not None
+                           and math.isfinite(s.vehicle_yaw_deg))
             return self._fuse_paired(paired, psi_now, now)
 
         # LEGACY: one branch per frame, no viewpoint data. A frame the solver

@@ -7187,7 +7187,7 @@ The idle numbers are the floor, not the bar for a loaded vehicle.
 
 ## 69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)
 
-`mongla_localization/launch_respawn.py` restarts every process bringup starts;
+`mongla_runtime/launch_respawn.py` restarts every process bringup starts;
 `mongla_vision/cameras/reopen.py` reopens a camera that dropped off USB (B-110).
 Which numbers are decisions, which are derived and which are measured:
 
@@ -7420,7 +7420,7 @@ post-processing are the rest, and the executor never touched them. So the
 per-callback figure is 6.7x and the node is about 7 % cheaper; both are true
 and only the second is what the vehicle gets.
 
-**Shipped.** `mongla_localization/spin.py` picks the executor for every node
+**Shipped.** `mongla_runtime/spin.py` picks the executor for every node
 main (`MONGLA_EXECUTOR=events`, the default, or `classic`). Humble has no
 events executor, so a dev box gets the classic one. The manager stays
 multi-threaded on purpose: its action callbacks block for the length of a
@@ -7767,7 +7767,7 @@ lock, not the kernel, is the timing risk in a Python process.
 
 **Verdict.** The realtime kernel is not adopted: with the two settings the
 stock kernel is 50 times inside the bar, and there is nothing left for it to
-remove at a 20 ms period. **What ships:** `mongla_localization/realtime.py`,
+remove at a 20 ms period. **What ships:** `mongla_runtime/realtime.py`,
 called by the manager before it starts its threads (`SCHED_FIFO` 10, 0.5 ms
 switch interval, `MONGLA_REALTIME=off` to disable);
 `kutum/system/limits/99-mongla-realtime.conf` permits it and `doctor.sh`
@@ -8339,8 +8339,10 @@ the whole vision graph, is under a quarter of it.
 | alone | 624 | 100.00 ms | 101.45 ms | 102.88 ms |
 | beside `vision_pi.launch.py` (lock, flow; forward 9.8 Hz, downward 59.2 Hz) | 611 | 100.00 ms | 103.51 ms | 105.76 ms |
 
-**Decision.** `lock_inputs.ODOM_MAX_AGE_S = 0.5`: older, the closure step
-neither searches nor enrols, and counts the refusal as `stale odometry`.
+**Decision.** `ODOM_MAX_AGE_S = 0.5` (`localization_publish.py`, beside the
+timer it is five periods of): older, the closure step neither searches nor
+enrols, and counts the refusal as `stale odometry`. Since 2026-11-20 the
+mission's `pose()` and `motion()` read the same bound and answer None.
 
 **The age is taken from the stamp, not the arrival.** The timer publishes
 whether or not the filter's inputs still arrive, and stamps each message with

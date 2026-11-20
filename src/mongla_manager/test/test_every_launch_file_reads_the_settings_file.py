@@ -13,7 +13,7 @@ import sys
 
 import pytest
 
-from mongla_localization import launch_defaults as LD
+from mongla_runtime import launch_defaults as LD
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'tools'))

@@ -23,7 +23,7 @@ import math
 import numpy as np
 import pytest
 
-from mongla_localization.pool_lines import (
+from mongla_vision.flow.pool_lines import (
     CROSS_LINE_FROM_WALL_M, LANE_SPACING_M, LaneLine, detect,
 )
 

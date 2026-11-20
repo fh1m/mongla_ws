@@ -507,6 +507,40 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-126: a mission read a stopped localiser's last pose and last motion verdict forever `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `pose()` cached the first `/mongla/odom` it heard and, once one existed, neither
+pumped for a newer one nor asked its age. The localiser restarts three times and then stays
+down, so every later `pose()` answered with where the hull had been. `motion()` reads a
+latched topic published on change, so a dead localiser's last `'ok'` read forever.
+
+**Fix.** Both answer None unless the odometry STAMP moved within `ODOM_MAX_AGE_S` (0.5 s,
+five periods of the 10 Hz timer), the rule the lock's loop closure already used; the bound
+now lives once, beside the timer, in `localization_publish.py`. Guard:
+`test_a_stopped_localiser_gives_no_pose.py`, a real publisher with a frozen stamp;
+injection-verified. BUILT, NEVER FLOWN.
+
+### B-127: a vision placement froze itself into the course as a tape survey `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `place_prop(commit=True)` wrote through `course_survey.survey`, which always set
+`measured: true`. A measured prop is only ever checked, never overwritten, so one placement
+from a drifted pose became permanent, and the next run's placements could only log that
+they disagreed with it.
+
+**Fix.** `survey(measured=...)`: the CLI's tape survey writes true; a placement writes
+false, with its sigma in the note, so a later placement refines it. Guard: the commit test
+in `test_pose_and_prop_fix.py`, which asserted the defect before.
+
+### B-128: course and frames files silently dropped what they did not recognise `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `bearing: 90` for `bearing_deg: 90` loaded as "bearing unset", and the anchor
+refused later naming the right key; `downwards_cam:` loaded as "not measured" and a taped
+lever arm was never applied; a quoted `measured: "false"` read as True.
+
+**Fix.** Both loaders refuse an unknown key (naming the nearest known one) and a
+non-boolean `measured`. Guard: `test_a_misspelt_course_key_is_refused.py`, four of seven
+failing on the old code.
+
 ### B-124: the localiser counted a refused measurement as fused, and could stay silent while unaided `READ 2026-11-20` **FIXED 2026-11-20**
 
 **What.** `LocalizationInputsMixin._apply` dropped the update's own answer and
@@ -797,7 +831,7 @@ healthy camera as well.
 
 **Fix.** The owner set the policy: restart 2 s after the death, three times,
 then stay down and say so; the mission keeps running and nothing acts on the
-loss alone. `mongla_localization/launch_respawn.py` implements it once,
+loss alone. `mongla_runtime/launch_respawn.py` implements it once,
 because Humble's launch has no restart limit. Every process in `bringup`,
 `vision_pi` and `vision` uses it except the operator display, and
 `test/test_every_launched_process_restarts.py` fails a bare node.

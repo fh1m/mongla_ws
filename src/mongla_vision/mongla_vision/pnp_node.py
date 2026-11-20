@@ -234,14 +234,14 @@ def to_msg(tp, header=None) -> TargetPose:
 
 
 def main(argv=None):
-    from mongla_localization.orphan import die_with_parent
+    from mongla_runtime.orphan import die_with_parent
     die_with_parent()        # an orphan holds devices and duplicates topics
     rclpy.init(args=argv)
     node = PnPNode()
-    from mongla_localization.params_file import refuse_unknown
+    from mongla_runtime.params_file import refuse_unknown
     refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
-        from mongla_localization.spin import spin
+        from mongla_runtime.spin import spin
         spin(node)
     except KeyboardInterrupt:
         pass
