@@ -15,6 +15,7 @@
 #   defaults to a flat ~/mongla_runs (unchanged behaviour).
 #
 # zsh + bash compatible. Sourcing is required (it must mutate YOUR shell env).
+# shellcheck shell=bash  # sourced by bash and zsh; no shebang on purpose
 
 # --- refuse to be executed (it would export into a throwaway subshell) -------
 _dbr_sourced=0
@@ -53,6 +54,7 @@ mkdir -p "$ROS_LOG_DIR"
 # lineage, W-RS26). On Kutum the workspace is a release and carries
 # release.json; anywhere else, the commit and whether it was dirty.
 if [ -n "${ZSH_VERSION:-}" ]; then
+  # shellcheck disable=SC2296  # zsh-only expansion, on the zsh branch
   _dbr_self="${(%):-%x}"
 else
   _dbr_self="${BASH_SOURCE[0]}"

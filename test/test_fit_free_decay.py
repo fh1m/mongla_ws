@@ -8,7 +8,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))  # shared libraries
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools' / 'bench'))
-from fit_free_decay import DecayFit, fit_decay, looks_linear_instead  # noqa: E402
+from fit_free_decay import fit_decay, looks_linear_instead  # noqa: E402
 
 
 def quad_decay(*, q_over_i, w0, hz=100.0, seconds=30.0, noise=0.0, seed=3):

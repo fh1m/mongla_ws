@@ -74,7 +74,7 @@ def test_a_nose_up_hull_is_corrected_by_passing_negative_pitch():
     # Hull pitched 2 deg nose-up: the level-camera answer is wrong, the corrected one is right.
     import math
     p = math.radians(-2.0)
-    a, b = 0.0, 1.0 / 3.0                      # truth: floor point 3 m ahead, 1 m below
+    b = 1.0 / 3.0                              # truth: floor point 3 m ahead, 1 m below
     # pixel row for the hull-frame ray (1, 0, 1/3) seen by a camera pitched p below horizontal
     zc = math.cos(p) * 1.0 + math.sin(p) * b
     yc = -math.sin(p) * 1.0 + math.cos(p) * b

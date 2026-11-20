@@ -4,7 +4,6 @@ A compass filter can be wrong through 358 degrees of the circle and correct
 everywhere you happen to test it, then fail at north -- which is the heading a
 returning AUV is most likely to be on.
 """
-import math
 import sys
 from pathlib import Path
 

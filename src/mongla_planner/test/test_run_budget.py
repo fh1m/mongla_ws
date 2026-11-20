@@ -8,7 +8,7 @@ reserve cannot be spent by any amount of optimism.
 import pytest
 
 from mongla_planner.run_budget import (
-    RunBudget, Task, Verdict, by_points_per_second,
+    RunBudget, Task, by_points_per_second,
 )
 
 

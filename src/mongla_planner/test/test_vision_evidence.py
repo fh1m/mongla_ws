@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 from mongla_control.vision_verbs import _fired_suffix
 from mongla_planner.mongla_dsl import MonglaMission
-from mongla_planner.vision_dsl import VisionResult, _VisionDSL, ALIGNED
+from mongla_planner.vision_dsl import _VisionDSL, ALIGNED
 
 
 def test_the_fire_suffix_reports_what_left():
@@ -66,7 +66,6 @@ def test_no_fire_requested_reads_none_and_never_seen_reads_null():
 
 def test_the_align_verb_appends_the_fire_outcome_to_its_result():
     """Structural: the suffix must be on the RESULT message the DSL parses."""
-    import ast
     import pathlib
     import mongla_control.vision_verbs as vv
     src = pathlib.Path(vv.__file__).read_text()

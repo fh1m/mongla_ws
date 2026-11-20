@@ -121,9 +121,7 @@ def test_a_FAILED_decomposition_refuses_instead_of_reporting_SQUARE():
     board. That is the one wrong answer a firing gate must never be handed, and
     it is what the code did before the finite check.
     """
-    import mongla_vision.anchor.geometry as G
     H, ref, live = _scene(tilt_deg=30.0)
-    real = G.cv2 if hasattr(G, 'cv2') else None      # module imports cv2 locally
     import cv2
 
     class _NaNCv2:

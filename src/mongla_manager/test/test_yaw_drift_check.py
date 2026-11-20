@@ -13,8 +13,6 @@ The board publishes its own body rates at 50 Hz inside ATTITUDE (fw
 `mav_stream.cpp:226` packs `s.gx/gy/gz`), so stillness is MEASURABLE and never
 has to be assumed again.
 """
-import importlib.util
-import sys
 from pathlib import Path
 
 _TOOL = Path(__file__).resolve().parents[3] / 'tools' / 'bench' / 'yaw_drift_check.py'
