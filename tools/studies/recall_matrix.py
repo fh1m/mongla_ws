@@ -223,7 +223,7 @@ def main():
         import cv2
         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
 
-        def pre(img):
+        def pre(img):  # noqa: F811 -- replaces the None above when --clahe
             yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
             yuv[:, :, 0] = clahe.apply(yuv[:, :, 0])
             return cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR)

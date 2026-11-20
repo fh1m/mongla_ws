@@ -13,7 +13,6 @@ to 45 deg/s -> 0.0028, where yaw demands are ACCEPTED and produce NO thrust.
 """
 import math
 
-import pytest
 
 from mongla_control.fc import srot_protocol as sp
 from mongla_control.fc.srot_fc import SrotFC

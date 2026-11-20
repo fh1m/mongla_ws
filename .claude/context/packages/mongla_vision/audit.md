@@ -120,6 +120,47 @@ then each finding checked against the code before anything changed.
 | `top_k` | the lock restated 1024 beside both backends' defaults | FIXED: the defaults are used |
 | `fps` | a non-zero `fps:=` on `vision.launch` also caps publishing | not a defect at the default (0); noted |
 
+## Live run on Kutum, 2026-11-19
+
+The whole of `vision_pi.launch.py`, on the release after the second read,
+with both real cameras and no board (`paused:=false`; the launch default
+starts both detectors paused for the mission to resume). Every output topic
+exists (50, once discovery has had six seconds). Rates, measured while 22
+rate-checkers loaded the Pi, so low:
+
+| | camera | detections | lock | tracks |
+|---|---|---|---|---|
+| forward, Fantech in evening light | 11.4 fps | 15.0 Hz | 15.0 Hz | 15.0 Hz |
+| downward, Sonix | 85 fps | 31.4 Hz (56.8 with 2 checkers) | 43.0 Hz | 31.5 Hz |
+
+Silent, each for a reason that is not a defect: `velocity` (flow refuses
+without `pool_depth_m`, and says so as an ERROR), `floor_height` (needs the
+board's barometer), `target_pose` and `correspondences` (need a prop the model
+knows in view; the bench has none). Two defects, both fixed (B-123): a Ctrl-C
+interrupted every node's teardown, inside the Hailo's release in the
+detector, and every launch printed a tracker clamp warning its own defaults
+caused. The dead-code sweep finds one module with no live importer,
+`trigger_stamps.py`, which waits on the board's camera trigger (upstream ask
+`pr-w`) and says so where the guard lists it.
+
+**Re-measured 2026-11-20**, release `00f54f90`, one subscriber process for every
+`/mongla` topic (best effort, 15 s) instead of 22 checkers, no board:
+
+| `paused:=false` | camera | detections | tracks | lock |
+|---|---|---|---|---|
+| forward, Fantech, daylight | 27-29 fps, 0 dropped | 25.5 Hz | 25.4 Hz | 30.0 Hz |
+| downward, Sonix | 99-104 fps, 0 dropped | 25.8 Hz | 25.9 Hz | 99.6 Hz |
+
+Paused (the default), the downward camera runs at 162 fps; with both detectors
+inferring it falls to about 100, and the pair gets about 51 inferences a second
+between them. That is the chip budget of measured-bars 95 (two 3-context models
+ask 128 % of the Hailo), and it is what the YOLO-family A/B is for. Flow,
+given `medium:=air pool_depth_m:=1.0`, passes the pool-depth refusal and stops
+at the next one, "no fresh depth": the height above the floor needs the board's
+barometer, so flow velocity on hardware waits for the board (po7.7). SIGINT
+stopped the whole launch inside 10 s; only `hailort_service`, the system
+daemon, remained.
+
 ## Cameras
 
 The Fantech (colour, USB 2) is the forward camera and the Sonix global-shutter mono is the
@@ -130,6 +171,14 @@ same light. Colour is what the forward detector needs; rate is what flow needs. 
 record is `measured-bars.md`, "Forward camera rate". **Bench tests of vision use the Sonix**,
 because the Fantech's rate follows the room's light and confounds any rate or ladder
 measurement.
+
+**The plan from 2026-11-20 (owner):** the forward camera becomes a second
+global-shutter camera, 120 fps class, when it arrives; the Fantech is the
+interim forward camera only. Plan and measure for two global-shutter cameras
+until that changes. At 120 fps each, the current 3-context models would ask
+about 350 % of the chip and single-context v8-family models about 58 %
+(measured-bars 95), so the detector family decides whether both cameras can
+detect at their own rate.
 
 ## From the competition's point of view
 

@@ -15,7 +15,6 @@ images, no detections and no lock, and every rung reported 0 %.
 Reads the source rather than importing it: `camera_node` needs rclpy and a ROS
 graph, which is why nothing caught this before hardware.
 """
-import ast
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / 'mongla_vision' / 'camera_node.py'

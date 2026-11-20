@@ -56,7 +56,7 @@ from mongla_vision.detection.hailo import letterbox   # noqa: E402
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of_file  # noqa: E402  (issue #22)
 
 
 def _unletterbox(b, size, scale, pad_x, pad_y):
@@ -95,7 +95,7 @@ def test_dropping_the_padding_is_detectably_wrong():
     size, w, h = 640, 1280, 720
     _, scale, pad_x, pad_y = letterbox(np.zeros((h, w, 3), np.uint8), size)
     assert pad_y > 0, 'a 16:9 frame must letterbox to non-zero vertical pads'
-    x1, y1 = 0.25 * w, 0.30 * h
+    y1 = 0.30 * h
     nb_y = (y1 * scale + pad_y) / size
     wrong = nb_y * size / scale          # pads ignored
     assert abs(wrong - y1) > 1.0

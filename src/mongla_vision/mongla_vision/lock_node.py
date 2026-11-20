@@ -341,6 +341,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        from mongla_localization.spin import deaf_to_ctrl_c
+        deaf_to_ctrl_c()      # a second Ctrl-C must not interrupt the teardown
         node.destroy_node()
         try:
             rclpy.shutdown()

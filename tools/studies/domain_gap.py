@@ -38,8 +38,6 @@ def main():
 
     from ultralytics import YOLO
     model = YOLO(a.model)
-    names = model.names if isinstance(model.names, dict) else dict(
-        enumerate(model.names))
 
     # ---- stills: real recall, because labels exist ------------------------
     img_dir = os.path.join(a.stills, 'images')
