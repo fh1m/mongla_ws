@@ -171,8 +171,10 @@ fallback only, and flow is the velocity.
 | 2 | close the at-rest miss | the real bench recording, 1x on Kutum | the bias prior; walk 15.5 cm -> 0.94 cm in 90 s | **shipped** (B-135) |
 | 2b | the same prior, in motion | truth study A1 | rms 0.050 vs 0.051 m | **shipped**, no cost |
 | 3 | altitude for flow scale: floor map, else a Ping2 | course file arithmetic | a sloping floor is up to 30 % of scale at 0.5 m depth | **bead es5.7**, needs the venue floor surveyed |
+| 3b | the same chain on real underwater data | AQUALOC harbour, sequences 02-07, height fitted on 01 (`tools/studies/aqualoc_replay.py`) | flow holds 5.8-29.5 m final error (24-104 % of path) against kilometres for IMU and depth alone; a fitted height does not carry between runs (1.52 vs 0.60 m) | **runs on real water; not an accuracy result**: harbour floor, fitted height and a poor gyro, against 2-4 % for the best DVL-free systems |
 | 4 | camera-to-IMU lag and de-rotation | — | the board is not on Kutum; no recording has camera and gyro together in rotation | **blocked** (po7.13) |
 | 5 | heading at surveyed headings | — | needs the pool | **pool day**, bar <= 2 deg |
+| 5b | heading from image rotation | the same AQUALOC replay | yaw error 75-177 deg without it; with it final error fell on 6 of 6 but halved on only 3 | **bar missed**; heading against the board's AHRS is bead 5ag.9, needs the board |
 | 6 | prop fixes gated into the filter | truth study A3 | the gate refused correct fixes from a confidently wrong filter | **fixed and shipped** (B-136, B-137) |
 | 7 | thruster model only as a dropout bridge | truth study A4 | a 12 s flow dropout costs 1.1 cm on this route; the demand model stays a fallback | **kept as is** |
 | 8 | IMU or FOG upgrade | — | only if 2 had failed on a measured bias; it did not | **discarded** |
