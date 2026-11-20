@@ -130,7 +130,7 @@ def test_it_survives_sensor_noise():
 def test_the_heading_is_modulo_ONE_EIGHTY_not_ninety():
     """A line is 1-D, so it is only TWO-fold ambiguous -- strictly better than
     the tile grid's four-fold. The ambiguity is returned, never invented away."""
-    ln = LaneLine(angle_deg=30.0, offset_px=0.0, support=100, spread_deg=0.1)
+    ln = LaneLine(angle_deg=30.0, offset_px=0.0, support=100, elongation=10.0)
     assert ln.heading_deg() == pytest.approx(30.0)
     assert ln.heading_deg(mount_yaw_deg=200.0) == pytest.approx(10.0)
 
@@ -138,7 +138,7 @@ def test_the_heading_is_modulo_ONE_EIGHTY_not_ninety():
 def test_cross_track_converts_to_metres_with_a_height():
     """Same pinhole scaling the flow path uses, so it inherits whatever height
     is available -- including the one the tile grating reads off the floor."""
-    ln = LaneLine(angle_deg=0.0, offset_px=100.0, support=100, spread_deg=0.1)
+    ln = LaneLine(angle_deg=0.0, offset_px=100.0, support=100, elongation=10.0)
     assert ln.cross_track_m(1000.0, 2.0) == pytest.approx(0.2)
     assert math.isnan(ln.cross_track_m(0.0, 2.0))
 

@@ -8757,3 +8757,19 @@ tolerance.
 left three bag players running; their interleaved IMU read as 10 359 gaps and positions
 of 10^6 m. Every number above is from a run with 0 gaps and no player left after it.
 
+**Added the same day.**
+
+- **The go_to accepting path, on the same recording.** After a prop-style fix at
+  (0, 0), sigma 0.05 m, the state read sigma 0.06 m and `go_to(1, 0)` was accepted: 30
+  frames at 10 Hz of `lat -0.30` (30 % to port; the hull faced 90 deg, the goal was due
+  north), no yaw or depth, ending neutral; TIMEOUT after 3 s, true, the hull never moved.
+  A goal inside the tolerance: ARRIVED, one neutral frame.
+- **`usable` needs a measured velocity** (`AID_MAX_AGE_S` = 2.0 s): a flow or ZUPT fused
+  within 2 s. A still hull ZUPTs about once a second (232 in 240 s above), so this allows
+  one missed window. It closes the 20 s of "aided" on a cold, unaided filter.
+- **The tile grating needs `tile_decimate` >= 2.** Rendered grid, 40 px period, Gaussian
+  blur sigma 3 px, noise sigma 10, angles 0-85 deg in 5 deg steps: at x1 every angle was
+  refused (peak share 0.008-0.019 against the 0.01 bar, the peak spread over more bins
+  than the share window holds); at x2 and x3 every angle read within 0.2 deg, share
+  0.034. The node now refuses x1 while `tile_m` is set.
+

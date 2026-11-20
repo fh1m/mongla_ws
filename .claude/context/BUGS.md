@@ -577,6 +577,31 @@ non-zero demand has been seen. Guards in `test_localization_node.py`
 `test_a_hull_never_thrust_is_settled_from_the_start`), both injection-verified. Numbers:
 measured-bars 99.
 
+### B-133: the floor drift bounds held a constant residual at zero `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `_on_floor_grid`'s docstring says the residual between heading and grid is
+constant; `snap_to_grid` was handed the raw image angle and so pinned that residual at
+zero. It is zero only when the camera mount, the image-angle convention (a lane along
+the hull reads 90) and the feature's pool direction cancel. Rendered through the real
+detectors: every lane read along the pool's x axis was refused, and under a 37 deg mount
+the grid was refused too. The existing tests fed the filter its own yaw as the "image"
+angle, so they measured agreement and could not see it.
+
+**Fix.** The first floor read after each anchor records the residual; later reads bound
+drift against it, and a reference is not counted as a correction. Truth test
+`test_a_rendered_floor_bounds_drift_under_any_mount` (lane and grid), failing with the
+residual held at zero.
+
+### B-134: the uplink tick stalled the manager's telemetry for 10 s `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `_vision_uplink_tick` called `_vision_state_for`, whose first build waits up to
+10 s for a detection, on `timer_group`, shared with `telemetry_tick`, `_health_tick` and
+`board_link_tick`. Setting `vision_uplink_camera` froze `/mongla/state` for 10 s. The
+heartbeat thread was not affected.
+
+**Fix.** The uplink builds its VisionState with `preflight=False`; vision verbs keep the
+warm-up. Guard `test_the_uplink_builds_without_the_preflight_wait`.
+
 ### B-130: the old-host guard matched `mongla.localization()` `READ 2026-11-20` **FIXED 2026-11-20**
 
 **What.** `test_kutum_has_one_name` grepped a fixed string, so the DSL call

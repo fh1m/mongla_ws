@@ -1034,3 +1034,12 @@ class TestTracksForAViewer:
             n._pub_tracks.publish.assert_not_called()
         finally:
             n.destroy_node()
+
+
+def test_a_full_resolution_grating_is_refused_at_start_up():
+    """measured-bars 99: at tile_decimate 1 the grating refused a blurred,
+    noisy grid at every angle, so the node must not start blind."""
+    with pytest.raises(ValueError, match='tile_decimate'):
+        _make(tile_m=0.15, tile_decimate=1)
+    n = _make(tile_m=0.15, tile_decimate=3)
+    n.destroy_node()

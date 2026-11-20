@@ -43,18 +43,46 @@ def test_a_live_unanchored_filter_names_the_anchor_as_the_missing_step():
     assert not s.usable and 'anchored' in s.reason
 
 
-@pytest.mark.parametrize('age,anchored,aiding,want', [
-    (math.nan, True, 'aided', 'no IMU'),
-    (2.0, True, 'aided', 'silent'),
-    (0.1, False, 'aided', 'anchored'),
-    (0.1, True, 'unaided', 'unaided'),
-    (0.1, True, '', 'unaided'),
-    (0.1, True, 'aided (flow uncalibrated)', ''),
-    (0.1, True, 'aided', ''),
+@pytest.mark.parametrize('age,anchored,aiding,aid_age,want', [
+    (math.nan, True, 'aided', 0.5, 'no IMU'),
+    (2.0, True, 'aided', 0.5, 'silent'),
+    (0.1, False, 'aided', 0.5, 'anchored'),
+    (0.1, True, 'unaided', 0.5, 'unaided'),
+    (0.1, True, '', 0.5, 'unaided'),
+    (0.1, True, 'aided', math.nan, 'for ever'),
+    (0.1, True, 'aided', lp.AID_MAX_AGE_S + 0.1, 'for 2.1 s'),
+    (0.1, True, 'aided (flow uncalibrated)', 0.5, ''),
+    (0.1, True, 'aided', lp.AID_MAX_AGE_S, ''),
 ])
-def test_the_verdict(age, anchored, aiding, want):
-    got = lp.verdict(imu_age_s=age, anchored=anchored, aiding=aiding)
+def test_the_verdict(age, anchored, aiding, aid_age, want):
+    got = lp.verdict(imu_age_s=age, anchored=anchored, aiding=aiding, aid_age_s=aid_age)
     assert (want in got) if want else got == ''
+
+
+def test_an_anchored_cold_filter_with_no_velocity_measured_is_not_usable():
+    """measured-bars 99: the gate read aided for 20 s on a cold filter while
+    the position ran 9 m. Anchored, gate open, nothing measured: not usable."""
+    n = _node()                                  # demand unknown: no ZUPT can fire
+    out = _states(n)
+    for k in range(100):
+        n._on_imu(_Imu(100.0 + 0.02 * k))
+    n._anchored = True
+    n._aiding_state = 'aided'
+    n._publish()
+    s = out[-1]
+    assert not s.usable and 'no flow or ZUPT fused for ever' in s.reason
+
+
+def test_a_still_hull_with_zupts_is_usable_once_anchored():
+    n = _node(disarmed=True)
+    out = _states(n)
+    for k in range(150):
+        n._on_imu(_Imu(100.0 + 0.02 * k))
+    assert n._n['zupt'] >= 1
+    n._anchored = True
+    n._aiding_state = 'aided'
+    n._publish()
+    assert out[-1].usable, out[-1].reason
 
 
 def test_the_horizontal_sigma_is_the_worse_axis_of_a_rotated_ellipse():

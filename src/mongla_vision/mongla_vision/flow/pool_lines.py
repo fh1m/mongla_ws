@@ -78,8 +78,8 @@ MAX_BAND_GROWTH = 1.35
 class LaneLine:
     angle_deg: float          # direction in the image, [0, 180)
     offset_px: float          # signed perpendicular distance from frame centre
-    support: int              # segments that agreed
-    spread_deg: float         # how tightly they agreed
+    support: int              # pixels in the dark band
+    elongation: float         # band length over width; >= MIN_ELONGATION
 
     def heading_deg(self, mount_yaw_deg: float = 0.0) -> float:
         """Hull heading in the POOL frame, modulo 180 degrees.
@@ -205,7 +205,7 @@ def detect(gray: np.ndarray, *, min_span: float = MIN_LINE_SPAN
     nx, ny = -math.sin(math.radians(ang)), math.cos(math.radians(ang))
     offset = (float(xs.mean()) - cx) * nx + (float(ys.mean()) - cy) * ny
     return LaneLine(angle_deg=float(ang), offset_px=float(offset),
-                    support=int(xs.size), spread_deg=float(1.0 / max(elong, 1e-6)))
+                    support=int(xs.size), elongation=float(elong))
 
 
 def _dark_threshold(a: np.ndarray):

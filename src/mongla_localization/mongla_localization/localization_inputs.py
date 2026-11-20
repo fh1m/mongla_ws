@@ -496,6 +496,7 @@ class LocalizationInputsMixin:
             return
         if self._apply(None, lambda f, s=self._zupt_sigma: f.update_zero_velocity(sigma=s)):
             self._n['zupt'] += 1
+            self._note_seen('zupt', now)
         self._still.clear()
 
     def _on_flow_calibration(self, msg) -> None:
@@ -562,6 +563,9 @@ class LocalizationInputsMixin:
             return
         self._yaw_offset_deg = offset
         self._n['yaw'] += 1
+        # A new anchor is a new truth: each floor feature re-reads its constant
+        # residual against it (`_bound_yaw`).
+        self._floor_ref = {}
         if not self._anchored:
             self._anchored = True
             # Connect `pool` to the hull, once. The same claim the odometry
@@ -614,13 +618,27 @@ class LocalizationInputsMixin:
         the replayed update, against the yaw the filter had at that instant:
         during a turn the heading of now is somewhere else, and comparing the
         two pulled yaw toward where the hull had been (BUGS B-91).
+
+        The bound holds the residual CONSTANT, not zero. The angle is the
+        feature in the image: it differs from the pool heading by the camera's
+        mount yaw, the image-angle convention (a lane along the hull reads 90)
+        and the feature's own direction in the pool, none of them known here.
+        So the first read after each anchor, when yaw is the anchor's, records
+        that residual, and later reads bound drift against it. Holding it at
+        zero refused every lane line along the pool's x axis and pulled a
+        grid under any mount not square to the hull (BUGS B-133).
         """
         if not self._anchored:
             return
-        refused = []
+        refs = self.__dict__.setdefault('_floor_ref', {})
+        refused, referenced = [], []
 
         def bound(f, a=angle_deg, s=self._grid_sigma_deg):
-            snapped = snap_to_grid(f.X.yaw_deg(), a,
+            if key not in refs:
+                refs[key] = _wrap_period(f.X.yaw_deg() - a, period_deg)
+                referenced.append(True)
+                return True                      # referenced, nothing to correct
+            snapped = snap_to_grid(f.X.yaw_deg(), a + refs[key],
                                    max_correction_deg=self._grid_max_corr_deg,
                                    period_deg=period_deg)
             if snapped is None:
@@ -634,6 +652,8 @@ class LocalizationInputsMixin:
             # drift: the wrong grid line, never applied.
             self._n[f'{key}_refused'] += 1
             return
+        if referenced:
+            return                               # a reference is not a correction
         # What the floor moved goes into the offset, or it is undone. The
         # next board attitude, 20 ms later, would pull yaw straight back to
         # board + offset: a drift bound that bounds nothing. Folding the
@@ -644,6 +664,7 @@ class LocalizationInputsMixin:
         moved = _wrap180(self._filter.X.yaw_deg() - before)
         self._yaw_offset_deg = _wrap180(self._yaw_offset_deg + moved)
         self._n[key] += 1
+
 
     def _on_fix(self, msg: PointStamped) -> None:
         """A pool-frame position, from `fix_position()` or `fix_from_prop()`.
@@ -662,3 +683,8 @@ class LocalizationInputsMixin:
                            f.update_position(xy, sigma=s)):
             return                      # older than the replay horizon: refused
         self._n['fix'] += 1
+
+def _wrap_period(deg: float, period: float) -> float:
+    """`deg` wrapped to (-period/2, period/2]."""
+    r = float(deg) % period
+    return r - period if r > period / 2.0 else r
