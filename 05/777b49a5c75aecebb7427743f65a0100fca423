@@ -1,0 +1,20 @@
+.claude/context/perception/model-pipeline.md
+  s_4af8d6f83b24e8::t_c6f61e092d4c30 83-100
+  s_4af8d6f83b24e8::t_d55727a18c6e0c 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "05777b49a5c75aecebb7427743f65a0100fca423",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
