@@ -2,7 +2,7 @@
 # `cmd` is any verb in the COMMANDS registry (mongla_control/commands.py is
 # the single source of truth; this list is illustrative, not exhaustive):
 string  cmd          # arm | disarm | set_mode | head | stop | pause | surface |
-                     # mission_reset | calibrate_depth | calc_distance |
+                     # mission_reset | calibrate_depth | calc_distance | locate | go_to |
                      # move_forward | move_back | move_left | move_right |
                      # yaw_left | yaw_right | turn | set_depth | style_roll |
                      # vision_align | vision_move | motor_test | fire
@@ -21,6 +21,9 @@ string  target_name  # mode string  (set_mode)
 float32 timeout      # max wait (all commands)
 float32 settle       # post-command neutral-hold seconds; 0 = axis-natural settle only
 string  phase        # `calc_distance`: 'start' | 'stop' (downward optical-flow odometry bracket)
+float32 x_m          # `go_to`: pool-frame goal, metres (NED: x along bearing 0)
+float32 y_m          # `go_to`: pool-frame goal, metres (y along bearing 90)
+float32 tolerance_m  # `go_to`: arrived within this; also the sigma it must be known to
 float32 flips        # style_roll: number of complete 360° rotations (default 1)
 
 # ---- vision_align / vision_move fields  (ignored by non-vision cmds) ---

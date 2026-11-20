@@ -53,14 +53,12 @@ one-camera vision.launch.py (camera:=forward|downward). See
 """
 
 from launch                  import LaunchDescription
-from launch.actions          import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
+from launch.actions          import DeclareLaunchArgument
 from launch.conditions       import IfCondition
-from launch.event_handlers   import OnProcessExit
-from launch.events           import Shutdown
 from launch.substitutions    import LaunchConfiguration, PythonExpression
 from launch_ros.actions      import Node
 from launch_ros.parameter_descriptions import ParameterValue
-from mongla_localization import launch_defaults
+from mongla_runtime import launch_defaults
 
 _QUIET = ['--log-level', 'warn']
 
@@ -136,7 +134,9 @@ def generate_launch_description():
         DeclareLaunchArgument('debug_image_hz', default_value='10.0',
                               description='Annotated image_debug publish rate (the browser-stream '
                                           'smoothness knob; raise toward inference FPS for a web viewer)'),
-        DeclareLaunchArgument('viewer',       default_value='true'),
+        # Only with a screen: the viewer's exit shuts this launch, so one that
+        # aborts on a headless Kutum took the whole stack down in 5 s.
+        DeclareLaunchArgument('viewer',       default_value=launch_defaults.has_screen()),
         DeclareLaunchArgument('tracking',     default_value='true'),
         DeclareLaunchArgument('tracker_type', default_value='ocsort',
                               description='Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack'),
@@ -296,9 +296,8 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('flow')),
     )
 
-    shutdown_on_exit = RegisterEventHandler(
-        OnProcessExit(target_action=viewer, on_exit=[EmitEvent(event=Shutdown())])
-    )
+    # Only a clean quit (q) ends the launch; a crash or a lost screen does not.
+    shutdown_on_exit = launch_defaults.viewer_quit_shuts_launch(viewer)
 
     # `launch: vision_dual:` in ~/.mongla/bringup.yaml re-defaults these, and its
     # `nodes:` reach the nodes below -- only when this file is the one typed.

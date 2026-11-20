@@ -252,9 +252,9 @@ class _HeartbeatThread:
 
     Why not a ROS timer. It used to be `create_timer(0.5, heartbeat_tick)` in
     the MutuallyExclusive `timer_group`, sharing one slot with callbacks that
-    BLOCK: `_vision_uplink_tick` -> `_vision_state_for` waits up to 10 s for a
-    first CameraInfo, and `_reapply_srot_config` -> `set_default_gain` busy-waits
-    up to 3 s. While either ran, no heartbeat left -- and the board SURFACES the
+    BLOCK: `_reapply_srot_config` -> `set_default_gain` busy-waits up to 3 s,
+    and `_vision_uplink_tick` waited up to 10 s for a first detection (it now
+    builds without that preflight). While either ran, no heartbeat left -- and the board SURFACES the
     vehicle after 5 s of silence (CLAUDE.md safety rule 3). Worse, the timer
     only existed once `executor.spin()` started, so every second of bring-up
     after the port opened (preflight reads, payload roles -- many seconds)

@@ -38,6 +38,32 @@ class DetectorPublishMixin:
         m.database_version = int(self._model_epoch)
         self._pub_vinfo.publish(m)
 
+    def _publish_model_classes(self) -> None:
+        """`<ns>/model_classes`, latched: what the running model(s) can emit.
+
+        Comma-separated and sorted, primary and extras together; '' while no
+        model is loaded. A course naming a class outside this set can never be
+        seen, and the mission DSL warns on it (`use_course`, `set_model`).
+        """
+        pub = getattr(self, '_pub_model_classes', None)
+        if pub is None:
+            return
+        from std_msgs.msg import String
+        dets = [getattr(self, '_det', None)]
+        reg = getattr(self, '_registry', None) or {}
+        dets += [reg.get(n) for n in (getattr(self, '_extra_names', []) or [])]
+        # Evidence, not control: a model that cannot say its names publishes
+        # none for itself, and never takes the detector down with it.
+        names = set()
+        for d in dets:
+            if d is None:
+                continue
+            try:
+                names.update(str(c) for c in (d.class_names() or []) if c)
+            except Exception as exc:                    # noqa: BLE001
+                self.get_logger().warning(f'[DET  ] class names of {d!r} unreadable: {exc!r}')
+        pub.publish(String(data=','.join(sorted(names))))
+
     def _publish_classes(self, classes_str: str) -> None:
         """Publish the current classes filter so display_node can light up active classes."""
         from std_msgs.msg import String

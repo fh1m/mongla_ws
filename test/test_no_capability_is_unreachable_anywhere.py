@@ -3,7 +3,7 @@
 The gap this closes. `mongla_vision/test/test_no_capability_is_built_and_
 unreachable.py` is this repo's guard against its own oldest and most expensive
 defect -- code that is correct, tested, and not on the vehicle. It works. It also
-scans exactly ONE of the seven packages:
+scans exactly ONE of the packages:
 
     for p in sorted((_PKG / 'mongla_vision').rglob('*.py')):
 

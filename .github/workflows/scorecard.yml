@@ -1,0 +1,39 @@
+# OpenSSF Scorecard: how this repository scores on the supply-chain checks
+# (pinned actions, token permissions, branch protection, dangerous workflows,
+# reviewed changes). Advisory, not a required check: the results land in the
+# Security tab as code-scanning alerts, and the score is published to the OpenSSF API.
+name: Scorecard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 4 * * 1'
+  branch_protection_rule:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # upload the results to code scanning
+      id-token: write          # publish the score to the OpenSSF API
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+
+      - name: Run the analysis
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e  # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26  # v4.39.2
+        with:
+          sarif_file: results.sarif

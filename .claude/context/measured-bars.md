@@ -159,6 +159,10 @@ is how `recommend()` happened.
 - [93. LIGHTERGLUE ON THE ANCHOR'S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19)](#93-lighterglue-on-the-anchors-cpu--better-fits-but-not-inside-the-333-ms-anchor-cycle-2026-11-19)
 - [94. VISUAL ODOMETRY FROM XFEAT — LK already does it better inside the same solver (2026-11-19)](#94-visual-odometry-from-xfeat--lk-already-does-it-better-inside-the-same-solver-2026-11-19)
 - [95. ONE HAILO-8, THREE NETWORKS — XFeat at the anchor's rate costs the detectors nothing, and scheduler priority buys nothing (2026-11-19)](#95-one-hailo-8-three-networks--xfeat-at-the-anchors-rate-costs-the-detectors-nothing-and-scheduler-priority-buys-nothing-2026-11-19)
+- [96. STARK-LIGHTNING AS A LADDER RUNG — 6.7 ms a call on the Hailo-8, and no longer a hold than the follower (2026-11-20)](#96-stark-lightning-as-a-ladder-rung--67-ms-a-call-on-the-hailo-8-and-no-longer-a-hold-than-the-follower-2026-11-20)
+- [97. MONOCULAR DEPTH ON THE HAILO-8 — no network in the Model Zoo carries the floor's scale, so none can give flow its height (2026-11-20)](#97-monocular-depth-on-the-hailo-8--no-network-in-the-model-zoo-carries-the-floors-scale-so-none-can-give-flow-its-height-2026-11-20)
+- [98. THE DETECTOR FAMILY — yolov8n matches yolo11n after INT8 and runs 3.3x faster on the Hailo-8 (2026-11-20)](#98-the-detector-family--yolov8n-matches-yolo11n-after-int8-and-runs-33x-faster-on-the-hailo-8-2026-11-20)
+- [99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20)](#99-localization-on-a-real-bench-recording--state-verdict-and-verbs-replayed-7-cm-at-rest-zupt-rate-is-not-the-limit-2026-11-20)
 <!-- contents:end -->
 
 ---
@@ -4098,12 +4102,151 @@ refused, with the reason.
 seven clips, so it is unmeasured on a scene none of them resembles; the
 leave-one-clip-out vocabulary above is the honest estimate, and the pool's
 own footage is where it gets re-learnt (`--write-vocab`). Recall@1 here is
-retrieval inside one clip, seconds to minutes apart; the revisit of a place an
-hour later, in a different light, is not measured. The IMU-rotated query (XFeat
+retrieval inside one clip, seconds to minutes apart; the revisit across runs
+is measured in 20.5. The IMU-rotated query (XFeat
 is not rotation invariant) cannot be scored on these clips, which carry no
 IMU, and waits for a recorded bag.
 
+### 20.4 A learned signature against VLAD-16 (2026-11-19)
+
+`tools/studies/bank_shortlist_accuracy.py --set both --signatures vlad16,cosplace
+--against vlad16`, the same clips, references and truth as 20.3. CosPlace
+ResNet-18 (CVPR 2022, 512-D, trained on street views) sees the whole frame
+instead of XFeat's descriptors; grey frames go in as three equal channels.
+
+**Bar, written before the first run (bead po7.15.4):** CosPlace replaces
+VLAD-16 only if it clears the same four clauses as 20.3 against VLAD-16
+(forward Recall@1 up at least 10 points with the lower 95 % bound above
+zero, downward not lower by more than 2 points, loss@5 not up) **and** a
+signature costs at most 50 ms on Kutum: 15 % of the 333 ms anchor cycle,
+paid once per relocalisation query. Failing either keeps VLAD-16, which
+needs no second network.
+
+| signature | forward r@1 / r@5 / loss@5 (120 queries) | downward r@1 / r@5 / loss@5 (48 queries) |
+|---|---|---|
+| VLAD, 16 words (shipped) | **65.8 % / 93.3 % / 0.8 %** | **77.1 % / 97.9 % / 1.3 %** |
+| CosPlace ResNet-18 | 64.2 % / 93.3 % / 1.0 % | 47.9 % / 83.3 % / 9.1 % |
+
+Paired difference to VLAD-16, Recall@1: forward **-1.7 points (-9.2 to +5.8)**,
+downward **-29.2 (-43.8 to -14.6)**, loss@5 +7.8 points on the floor (the bin
+clip alone loses 17.2 % of its inlier yield). **Rejected on accuracy**; the
+cost clause was not reached. VLAD-16 reproduced 20.3 to the digit, so the
+harness change did not move the incumbent.
+
+**Result.** A network trained on street views is as good as VLAD forward and
+much worse on the floor, which is the camera relocalisation leans on: the
+tiled pool bottom and the bin are textures, not places, and whole-image
+appearance cannot tell one tile from the next where XFeat's local words can.
+A learned signature would have to be trained on our own floor footage to
+compete, and nothing here says it would then beat words already learnt from it.
+
+### 20.5 The current best retrievers, on the same footage (2026-11-19)
+
+The 2024-2025 leaders all sit on a DINOv2 backbone: MegaLoc (ViT-B + SALAD,
+CVPRW 2025, the best published across benchmarks), BoQ (CVPR 2024, also a
+ResNet-50 form a Hailo can run as a CNN), and AnyLoc (RA-L 2023: DINOv2
+patch features + VLAD, untrained, the only one scored underwater, where its
+ViT-S beat its ViT-G). Each is scored as 20.4 scored CosPlace: `--signatures
+vlad16,megaloc,boq_r50,anyloc_s --against vlad16`. `anyloc_s` is DINOv2
+ViT-S/14 last-layer patch tokens through the same 16-word VLAD, words learnt
+on the other clips.
+
+**Bar, written before the first run (bead po7.15.4):** the 20.4 bar, for
+each candidate separately. Four candidates are tried, so a pass with the
+lower bound within 2 points of zero is re-run at a different stride before
+it counts. A candidate that clears the accuracy clauses but not the 50 ms
+on Kutum is parsed for the Hailo-8 before it is set aside.
+
+**The revisit, which 20.3 owed.** Retrieval inside one clip is seconds to
+minutes apart. `--revisit` builds the bank from one run and queries it with
+frames of ANOTHER run past the same props: Mirpur torpedo and torpedo_1,
+octagon 1 and 2, bin_front 1/2/3, octagon_front 1 and 2, torpedo_shark_up
+1/2/3. Truth is the same expensive match; a query counts only when its best
+reference reaches `MIN_INLIERS` (15), the bank's own "same scene". VLAD words
+are learnt on clips outside the pair. **Bar, written before the first
+revisit run:** a candidate adopted on the in-clip bar must not lose more
+than 2 points of revisit Recall@1 to VLAD-16; a candidate that failed in-clip
+but gains at least 10 revisit points with the lower bound above zero is
+re-examined rather than set aside, because the revisit is the job.
+
+In-clip, against VLAD-16 (120 forward / 48 downward queries; ms a frame on
+the dev-box CPU, 12 threads):
+
+| signature | forward r@1 / loss@5 | downward r@1 / loss@5 | Recall@1 vs VLAD-16, forward; downward (95 %) | ms |
+|---|---|---|---|---|
+| VLAD-16 (shipped) | 65.8 % / 0.8 % | **77.1 % / 1.3 %** | -- | 1 |
+| MegaLoc | 63.3 % / 1.3 % | 66.7 % / 3.9 % | -2.5 (-10.8, +5.8); -10.4 (-25.0, +2.1) | 442 |
+| BoQ ResNet-50 | 68.3 % / 0.9 % | 62.5 % / 3.2 % | +2.5 (-5.8, +10.8); **-14.6 (-27.1, -2.1)** | 168 |
+| AnyLoc ViT-S | 52.5 % / 2.9 % | 41.7 % / 7.5 % | **-13.3 (-22.5, -4.2); -35.4 (-52.1, -18.8)** | 139 |
+
+The revisit, 18 bank/query run pairs, 368 queries whose place is in the bank:
+
+| signature | r@1 | r@5 | loss@5 | Recall@1 vs VLAD-16 (95 %) |
+|---|---|---|---|---|
+| VLAD-16 (shipped) | 21.5 % | 54.3 % | 8.7 % | -- |
+| CosPlace | 21.5 % | -- | 10.0 % | +0.0 (-5.2, +5.2) |
+| MegaLoc | 19.8 % | 51.1 % | 10.0 % | -1.6 (-6.5, +3.0) |
+| BoQ ResNet-50 | 19.6 % | 59.0 % | 8.5 % | -1.9 (-6.2, +2.4) |
+| AnyLoc ViT-S | 17.4 % | 51.1 % | 9.1 % | -4.1 (-9.0, +0.8) |
+
+What the lock feels on a revisit is whether the shortlist still holds a
+reference that verifies. Of the queries whose best reference reaches the
+threshold, the share whose top-k by signature still does:
+
+| VLAD-16, revisit | k=1 | k=2 | k=3 | k=5 | k=8 |
+|---|---|---|---|---|---|
+| a match, `MIN_INLIERS` (368) | 82.3 % | 89.1 % | 93.2 % | 96.2 % | 96.7 % |
+| identity, `IDENTITY_INLIERS` (190) | 71.1 % | 82.6 % | 87.9 % | 91.6 % | 94.7 % |
+
+(BoQ: identity 79.5 / 85.8 / 90.0 / 92.6 / 94.7 %, inside the noise of VLAD.)
+
+**No candidate passes; VLAD-16 stays.** None clears the in-clip bar, none
+gains on the revisit, and three of the four are significantly worse on the
+floor. The 50 ms and Hailo clauses were never reached, so nothing was
+compiled.
+
+**Result.** Two things were learnt, and the second matters more. First, the
+2024-2025 leaders are trained on city streets and judge the whole frame;
+the pool floor and the props on a black wall are textures and small objects,
+and words learnt from our own descriptors rank them better at 1/150th of the
+cost. Second, the revisit is hard for every signature: across runs the top
+reference is right about one time in five, against two in three within a
+run. The design survives it because the shortlist is verified, not trusted:
+XFeat geometry over the top 5 keeps identity for 91.6 % of revisit queries.
+On Kutum the time budget affords k = 4 (31.4 ms a match, 45 % of a 333 ms
+cycle), so a revisit keeps identity about 90 % of the time; matching all 8
+when the lock is lost would buy about 5 points. That is a lever, not a
+defect, and it is measured on the ladder before anything is changed.
+
+**Caution.** The revisit clips are runs minutes to a day apart at the same
+venue; different venues, seasons and turbidity are not measured. 3 of 18
+pairs hold fewer than 20 queries. A learned signature fine-tuned on our own
+footage was not tried; nothing above suggests it would gain, and it would
+need water footage the archive does not hold.
+
 ---
+
+### 20.6 Whole-image language-vision encoders (2026-11-20)
+
+CLIP and SigLIP2 are in the Hailo Model Zoo's image-encoder category, so they
+are the last retrievers on hand that the chip could run. Both as their
+authors run them, through open_clip: `ViT-B-32-quickgelu` (OpenAI weights) and
+`ViT-B-32-SigLIP2-256` (WebLI), the L2-normalised image embedding as the
+signature, scored by the same tool and footage as 20.5 against VLAD-16.
+**Bar:** the 20.5 bar, unchanged, written down before the runs.
+
+| signature | in-clip forward r@1 | in-clip downward r@1 | revisit r@1 | Recall@1 vs VLAD-16, forward; downward; revisit (95 %) |
+|---|---|---|---|---|
+| CLIP ViT-B/32 | 46.7 % | 31.2 % | 14.1 % | **-19.2 (-28.3, -10.0); -45.8 (-64.6, -27.1); -7.3 (-12.2, -2.4)** |
+| SigLIP2 ViT-B/32 | 46.7 % | 41.7 % | 12.0 % | **-19.2 (-29.2, -9.2); -35.4 (-52.1, -18.8); -9.5 (-14.7, -4.3)** |
+
+**Both fail, on every clause, with every interval below zero; VLAD-16
+stays.** They lose more than the 20.5 candidates did, which fits 20.5's first
+lesson: an encoder trained to say what a whole image shows ranks a floor
+texture and a small prop worse than words learnt from our own descriptors.
+Nothing was compiled. The scorer was a copy of `bank_shortlist_accuracy.py`
+with two signatures added; it is not shipped, and the logs are on the dev
+box under `~/attic/2026-11-20/clip_siglip/`.
 
 ## 21. A reference does NOT decay to death — and a correction
 
@@ -7187,7 +7330,7 @@ The idle numbers are the floor, not the bar for a loaded vehicle.
 
 ## 69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)
 
-`mongla_localization/launch_respawn.py` restarts every process bringup starts;
+`mongla_runtime/launch_respawn.py` restarts every process bringup starts;
 `mongla_vision/cameras/reopen.py` reopens a camera that dropped off USB (B-110).
 Which numbers are decisions, which are derived and which are measured:
 
@@ -7420,7 +7563,7 @@ post-processing are the rest, and the executor never touched them. So the
 per-callback figure is 6.7x and the node is about 7 % cheaper; both are true
 and only the second is what the vehicle gets.
 
-**Shipped.** `mongla_localization/spin.py` picks the executor for every node
+**Shipped.** `mongla_runtime/spin.py` picks the executor for every node
 main (`MONGLA_EXECUTOR=events`, the default, or `classic`). Humble has no
 events executor, so a dev box gets the classic one. The manager stays
 multi-threaded on purpose: its action callbacks block for the length of a
@@ -7767,7 +7910,7 @@ lock, not the kernel, is the timing risk in a Python process.
 
 **Verdict.** The realtime kernel is not adopted: with the two settings the
 stock kernel is 50 times inside the bar, and there is nothing left for it to
-remove at a 20 ms period. **What ships:** `mongla_localization/realtime.py`,
+remove at a 20 ms period. **What ships:** `mongla_runtime/realtime.py`,
 called by the manager before it starts its threads (`SCHED_FIFO` 10, 0.5 ms
 switch interval, `MONGLA_REALTIME=off` to disable);
 `kutum/system/limits/99-mongla-realtime.conf` permits it and `doctor.sh`
@@ -8339,8 +8482,10 @@ the whole vision graph, is under a quarter of it.
 | alone | 624 | 100.00 ms | 101.45 ms | 102.88 ms |
 | beside `vision_pi.launch.py` (lock, flow; forward 9.8 Hz, downward 59.2 Hz) | 611 | 100.00 ms | 103.51 ms | 105.76 ms |
 
-**Decision.** `lock_inputs.ODOM_MAX_AGE_S = 0.5`: older, the closure step
-neither searches nor enrols, and counts the refusal as `stale odometry`.
+**Decision.** `ODOM_MAX_AGE_S = 0.5` (`localization_publish.py`, beside the
+timer it is five periods of): older, the closure step neither searches nor
+enrols, and counts the refusal as `stale odometry`. Since 2026-11-20 the
+mission's `pose()` and `motion()` read the same bound and answer None.
 
 **The age is taken from the stamp, not the arrival.** The timer publishes
 whether or not the filter's inputs still arrive, and stamps each message with
@@ -8509,6 +8654,26 @@ any sample size here, so the Hailo port of LighterGlue is carried on to its
 own emulation bar and a finished result, but it has no measured benefit to
 buy: adopting it would need a case this study does not show.
 
+**LiftFeat (2026-11-20), same 78 pairs, same bar.** `--liftfeat DIR`, a
+clone of lyp-deeplearning/LiftFeat at its own `extract`, the 1024 best points
+by score, our cosine matcher at 0.5 and 0.82, written before the run to the
+EdgePoint2 bar (and to its bead's: adopt only at +5 points). Its first run
+read 0.0 correct matches, and that was **the harness, not the model**: its
+`extract` normalises over the keypoint axis (descriptor norm 0.3), so every
+cosine score fell under the cut; the harness now makes the rows unit and a
+frame matches itself 726 of 726 before the study runs.
+
+| method (78 pairs) | correct / pair | precision | fit right, frame / box | frame fit vs shipped | box fit vs shipped |
+|---|---|---|---|---|---|
+| shipped | 359.0 | 56.9 % | 65.4 / 84.6 % | -- | -- |
+| LiftFeat @0.5 | 306.2 | 61.7 % | 57.7 / 79.5 % | -7.7 [-15.4, +0.0] | -5.1 [-11.5, +0.0] |
+| LiftFeat @0.82 | 306.2 | 62.4 % | 57.7 / 76.9 % | -7.7 [-15.4, +0.0] | **-7.7 [-14.1, -1.3]** |
+
+LiftFeat is rejected: the lower bound of the box fit is -11.5 and -14.1
+against the -5 bar, 53 fewer correct matches a pair, and it costs 4.96 GFLOPs
+against XFeat's 1.33 in its own table. It is more precise than shipped, as
+EdgePoint2 was; the anchor needs the fit. No Hailo parse is attempted.
+
 **Open.** What LighterGlue costs on the chip, if it quantises (bead
 po7.15.1.1), is still worth knowing and is being measured.
 
@@ -8670,4 +8835,239 @@ downward rate settles where the chip is full (45 x 13.5 + 30 x 15.8 = 1081 ms
 a second, the switching between network groups included). XFeat's 6.2 ms at
 3 Hz is 1.9 % of the chip. What buys downward rate is chip time: a smaller
 input for the downward model, or a lower asked rate; host work cannot.
+
+
+## 96. STARK-LIGHTNING AS A LADDER RUNG — 6.7 ms a call on the Hailo-8, and no longer a hold than the follower (2026-11-20)
+
+`tools/studies/stark_rung.py` on Kutum, `stark_lightning_repvgg_a0` from
+Hailo Model Zoo v2.20 compiled for the Hailo-8 (the Model Zoo's own crop
+factors and corner decode), against the shipped follower (`tracking/follower.py`)
+and a `frozen` seed box. Truth is the detector's strong boxes (conf >= 0.45,
+`gate_sharks`), hidden from all three after the seed; a rung holds while IoU
+>= 0.5, up to a 2.5 s horizon (the measured p99 gap). Four archive clips:
+gate.mkv, gate90.mp4 (class gate), torpedo.mkv, torpedo_1.mkv (class shark).
+Bar written before the run (bead po7.16): the paired hold difference, STARK
+minus follower, has median > 0 and a 95 % bootstrap lower bound > 0 over at
+least 30 windows; then a chip-cost run. Falsifier: the frozen box must hold
+least.
+
+**The first full run failed its falsifier.** Over all 575 windows the frozen
+box held a median 2.50 s (96 % of gate.mkv's 459 windows to the horizon): the
+gate barely moves in frame, so standing still scores perfectly and the test
+cannot rank following. The bar was then restricted to MOVING windows, chosen
+from truth alone (the frozen box fails inside the horizon). That rule came
+after seeing the failure and is stated as such in the script.
+
+| windows | n | follower median | STARK median | frozen median |
+|---|---|---|---|---|
+| all | 575 | 2.50 s | 1.73 s | 2.50 s |
+| moving | 49 | 2.10 s | 2.50 s | 1.67 s |
+| moving, gate.mkv | 19 | 1.39 s | 2.29 s | -- |
+| moving, gate90.mp4 | 23 | 2.50 s | 2.50 s | -- |
+| moving, torpedo + torpedo_1 | 7 | 1.67, 1.75 s | 2.50 s | -- |
+
+Paired over the 49 moving windows: STARK minus follower median +0.00 s, 95 %
+interval [+0.00, +0.00], mean +0.16 s. Falsifier ok on these windows. STARK
+call p50 6.7 ms (crop and copy included) on the Pi with nothing else on the
+chip.
+
+**Result: STARK is rejected as a rung.** The bar asks for a paired median
+above zero and it is zero: on most moving windows both rungs reach the
+horizon. Where they differ STARK tends to hold longer, but 49 windows do not
+show it, and on the still windows it is clearly worse: on gate.mkv it loses
+the gate in a median 0.25 s where the follower holds 2.50 s (a large, thin,
+hollow target; the template is mostly water). A rung that drops a still
+target is a regression the moving-window gain does not buy back. The chip-cost
+run was not made (the accuracy clause failed first). Reopen with a footage
+set that has more motion in frame, and score still and moving windows
+separately.
+
+## 97. MONOCULAR DEPTH ON THE HAILO-8 — no network in the Model Zoo carries the floor's scale, so none can give flow its height (2026-11-20)
+
+`tools/studies/depth_scale_check.py` on Kutum. Flow refuses without the
+height above the floor (V-9); a network reading metric height off one frame
+would remove that input (bead po7.17). Exact truth without a rig: crop the
+central 1/z of a floor frame and resize it back, which is the same flat floor
+seen from 1/z of the height. A metric network must report the centre median
+depth scaled by 1/z (or disparity by z). Bar written before the run: within
+10 % of that, at z = 1.5 and 2.0, median over frames. Falsifier: `--control`
+scales each output to unit median, as an affine-invariant network does, and
+must fail. 30 downward archive frames (octagon bottom, bin, torpedo down).
+
+| network (HAILO8 HEF) | call | ratio at z 1.5 (needs 0.667 / 1.5) | ratio at z 2.0 (needs 0.5 / 2.0) |
+|---|---|---|---|
+| scdepthv3 (256x320) | 5.6 ms | 0.997 [p10 0.972, p90 1.021] | 0.987 [0.965, 1.017] |
+| fast_depth | 3.2 ms | 0.873 [0.697, 1.176] | 0.864 [0.615, 1.101] |
+| depth_anything_v2_vits (224x224) | 36.3 ms | 1.092 [0.709, 1.475] | 1.008 [0.547, 1.702] |
+| control (unit-median scdepthv3) | -- | 0.997 | 0.987 |
+
+**Result: all three refused for height.** None moves toward either target;
+scdepthv3 reads the same as the unit-median control, so its output carries no
+scale at all, and the other two scatter around 1. This is what their training
+predicts (scdepthv3 self-supervised up to scale, Depth Anything relative,
+fast_depth indoor supervised on NYU at a different camera), and the water
+does not change it. The falsifier failed as it must. There is no positive
+control (no network on hand is known to carry scale on this camera), so a
+pass would have needed the bench and water checks the bead names before
+shipping. Height stays the barometer plus `pool_depth_m`, or the downward
+flow's implied height (section 5, 0.69 to 0.72 m against 0.72 taped).
+
+## 98. THE DETECTOR FAMILY — yolov8n matches yolo11n after INT8 and runs 3.3x faster on the Hailo-8 (2026-11-20)
+
+**Question.** Both cameras are to be 120 fps global-shutter. Section 95 has two
+3-context YOLO11 models sharing the chip at about 51 inferences a second. Does a
+single-context family give that rate back without losing targets?
+
+**Bar, written before the compile** (bead po7.15.7): yolov8n becomes the training
+default if its INT8 HEF is within 0.02 mAP50 of yolo11n on the held-out test
+split, compiles single-context, and runs at least twice yolo11n's chip rate.
+
+**Method.** Same data (torpedo_v1, 5 classes), same 80 epochs, same harness
+(`tools/bench/hailo_compile.sh --finetune off`, DFC 3.34, 1024 real calibration
+frames). Chip rate: `hailortcli benchmark --time-to-run 10`, HW-only, Kutum,
+nothing else on the chip. Accuracy: every test image through the compiled HEF on
+the Hailo (`HailoDetector`, conf 0.001), scored against the labels, COCO
+101-point AP at IoU 0.5. The scorer's self-test reads 0.995 for labels fed back
+as predictions (the 101-point ceiling, which is also why training read 0.995)
+and 0.000 for boxes shifted one width.
+
+| | contexts | chip FPS | HW latency | INT8 mAP50, test (42) | valid (13 readable) |
+|---|---|---|---|---|---|
+| yolo11n | 3 | 97.8 | 8.33 ms | 0.981 | 0.995 |
+| yolov8n | **1** | **319.3** | **6.27 ms** | **0.981** | 0.995 |
+
+The shipped gate_sharks (yolo11, 3 contexts) reads 95.3 FPS by the same method,
+which agrees with the 51 a second two of them share in a live launch.
+
+**Verdict.** Passes every clause: equal accuracy, single context, 3.27x the
+rate. yolov8n is the training default from here. Per class the two differ only
+in which class costs them (yolo11n loses on class 3, yolov8n on class 2), on 42
+images; a larger held-out set is what would separate them, if anything does.
+At two cameras of 120 fps, yolov8n asks 75 % of the chip (240 / 319); yolo11n
+could not (245 %).
+
+## 99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20)
+
+**What.** `bag_srot_bench_rest_20260924_145631`: 30 min of the real SROT board on the
+bench, disarmed, hull still, so the true displacement is zero. `/mongla/imu` and
+`/mongla/state` replayed at 1x on Kutum (Jazzy; Humble's `ros2 bag` cannot read this
+bag's metadata) into this branch's `localization_node`; a probe on the same graph
+recorded `/mongla/localization/state` and called `locate` and `go_to` through the real
+`LocalizationBridge` before and after publishing an anchor heading. The bag holds no
+demand, so a zero demand was streamed at 20 Hz, as a disarmed board reports it.
+
+**Bars, written before the run.** State at 10 Hz +-10 %. ZUPT on: aided, NOT usable
+with reason "heading not anchored" until the anchor, usable after it, drift under 5 cm
+(the 2026-09-11 bar). ZUPT off (control): unaided, runaway over 1 m. `locate` and
+`go_to` refuse before the anchor; after it `go_to` refuses while sigma exceeds the
+tolerance.
+
+| run | state rate | verdict before / after anchor | max drift from start | sigma at end | ZUPTs | gaps |
+|---|---|---|---|---|---|---|
+| ZUPT on | 10.00 Hz | not anchored / USABLE | 0.070 m to 98 s; 0.206 m at 100 s, back to 0.10 m | 1.11 m | 232 / 240 s | 0 |
+| ZUPT off | 10.00 Hz | not anchored / unaided | 9 m at 10 s, 78 m at 30 s, 1665 m at 140 s | 163 m | 0 | 0 |
+
+- **Verdicts: pass.** Every refusal named the right reason; `go_to` was refused after the
+  anchor at sigma 1.06 m against a 0.30 m tolerance, which is correct: nothing had fixed
+  position. The accepting path of `go_to` was NOT exercised on this data (it needs a fix
+  or flow); its unit tests cover it.
+- **Drift: fails the 5 cm bar by 2 cm**, the same 7 cm the 2026-09-11 live run reported
+  in x. The recording is not perfectly still: the gyro exceeds 0.02 rad/s at 3 s and
+  at 98-99 s, which is where the 7 cm and the 0.21 m spike are; between them the
+  position walks about 1.4 mm/s.
+- **The ZUPT rate is not the limit.** A/B, bar written first (treatment passes if drift
+  goes under 5 cm with 0 gate flips): a sliding stillness window, ZUPT up to 50 Hz
+  instead of about 1 Hz. The counter proved the knob took (11 420 ZUPTs vs 232); drift
+  0.171 m vs 0.203 m, end sigma 1.01 vs 1.11 m. **Rejected**: no material gain for 50x
+  the updates.
+- **Caution: "aided" is not "position good".** In the ZUPT-off control the gate read
+  `aided` for the first 20 s while the position ran 9 m, because a cold filter's
+  velocity sigma sits under the gate by design (inekf `_velocity_is_observed`). `usable`
+  can therefore read true in that window after an anchor; `go_to` still refuses on
+  sigma (5.6 m at 10 s). Read sigma, not the word.
+- **Fixed by this run (BUGS B-132).** Before any input the node logged "aiding
+  restored"; and a hull never thrust waited the 3 tau coast settle for its first ZUPT:
+  **0.707 m in the first 2.7 s** before the fix, **0.083 m** after, same replay.
+
+**Method trap.** Background jobs of a non-interactive shell ignore SIGINT, so `kill -INT`
+left three bag players running; their interleaved IMU read as 10 359 gaps and positions
+of 10^6 m. Every number above is from a run with 0 gaps and no player left after it.
+
+**Added the same day.**
+
+- **The go_to accepting path, on the same recording.** After a prop-style fix at
+  (0, 0), sigma 0.05 m, the state read sigma 0.06 m and `go_to(1, 0)` was accepted: 30
+  frames at 10 Hz of `lat -0.30` (30 % to port; the hull faced 90 deg, the goal was due
+  north), no yaw or depth, ending neutral; TIMEOUT after 3 s, true, the hull never moved.
+  A goal inside the tolerance: ARRIVED, one neutral frame.
+- **`usable` needs a measured velocity** (`AID_MAX_AGE_S` = 2.0 s): a flow or ZUPT fused
+  within 2 s. A still hull ZUPTs about once a second (232 in 240 s above), so this allows
+  one missed window. It closes the 20 s of "aided" on a cold, unaided filter.
+- **The tile grating needs `tile_decimate` >= 2.** Rendered grid, 40 px period, Gaussian
+  blur sigma 3 px, noise sigma 10, angles 0-85 deg in 5 deg steps: at x1 every angle was
+  refused (peak share 0.008-0.019 against the 0.01 bar, the peak spread over more bins
+  than the share window holds); at x2 and x3 every angle read within 0.2 deg, share
+  0.034. The node now refuses x1 while `tile_m` is set.
+- **The accelerometer bias prior was 17 sigma off what this board measures.** The
+  ledger's static IMU table measures the bias at 0.167 m/s^2; the filter's prior was
+  0.01 (`P0_bias`, shared with the gyro), so it could not learn it, and every ZUPT
+  shoved position by the same biased innovation. A/B, bar written first (pre-anchor
+  drift under 5 cm, no new rejects or gate flips), same 240 s replay, prior printed
+  in-process by the node:
+
+  | `ACCEL_BIAS_PRIOR` | first 5 s | walk 5-95 s | after anchor, 120 s | rejects | flips |
+  |---|---|---|---|---|---|
+  | 0.01 | 0.083 m | 0.155 m | 0.078 m | 0 | 1 |
+  | **0.2** | 0.083 m | **0.0094 m** | **0.0089 m** | 0 | 1 |
+
+  **Shipped 0.2** (covers 0.167). The bar as written still fails on the first second:
+  0.083 m is the bias integrated before the first ZUPT can fire, 0.5 * 0.167 * 1^2,
+  on deck and before any anchor or fix. After it the still hull holds under 1 cm,
+  through the 98 s bench knock that moved the old filter 0.21 m.
+- **Truth, before water: `tools/studies/localization_candidates.py`.** A 60 s pool route
+  (15.2 m, two cruises at 0.4 m/s, a 90 deg turn, four stops) flown kinematically, every
+  input synthesised at the node's rates and sigmas (board numbers from the static IMU table
+  above), the real `RIEKF` scored against the route; 5 seeds per arm. Bars in the file's
+  docstring, written first. `--self-test`: perfect sensors 0.001 m; a 5 % scale error
+  chosen on purpose reads 3.71 % of distance (window 3.5-6.5 %). PASS.
+
+  | arm | result | bar |
+  |---|---|---|
+  | A1 bias prior 0.01 / **0.2**, in motion | rms 0.051 / **0.050 m** | 0.2 within +10 %: **PASS** |
+  | A2 flow scale 0 / 2.5 / 5 % | final 0.58 / 1.65 / 3.46 % of distance | characterisation |
+  | A3 one fix at 6 s, 5 % scale, second correct fix at 59 s, **no floor** | **accepted 2 of 5**; believed 0.153 m, was 0.5-0.7 m off | after <= own error + 5 cm: **FAIL** |
+  | A3 the same, fix at 20 s, no floor | accepted 4 of 5 | **FAIL** |
+  | A3 both, **`FLOW_SCALE_SIGMA` 0.036** | **accepted 5 of 5, and 5 of 5**; believed 0.59 / 0.39 m | **PASS** |
+  | A4 12 s flow dropout mid-cruise | 0.099 m at its end, against 0.088 m with no dropout | characterisation |
+
+  The bar first written for A3, "under 0.30 m after the fix", failed in every arm including
+  the accepted ones: a sigma-0.15 m fix lands over 0.30 m from truth 13.5 % of the time on its
+  own, so that bar scored the fix's noise, not the filter. Kept here; the bar meant was
+  "accepted, and no worse than the fix's own error plus 5 cm".
+
+  **Shipped: `FLOW_SCALE_SIGMA = 0.036`** (`inekf.py`), the worst of the three §13 slides,
+  the same value as mongla_vision's `FLOW_SCALE_SIGMA_FRAC` (`test_one_scale_error.py`
+  holds them equal; it first shipped as a hand-rounded 0.035, and the table above was re-run
+  at 0.036 with the same verdicts): after a fix the horizontal sigma is held at no less than
+  sqrt(sigma_fix^2 + (0.036 x distance)^2). Without it the filter's position sigma came from
+  per-sample flow noise only, which integrates like a square root while a scale error grows
+  with distance; a filter one fix in was certain and wrong, and refused the correction.
+  A1, A2 and A4 are unchanged by it to the millimetre. `test_scale_error_floor.py` fails
+  with the floor removed. Consequence for `go_to`: from a 0.15 m fix, sigma reaches the
+  0.5 m default tolerance after about 13.2 m (7.2 m at 0.3 m), and `go_to` then stops until
+  the next fix, which is the honest answer. The DSL's `go_to` warns before a leg longer than
+  that (`reach_m`, `test_go_to_reach.py`), so a route is planned with a fix every ~10 m.
+
+  Not covered by 0.036: a sloping floor. Flow scale is height above the floor; the course
+  file's floor goes from 1.28 to 2.0 m, so one assumed depth is up to 30 % wrong at 0.5 m
+  hull depth. A floor-depth map is bead es5.7.
+
+- **ZUPT stillness, magnitude against per axis (B-139), 2026-11-20.** Bar, written first: on
+  the real bench recording (1x on Kutum, zupt on, anchor at 120 s, 240 s), the per-axis
+  veto applies no fewer ZUPTs and walks no further at rest than the magnitude veto it
+  replaces, within 1 mm. Result: 232 and 232 ZUPTs; still-hull walk 5-95 s 9.3 and 9.4 mm;
+  after the anchor 9.3 and 8.9 mm. **PASS**. The case it exists for, +-0.4 m/s^2 sideways
+  with the gyro quiet, applied 3 ZUPTs in 3 s under the magnitude veto and none per axis
+  (`test_a_hull_shaking_without_turning_is_not_still`). `STILL_ACCEL_SPREAD` 0.25 m/s^2 is
+  unchanged; it now bounds each axis.
 

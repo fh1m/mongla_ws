@@ -102,6 +102,48 @@ class ReportMixin:
              'elapsed': 0.0, 'msg': path or f'no image_debug frame from {cam}'})
         return path
 
+    def _tether_bound_nodes(self, timeout: float = 2.0) -> list:
+        """[(node, why)] for every Mongla node that stops with the tether.
+
+        Every node declares `tether_bound` when it starts spinning
+        (`mongla_runtime.tether`). A node that does not answer in time is left
+        out with a warning: an unreadable answer is not a reason to stop a run
+        the operator is about to start, and the bound case is the one named.
+        """
+        import time as _t
+        from rcl_interfaces.srv import GetParameters
+        client = getattr(self, 'client', None)
+        if client is None:
+            return []
+        node = client.node
+        try:
+            names = sorted({n for n, ns in node.get_node_names_and_namespaces()
+                            if n.startswith('mongla') and n != node.get_name()})
+        except Exception:                                  # noqa: BLE001
+            return []
+        pending = {}
+        for n in names:
+            cli = node.create_client(GetParameters, f'/{n}/get_parameters')
+            if cli.wait_for_service(timeout_sec=0.2):
+                pending[n] = (cli, cli.call_async(GetParameters.Request(names=['tether_bound'])))
+            else:
+                node.destroy_client(cli)
+        deadline = _t.monotonic() + float(timeout)
+        while any(not f.done() for _, f in pending.values()) and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        bound, silent = [], []
+        for n, (cli, fut) in pending.items():
+            vals = fut.result().values if fut.done() and fut.result() else []
+            why = vals[0].string_value if vals else None
+            if why is None:
+                silent.append(n)
+            elif why:
+                bound.append((n, why))
+            node.destroy_client(cli)
+        if silent:
+            self.log.warning(f'[TETH ] no tether answer from: {", ".join(silent)}')
+        return bound
+
     def countdown(self, seconds: int = 10, *,
                   message: str = "Wire removed  --  Mongla is now autonomous. Good luck."):
         """The tether-removal window: a countdown on THIS host, before `arm()`.
@@ -119,12 +161,18 @@ class ReportMixin:
         long each redraw takes (a sleep(1) per tick ran ~2 ms long per tick on
         Kutum, measured-bars §timing).
         """
-        if (os.environ.get('SSH_CONNECTION') and not os.environ.get('TMUX')
-                and not os.environ.get('STY')):
+        from mongla_runtime.tether import tether_bound
+        why = tether_bound()
+        if why:
             raise RuntimeError(
-                'countdown refused: this is an ssh session outside tmux. Pulling '
-                'the tether would kill the mission and the manager would surface '
-                'the vehicle. Start it as: tmux new -s run, then the mission.')
+                f'countdown refused: this mission was {why}. Pulling the tether '
+                f'would kill the mission and the manager would surface the vehicle.')
+        bound = self._tether_bound_nodes()
+        if bound:
+            raise RuntimeError(
+                'countdown refused: these nodes stop when the tether is pulled -- '
+                + '; '.join(f'{n}: {w}' for n, w in bound)
+                + '. Restart the stack inside tmux.')
         seconds = max(1, int(round(seconds)))
         width = 66
         border_h = '━' * width

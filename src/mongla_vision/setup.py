@@ -35,6 +35,11 @@ setup(
             'detector_dual_node  = mongla_vision.detector_dual_node:main',
             'tracker_node        = mongla_vision.tracker_node:main',
             'lock_node           = mongla_vision.lock_node:main',
+            # The target's pose from the lock's evidence, and the one pose its
+            # frames agree on: vision's output, in the camera frame. The
+            # localiser consumes it through the heading anchor.
+            'pnp_node            = mongla_vision.pnp_node:main',
+            'pose_fuse_node      = mongla_vision.pose_fuse_node:main',
             'vision_check        = mongla_vision.utils.check_pipeline:main',
             'water_check         = mongla_vision.utils.water_check:main',
             'vision_thrust_check = mongla_vision.utils.check_thrust:main',

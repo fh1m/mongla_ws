@@ -69,6 +69,23 @@ COMMANDS = {
         'fields':   [],
         'defaults': {},
     },
+    'locate': {
+        'help':     'Is localization usable, and where does it put the hull? '
+                    'success = usable; the message says why not, and gives the '
+                    'pool position, sigma, aiding and motion. final_value = the '
+                    'horizontal sigma in metres. Works disarmed.',
+        'fields':   [],
+        'defaults': {},
+    },
+    'go_to': {
+        'help':     'Drive to pool point (x_m, y_m) on the localization estimate: '
+                    'surge and sway in STABILIZE, depth and heading held by the '
+                    'board. Refused before anything moves unless localization is '
+                    'usable and its sigma is within tolerance_m; stops if it goes '
+                    'bad or motion reads blocked. final_value = metres left.',
+        'fields':   ['x_m', 'y_m', 'tolerance_m', 'duration', 'gain'],
+        'defaults': {'tolerance_m': 0.5, 'duration': 60.0, 'gain': 30.0},
+    },
     'calc_distance': {
         'help':     "Downward optical-flow distance bracket: phase='start' latches "
                     "the axis + resets, 'stop' returns accumulated metres in "

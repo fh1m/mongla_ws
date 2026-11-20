@@ -79,8 +79,16 @@ def load(path: Optional[pathlib.Path] = None) -> Offsets:
     """Read the offsets. Raises on a malformed entry rather than guessing."""
     data = yaml.safe_load(pathlib.Path(path or _YAML).read_text()) or {}
     imu_to = data.get('imu_to') or {}
-    return Offsets(**{k: _vec(imu_to.get(k), k)
-                      for k in ('downward_cam', 'forward_cam', 'baro')})
+    names = ('downward_cam', 'forward_cam', 'baro')
+    # A misspelt name would load as "not measured", and the offset someone
+    # taped would be silently unused.
+    for where, have, allowed in (('the top level', data, ('imu_to', 'measured')),
+                                 ('imu_to', imu_to, names)):
+        unknown = sorted(set(have) - set(allowed))
+        if unknown:
+            raise ValueError(f'frames.yaml: {where} has {unknown}, which nothing '
+                             f'reads. Known: {", ".join(allowed)}')
+    return Offsets(**{k: _vec(imu_to.get(k), k) for k in names})
 
 
 # ── the depth sign: the one place it flips ────────────────────────────────

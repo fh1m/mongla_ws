@@ -1,4 +1,5 @@
-# Class index for the stock Model Zoo yolov8n_seg / yolov11n_seg HEFs.
+# Class index for the stock Model Zoo yolov8n_seg HEF (a yolov11n_seg HEF takes a copy
+# of this file under its own stem: the classes are the same).
 #
 # A .hef carries NO class names, so without this sidecar the id->label map
 # does not exist, the allowlist matches nothing and every frame returns [].

@@ -49,7 +49,7 @@ def test_every_process_has_a_restart_or_a_written_reason(name):
                   and n.node_executable not in NOT_RESTARTED)
     assert not bare, (
         f'{name} starts {bare} with no restart. Wrap it in '
-        f'`respawning(...)` (mongla_localization/launch_respawn.py), or add it '
+        f'`respawning(...)` (mongla_runtime/launch_respawn.py), or add it '
         f'to NOT_RESTARTED with the reason.')
 
 
