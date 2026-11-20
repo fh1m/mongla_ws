@@ -1,0 +1,33 @@
+src/mongla_planner/mongla_planner/dsl_detector.py
+  s_4af8d6f83b24e8::t_06345caa29f36f 273-274
+src/mongla_planner/mongla_planner/dsl_heading.py
+  s_4af8d6f83b24e8::t_6372a589eb3dea 56,59-115
+src/mongla_planner/test/test_a_course_class_no_model_emits_is_named.py
+  s_4af8d6f83b24e8::t_1bcdd88febd0d3 1-46
+src/mongla_vision/mongla_vision/detection/detector.py
+  s_4af8d6f83b24e8::t_27b332d7d029f1 82-90
+src/mongla_vision/mongla_vision/detector_node.py
+  s_4af8d6f83b24e8::t_5f0c5dced9d585 317-318
+src/mongla_vision/mongla_vision/detector_publish.py
+  s_4af8d6f83b24e8::t_90c299ffd6b9a3 40-57
+src/mongla_vision/mongla_vision/detector_setup.py
+  s_4af8d6f83b24e8::t_850ba14d475fcf 232
+src/mongla_vision/test/test_the_detector_says_what_it_can_emit.py
+  s_4af8d6f83b24e8::t_aef80aa123290e 1-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "e7d91031ca5344bea6933ed10dafe99c5b1d389d",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
