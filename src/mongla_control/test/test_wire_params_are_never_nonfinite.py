@@ -33,7 +33,6 @@ thrust**. A range check accepts that happily, and the range-only version of this
 test passed it. Each converter must fail to ITS OWN neutral.
 """
 
-import itertools
 import math
 
 import pytest

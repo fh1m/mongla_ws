@@ -343,7 +343,6 @@ def test_vision_align_SETS_the_mode_when_the_board_will_take_it():
 # REAL `make_writers`. Nothing between the verb and the wire is doubled, so a
 # method the backend lacks raises here exactly as it would on the vehicle.
 
-import pytest
 
 from mongla_control.fc.srot_fc import SrotFC
 from mongla_control.motion_writers import make_writers
