@@ -15,7 +15,6 @@ close. That is why it needs a live range, and why it could not have been
 computed correctly before the flat-port refraction fix made `target_pose`
 metric.
 """
-import math
 import sys
 from pathlib import Path
 

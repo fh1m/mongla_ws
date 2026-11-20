@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest                                              # noqa: E402
 
 from mongla_control.allocation import (                    # noqa: E402
-    MIXER, Allocation, allocate, headroom, largest_axis_within_budget,
+    MIXER, allocate, headroom, largest_axis_within_budget,
 )
 
 def _firmware_mixer() -> Path:

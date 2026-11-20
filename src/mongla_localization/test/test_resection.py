@@ -13,7 +13,7 @@ import math
 import pytest
 
 from mongla_localization.resection import (
-    Fix, circumcircle, fix_from_bearings, on_danger_circle,
+    circumcircle, fix_from_bearings, on_danger_circle,
 )
 
 

@@ -89,8 +89,9 @@ _prune_missing_paths() {  # echo $1 (a ':'-list) minus empty/nonexistent dirs
     done
     printf '%s' "$out"
 }
-export AMENT_PREFIX_PATH="$(_prune_missing_paths "${AMENT_PREFIX_PATH:-}")"
-export CMAKE_PREFIX_PATH="$(_prune_missing_paths "${CMAKE_PREFIX_PATH:-}")"
+AMENT_PREFIX_PATH="$(_prune_missing_paths "${AMENT_PREFIX_PATH:-}")"
+CMAKE_PREFIX_PATH="$(_prune_missing_paths "${CMAKE_PREFIX_PATH:-}")"
+export AMENT_PREFIX_PATH CMAKE_PREFIX_PATH
 
 # Always a clean build. An incremental symlink-install tree keeps what
 # source no longer has -- links to a deleted model broke the vehicle's build on
