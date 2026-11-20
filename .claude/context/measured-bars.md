@@ -161,6 +161,8 @@ is how `recommend()` happened.
 - [95. ONE HAILO-8, THREE NETWORKS — XFeat at the anchor's rate costs the detectors nothing, and scheduler priority buys nothing (2026-11-19)](#95-one-hailo-8-three-networks--xfeat-at-the-anchors-rate-costs-the-detectors-nothing-and-scheduler-priority-buys-nothing-2026-11-19)
 - [96. STARK-LIGHTNING AS A LADDER RUNG — 6.7 ms a call on the Hailo-8, and no longer a hold than the follower (2026-11-20)](#96-stark-lightning-as-a-ladder-rung--67-ms-a-call-on-the-hailo-8-and-no-longer-a-hold-than-the-follower-2026-11-20)
 - [97. MONOCULAR DEPTH ON THE HAILO-8 — no network in the Model Zoo carries the floor's scale, so none can give flow its height (2026-11-20)](#97-monocular-depth-on-the-hailo-8--no-network-in-the-model-zoo-carries-the-floors-scale-so-none-can-give-flow-its-height-2026-11-20)
+- [98. THE DETECTOR FAMILY — yolov8n matches yolo11n after INT8 and runs 3.3x faster on the Hailo-8 (2026-11-20)](#98-the-detector-family--yolov8n-matches-yolo11n-after-int8-and-runs-33x-faster-on-the-hailo-8-2026-11-20)
+- [99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20)](#99-localization-on-a-real-bench-recording--state-verdict-and-verbs-replayed-7-cm-at-rest-zupt-rate-is-not-the-limit-2026-11-20)
 <!-- contents:end -->
 
 ---
@@ -7328,7 +7330,7 @@ The idle numbers are the floor, not the bar for a loaded vehicle.
 
 ## 69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)
 
-`mongla_localization/launch_respawn.py` restarts every process bringup starts;
+`mongla_runtime/launch_respawn.py` restarts every process bringup starts;
 `mongla_vision/cameras/reopen.py` reopens a camera that dropped off USB (B-110).
 Which numbers are decisions, which are derived and which are measured:
 
@@ -7561,7 +7563,7 @@ post-processing are the rest, and the executor never touched them. So the
 per-callback figure is 6.7x and the node is about 7 % cheaper; both are true
 and only the second is what the vehicle gets.
 
-**Shipped.** `mongla_localization/spin.py` picks the executor for every node
+**Shipped.** `mongla_runtime/spin.py` picks the executor for every node
 main (`MONGLA_EXECUTOR=events`, the default, or `classic`). Humble has no
 events executor, so a dev box gets the classic one. The manager stays
 multi-threaded on purpose: its action callbacks block for the length of a
@@ -7908,7 +7910,7 @@ lock, not the kernel, is the timing risk in a Python process.
 
 **Verdict.** The realtime kernel is not adopted: with the two settings the
 stock kernel is 50 times inside the bar, and there is nothing left for it to
-remove at a 20 ms period. **What ships:** `mongla_localization/realtime.py`,
+remove at a 20 ms period. **What ships:** `mongla_runtime/realtime.py`,
 called by the manager before it starts its threads (`SCHED_FIFO` 10, 0.5 ms
 switch interval, `MONGLA_REALTIME=off` to disable);
 `kutum/system/limits/99-mongla-realtime.conf` permits it and `doctor.sh`
@@ -8480,8 +8482,10 @@ the whole vision graph, is under a quarter of it.
 | alone | 624 | 100.00 ms | 101.45 ms | 102.88 ms |
 | beside `vision_pi.launch.py` (lock, flow; forward 9.8 Hz, downward 59.2 Hz) | 611 | 100.00 ms | 103.51 ms | 105.76 ms |
 
-**Decision.** `lock_inputs.ODOM_MAX_AGE_S = 0.5`: older, the closure step
-neither searches nor enrols, and counts the refusal as `stale odometry`.
+**Decision.** `ODOM_MAX_AGE_S = 0.5` (`localization_publish.py`, beside the
+timer it is five periods of): older, the closure step neither searches nor
+enrols, and counts the refusal as `stale odometry`. Since 2026-11-20 the
+mission's `pose()` and `motion()` read the same bound and answer None.
 
 **The age is taken from the stamp, not the arrival.** The timer publishes
 whether or not the filter's inputs still arrive, and stamps each message with
@@ -8907,3 +8911,163 @@ control (no network on hand is known to carry scale on this camera), so a
 pass would have needed the bench and water checks the bead names before
 shipping. Height stays the barometer plus `pool_depth_m`, or the downward
 flow's implied height (section 5, 0.69 to 0.72 m against 0.72 taped).
+
+## 98. THE DETECTOR FAMILY — yolov8n matches yolo11n after INT8 and runs 3.3x faster on the Hailo-8 (2026-11-20)
+
+**Question.** Both cameras are to be 120 fps global-shutter. Section 95 has two
+3-context YOLO11 models sharing the chip at about 51 inferences a second. Does a
+single-context family give that rate back without losing targets?
+
+**Bar, written before the compile** (bead po7.15.7): yolov8n becomes the training
+default if its INT8 HEF is within 0.02 mAP50 of yolo11n on the held-out test
+split, compiles single-context, and runs at least twice yolo11n's chip rate.
+
+**Method.** Same data (torpedo_v1, 5 classes), same 80 epochs, same harness
+(`tools/bench/hailo_compile.sh --finetune off`, DFC 3.34, 1024 real calibration
+frames). Chip rate: `hailortcli benchmark --time-to-run 10`, HW-only, Kutum,
+nothing else on the chip. Accuracy: every test image through the compiled HEF on
+the Hailo (`HailoDetector`, conf 0.001), scored against the labels, COCO
+101-point AP at IoU 0.5. The scorer's self-test reads 0.995 for labels fed back
+as predictions (the 101-point ceiling, which is also why training read 0.995)
+and 0.000 for boxes shifted one width.
+
+| | contexts | chip FPS | HW latency | INT8 mAP50, test (42) | valid (13 readable) |
+|---|---|---|---|---|---|
+| yolo11n | 3 | 97.8 | 8.33 ms | 0.981 | 0.995 |
+| yolov8n | **1** | **319.3** | **6.27 ms** | **0.981** | 0.995 |
+
+The shipped gate_sharks (yolo11, 3 contexts) reads 95.3 FPS by the same method,
+which agrees with the 51 a second two of them share in a live launch.
+
+**Verdict.** Passes every clause: equal accuracy, single context, 3.27x the
+rate. yolov8n is the training default from here. Per class the two differ only
+in which class costs them (yolo11n loses on class 3, yolov8n on class 2), on 42
+images; a larger held-out set is what would separate them, if anything does.
+At two cameras of 120 fps, yolov8n asks 75 % of the chip (240 / 319); yolo11n
+could not (245 %).
+
+## 99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20)
+
+**What.** `bag_srot_bench_rest_20260924_145631`: 30 min of the real SROT board on the
+bench, disarmed, hull still, so the true displacement is zero. `/mongla/imu` and
+`/mongla/state` replayed at 1x on Kutum (Jazzy; Humble's `ros2 bag` cannot read this
+bag's metadata) into this branch's `localization_node`; a probe on the same graph
+recorded `/mongla/localization/state` and called `locate` and `go_to` through the real
+`LocalizationBridge` before and after publishing an anchor heading. The bag holds no
+demand, so a zero demand was streamed at 20 Hz, as a disarmed board reports it.
+
+**Bars, written before the run.** State at 10 Hz +-10 %. ZUPT on: aided, NOT usable
+with reason "heading not anchored" until the anchor, usable after it, drift under 5 cm
+(the 2026-09-11 bar). ZUPT off (control): unaided, runaway over 1 m. `locate` and
+`go_to` refuse before the anchor; after it `go_to` refuses while sigma exceeds the
+tolerance.
+
+| run | state rate | verdict before / after anchor | max drift from start | sigma at end | ZUPTs | gaps |
+|---|---|---|---|---|---|---|
+| ZUPT on | 10.00 Hz | not anchored / USABLE | 0.070 m to 98 s; 0.206 m at 100 s, back to 0.10 m | 1.11 m | 232 / 240 s | 0 |
+| ZUPT off | 10.00 Hz | not anchored / unaided | 9 m at 10 s, 78 m at 30 s, 1665 m at 140 s | 163 m | 0 | 0 |
+
+- **Verdicts: pass.** Every refusal named the right reason; `go_to` was refused after the
+  anchor at sigma 1.06 m against a 0.30 m tolerance, which is correct: nothing had fixed
+  position. The accepting path of `go_to` was NOT exercised on this data (it needs a fix
+  or flow); its unit tests cover it.
+- **Drift: fails the 5 cm bar by 2 cm**, the same 7 cm the 2026-09-11 live run reported
+  in x. The recording is not perfectly still: the gyro exceeds 0.02 rad/s at 3 s and
+  at 98-99 s, which is where the 7 cm and the 0.21 m spike are; between them the
+  position walks about 1.4 mm/s.
+- **The ZUPT rate is not the limit.** A/B, bar written first (treatment passes if drift
+  goes under 5 cm with 0 gate flips): a sliding stillness window, ZUPT up to 50 Hz
+  instead of about 1 Hz. The counter proved the knob took (11 420 ZUPTs vs 232); drift
+  0.171 m vs 0.203 m, end sigma 1.01 vs 1.11 m. **Rejected**: no material gain for 50x
+  the updates.
+- **Caution: "aided" is not "position good".** In the ZUPT-off control the gate read
+  `aided` for the first 20 s while the position ran 9 m, because a cold filter's
+  velocity sigma sits under the gate by design (inekf `_velocity_is_observed`). `usable`
+  can therefore read true in that window after an anchor; `go_to` still refuses on
+  sigma (5.6 m at 10 s). Read sigma, not the word.
+- **Fixed by this run (BUGS B-132).** Before any input the node logged "aiding
+  restored"; and a hull never thrust waited the 3 tau coast settle for its first ZUPT:
+  **0.707 m in the first 2.7 s** before the fix, **0.083 m** after, same replay.
+
+**Method trap.** Background jobs of a non-interactive shell ignore SIGINT, so `kill -INT`
+left three bag players running; their interleaved IMU read as 10 359 gaps and positions
+of 10^6 m. Every number above is from a run with 0 gaps and no player left after it.
+
+**Added the same day.**
+
+- **The go_to accepting path, on the same recording.** After a prop-style fix at
+  (0, 0), sigma 0.05 m, the state read sigma 0.06 m and `go_to(1, 0)` was accepted: 30
+  frames at 10 Hz of `lat -0.30` (30 % to port; the hull faced 90 deg, the goal was due
+  north), no yaw or depth, ending neutral; TIMEOUT after 3 s, true, the hull never moved.
+  A goal inside the tolerance: ARRIVED, one neutral frame.
+- **`usable` needs a measured velocity** (`AID_MAX_AGE_S` = 2.0 s): a flow or ZUPT fused
+  within 2 s. A still hull ZUPTs about once a second (232 in 240 s above), so this allows
+  one missed window. It closes the 20 s of "aided" on a cold, unaided filter.
+- **The tile grating needs `tile_decimate` >= 2.** Rendered grid, 40 px period, Gaussian
+  blur sigma 3 px, noise sigma 10, angles 0-85 deg in 5 deg steps: at x1 every angle was
+  refused (peak share 0.008-0.019 against the 0.01 bar, the peak spread over more bins
+  than the share window holds); at x2 and x3 every angle read within 0.2 deg, share
+  0.034. The node now refuses x1 while `tile_m` is set.
+- **The accelerometer bias prior was 17 sigma off what this board measures.** The
+  ledger's static IMU table measures the bias at 0.167 m/s^2; the filter's prior was
+  0.01 (`P0_bias`, shared with the gyro), so it could not learn it, and every ZUPT
+  shoved position by the same biased innovation. A/B, bar written first (pre-anchor
+  drift under 5 cm, no new rejects or gate flips), same 240 s replay, prior printed
+  in-process by the node:
+
+  | `ACCEL_BIAS_PRIOR` | first 5 s | walk 5-95 s | after anchor, 120 s | rejects | flips |
+  |---|---|---|---|---|---|
+  | 0.01 | 0.083 m | 0.155 m | 0.078 m | 0 | 1 |
+  | **0.2** | 0.083 m | **0.0094 m** | **0.0089 m** | 0 | 1 |
+
+  **Shipped 0.2** (covers 0.167). The bar as written still fails on the first second:
+  0.083 m is the bias integrated before the first ZUPT can fire, 0.5 * 0.167 * 1^2,
+  on deck and before any anchor or fix. After it the still hull holds under 1 cm,
+  through the 98 s bench knock that moved the old filter 0.21 m.
+- **Truth, before water: `tools/studies/localization_candidates.py`.** A 60 s pool route
+  (15.2 m, two cruises at 0.4 m/s, a 90 deg turn, four stops) flown kinematically, every
+  input synthesised at the node's rates and sigmas (board numbers from the static IMU table
+  above), the real `RIEKF` scored against the route; 5 seeds per arm. Bars in the file's
+  docstring, written first. `--self-test`: perfect sensors 0.001 m; a 5 % scale error
+  chosen on purpose reads 3.71 % of distance (window 3.5-6.5 %). PASS.
+
+  | arm | result | bar |
+  |---|---|---|
+  | A1 bias prior 0.01 / **0.2**, in motion | rms 0.051 / **0.050 m** | 0.2 within +10 %: **PASS** |
+  | A2 flow scale 0 / 2.5 / 5 % | final 0.58 / 1.65 / 3.46 % of distance | characterisation |
+  | A3 one fix at 6 s, 5 % scale, second correct fix at 59 s, **no floor** | **accepted 2 of 5**; believed 0.153 m, was 0.5-0.7 m off | after <= own error + 5 cm: **FAIL** |
+  | A3 the same, fix at 20 s, no floor | accepted 4 of 5 | **FAIL** |
+  | A3 both, **`FLOW_SCALE_SIGMA` 0.036** | **accepted 5 of 5, and 5 of 5**; believed 0.59 / 0.39 m | **PASS** |
+  | A4 12 s flow dropout mid-cruise | 0.099 m at its end, against 0.088 m with no dropout | characterisation |
+
+  The bar first written for A3, "under 0.30 m after the fix", failed in every arm including
+  the accepted ones: a sigma-0.15 m fix lands over 0.30 m from truth 13.5 % of the time on its
+  own, so that bar scored the fix's noise, not the filter. Kept here; the bar meant was
+  "accepted, and no worse than the fix's own error plus 5 cm".
+
+  **Shipped: `FLOW_SCALE_SIGMA = 0.036`** (`inekf.py`), the worst of the three §13 slides,
+  the same value as mongla_vision's `FLOW_SCALE_SIGMA_FRAC` (`test_one_scale_error.py`
+  holds them equal; it first shipped as a hand-rounded 0.035, and the table above was re-run
+  at 0.036 with the same verdicts): after a fix the horizontal sigma is held at no less than
+  sqrt(sigma_fix^2 + (0.036 x distance)^2). Without it the filter's position sigma came from
+  per-sample flow noise only, which integrates like a square root while a scale error grows
+  with distance; a filter one fix in was certain and wrong, and refused the correction.
+  A1, A2 and A4 are unchanged by it to the millimetre. `test_scale_error_floor.py` fails
+  with the floor removed. Consequence for `go_to`: from a 0.15 m fix, sigma reaches the
+  0.5 m default tolerance after about 13.2 m (7.2 m at 0.3 m), and `go_to` then stops until
+  the next fix, which is the honest answer. The DSL's `go_to` warns before a leg longer than
+  that (`reach_m`, `test_go_to_reach.py`), so a route is planned with a fix every ~10 m.
+
+  Not covered by 0.036: a sloping floor. Flow scale is height above the floor; the course
+  file's floor goes from 1.28 to 2.0 m, so one assumed depth is up to 30 % wrong at 0.5 m
+  hull depth. A floor-depth map is bead es5.7.
+
+- **ZUPT stillness, magnitude against per axis (B-139), 2026-11-20.** Bar, written first: on
+  the real bench recording (1x on Kutum, zupt on, anchor at 120 s, 240 s), the per-axis
+  veto applies no fewer ZUPTs and walks no further at rest than the magnitude veto it
+  replaces, within 1 mm. Result: 232 and 232 ZUPTs; still-hull walk 5-95 s 9.3 and 9.4 mm;
+  after the anchor 9.3 and 8.9 mm. **PASS**. The case it exists for, +-0.4 m/s^2 sideways
+  with the gyro quiet, applied 3 ZUPTs in 3 s under the magnitude veto and none per axis
+  (`test_a_hull_shaking_without_turning_is_not_still`). `STILL_ACCEL_SPREAD` 0.25 m/s^2 is
+  unchanged; it now bounds each axis.
+

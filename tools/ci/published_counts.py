@@ -38,6 +38,8 @@ SUITES = (
     ('mongla_manager', 'the node, bring-up gates, the docs contract'),
     ('mongla_planner', 'the CLI, the DSL, the missions'),
     ('mongla_localization', 'the filter, retrodiction, course priors'),
+    ('mongla_runtime', 'how every node runs, restarts and stops'),
+    ('mongla_batighor', 'the operator center'),
     ('test/', 'nothing unreachable, the retired stack stays retired'),
 )
 SUITE_NAMES = tuple(name for name, _ in SUITES)

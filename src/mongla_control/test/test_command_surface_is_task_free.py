@@ -32,7 +32,7 @@ _TASK_WORDS = re.compile(
 
 def test_the_audit_actually_has_verbs_to_check():
     """A guard that silently checks nothing is worse than no guard."""
-    # 23 verbs today; far fewer means the import found the wrong registry
+    # 25 verbs today; far fewer means the import found the wrong registry
     assert len(COMMANDS) >= 20, f'only {len(COMMANDS)} verbs found -- registry moved?'
 
 

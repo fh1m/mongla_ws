@@ -39,15 +39,13 @@ Camera/detector/tracker log at WARN; the viewer logs at INFO.
 from functools                    import partial
 
 from launch                       import LaunchDescription
-from launch.actions               import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
+from launch.actions               import DeclareLaunchArgument
 from launch.conditions            import IfCondition
-from launch.event_handlers        import OnProcessExit
-from launch.events                import Shutdown
 from launch.substitutions         import LaunchConfiguration, PythonExpression
 from launch_ros.actions           import Node
 from launch_ros.parameter_descriptions import ParameterValue
-from mongla_localization import launch_defaults
-from mongla_localization.launch_respawn import respawning
+from mongla_runtime import launch_defaults
+from mongla_runtime.launch_respawn import respawning
 
 # Quiet by default: camera/tracker/depth emit only warnings+ so the console
 # isn't flooded during a mission (YOLO itself is already verbose=False). The
@@ -164,8 +162,10 @@ def generate_launch_description():
         DeclareLaunchArgument('debug_image_hz', default_value='10.0',
                               description='Annotated image_debug publish rate (raise toward inference '
                                           'FPS for a smoother vision_display picture)'),
-        DeclareLaunchArgument('viewer',        default_value='true',
-                              description='Open the OpenCV vision_display HUD (viewer:=false = headless)'),
+        DeclareLaunchArgument('viewer',        default_value=launch_defaults.has_screen(),
+                              description='Open the OpenCV vision_display HUD. Default: '
+                                          'only when there is a screen (DISPLAY or '
+                                          'WAYLAND_DISPLAY), so a headless Kutum keeps running'),
         DeclareLaunchArgument('tracking',      default_value='true',
                               description='Start tracker_node (Roboflow OC-SORT/ByteTrack + Kalman)'),
         DeclareLaunchArgument('tracker_type',  default_value='ocsort',
@@ -321,11 +321,9 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('viewer')),
     )
 
-    # Closing the viewer (Q) tears down the whole group so nodes don't orphan.
-    shutdown_on_viewer_exit = RegisterEventHandler(
-        OnProcessExit(target_action=image_viewer,
-                      on_exit=[EmitEvent(event=Shutdown())]),
-    )
+    # Quitting the viewer (Q) tears down the group; a viewer that crashed or
+    # lost its screen does not (a tetherless run must keep its vision).
+    shutdown_on_viewer_exit = launch_defaults.viewer_quit_shuts_launch(image_viewer)
 
     # `launch: vision:` in ~/.mongla/bringup.yaml re-defaults these, and its
     # `nodes:` reach the nodes below -- only when this file is the one typed.

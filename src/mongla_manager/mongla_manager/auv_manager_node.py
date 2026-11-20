@@ -351,7 +351,7 @@ def main(args=None):
     parent_pid = os.getppid()
     # Before the node exists, so the reader, heartbeat and executor threads it
     # starts inherit the priority (measured-bars 76).
-    from mongla_localization import realtime
+    from mongla_runtime import realtime
     took = realtime.apply(rclpy.logging.get_logger('mongla_manager'))
     node = AUVManagerNode()
     node.get_logger().info(f'[RT   ] {took}')
@@ -371,7 +371,7 @@ def main(args=None):
     try:
         # Inside the try, so a refusal still runs the teardown below: the
         # board link is already open by now.
-        from mongla_localization.params_file import refuse_unknown
+        from mongla_runtime.params_file import refuse_unknown
         refuse_unknown(node)   # bringup.yaml `nodes:` typos stop here
         executor.spin()
     except (KeyboardInterrupt, ExternalShutdownException):

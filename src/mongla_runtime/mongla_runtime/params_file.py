@@ -8,7 +8,7 @@ The deck has ONE settings file. Its top level holds launch arguments; its
       mongla_manager:
         vision.kp_yaw: 80.0         # a parameter of the manager node
 
-Bringup (`mongla_localization/launch_defaults.py`) writes `nodes:` out as an
+Bringup (`mongla_runtime/launch_defaults.py`) writes `nodes:` out as an
 ordinary ROS parameter file and hands it to every node it starts. ROS then
 does two silent things this module exists to make loud:
 
@@ -24,8 +24,8 @@ stops it at launch with what to do instead. Only the file bringup applied is
 checked (its path arrives in `APPLIED_ENV`); a node started any other way is
 left alone.
 
-It lives in `mongla_localization` because that is the one package every node
-package already depends on: `mongla_vision` and `mongla_manager` both do.
+It lives in `mongla_runtime`, which imports nothing from Mongla, so every
+node package can depend on it without a cycle.
 """
 from __future__ import annotations
 

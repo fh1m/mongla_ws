@@ -147,6 +147,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `missions/demo_move_see.py` | minimal open-loop + vision demo (two-verb). |
 | `missions/demo_pursue.py` | torpedo-style approach using align() then move(). |
 | `missions/demo_square.py` | the classic shakedown mission. |
+| `missions/localization_check.py` | is localization working, stage by stage, in water. |
 | `missions/out_and_back.py` | dive, swim straight, turn clockwise, swim back. Control only. |
 | `missions/pool_day_practice.py` | Pool day practice run: Gate → Slalom → Torpedo → Bin. |
 | `missions/pool_day_torpedo.py` | Pool day torpedo practice: align → approach → fine-lock → fire. |

@@ -73,6 +73,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `hailo_service_drill.py` | What happens to a vision process when the HailoRT service dies. |
 | `hailo_share.py` | What XFeat costs the detectors when the three share one Hailo-8. |
 | `hailo_stages.py` | Where does a Hailo detector call go? Per stage, one or two detectors at once. |
+| `hef_map.py` | mAP50 of a compiled HEF on a labelled YOLO split, run on the real Hailo. |
 | `hef_vs_cpu.py` | Does XFeat still MATCH after INT8? The gate that makes the HEF a result. |
 | `hull_stations.py` | Read EXACT thruster stations out of an Onshape GLB export. |
 | `imu_rest_stats.py` | What the board's IMU says when the vehicle is NOT moving. |
@@ -189,6 +190,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `gap_distribution.py` | The detection-gap distribution, measured at NATIVE FRAME RATE. |
 | `gap_recovery_potential.py` | Is there anything to recover inside a gap? Measured, before building on it. |
 | `held_rung_score.py` | Does the HELD rung put the lock where the target is, and only there? HELD lets a box under the acting bar keep a lock the bar acquired, when it lands near where the lock already is ... |
+| `localization_candidates.py` | Score the localization candidates against exact truth, before any water. |
 | `loop_closure_truth.py` | Does a loop closure fire at a REVISIT, and nowhere else? The gates in `anchor/loop_closure.py` are unit-tested against synthetic poses. |
 | `model_select.py` | Rank candidate models by what deployment actually needs. |
 | `negative_clip_check.py` | What does the model say when the prop is NOT there? The gap this closes. |

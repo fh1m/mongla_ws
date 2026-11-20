@@ -57,6 +57,16 @@
     "StateTransitions!aiding": {
       "paths": [
         {
+          "value": "/mongla/localization/state.usable",
+          "label": "usable",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/localization/state.reason",
+          "label": "why not",
+          "timestampMethod": "receiveTime"
+        },
+        {
           "value": "/mongla/localization/aiding.data",
           "label": "aided by",
           "timestampMethod": "receiveTime"

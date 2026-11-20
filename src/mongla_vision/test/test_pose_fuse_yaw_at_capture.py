@@ -8,7 +8,7 @@ import time
 from collections import deque
 from types import SimpleNamespace
 
-from mongla_localization.pose_fuse_node import PoseFuseNode
+from mongla_vision.pose_fuse_node import PoseFuseNode
 
 
 def _hdr(t):
