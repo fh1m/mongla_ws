@@ -531,6 +531,60 @@ they disagreed with it.
 false, with its sigma in the note, so a later placement refines it. Guard: the commit test
 in `test_pose_and_prop_fix.py`, which asserted the defect before.
 
+### B-129: on a headless Kutum the viewer took the whole vision launch down `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `vision_dual` defaulted `viewer:=true` and shuts the launch when the viewer exits
+(on a desk, `q` quits everything). Kutum has no screen: the viewer aborted (exit -6) and
+cameras, detectors and trackers stopped 5.5 s after start, cleanly, so the log read like an
+operator Ctrl-C. Every footage run there ended before a frame was detected.
+
+**Fix.** `viewer` defaults to whether there is a LOCAL screen (`launch_defaults.has_screen`:
+a DISPLAY of the form `:N`, or WAYLAND_DISPLAY), in both vision launch files; `viewer:=true`
+typed still wins. An `ssh -X` display (`localhost:10.0`) is not local: it goes over the
+tether, and pulling the tether would take the viewer down with it. And only a CLEAN viewer
+exit (code 0, the operator pressing `q`) ends the launch (`viewer_quit_shuts_launch`); a
+viewer that crashes takes only itself. Guards: `test_a_headless_launch_starts_no_viewer.py`,
+`test_only_a_clean_viewer_quit_ends_the_launch.py`, both failing on the old code. Re-run
+on Kutum with the viewer off: forward 24.9 Hz of `gate` detections on recorded footage.
+
+### B-131: a stack started over ssh died with the tether `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** A run is tetherless: start over the tether, count down, pull it. A process started
+in the foreground of an ssh shell, outside tmux, is hung up when the session goes.
+Reproduced on Kutum: a process in an interactive ssh shell died when the ssh client was
+killed; the same process inside tmux lived. Nothing in the stack knew or said so, and the
+countdown went ahead.
+
+**Fix.** `mongla_runtime.tether.tether_bound()` says why a process would stop ('' when it
+would not: no ssh, tmux/screen, nohup, or no controlling terminal). `spin()` declares it on
+every node as the read-only parameter `tether_bound` and warns at start-up; the DSL
+`countdown()` asks every `mongla*` node and refuses while any is bound, naming it. Checked
+on Kutum: the ssh shell reads bound, a tmux shell reads ''. Guards:
+`test_a_process_knows_if_the_tether_kills_it.py` and the countdown tests in
+`test_no_board_verb_before_arm.py`.
+
+### B-132: the localiser said "aided" before any input, and a never-thrust hull waited 3 s to ZUPT `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** Replaying the real bench-rest recording: the node logged "aiding restored" before
+its first IMU sample (the cold covariance read as an observation), and the first ZUPT came
+only after the 3 tau coast settle, although nothing had been commanded since start, so
+there was nothing to coast out of: 0.71 m dead-reckoned in the first 2.7 s (1x replay),
+0.08 m with the fix.
+
+**Fix.** No aiding verdict until an input has been fused; the settle applies only after a
+non-zero demand has been seen. Guards in `test_localization_node.py`
+(`test_aiding_is_not_reported_before_any_input`,
+`test_a_hull_never_thrust_is_settled_from_the_start`), both injection-verified. Numbers:
+measured-bars 99.
+
+### B-130: the old-host guard matched `mongla.localization()` `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `test_kutum_has_one_name` grepped a fixed string, so the DSL call
+`mongla.localization()` read as the retired host name.
+
+**Fix.** It matches the name with no identifier character after it; a file naming the
+real old host still fails it (injection-verified).
+
 ### B-128: course and frames files silently dropped what they did not recognise `READ 2026-11-20` **FIXED 2026-11-20**
 
 **What.** `bearing: 90` for `bearing_deg: 90` loaded as "bearing unset", and the anchor

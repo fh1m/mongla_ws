@@ -1098,6 +1098,7 @@ class _Recorder:
 def test_aiding_is_reported_as_aided_on_a_healthy_filter():
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     n._report_aiding()
     assert n._pub_aiding.sent == ['aided']
 
@@ -1106,6 +1107,7 @@ def test_an_unreadable_aiding_gate_reports_unaided():
     """Issue #52: the feed is a safety input, so it fails closed."""
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
 
     def boom():
         raise RuntimeError('covariance is not finite')
@@ -1121,6 +1123,7 @@ def test_aiding_flips_to_unaided_when_velocity_stops_being_observed():
     warning the node already logs."""
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     n._report_aiding()
     for _ in range(200):
         n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
@@ -1133,6 +1136,7 @@ def test_aiding_is_published_only_on_CHANGE():
     restatement of an unchanged fact is noise an operator learns to ignore."""
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     for _ in range(5):
         n._report_aiding()
     assert n._pub_aiding.sent == ['aided']
@@ -1141,6 +1145,7 @@ def test_aiding_is_published_only_on_CHANGE():
 def test_aiding_recovers_when_velocity_is_measured_again():
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     n._report_aiding()
     for _ in range(200):
         n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
@@ -1156,6 +1161,7 @@ def test_a_filter_without_the_gate_reports_unaided_and_does_not_crash():
     unaided: a gate that is not there has not vouched for the position (#52)."""
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
 
     class _Old:
         pass
@@ -1172,6 +1178,7 @@ def test_the_aiding_topic_is_not_the_motion_topic():
     hull is perfectly well localised; an unaided one is not."""
     n = _node()
     n._pub_aiding, n._pub_motion = _Recorder(), _Recorder()
+    n._last_input_t = 100.0                     # has heard an input
     for _ in range(200):
         n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
     n._report_aiding()
@@ -1283,9 +1290,29 @@ def test_an_UNKNOWN_demand_is_not_stillness():
 def test_a_centred_demand_must_hold_long_enough_to_have_stopped():
     """Thrust off is not hull stopped: it coasts for ~3 time constants."""
     n = _node()
-    n._on_demand(_Demand(0.0, 0.0))            # centred just now
+    n._on_demand(_Demand(0.6, 0.0))            # thrust ...
+    n._on_demand(_Demand(0.0, 0.0))            # ... centred just now
     _cruise(n, demand=(0.0, 0.0), seconds=1.5, v=0.0)
     assert n._n['zupt'] == 0
+
+
+def test_a_hull_never_thrust_is_settled_from_the_start():
+    """Nothing to coast out of: the real bench recording dead-reckoned
+    0.71 m in the 3 s settle before its first ZUPT (measured-bars 99)."""
+    n = _node()
+    n._on_demand(_Demand(0.0, 0.0))
+    _cruise(n, demand=(0.0, 0.0), seconds=1.5, v=0.0)
+    assert n._n['zupt'] >= 1
+
+
+def test_aiding_is_not_reported_before_any_input():
+    """The cold covariance is a prior, not an observation: no 'aiding
+    restored' line, and no aided state, from a node that has heard nothing."""
+    n = _node()
+    sent = []
+    n._pub_aiding = type('P', (), {'publish': lambda self, m: sent.append(m.data)})()
+    n._report_aiding()
+    assert sent == [] and n._aiding_state is None
 
 
 def test_a_long_centred_demand_with_a_still_hull_still_zupts():
@@ -1373,6 +1400,7 @@ def test_aiding_by_uncalibrated_flow_is_reported_as_such():
     import types
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     n._on_flow_calibration(types.SimpleNamespace(
         data="uncalibrated: none was passed (-p calibration:=<json>)"))
     n._report_aiding()
@@ -1385,6 +1413,7 @@ def test_unaided_stays_unaided_whatever_the_calibration_says():
     import types
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     n._on_flow_calibration(types.SimpleNamespace(data='uncalibrated: x'))
     for _ in range(200):
         n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)

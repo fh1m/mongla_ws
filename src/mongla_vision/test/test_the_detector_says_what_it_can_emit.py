@@ -36,3 +36,16 @@ def test_extras_are_included():
 def test_no_model_yet_is_an_empty_set_not_a_guess():
     assert _node(None) == ['']
     assert Detector().class_names() == []
+
+
+def test_a_model_that_cannot_say_its_names_does_not_take_the_detector_down():
+    class _Broken(Detector):
+        def class_names(self):
+            raise RuntimeError('no table')
+    warned = []
+    out = []
+    n = NS(_det=_Broken(), _registry={'x': _Det({0: 'gate'})}, _extra_names=['x'],
+           _pub_model_classes=NS(publish=lambda m: out.append(m.data)),
+           get_logger=lambda: NS(warning=warned.append))
+    DetectorPublishMixin._publish_model_classes(n)
+    assert out == ['gate'] and warned

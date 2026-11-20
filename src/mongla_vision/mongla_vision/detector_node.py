@@ -399,6 +399,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         # name and a baseline to compare against, rather than silence
         # until the first switch.
         self._publish_vision_info()
+        self._publish_model_classes()
 
     def _on_infer_failure(self, exc) -> None:
         """A node that cannot do its job must stop claiming to be up.

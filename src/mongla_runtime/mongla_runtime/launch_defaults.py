@@ -85,12 +85,16 @@ def has_screen(env=None) -> str:
     """'true' when this session can open a window, else 'false'.
 
     The default for every launch file's `viewer`. Kutum has no screen, and a
-    viewer that aborts there took `vision_dual` down 5 s after it started,
-    because its exit is wired to shut the launch (on a desk, `q` quits all).
-    `viewer:=true` typed still wins.
+    viewer that aborts there took `vision_dual` down 5 s after it started
+    (B-129). A forwarded display (`ssh -X`) does not count: it is the tether.
+    `viewer:=true` typed still wins, and even then only a clean quit (`q`)
+    shuts the launch: `viewer_quit_shuts_launch`.
     """
     env = os.environ if env is None else env
-    return 'true' if (env.get('DISPLAY') or env.get('WAYLAND_DISPLAY')) else 'false'
+    # A LOCAL screen only. `ssh -X` sets DISPLAY to `localhost:10.0`: a viewer
+    # there streams over the tether and dies with it, mid-run.
+    local_x = str(env.get('DISPLAY', '')).startswith(':')
+    return 'true' if (local_x or env.get('WAYLAND_DISPLAY')) else 'false'
 
 
 def config_path() -> Path | None:
@@ -258,3 +262,23 @@ def for_launch_file(args: list, launch_file: str) -> tuple[list, list]:
     note = ([LogInfo(msg=f'[{section}] settings from {path}: ' + ', '.join(
         f'{k}={v}' for k, v in sorted(values.items())))] if values else [])
     return args, note + node_actions()
+
+
+def viewer_quit_shuts_launch(viewer):
+    """The handler that ends a launch when the operator quits the viewer.
+
+    Only a clean exit (code 0, the `q` key) shuts it. A viewer that crashed or
+    lost its display -- a forwarded screen when the tether is pulled -- exits
+    non-zero and leaves cameras, detectors and trackers running: on a
+    tetherless run the viewer is the one part nothing depends on.
+    """
+    from launch.actions import EmitEvent, RegisterEventHandler
+    from launch.event_handlers import OnProcessExit
+    from launch.events import Shutdown
+
+    def on_exit(event, _context):
+        if event.returncode == 0:
+            return [EmitEvent(event=Shutdown(reason='viewer quit'))]
+        return None
+    return RegisterEventHandler(OnProcessExit(target_action=viewer, on_exit=on_exit))
+
