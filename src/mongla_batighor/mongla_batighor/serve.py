@@ -55,9 +55,42 @@ THEME_HEAD = (b'<link rel="stylesheet" href="/theme/batighor.css">'
               b'catch(e){}</script>')
 
 
+# `?layout=` on a browser's first visit (B-141). Lichtblick 1.30.0 matches the
+# name against the layouts it already holds, waiting only if its remote sync
+# is already busy, and it syncs only while the tab is visible. A link opened
+# in a background tab on a fresh profile therefore finds none of the
+# organisation's layouts, the match fails and it makes and selects a personal
+# "Default"; the sync stores the layouts once the tab is shown, which is why a
+# second visit works. So: if the named layout is not in the app's layout
+# database when the page loads, wait for the sync to store it, then load the
+# page once more. A
+# browser that already holds it is left alone. The database is opened only
+# once it exists: opening it first would create it empty at version 1, and
+# the app's own upgrade, which makes the store, would then never run.
+FIRST_VISIT_HEAD = (
+    b'<script>(function(){try{'
+    b'var want=new URLSearchParams(location.search).get("layout"),flag="batighor.layout-reload";'
+    b'if(!want||sessionStorage.getItem(flag)||!indexedDB.databases)return;'
+    b'var DB="lichtblick-layouts",start=Date.now(),first=true;'
+    b'function has(done){indexedDB.databases().then(function(l){'
+    b'if(!l.some(function(d){return d.name===DB}))return done(false);'
+    b'var r=indexedDB.open(DB);r.onsuccess=function(){var db=r.result;'
+    b'if(!db.objectStoreNames.contains("layouts")){db.close();return done(false)}'
+    b'var g=db.transaction("layouts").objectStore("layouts").getAll();'
+    b'g.onsuccess=function(){db.close();done(g.result.some(function(x){'
+    b'return x.layout&&x.layout.name===want}))};'
+    b'g.onerror=function(){db.close();done(false)}};'
+    b'r.onerror=function(){done(false)}})}'
+    b'function poll(){has(function(found){'
+    b'if(found){if(!first){sessionStorage.setItem(flag,"1");location.reload()}return}'
+    b'first=false;if(Date.now()-start<15000)setTimeout(poll,250)})}'
+    b'poll()}catch(e){}})()</script>')
+
+
 def themed(html: bytes) -> bytes:
-    """The app page with Batighor's theme linked in, before the app's own head ends."""
-    return html.replace(b'</head>', THEME_HEAD + b'</head>', 1)
+    """The app page with Batighor's theme linked in, before the app's own head
+    ends, and the first-visit layout fix (`FIRST_VISIT_HEAD`)."""
+    return html.replace(b'</head>', THEME_HEAD + FIRST_VISIT_HEAD + b'</head>', 1)
 
 
 # The types Kutum serves, from a fixed table: a type guessed from the asked-for
