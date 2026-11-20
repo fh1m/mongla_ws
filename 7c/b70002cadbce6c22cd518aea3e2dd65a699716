@@ -1,0 +1,54 @@
+README.md
+  s_4af8d6f83b24e8::t_e31d8cecc513e9 414-441
+.claude/context/packages/mongla_localization/README.md
+  s_4af8d6f83b24e8::t_3154b3b3f6eace 183-185
+  s_4af8d6f83b24e8::t_8f1dc5577d0513 50-114
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_d829f23251be69 605-640
+src/mongla_localization/mongla_localization/localization_node.py
+  s_4af8d6f83b24e8::t_ebd33f9e2a1937 83-84
+  s_4af8d6f83b24e8::t_ade71281fb5d11 72-76
+  s_4af8d6f83b24e8::t_3326b50f386f5b 44,68-71,77-78,93,255-256
+tools/studies/localization_candidates.py
+  s_4af8d6f83b24e8::t_e6e205106373c1 252
+  s_4af8d6f83b24e8::t_36d3aa4250e5a2 1-144,146-152,155-159,161-169,172,174-205,208-209,211-221,223-251,255-267,269-275,291-298
+  s_4af8d6f83b24e8::t_578d61a304578a 145,153-154,160,170-171,173,206-207,210,222,253-254,268,276-290
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_1c7f9f724db867 8775-8824
+.claude/context/packages/mongla_localization/audit.md
+  s_4af8d6f83b24e8::t_594d44daec3c98 56-58,107-111,132-161
+docs/assets/site.css
+  s_4af8d6f83b24e8::t_2e1296f0fb1974 1958-1975
+docs/index.html
+  s_4af8d6f83b24e8::t_fd05c4f5bddda1 1574-1701,3106-3232
+src/mongla_localization/mongla_localization/inekf.py
+  s_4af8d6f83b24e8::t_53d53b3f25adce 182-184,186,190,217-226,236-238,291-307,596-602
+src/mongla_localization/mongla_localization/localization_inputs.py
+  s_4af8d6f83b24e8::t_df28fe42c37ea8 684-695
+src/mongla_localization/mongla_localization/localization_publish.py
+  s_4af8d6f83b24e8::t_b14cfcba0c44e6 266
+src/mongla_localization/test/test_localization_node.py
+  s_4af8d6f83b24e8::t_8f596aa062f2e7 72-73,76,1501-1535
+src/mongla_localization/test/test_scale_error_floor.py
+  s_4af8d6f83b24e8::t_fd796f61efb6d2 1-52
+src/mongla_localization/test/test_the_filter_has_a_caller.py
+  s_4af8d6f83b24e8::t_41fe2b38b8e055 61
+tools/README.md
+  s_4af8d6f83b24e8::t_f59b01468f0fb2 192
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7cb70002cadbce6c22cd518aea3e2dd65a699716",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
