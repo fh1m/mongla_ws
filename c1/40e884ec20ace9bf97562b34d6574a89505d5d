@@ -1,0 +1,31 @@
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_2e8a00651e4196 664-674
+.claude/context/packages/mongla_localization/audit.md
+  s_4af8d6f83b24e8::t_e2f32a78da0ccb 185-199
+docs/stats.json
+  s_4af8d6f83b24e8::t_bbb4f0bba6ec18 2-5,10,15-16,20-21,25,29,32-37,39-42,48-49,52-53,56-57,60-61,64-65,68-69
+test/test_published_test_counts_are_the_last_run.py
+  s_4af8d6f83b24e8::t_dc11f628dd3219 55-66
+tools/ci/published_counts.py
+  s_4af8d6f83b24e8::t_28a80296d1616a 41-42
+README.md
+  s_4af8d6f83b24e8::t_2f9f2b0e22e526 13,122,387-388,395-400,404-408,417-419,422-438,442,448,450-451,456-464,467-470,473-477,667-671,676,883-890,892,912,998
+docs/index.html
+  s_4af8d6f83b24e8::t_ec7347622d3f7c 113,1649-1654,1699-1701,1949
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c140e884ec20ace9bf97562b34d6574a89505d5d",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
