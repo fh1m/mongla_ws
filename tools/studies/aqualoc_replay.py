@@ -41,6 +41,16 @@ the filter observes heading against a gyro drifting about 1.5 deg/s. The variant
 helped on 6 of 6 but halved the error on only 3, short of its bar. Self-fitted,
 06 reads 0.60 m, against 1.52 m on 01: height does not carry between runs.
 
+**Warning: the position "pass" says almost nothing about accuracy.** Its
+baseline drifts kilometres, so nearly any aid clears a 50 % cut. The number
+that matters is the absolute error, 24-104 % of the path, against the 2-4 %
+the best published DVL-free systems reach (localization research report). The
+conditions are harsher than the vehicle's (harbour floor, a fitted rather than
+measured height, a poor MEMS gyro, no heading source), so this is not a
+prediction of pool accuracy either way. It shows the chain runs on real water
+and that heading and height are its limits; the in-water test against a
+measured floor target (bead 5ag.1) still decides whether localization works.
+
     python3 tools/studies/aqualoc_replay.py --self-test
     python3 tools/studies/aqualoc_replay.py --root $MONGLA_DATA/datasets/aqualoc/harbor
 """
