@@ -357,6 +357,12 @@ class LocalizationInputsMixin:
         # that cannot be read has not said the position is observable.
         observed, unread = False, 'this filter has no observability gate'
         probe = getattr(self._filter, '_velocity_is_observed', None)
+        if getattr(self, '_last_input_t', 0.0) <= 0.0:
+            # Nothing fused yet: the initial covariance is not an observation.
+            # The gate read "aided" here, and the node logged "aiding restored"
+            # with no input at all (seen on the bench replay, BUGS B-131).
+            # Say nothing until there is something to say.
+            return
         if probe is not None:
             try:
                 observed, unread = bool(probe()), ''
@@ -418,8 +424,15 @@ class LocalizationInputsMixin:
                    and max(abs(x), abs(y)) < DEMAND_CENTRE_EPS)
         if not centred:
             self._centred_since = None
+            if math.isfinite(x) and math.isfinite(y):
+                self._thrust_seen = True
         elif getattr(self, '_centred_since', None) is None:
-            self._centred_since = now
+            # The settle lets a hull coast to a stop after thrust. One never
+            # commanded since start has nothing to coast out of: waiting 3 s
+            # there dead-reckoned 0.71 m on the real bench recording before the
+            # first ZUPT (measured-bars 99). Settled from the start instead.
+            self._centred_since = (now if getattr(self, '_thrust_seen', False)
+                                   else -math.inf)
 
     def _maybe_model_aid(self) -> None:
         """When flow has gone quiet, aid velocity from the learned demand model.

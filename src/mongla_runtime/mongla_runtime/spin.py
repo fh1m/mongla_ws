@@ -58,7 +58,9 @@ def make_executor(logger=None, classic=None, env=None):
 def spin(*nodes, classic=None) -> None:
     """`rclpy.spin`, on the chosen executor, for one node or several."""
     ex, name = make_executor(nodes[0].get_logger(), classic)
+    from .tether import declare
     for n in nodes:
+        declare(n)                  # does this process survive the tether?
         ex.add_node(n)
     nodes[0].get_logger().info(f'[EXEC ] spinning on the {name} executor')
     from rclpy.executors import ExternalShutdownException

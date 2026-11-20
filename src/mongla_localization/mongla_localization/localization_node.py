@@ -159,6 +159,7 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
                 horizon_s=float(self.declare_parameter('retro_horizon_s', 2.0).value))
         self._last_demand_t = None
         self._centred_since = None       # when the demand last became centred
+        self._thrust_seen = False        # any non-zero demand since start
         self._motion = MotionCheck()
         self._motion_state = None
 

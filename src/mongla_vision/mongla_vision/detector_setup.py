@@ -437,6 +437,7 @@ class DetectorSetupMixin:
                 self._active_name = key
                 self._set_extra(extra_names)
                 self._publish_vision_info()
+                self._publish_model_classes()
                 self.get_logger().info(
                     f"[DET  ] active_model → {key!r}"
                     + (f" (via stem {name!r})" if key != name else "")

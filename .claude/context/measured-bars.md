@@ -160,6 +160,7 @@ is how `recommend()` happened.
 - [94. VISUAL ODOMETRY FROM XFEAT — LK already does it better inside the same solver (2026-11-19)](#94-visual-odometry-from-xfeat--lk-already-does-it-better-inside-the-same-solver-2026-11-19)
 - [95. ONE HAILO-8, THREE NETWORKS — XFeat at the anchor's rate costs the detectors nothing, and scheduler priority buys nothing (2026-11-19)](#95-one-hailo-8-three-networks--xfeat-at-the-anchors-rate-costs-the-detectors-nothing-and-scheduler-priority-buys-nothing-2026-11-19)
 - [98. THE DETECTOR FAMILY — yolov8n matches yolo11n after INT8 and runs 3.3x faster on the Hailo-8 (2026-11-20)](#98-the-detector-family--yolov8n-matches-yolo11n-after-int8-and-runs-33x-faster-on-the-hailo-8-2026-11-20)
+- [99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20)](#99-localization-on-a-real-bench-recording--state-verdict-and-verbs-replayed-7-cm-at-rest-zupt-rate-is-not-the-limit-2026-11-20)
 <!-- contents:end -->
 
 ---
@@ -8708,4 +8709,51 @@ in which class costs them (yolo11n loses on class 3, yolov8n on class 2), on 42
 images; a larger held-out set is what would separate them, if anything does.
 At two cameras of 120 fps, yolov8n asks 75 % of the chip (240 / 319); yolo11n
 could not (245 %).
+
+## 99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20)
+
+**What.** `bag_srot_bench_rest_20260924_145631`: 30 min of the real SROT board on the
+bench, disarmed, hull still, so the true displacement is zero. `/mongla/imu` and
+`/mongla/state` replayed at 1x on Kutum (Jazzy; Humble's `ros2 bag` cannot read this
+bag's metadata) into this branch's `localization_node`; a probe on the same graph
+recorded `/mongla/localization/state` and called `locate` and `go_to` through the real
+`LocalizationBridge` before and after publishing an anchor heading. The bag holds no
+demand, so a zero demand was streamed at 20 Hz, as a disarmed board reports it.
+
+**Bars, written before the run.** State at 10 Hz +-10 %. ZUPT on: aided, NOT usable
+with reason "heading not anchored" until the anchor, usable after it, drift under 5 cm
+(the 2026-09-11 bar). ZUPT off (control): unaided, runaway over 1 m. `locate` and
+`go_to` refuse before the anchor; after it `go_to` refuses while sigma exceeds the
+tolerance.
+
+| run | state rate | verdict before / after anchor | max drift from start | sigma at end | ZUPTs | gaps |
+|---|---|---|---|---|---|---|
+| ZUPT on | 10.00 Hz | not anchored / USABLE | 0.070 m to 98 s; 0.206 m at 100 s, back to 0.10 m | 1.11 m | 232 / 240 s | 0 |
+| ZUPT off | 10.00 Hz | not anchored / unaided | 9 m at 10 s, 78 m at 30 s, 1665 m at 140 s | 163 m | 0 | 0 |
+
+- **Verdicts: pass.** Every refusal named the right reason; `go_to` was refused after the
+  anchor at sigma 1.06 m against a 0.30 m tolerance, which is correct: nothing had fixed
+  position. The accepting path of `go_to` was NOT exercised on this data (it needs a fix
+  or flow); its unit tests cover it.
+- **Drift: fails the 5 cm bar by 2 cm**, the same 7 cm the 2026-09-11 live run reported
+  in x. The recording is not perfectly still: the gyro exceeds 0.02 rad/s at 3 s and
+  at 98-99 s, which is where the 7 cm and the 0.21 m spike are; between them the
+  position walks about 1.4 mm/s.
+- **The ZUPT rate is not the limit.** A/B, bar written first (treatment passes if drift
+  goes under 5 cm with 0 gate flips): a sliding stillness window, ZUPT up to 50 Hz
+  instead of about 1 Hz. The counter proved the knob took (11 420 ZUPTs vs 232); drift
+  0.171 m vs 0.203 m, end sigma 1.01 vs 1.11 m. **Rejected**: no material gain for 50x
+  the updates.
+- **Caution: "aided" is not "position good".** In the ZUPT-off control the gate read
+  `aided` for the first 20 s while the position ran 9 m, because a cold filter's
+  velocity sigma sits under the gate by design (inekf `_velocity_is_observed`). `usable`
+  can therefore read true in that window after an anchor; `go_to` still refuses on
+  sigma (5.6 m at 10 s). Read sigma, not the word.
+- **Fixed by this run (BUGS B-132).** Before any input the node logged "aiding
+  restored"; and a hull never thrust waited the 3 tau coast settle for its first ZUPT:
+  **0.707 m in the first 2.7 s** before the fix, **0.083 m** after, same replay.
+
+**Method trap.** Background jobs of a non-interactive shell ignore SIGINT, so `kill -INT`
+left three bag players running; their interleaved IMU read as 10 359 gaps and positions
+of 10^6 m. Every number above is from a run with 0 gaps and no player left after it.
 

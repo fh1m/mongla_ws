@@ -53,10 +53,8 @@ one-camera vision.launch.py (camera:=forward|downward). See
 """
 
 from launch                  import LaunchDescription
-from launch.actions          import DeclareLaunchArgument, EmitEvent, RegisterEventHandler
+from launch.actions          import DeclareLaunchArgument
 from launch.conditions       import IfCondition
-from launch.event_handlers   import OnProcessExit
-from launch.events           import Shutdown
 from launch.substitutions    import LaunchConfiguration, PythonExpression
 from launch_ros.actions      import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -298,9 +296,8 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('flow')),
     )
 
-    shutdown_on_exit = RegisterEventHandler(
-        OnProcessExit(target_action=viewer, on_exit=[EmitEvent(event=Shutdown())])
-    )
+    # Only a clean quit (q) ends the launch; a crash or a lost screen does not.
+    shutdown_on_exit = launch_defaults.viewer_quit_shuts_launch(viewer)
 
     # `launch: vision_dual:` in ~/.mongla/bringup.yaml re-defaults these, and its
     # `nodes:` reach the nodes below -- only when this file is the one typed.
