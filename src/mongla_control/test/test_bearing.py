@@ -3,7 +3,6 @@
 The failure mode this guards is not a crash: a wrong bearing is a plausible
 number that aims the vehicle slightly off, forever.
 """
-import json
 import math
 import sys
 from pathlib import Path

@@ -13,7 +13,6 @@ cleared and stream rates back to compiled defaults. A mission that keeps
 issuing verbs is steering a vehicle it no longer configured, and each verb
 fails in its own way without naming the cause.
 """
-import pytest
 
 from mongla_manager import auv_manager_node as amn
 

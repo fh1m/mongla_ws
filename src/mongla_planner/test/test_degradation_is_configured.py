@@ -71,7 +71,6 @@ def test_no_mission_enters_the_downward_camera_without_asking():
                     continue
                 attr = getattr(c.func, 'attr', '')
                 lit = [a.value for a in c.args if isinstance(a, ast.Constant)]
-                kw = {k.arg: getattr(k.value, 'value', None) for k in c.keywords}
                 if attr == 'use_camera' and 'downward' in lit:
                     uses = True
                 if attr == 'camera_usable' and 'downward' in lit:

@@ -31,8 +31,6 @@ Deliberately NOT "mirror every value in both places": a second copy of a number
 is the disease, not the cure. This checks the one property that matters.
 """
 import ast
-import os
-import re
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[3] / 'src'   # the package root

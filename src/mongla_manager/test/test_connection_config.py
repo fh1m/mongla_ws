@@ -6,7 +6,6 @@ environment probes touch sockets / `/dev`, so they are monkeypatched here.
 """
 
 import time
-import pytest
 
 from mongla_manager import connection_config as cc
 

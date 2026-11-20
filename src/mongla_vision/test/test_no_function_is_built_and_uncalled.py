@@ -41,7 +41,6 @@ import shutil
 import subprocess
 import sys
 
-import pytest
 
 _ROOT = pathlib.Path(__file__).resolve().parents[3]
 _TOOL = _ROOT / 'tools' / 'ci' / 'dead_function_sweep.py'

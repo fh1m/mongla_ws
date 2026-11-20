@@ -42,7 +42,6 @@ from mongla_planner.missions.competition_config import (
     SAUVC_QUAL_BLIND_BACK_S,
     SAUVC_QUAL_BLIND_ENABLED,
     SAUVC_QUAL_BLIND_OUT_S,
-    SAUVC_QUAL_BUDGET_S,
     SAUVC_QUAL_GATE_ALIGN_S,
     SAUVC_QUAL_GATE_MOVE_S,
     SAUVC_QUAL_PASS_DEPTH_M,

@@ -111,7 +111,6 @@ def test_it_survives_blur_that_destroys_every_corner():
     """The turbid-water case. A lane line is 0.2-0.3 m of high-contrast dark
     spanning the frame -- it outlives the blur that erases the features a
     tracker needs."""
-    import cv2
 
     for k in (9, 21):
         g = detect(pool(angle_deg=25.0, blur=k))
