@@ -40,7 +40,8 @@ STILL_GYRO_RAD_S = 0.02
 # Peak-to-peak of |specific force| over the window. Gravity is included in the
 # reading, so a tilted hull shows a large CONSTANT; only variation is motion.
 STILL_ACCEL_SPREAD = 0.25          # m/s^2
-STILL_WINDOW = 50                  # 1.0 s at the board's 50 Hz
+IMU_HZ = 50                        # ATTITUDE and SCALED_IMU2, pinned (measured-bars: 51.6 Hz)
+STILL_WINDOW = IMU_HZ              # 1.0 s
 # Stillness needs a command too (issue #25). The IMU test above cannot tell
 # "still" from "cruising at constant velocity": heading held, no acceleration,
 # |a| = g. Flow drops out mid-transit (bare floor, turbidity), and the ZUPT then
@@ -81,7 +82,6 @@ def _now_or(t_newest, fallback: float) -> float:
     return t_newest if t_newest is not None else fallback
 
 
-
 def _Rz(deg: float) -> np.ndarray:
     """Yaw about world z (NED down): positive turns north toward east."""
     a = math.radians(float(deg))
@@ -107,7 +107,6 @@ def _R_from_quat(w, x, y, z):
         [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
 
 
-
 class LocalizationInputsMixin:
     # ---- inputs ---------------------------------------------------------
 
@@ -116,14 +115,31 @@ class LocalizationInputsMixin:
 
         `t=None` means the input carries no stamp: it is applied at the newest
         event time, which is what on-arrival meant all along.
+
+        False when the measurement was NOT USED: older than the replay
+        horizon, or refused by the filter itself (an update returns False on a
+        chi-square rejection or the B-56 gate). Every counter that says a
+        channel was fused, and the NO VELOCITY AIDING warning that reads them,
+        rests on this; it used to return True for anything handed over. A
+        replay may run `fn` again later, so the answer kept is the first run's,
+        the one made for this call.
         """
+        said = []
+
+        def run(f):
+            r = fn(f)
+            if not said:
+                said.append(r)
+            return r
         retro = getattr(self, '_retro', None)
         if retro is None:
-            fn(self._filter)
-            return True
-        if t is None:
-            t = _now_or(retro.newest_t(), self._last_imu_t or 0.0)
-        return retro.run(float(t), fn, span=span, make=make)
+            run(self._filter)
+        else:
+            if t is None:
+                t = _now_or(retro.newest_t(), self._last_imu_t or 0.0)
+            if not retro.run(float(t), run, span=span, make=make):
+                return False
+        return not said or said[0] is not False
 
     def _on_imu(self, msg: Imu) -> None:
         t = _stamp_s(msg.header)
@@ -305,8 +321,9 @@ class LocalizationInputsMixin:
                            lambda f, vx=vx_now, vy=vy_now, a=max(var_x, 1e-6),
                            b=max(var_y, 1e-6), r=self._flow_lever_arm:
                            f.update_body_velocity_xy(vx, vy, a, b, lever_arm=r)):
-            # Older than the replay horizon: NOT fused, so not counted as
-            # fused -- the aiding diagnostic read refused samples as aid.
+            # Older than the replay horizon, or rejected by the filter: NOT
+            # fused, so not counted as fused -- the aiding diagnostic read
+            # refused samples as aid.
             self._n['flow_refused'] += 1
             return
         self._n['flow'] += 1
@@ -406,13 +423,13 @@ class LocalizationInputsMixin:
             return
         if time.monotonic() - self._last_flow_t < FLOW_FRESH_S:
             return
-        if self._last_demand_t is None or time.monotonic() - self._last_demand_t > 0.5:
+        if self._last_demand_t is None or time.monotonic() - self._last_demand_t > DEMAND_FRESH_S:
             return
         p = self._model.predict()
         if p is None:
             return
-        self._apply(None, lambda f, p=p: f.update_body_velocity_xy(p[0], p[1], p[2], p[3]))
-        self._n['model'] += 1
+        if self._apply(None, lambda f, p=p: f.update_body_velocity_xy(p[0], p[1], p[2], p[3])):
+            self._n['model'] += 1
 
     def _maybe_zupt(self) -> None:
         """Stand still and the filter learns from it -- but only if it IS still.
@@ -443,7 +460,7 @@ class LocalizationInputsMixin:
         if (since is None or self._last_demand_t is None
                 or now - self._last_demand_t > DEMAND_FRESH_S):
             return
-        settle = max(STILL_WINDOW / 50.0,
+        settle = max(STILL_WINDOW / IMU_HZ,
                      DEMAND_SETTLE_TAUS * float(self._model.tau_s))
         if now - since < settle:
             return
@@ -455,8 +472,8 @@ class LocalizationInputsMixin:
         # there and a tilted hull reads a large constant. Variation is motion.
         if (max(acc) - min(acc)) > STILL_ACCEL_SPREAD:
             return
-        self._apply(None, lambda f, s=self._zupt_sigma: f.update_zero_velocity(sigma=s))
-        self._n['zupt'] += 1
+        if self._apply(None, lambda f, s=self._zupt_sigma: f.update_zero_velocity(sigma=s)):
+            self._n['zupt'] += 1
         self._still.clear()
 
     def _on_flow_calibration(self, msg) -> None:
@@ -586,8 +603,8 @@ class LocalizationInputsMixin:
                                    period_deg=period_deg)
             if snapped is None:
                 refused.append(True)
-                return
-            f.update_yaw(snapped, sigma_deg=s)
+                return None
+            return f.update_yaw(snapped, sigma_deg=s)
 
         before = self._filter.X.yaw_deg()
         if not self._apply(t, bound) or refused:

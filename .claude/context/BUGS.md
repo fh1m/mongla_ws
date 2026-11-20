@@ -507,6 +507,35 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-124: the localiser counted a refused measurement as fused, and could stay silent while unaided `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `LocalizationInputsMixin._apply` dropped the update's own answer and
+returned True for anything it handed the filter. A flow sample the chi-square
+gate rejected, a depth or yaw the B-56 observability gate refused, a ZUPT or a
+model aid the filter rejected: each was counted as fused. The diagnostic line
+over-reported every channel, and the one operator warning that matters, "NO
+VELOCITY AIDING", is computed from the flow and ZUPT counters, so a stream of
+rejected flow kept it silent while nothing aided velocity.
+
+**Fix.** `_apply` returns False when the update returned False (or the sample
+was older than the replay horizon); the answer kept is the first run's, since
+a later replay may run the same update again. Every counter, and the floor
+grid and lane line, count on it. Guard:
+`test_a_refused_update_is_not_counted_as_fused.py`, four of its five tests
+failing on the old code, with and without retrodiction. BUILT, NEVER FLOWN.
+
+### B-125: the fused target pose published zeros for what it never fused `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `pose_fuse_node` filled yaw, range and the spread and left every
+other float of `TargetPose` at its default 0.0. Batighor plots the fused
+`bearing_deg` and `reproj_px`, so the operator saw a bearing of exactly zero on
+every fused pose, and a yaw and range of zero whenever the fuse was undecided.
+Missions were safe: `dsl_heading` reads only a pose with `ok` set.
+
+**Fix.** `fused_message` sets every float the fuse does not compute to NaN.
+Guard: `test_fused_pose_says_nothing_it_did_not_fuse.py`, which also fails if
+a float is added to the message without a decision here; injection-verified.
+
 ### B-122: loop closure could not start, and the anchor pose put the object's origin outside the target `READ 2026-11-19` **FIXED 2026-11-19**
 
 **What.** Two defects found by the second line-by-line read of `mongla_vision`.

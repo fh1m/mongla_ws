@@ -27,6 +27,48 @@ from mongla_localization.pose_cluster import (
 from mongla_vision.stamps import capture_monotonic
 
 
+# The fused message's float fields. The fuse computes yaw, range and the
+# spread, and nothing else; every other float is NaN, this stack's absence.
+# They used to keep the message default 0.0, so Batighor plotted a fused
+# bearing and reprojection of exactly zero, and yaw and range of zero while
+# undecided, as if measured.
+_FLOATS = ('yaw_deg', 'pitch_deg', 'roll_deg', 'range_m', 'yaw_spread_deg',
+           'pitch_spread_deg', 'off_axis_deg', 'reproj_px', 'ambiguity',
+           'alt_yaw_deg', 'bearing_deg')
+
+
+def fused_message(out, fused, header, label):
+    """Fill `out` (a TargetPose) from one `PoseCluster.fuse` result."""
+    out.header = header
+    out.target_label = label
+    for f in _FLOATS:
+        setattr(out, f, float('nan'))
+    out.ok = bool(fused.decided)
+    if fused.decided:
+        out.yaw_deg = float(fused.yaw_deg)
+        out.range_m = float(fused.range_m)
+        # `n_points` is the support count here, not RANSAC inliers: a fused
+        # pose is fitted from FRAMES, and a consumer reading "how much
+        # evidence" wants that number. `yaw_spread_deg` keeps its meaning --
+        # the width of the answer, now across frames instead of branches.
+        out.n_points = int(fused.support)
+        out.yaw_spread_deg = float(fused.spread_deg)
+        # WHICH test decided is not decoration: 'viewpoint' survives a
+        # detector that reports the wrong branch more often, 'support' does
+        # not, and an operator reading a pose needs to know which they have.
+        out.reason = fused.rule
+    else:
+        # The disagreement goes on the wire, not into a vote. An
+        # unresolved mirror pair publishes ok=False with BOTH candidate
+        # yaws in `reason` and their separation in `yaw_spread_deg`, so a
+        # consumer can see what was refused and why (issue #55).
+        out.reason = fused.reason
+        if len(fused.candidates) == 2:
+            a, b = fused.candidates
+            out.yaw_spread_deg = float(abs(((a - b + 180.0) % 360.0) - 180.0))
+    return out
+
+
 class PoseFuseNode(Node):
     def __init__(self, **kw):
         super().__init__('mongla_pose_fuse', **kw)
@@ -121,33 +163,7 @@ class PoseFuseNode(Node):
             alt_yaw_deg=float(msg.alt_yaw_deg) if both else None,
             bearing_deg=float(msg.bearing_deg) if both else None))
 
-        out = TargetPose()
-        out.header = msg.header
-        out.target_label = label
-        fused = self._cluster.fuse(now=t)
-        out.ok = bool(fused.decided)
-        if fused.decided:
-            out.yaw_deg = float(fused.yaw_deg)
-            out.range_m = float(fused.range_m)
-            # `n_points` is the support count here, not RANSAC inliers: a fused
-            # pose is fitted from FRAMES, and a consumer reading "how much
-            # evidence" wants that number. `yaw_spread_deg` keeps its meaning --
-            # the width of the answer, now across frames instead of branches.
-            out.n_points = int(fused.support)
-            out.yaw_spread_deg = float(fused.spread_deg)
-            # WHICH test decided is not decoration: 'viewpoint' survives a
-            # detector that reports the wrong branch more often, 'support' does
-            # not, and an operator reading a pose needs to know which they have.
-            out.reason = fused.rule
-        else:
-            # The disagreement goes on the wire, not into a vote. An
-            # unresolved mirror pair publishes ok=False with BOTH candidate
-            # yaws in `reason` and their separation in `yaw_spread_deg`, so a
-            # consumer can see what was refused and why (issue #55).
-            out.reason = fused.reason
-            if len(fused.candidates) == 2:
-                a, b = fused.candidates
-                out.yaw_spread_deg = float(abs(((a - b + 180.0) % 360.0) - 180.0))
+        out = fused_message(TargetPose(), self._cluster.fuse(now=t), msg.header, label)
         self._pub.publish(out)
 
 

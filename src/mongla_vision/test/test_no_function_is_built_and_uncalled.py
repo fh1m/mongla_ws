@@ -81,9 +81,6 @@ DEFERRED_FUNCTIONS = {
         'metres from a lane line; needs a height source on the lane-line path, '
         'which the tile grating provides once lane_lines and the grating run '
         'together in water',
-    'src/mongla_localization/mongla_localization/resection.py:on_danger_circle':
-        'the resection degeneracy check; waits for resection itself to be fused '
-        '(three simultaneous prop sightings, never yet recorded)',
     'src/mongla_localization/mongla_localization/tile_grating.py:usable_height_m':
         'the instrument envelope; waits for the tile size of the venue pool, '
         'which is a measurement on the day',
