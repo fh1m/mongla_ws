@@ -1,0 +1,23 @@
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_04b7e2f57257af 581-602
+conftest.py
+  s_4af8d6f83b24e8::t_841185d6e9d441 101-122
+test/test_launches_leave_nothing_in_tmp.py
+  s_4af8d6f83b24e8::t_93067a136c85e7 1-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "ee2ba04d6eac2ec3b78620071d642b091e9100a3",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
