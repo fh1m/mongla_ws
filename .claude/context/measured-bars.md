@@ -159,6 +159,7 @@ is how `recommend()` happened.
 - [93. LIGHTERGLUE ON THE ANCHOR'S CPU — better fits, but not inside the 333 ms anchor cycle (2026-11-19)](#93-lighterglue-on-the-anchors-cpu--better-fits-but-not-inside-the-333-ms-anchor-cycle-2026-11-19)
 - [94. VISUAL ODOMETRY FROM XFEAT — LK already does it better inside the same solver (2026-11-19)](#94-visual-odometry-from-xfeat--lk-already-does-it-better-inside-the-same-solver-2026-11-19)
 - [95. ONE HAILO-8, THREE NETWORKS — XFeat at the anchor's rate costs the detectors nothing, and scheduler priority buys nothing (2026-11-19)](#95-one-hailo-8-three-networks--xfeat-at-the-anchors-rate-costs-the-detectors-nothing-and-scheduler-priority-buys-nothing-2026-11-19)
+- [98. THE DETECTOR FAMILY — yolov8n matches yolo11n after INT8 and runs 3.3x faster on the Hailo-8 (2026-11-20)](#98-the-detector-family--yolov8n-matches-yolo11n-after-int8-and-runs-33x-faster-on-the-hailo-8-2026-11-20)
 <!-- contents:end -->
 
 ---
@@ -8672,4 +8673,39 @@ downward rate settles where the chip is full (45 x 13.5 + 30 x 15.8 = 1081 ms
 a second, the switching between network groups included). XFeat's 6.2 ms at
 3 Hz is 1.9 % of the chip. What buys downward rate is chip time: a smaller
 input for the downward model, or a lower asked rate; host work cannot.
+
+
+## 98. THE DETECTOR FAMILY — yolov8n matches yolo11n after INT8 and runs 3.3x faster on the Hailo-8 (2026-11-20)
+
+**Question.** Both cameras are to be 120 fps global-shutter. Section 95 has two
+3-context YOLO11 models sharing the chip at about 51 inferences a second. Does a
+single-context family give that rate back without losing targets?
+
+**Bar, written before the compile** (bead po7.15.7): yolov8n becomes the training
+default if its INT8 HEF is within 0.02 mAP50 of yolo11n on the held-out test
+split, compiles single-context, and runs at least twice yolo11n's chip rate.
+
+**Method.** Same data (torpedo_v1, 5 classes), same 80 epochs, same harness
+(`tools/bench/hailo_compile.sh --finetune off`, DFC 3.34, 1024 real calibration
+frames). Chip rate: `hailortcli benchmark --time-to-run 10`, HW-only, Kutum,
+nothing else on the chip. Accuracy: every test image through the compiled HEF on
+the Hailo (`HailoDetector`, conf 0.001), scored against the labels, COCO
+101-point AP at IoU 0.5. The scorer's self-test reads 0.995 for labels fed back
+as predictions (the 101-point ceiling, which is also why training read 0.995)
+and 0.000 for boxes shifted one width.
+
+| | contexts | chip FPS | HW latency | INT8 mAP50, test (42) | valid (13 readable) |
+|---|---|---|---|---|---|
+| yolo11n | 3 | 97.8 | 8.33 ms | 0.981 | 0.995 |
+| yolov8n | **1** | **319.3** | **6.27 ms** | **0.981** | 0.995 |
+
+The shipped gate_sharks (yolo11, 3 contexts) reads 95.3 FPS by the same method,
+which agrees with the 51 a second two of them share in a live launch.
+
+**Verdict.** Passes every clause: equal accuracy, single context, 3.27x the
+rate. yolov8n is the training default from here. Per class the two differ only
+in which class costs them (yolo11n loses on class 3, yolov8n on class 2), on 42
+images; a larger held-out set is what would separate them, if anything does.
+At two cameras of 120 fps, yolov8n asks 75 % of the chip (240 / 319); yolo11n
+could not (245 %).
 
