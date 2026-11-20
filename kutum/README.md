@@ -126,6 +126,14 @@ every release. So the doctor compares each pin with what is installed and fails 
 whose pins the machine does not have, before the switch. After a pin changes, run the user
 half on the vehicle from the new tree (`kutum/setup.sh`, no sudo), then deploy.
 
+**The SD card is a working space, the dev box is the store.** The doctor fails below 5 GB
+free. Bags, clips and footage go to the dev box (`backup.sh --runs` copies them, pull-only
+and additive). Before removing a copied folder from the vehicle, check that nothing differs:
+`rsync -an --checksum --itemize-changes -e ssh fh1m@kutum.local:~/<folder> ~/kutum-backup/kutum/`
+must print nothing. When a run needs one again, send that folder alone
+(`rsync -a ~/kutum-backup/kutum/<folder> fh1m@kutum.local:~/`) and remove it the same way when
+the work is done. Never put data inside a release: it vanishes with the release.
+
 On the vehicle, every shell already has ROS and the workspace (`env.sh`), so:
 
 ```bash
@@ -186,7 +194,11 @@ that. From a blank SD card to a gated vehicle:
    FAIL while a change waits for a reboot, so reboot and run `kutum/doctor.sh`, and a FAIL
    then is real. Log out and back in, so the `dialout` group applies.
 6. From the dev box, put back what only the old vehicle had:
-   `rsync -a --exclude .backed-up ~/kutum-backup/mongla/ fh1m@kutum.local:~/`
+   `rsync -a --exclude .backed-up ~/kutum-backup/kutum/ fh1m@kutum.local:~/` (the folder
+   is named after the host `backup.sh` was given; older backups are under `mongla/`).
+   The backup also holds the HailoRT and driver sources, vendored dependencies included.
+   If the upstream tag is gone, copy `hailort_src` and `hailort_drivers` back before
+   step 5: `setup.sh` builds from a folder that already exists instead of cloning.
 7. From the dev box: `kutum/deploy.sh fh1m@kutum.local`. The detector models travel with
    the tree (they are untracked files in `src/mongla_vision/models/`, so they come from
    the dev box's copy). It builds and runs `bringup_check`.
