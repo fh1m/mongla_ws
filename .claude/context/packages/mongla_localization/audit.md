@@ -176,6 +176,7 @@ fallback only, and flow is the velocity.
 | 6 | prop fixes gated into the filter | truth study A3 | the gate refused correct fixes from a confidently wrong filter | **fixed and shipped** (B-136, B-137) |
 | 7 | thruster model only as a dropout bridge | truth study A4 | a 12 s flow dropout costs 1.1 cm on this route; the demand model stays a fallback | **kept as is** |
 | 8 | IMU or FOG upgrade | — | only if 2 had failed on a measured bias; it did not | **discarded** |
+| — | OpenMantaClaus's bearing-only EKF SLAM: prop positions learned while the run flies, on thruster dead reckoning and IMU yaw | their source (`src/ekfslam/`) and design notes; no accuracy figure published | the same information reaches us in two separate steps: `mission survey_course` maps the props from sightings beforehand, then `resection` fixes position against that map. Mapping while flying lets a drifted pose move the map it is being corrected by; the gap between their dead reckoning and our flow is what candidate 7 measured | **not adopted**; ours covers it |
 | — | off-the-shelf VIO as primary, compass near thrusters, Ping360, USBL, hydrophone ranging | evidence only | no pool result beats what we have, or the sensor is not fitted | **discarded** |
 
 The study is `tools/studies/localization_candidates.py` (self-tested; bars written first);
