@@ -1,0 +1,93 @@
+src/mongla_control/mongla_control/localization_verbs.py
+  s_4af8d6f83b24e8::t_3fb9906e99f7b7 1-194
+src/mongla_planner/mongla_planner/missions/localization_check.py
+  s_4af8d6f83b24e8::t_16adad44e1e08f 1-110
+.claude/context/ROADMAP.md
+  s_4af8d6f83b24e8::t_5da78eb95855b5 32,176
+.claude/context/missions/command-reference.md
+  s_4af8d6f83b24e8::t_cc65c48d321844 3,33
+.claude/context/packages/mongla_control/README.md
+  s_4af8d6f83b24e8::t_80273313b6eae6 155
+.claude/context/packages/mongla_localization/README.md
+  s_4af8d6f83b24e8::t_56b47f1099a16b 104-110
+.claude/context/packages/mongla_localization/audit.md
+  s_4af8d6f83b24e8::t_e65a2a18c25ee3 49,51,53-65,67-92
+.claude/context/packages/mongla_manager/README.md
+  s_4af8d6f83b24e8::t_04865ca3b233e7 190
+.claude/context/packages/mongla_planner/README.md
+  s_4af8d6f83b24e8::t_483884ff573834 150
+.claude/context/platform/launch-combinations.md
+  s_4af8d6f83b24e8::t_b41f3d1db51e08 243
+.claude/context/platform/ros2-conventions.md
+  s_4af8d6f83b24e8::t_30ee9481578902 82-83,85
+.claude/context/reference/commands.md
+  s_4af8d6f83b24e8::t_4807055c4fc388 7,18,20,215,245,319
+.claude/context/sota/planning.md
+  s_4af8d6f83b24e8::t_47fcc7e1fcf42a 65
+CLAUDE.md
+  s_4af8d6f83b24e8::t_b1fe05dc66dd1f 160,165,189
+README.md
+  s_4af8d6f83b24e8::t_2876670beed338 101,212,627,942,975
+docs/assets/diagrams/package-map.svg
+  s_4af8d6f83b24e8::t_02deb6ea6c54de 24
+docs/index.html
+  s_4af8d6f83b24e8::t_4487635045e867 1825
+src/mongla_batighor/layouts/localization.json
+  s_4af8d6f83b24e8::t_154261951b07a1 59-68
+src/mongla_batighor/mongla_batighor/views.py
+  s_4af8d6f83b24e8::t_70f643a8a9ea9d 259-261,361
+src/mongla_control/mongla_control/commands.py
+  s_4af8d6f83b24e8::t_94f9382da9ca0c 72-88
+src/mongla_control/mongla_control/mongla.py
+  s_4af8d6f83b24e8::t_ebe9e36b91a798 31,42,77,86-87,92-93,102
+src/mongla_control/test/test_command_surface_is_task_free.py
+  s_4af8d6f83b24e8::t_8899833547a0a7 35
+src/mongla_control/test/test_go_to_steers_only_on_a_usable_estimate.py
+  s_4af8d6f83b24e8::t_fd8d2e293e02dc 1-129
+src/mongla_interfaces/CMakeLists.txt
+  s_4af8d6f83b24e8::t_36ff134e789416 12
+src/mongla_interfaces/action/Move.action
+  s_4af8d6f83b24e8::t_aa5f212f1008a9 5,24-26
+src/mongla_interfaces/msg/LocalizationState.msg
+  s_4af8d6f83b24e8::t_4683ca6a651b26 1-27
+src/mongla_localization/mongla_localization/localization_inputs.py
+  s_4af8d6f83b24e8::t_01c6c380a0c78d 184,249-250,263-267,341
+src/mongla_localization/mongla_localization/localization_node.py
+  s_4af8d6f83b24e8::t_b1dd2b982d5563 55,105-107,234-236
+src/mongla_localization/mongla_localization/localization_publish.py
+  s_4af8d6f83b24e8::t_7bc5d2a48954f0 27-56,136-137,139,177,189-224
+src/mongla_localization/test/test_the_state_says_whether_localization_works.py
+  s_4af8d6f83b24e8::t_5a97a8572aeebc 1-70
+src/mongla_manager/config/bringup.example.yaml
+  s_4af8d6f83b24e8::t_52af1fc4af2d68 310,336
+src/mongla_manager/mongla_manager/localization_state.py
+  s_4af8d6f83b24e8::t_8aaf0d61655781 1-36
+src/mongla_manager/mongla_manager/node_setup.py
+  s_4af8d6f83b24e8::t_62781df2bf56be 426-429,437,440-445
+src/mongla_manager/package.xml
+  s_4af8d6f83b24e8::t_7062bc2871f91d 21
+src/mongla_planner/mongla_planner/dsl_position.py
+  s_4af8d6f83b24e8::t_19777e02a04f95 312-387
+src/mongla_planner/test/test_localization_check.py
+  s_4af8d6f83b24e8::t_568e416e3ec03b 1-80
+test/test_kutum_has_one_name.py
+  s_4af8d6f83b24e8::t_54a8bb81b94c4f 24-25
+tools/site/make_diagrams.py
+  s_4af8d6f83b24e8::t_a062a1bb230413 234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7bf27a5b90187e83018338e592abdb21d1bae1bd",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
