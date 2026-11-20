@@ -1,5 +1,4 @@
 """A pool fix is stamped with the capture time of the frame it came from."""
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from mongla_planner.mongla_dsl import MonglaMission

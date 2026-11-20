@@ -133,7 +133,7 @@ class SrotArming:
         if kill is None:
             if getattr(self, 'allow_unknown_kill_switch', False):
                 self._log_warn(f'[SROT ] !! OVERRIDDEN: {why}')
-                return True, f'KILL_SWITCH_UNKNOWN_OVERRIDDEN'
+                return True, 'KILL_SWITCH_UNKNOWN_OVERRIDDEN'
             return False, (f'{why}. Arming is refused because the kill switch '
                            f'could not stop this vehicle as far as the host can '
                            f'tell. On the bench, set allow_unknown_kill_switch:=true.')

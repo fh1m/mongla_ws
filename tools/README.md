@@ -179,6 +179,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `continuity_from_bag.py` | Run `continuity.analyse` on a RECORDED session -- the measurement it waits for. |
 | `continuity_from_video.py` | Gap distribution on REAL UNDERWATER FOOTAGE, with a real competition model. |
 | `cross_model_gate.py` | Two models, one class: does AGREEMENT kill the false positives? The situation nobody acted on. |
+| `depth_scale_check.py` | Does a monocular depth network on the Hailo-8 know the floor's SCALE? Flow refuses without the height above the floor (V-9), and a network that reads height off one image would remove that input ... |
 | `detection_continuity.py` | How often do we lose the target in real water, and for how long? The question nobody has answered. |
 | `detector_viewpoint_check.py` | Score a detector on a viewpoint it was not trained for -- honestly. |
 | `domain_gap.py` | The same model on STILLS it was trained from, and on VIDEO of the same run. |
@@ -196,6 +197,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `recall_matrix.py` | REAL RECALL -- against ground truth labels, per water regime. |
 | `return_check.py` | A2 -- RETURN: 2,882 raw frames + 302 labelled. |
 | `rung_independence.py` | Do the ladder's two carried rungs fail TOGETHER? Redundancy of two, or of one? The question nobody asked. |
+| `stark_rung.py` | Would STARK-Lightning on the Hailo-8 carry a box through a detection gap longer than the follower does? The follower (`tracking/follower.py`) carries the last box on sparse LK and refuses when its ... |
 | `tau_from_scale.py` | Rank the four scale sources against a KNOWN-CONSTANT-SPEED approach. |
 | `tracker_ab.py` | Which tracker closes more gaps on REAL competition footage? The question this settles, with numbers rather than an argument: the coast layer exists to bridge detection gaps, and nobody has ever ... |
 | `truth/` | Hand-labelled truth for the studies: when a target is really in view, labelled by eye from the frames and independently of any model, so a tracker or detector can be scored rather than compared with ... |

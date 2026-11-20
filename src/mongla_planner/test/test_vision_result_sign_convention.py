@@ -23,7 +23,6 @@ import inspect
 import pathlib
 import re
 
-import pytest
 
 from mongla_planner.vision_dsl import VisionResult
 

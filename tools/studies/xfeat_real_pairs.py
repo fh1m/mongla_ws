@@ -33,6 +33,14 @@ a Hailo compile if, for both the whole-frame and the target-box fit, the
 lower end of the 95 % interval of (its fit rate - shipped's) is above -5
 points. A point estimate alone decides nothing.
 
+LiftFeat (`--liftfeat DIR`, a clone of lyp-deeplearning/LiftFeat with its
+weights) runs under the same bar as EdgePoint2, and its bead's (po7.15.5): it
+earns the Hailo compile only through the same non-inferiority test, and is
+adopted only at 5 points above shipped. Its `extract` keeps every point above
+0.1 and ignores its own `top_k`, so the 1024 best by score are taken, as for
+every other method; the grey frame is given as three equal channels, which
+is what the downward camera gives.
+
 The chains favour no method by construction except that both chain
 matchers are themselves candidates; a step at 3 frames is matched right by
 every method, which `--self-test` cannot show and the agreement filter is
@@ -134,6 +142,11 @@ def run(a) -> int:
         'LighterGlue 768': lambda hA, hB, *_: glue(xr.detect(xf, hA, True, top_k=768),
                                                xr.detect(xf, hB, True, top_k=768)),
     }
+    if a.liftfeat:
+        lf = _liftfeat(a.liftfeat)
+        for thr in (0.5, 0.82):
+            methods[f'LiftFeat @{thr}'] = (
+                lambda hA, hB, fA, fB, thr=thr: cos(lf(fA), lf(fB), thr))
     for cfg in (('T32', 'S32', 'S64') if a.edgepoint2 else ()):
         ep = _edgepoint2(a.edgepoint2, cfg)
         for thr in (0.5, 0.82):
@@ -227,10 +240,12 @@ def run(a) -> int:
         print(f'  {m:22s} correct {mean[0]:+7.1f} [{lo_hi[0][0]:+.1f}, {lo_hi[0][1]:+.1f}]  '
               f'fit {100 * mean[1]:+5.1f} [{100 * lo_hi[1][0]:+.1f}, {100 * lo_hi[1][1]:+.1f}] pt  '
               f'box {100 * mean[2]:+5.1f} [{100 * lo_hi[2][0]:+.1f}, {100 * lo_hi[2][1]:+.1f}] pt')
-        if m.startswith('EdgePoint2') and lo_hi[1][0] > -0.05 and lo_hi[2][0] > -0.05:
+        if m.startswith(('EdgePoint2', 'LiftFeat')) and lo_hi[1][0] > -0.05 and lo_hi[2][0] > -0.05:
             earns.append(m)
-    if any(m.startswith('EdgePoint2') for m in per):
-        print('VERDICT EdgePoint2 ' + (f'earns a Hailo compile: {", ".join(earns)}' if earns
+    for fam in ('EdgePoint2', 'LiftFeat'):
+        if any(m.startswith(fam) for m in per):
+            mine = [m for m in earns if m.startswith(fam)]
+            print(f'VERDICT {fam} ' + (f'earns a Hailo compile: {", ".join(mine)}' if mine
                                        else 'does not earn a Hailo compile (non-inferiority not shown)'))
     return 0
 
@@ -273,6 +288,26 @@ def _edgepoint2(root, cfg, top_k=1024):
     return run
 
 
+def _liftfeat(root, top_k=1024):
+    """LiftFeat from a clone of lyp-deeplearning/LiftFeat, through its own
+    `extract`, then the `top_k` best points by score. Returns gray -> (kpts, desc)."""
+    sys.path.append(root)                  # after ours: its `utils` must not shadow
+    from models.liftfeat_wrapper import LiftFeat
+    net = LiftFeat(weight=os.path.join(root, 'weights', 'LiftFeat.pth'))
+
+    def run(gray):
+        out = net.extract(np.repeat(gray[:, :, None], 3, axis=2))
+        sc = out['scores']
+        top = sc.topk(min(top_k, len(sc))).indices
+        k = out['keypoints'][top].float().cpu().numpy().astype(np.float32)
+        d = out['descriptors'][top].cpu().numpy().astype(np.float32)
+        # `extract` normalises over the keypoint axis (norm 0.3 per row), so
+        # every score fell under the cosine cut and nothing matched (the first
+        # run read 0.0 correct for it). Cosine matching needs unit rows.
+        return k, d / np.linalg.norm(d, axis=1, keepdims=True)
+    return run
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--model', required=True)
@@ -280,6 +315,7 @@ def main(argv=None) -> int:
     ap.add_argument('--old', required=True, help='xfeat_onnx.py from before section 92')
     ap.add_argument('--starts', type=int, default=12, help='start frames per clip')
     ap.add_argument('--edgepoint2', default='', help='clone of HITCSC/EdgePoint2 (with weights)')
+    ap.add_argument('--liftfeat', default='', help='clone of lyp-deeplearning/LiftFeat (with weights)')
     return run(ap.parse_args(argv))
 
 

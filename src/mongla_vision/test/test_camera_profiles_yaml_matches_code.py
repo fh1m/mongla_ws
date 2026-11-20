@@ -19,7 +19,6 @@ nothing, after `device_path` into `**_`, the unloaded YAML profile table, and
 This compares the DATA, not the prose: each file's rationale comments differ
 deliberately and at different lengths, and that is fine.
 """
-import os
 import pathlib
 
 import pytest
