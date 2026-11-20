@@ -10,21 +10,23 @@ import subprocess
 import sys
 import tempfile
 
-import conftest
+# Read from the environment, not `import conftest`: under a multi-package run
+# another directory's conftest.py can win that import.
+SESSION_TMP = os.environ.get('TMPDIR', '')
 
 
 def test_temporary_files_go_to_the_session_directory():
     f = tempfile.NamedTemporaryFile(prefix='launch_params_', delete=False)
     f.close()
-    assert os.path.dirname(f.name) == conftest.SESSION_TMP
-    assert os.path.basename(conftest.SESSION_TMP).startswith('mongla-test-session-')
+    assert os.path.dirname(f.name) == SESSION_TMP
+    assert os.path.basename(SESSION_TMP).startswith('mongla-test-session-')
 
 
 def test_a_launched_process_inherits_it():
     out = subprocess.run([sys.executable, '-c', 'import tempfile; print(tempfile.gettempdir())'],
                          capture_output=True, text=True, check=True).stdout.strip()
-    assert out == conftest.SESSION_TMP
+    assert out == SESSION_TMP
 
 
 def test_pytests_own_temp_root_did_not_move(tmp_path):
-    assert conftest.SESSION_TMP not in str(tmp_path)
+    assert SESSION_TMP not in str(tmp_path)
