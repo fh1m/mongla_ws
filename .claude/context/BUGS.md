@@ -817,6 +817,36 @@ injection-verified for each behaviour); the study's `--self-test`.
 rises with any change that makes matches agree with each other, right or not.
 The comment that justified bilinear compared it only with nearest.
 
+### B-141: `?layout=` opened a personal Default on a browser's first visit `REPRODUCED 2026-11-19` **FIXED 2026-11-20**
+
+**What.** `http://kutum:8000/?layout=chain` in a browser profile that had never
+opened Batighor showed a personal "Default" layout; the organisation's chain
+layout was listed and had to be opened by hand. A second visit opened it.
+
+**Cause.** Upstream, Lichtblick 1.30.0 `CurrentLayoutProvider`: the `layout=`
+name is matched against the layouts the app already holds, and it waits only
+if the layout manager is busy. `LayoutManagerProvider` syncs only while the
+tab is visible. A link opened in a background tab on a fresh profile has no
+sync running, so the organisation's layouts are absent, the match fails and a
+personal "Default" is made and selected. The sync stores the layouts when the
+tab is shown, which is why the second visit works. A foreground tab on
+localhost, even with 150 ms of emulated latency, did not reproduce it.
+
+**Fix.** `serve.FIRST_VISIT_HEAD`, served in the app page: when the named
+layout is not in the app's layout database at load, it waits for the sync to
+store it and loads the page once more (a session flag stops a loop; 15 s cap).
+A browser that already holds the layout is untouched. The database is opened
+only after the app has created it, because opening it first would create it
+empty and the app's upgrade would never make its store.
+
+**Measured** (fresh headless Chrome profile, the link opened in a background
+tab, then shown; Kutum's Lichtblick 1.30.0 served from this tree): without the
+fix the app selected a personal Default; with it the page reloaded once and
+opened chain. The unused personal Default is still created by the first load.
+
+**Guards.** `test_serve_and_fetch.py`: the page carries the script inside its
+head, and the script never opens the database before the app has made it.
+
 ### B-118: the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame `READ 2026-11-18` **FIXED 2026-11-18**
 
 **What.** The anchor resizes every frame to its backend grid (XFeat, 320x240)
