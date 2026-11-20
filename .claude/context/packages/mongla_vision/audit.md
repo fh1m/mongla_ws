@@ -120,6 +120,13 @@ then each finding checked against the code before anything changed.
 | `top_k` | the lock restated 1024 beside both backends' defaults | FIXED: the defaults are used |
 | `fps` | a non-zero `fps:=` on `vision.launch` also caps publishing | not a defect at the default (0); noted |
 
+**Model sidecars, 2026-11-20.** `models/yolov11n_seg.yaml` was a byte-for-byte copy of
+`yolov8n_seg.yaml` (the 80 COCO classes), named by nothing, with no model on the dev box
+or Kutum: deleted. A stock `yolov11n_seg` HEF dropped in later takes a copy of
+`yolov8n_seg.yaml` under its own stem. `octagon` and `yolov8n_seg` also have no model on
+either machine; they stay, because missions and the launch name them and a model is
+dropped in on the day.
+
 ## Live run on Kutum, 2026-11-19
 
 The whole of `vision_pi.launch.py`, on the release after the second read,
@@ -225,7 +232,7 @@ loop on Kutum, or the rig that gives a ground truth to measure the ladder agains
 
 ## Every file
 
-The read column says whether the file was read line by line in this audit. All 105 were.
+The read column says whether the file was read line by line in this audit. All 106 were.
 
 | File | Lines | Reached from | Read | Finding |
 |---|---|---|---|---|
