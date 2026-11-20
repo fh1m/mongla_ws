@@ -1,0 +1,29 @@
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_ea64d8cea59da1 162,8677-8711
+.claude/skills/train-model/SKILL.md
+  s_4af8d6f83b24e8::t_2d0aefffa6f907 43,47-49
+README.md
+  s_4af8d6f83b24e8::t_9cfefa17854aae 64,799,802
+docs/index.html
+  s_4af8d6f83b24e8::t_21be4e3ad7195c 1734-1736,1738
+tools/README.md
+  s_4af8d6f83b24e8::t_505bdca2fb0933 76
+tools/bench/hef_map.py
+  s_4af8d6f83b24e8::t_03ae27aea42673 1-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "0b29c477f791d2715732237d15b68326462c6914",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
