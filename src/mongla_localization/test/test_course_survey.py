@@ -1,6 +1,5 @@
 """course_survey writes MEASURED positions to the deck copy, and the loader uses it."""
 import pytest
-import yaml
 
 from mongla_localization import course_map as cm
 from mongla_localization.course_survey import survey, main

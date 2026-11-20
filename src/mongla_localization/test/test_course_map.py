@@ -6,8 +6,6 @@ confidence, which is this stack's most expensive recurring defect wearing a new
 hat. So the tests are mostly about refusals and about the shipped file being
 honestly empty.
 """
-import math
-import pathlib
 
 import pytest
 

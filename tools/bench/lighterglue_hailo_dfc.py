@@ -92,7 +92,9 @@ def main() -> int:
                 m = [x for x in re.findall(r'quantization_param\(\[([^\]]+)\], force_range_in=\[([^\]]+)\]',
                                            str(e)) if x[0] != 'layer_name']
                 if not m:
-                    print(f'[{name}] stopped on: {str(e)[:600]}')
+                    # A TensorFlow error carries the traceback first and the
+                    # cause last; the head alone names no error at all.
+                    print(f'[{name}] stopped on {type(e).__name__}: ...{str(e)[-1500:]}')
                     return 1
                 layer, v = m[-1][0], [float(x) for x in m[-1][1].split(',')]
                 # The suggested range can exclude 0 (a softmax output reads

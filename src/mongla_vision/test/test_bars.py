@@ -20,7 +20,6 @@ import re
 import sys
 from pathlib import Path
 
-import pytest
 
 # `mongla_vision` is imported from THIS worktree (inserted first); every
 # CONSTANT below is still read as text. The distinction matters: the
