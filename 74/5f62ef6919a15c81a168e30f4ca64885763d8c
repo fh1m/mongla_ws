@@ -1,0 +1,27 @@
+.claude/hooks/py_check.sh
+  s_4af8d6f83b24e8::t_2001f3cb12b2f7 5,23-27
+.github/workflows/repository-integrity.yml
+  s_4af8d6f83b24e8::t_565c59cc57ba3c 31
+CLAUDE.md
+  s_4af8d6f83b24e8::t_31b470a7428325 437,442-443
+test/test_workflows_pass_actionlint.py
+  s_4af8d6f83b24e8::t_2a8f01847f96ce 1-32
+tools/ci/run_repo_integrity.py
+  s_4af8d6f83b24e8::t_0ed50839607aa7 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "745f62ef6919a15c81a168e30f4ca64885763d8c",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
