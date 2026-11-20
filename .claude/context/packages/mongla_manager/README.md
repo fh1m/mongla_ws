@@ -187,6 +187,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `health_reporters.py` | Each subsystem's private dialect, translated once. |
 | `kutum_health.py` | Kutum in the live health report: the Pi and the Hailo-8 on it, as one machine. |
 | `link_meter.py` | What the SROT link is carrying now: bytes and frames per second, per type. |
+| `localization_state.py` | the manager's view of `/mongla/localization/state`. |
 | `node_action.py` | The /mongla/move action server: which goals run, how they stop, what they report. |
 | `node_health.py` | Is the node alive, and is the mission: the health report and the three watchdogs (executor, mission, kill switch). |
 | `node_setup.py` | Bringing the node up: parameters, the board link, the recorder, the preflight reads. |

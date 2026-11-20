@@ -98,7 +98,7 @@ ros2 launch mongla_vision video.launch.py fwd_video:=/path/to/gate.mp4
 ros2 launch mongla_manager bringup.launch.py vision:=true
 ros2 run mongla_planner mongla arm
 ros2 run mongla_planner mongla move_forward --duration 3 --gain 40
-ros2 run mongla_planner mongla --help          # all 23 verbs, generated from one table
+ros2 run mongla_planner mongla --help          # all 25 verbs, generated from one table
 ```
 
 With the board attached, these two answer the only two questions that matter before you put
@@ -209,7 +209,7 @@ thinking on the Pi.**
 flowchart TB
     subgraph PI["Raspberry Pi 5 + Hailo-8 · the thinking half"]
         direction TB
-        CLI["mongla CLI<br/>23 verbs"] --> ACT
+        CLI["mongla CLI<br/>25 verbs"] --> ACT
         MIS["mission scripts<br/>Python DSL"] --> ACT
         ACT["/mongla/move<br/>one ROS action"] --> MGR
         MGR["auv_manager_node<br/>the ONLY node that talks to the board"]
@@ -624,7 +624,7 @@ where an absent value is `NaN` and never `0.0`.
 ```
 
 The CLI, the action server and the Python client all read that one table, so `--help`, argument
-parsing and dispatch follow automatically. **23 verbs** today.
+parsing and dispatch follow automatically. **25 verbs** today.
 
 **Warning: There is no verb the board cannot run.** A host heading lock and distance-closed moves
 existed for the old backend; the board holds heading itself
@@ -939,7 +939,7 @@ from why the vehicle exists to every number it has measured. Or dip in:
 | [`ROADMAP.md`](.claude/context/ROADMAP.md) | **the one status file** — where we are, what is left, what is blocked |
 | [`measured-bars.md`](.claude/context/measured-bars.md) | every shipped constant with the measurement behind it, retractions included |
 | [`BUGS.md`](.claude/context/BUGS.md) | the single defect register |
-| [`reference/commands.md`](.claude/context/reference/commands.md) | **generated from the code**: all 23 verbs with their fields and defaults, which ones run on the board, every executable, launch argument, node parameter and wire constant |
+| [`reference/commands.md`](.claude/context/reference/commands.md) | **generated from the code**: all 25 verbs with their fields and defaults, which ones run on the board, every executable, launch argument, node parameter and wire constant |
 
 <details>
 <summary>**The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 15 documents</summary>
@@ -972,7 +972,7 @@ from why the vehicle exists to every number it has measured. Or dip in:
 <details>
 <summary>**Missions** — [`.claude/context/missions/`](.claude/context/missions/) · 7 documents</summary>
 
-`command-reference` (all 23 verbs) · `client-and-dsl-api` · `mission-cookbook` · `detected-paradigm` ·
+`command-reference` (all 25 verbs) · `client-and-dsl-api` · `mission-cookbook` · `detected-paradigm` ·
 `precision-alignment` · `vision-results` · `verbs-srot-unlocks`
 
 </details>

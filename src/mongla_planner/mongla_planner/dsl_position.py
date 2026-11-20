@@ -309,6 +309,82 @@ class WhereMixin:
             rclpy.spin_once(node, timeout_sec=0.05)
         return fresh()
 
+    def localization(self, *, timeout: float = 1.0):
+        """The localization state, or None when the localiser is not publishing.
+
+            s = mongla.localization()
+            if s is None or not s.usable:
+                log(f'localization not usable: {s.reason if s else "not running"}')
+
+        The fields are `LocalizationState`'s: `usable` and `reason` answer "can
+        I steer on it"; `x_m`, `y_m`, `depth_m`, `yaw_deg` in `frame`;
+        `sigma_xy_m`; `aiding`; `motion`; the input ages and counts. Read
+        straight from the topic (no action goal), fresh by arrival under
+        `ODOM_MAX_AGE_S`: a localiser that stopped reads None, not its last word.
+        """
+        import time as _t
+        from mongla_interfaces.msg import LocalizationState
+        from mongla_localization.localization_publish import ODOM_MAX_AGE_S
+        node = self.client.node
+        if getattr(self, '_loc_sub', None) is None:
+            self._loc, self._loc_rx = None, 0.0
+
+            def _keep(msg):
+                self._loc, self._loc_rx = msg, _t.monotonic()
+            self._loc_sub = node.create_subscription(
+                LocalizationState, '/mongla/localization/state', _keep, 10)
+
+        def fresh():
+            return (self._loc is not None
+                    and _t.monotonic() - self._loc_rx <= ODOM_MAX_AGE_S)
+        rclpy.spin_once(node, timeout_sec=0.0)
+        deadline = _t.monotonic() + float(timeout)
+        while not fresh() and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        return self._loc if fresh() else None
+
+    def go_to(self, x_m: float, y_m: float, *, tolerance: float = 0.5,
+              duration: float = 60.0, gain: float = 30.0):
+        """Drive to pool point (x_m, y_m) on the localization estimate.
+
+        Returns the Move result: `.success` is arrived, `.final_value` the
+        metres left. Refused before any thrust when localization is not usable
+        or its position is not known to within `tolerance` -- anchor first,
+        and fix position from a prop if the sigma has grown.
+        """
+        return self._send('go_to', x_m=float(x_m), y_m=float(y_m),
+                          tolerance_m=float(tolerance),
+                          duration=float(duration), gain=float(gain))
+
+    def go_to_prop(self, prop: str, *, standoff: float = 1.0,
+                   tolerance: float = 0.5, duration: float = 60.0,
+                   gain: float = 30.0):
+        """Drive to `standoff` metres short of a course prop, along the line
+        from here. Refuses a prop with no position (`position_of` raises) and
+        needs a usable estimate for "here"; returns the Move result, or None
+        when either is missing (logged).
+        """
+        import math
+        course = getattr(self, '_course', None)
+        if course is None:
+            self.log.warning('[LOCAL] go_to_prop: use_course(<name>) first')
+            return None
+        try:
+            px, py = course.position_of(prop)
+        except (KeyError, ValueError) as exc:
+            self.log.warning(f'[LOCAL] go_to_prop({prop!r}): {exc}')
+            return None
+        here = self.localization()
+        if here is None or not here.usable:
+            self.log.warning(f'[LOCAL] go_to_prop({prop!r}): localization not '
+                             f'usable: {here.reason if here else "not running"}')
+            return None
+        dx, dy = px - here.x_m, py - here.y_m
+        d = math.hypot(dx, dy)
+        k = max(d - float(standoff), 0.0) / d if d > 0.0 else 0.0
+        return self.go_to(here.x_m + k * dx, here.y_m + k * dy,
+                          tolerance=tolerance, duration=duration, gain=gain)
+
     def motion(self, *, timeout: float = 1.0):
         """Is the hull moving the way it is being told to?
 

@@ -101,6 +101,13 @@ It starts with the vehicle (`localization:=true`, on by default). Its optional p
 separate switches — replay of late measurements, zero-velocity updates, heading fusion, the
 tile grating — so each can be enabled alone and measured.
 
+Is it working? One topic answers, `/mongla/localization/state`: `usable`, and `reason` when
+not. From a deck shell, `ros2 run mongla_planner mongla locate`; from a mission,
+`mongla.localization()`. Acting on it: `mongla go_to --x_m X --y_m Y` (verb) or
+`mongla.go_to(x, y)` / `mongla.go_to_prop(prop)` (DSL), each refused unless the estimate
+is usable and known to within the arrival tolerance. The in-water check is the mission
+`localization_check`; the stages are in [`audit.md`](audit.md).
+
 ## Testing
 
 ```bash

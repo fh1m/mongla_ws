@@ -21,7 +21,7 @@
 <text x="416.0" y="124.0" class="v" text-anchor="start">mongla_interfaces</text>
 <text x="416.0" y="146.0" class="l" text-anchor="start">one action:  /mongla/move</text>
 <text x="416.0" y="163.0" class="l" text-anchor="start">one topic:   /mongla/state</text>
-<text x="416.0" y="216.0" class="r" text-anchor="start">23 verbs, one goal at a time</text>
+<text x="416.0" y="216.0" class="r" text-anchor="start">25 verbs, one goal at a time</text>
 <line x1="332" y1="165" x2="396" y2="165" stroke="#ff2a14" stroke-width="1.6"/>
 <path d="M396,165 L387.9,168.8 L387.9,161.2 z" fill="#ff2a14"/>
 <path d="M332,310 H690 V200 H712" fill="none" stroke="#5a8dff" stroke-width="1.6"/><path d="M716,200 l-9,-4 v8 z" fill="#5a8dff"/>

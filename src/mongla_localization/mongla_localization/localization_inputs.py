@@ -181,6 +181,7 @@ class LocalizationInputsMixin:
         self._last_accel = np.asarray(accel, float)
         self._n['imu'] += 1
         self._last_input_t = t
+        self._note_seen('imu', time.monotonic())
 
         # The split, enforced here. The board owns attitude; without this
         # line the companion propagates its own and DIVERGES -- measured on
@@ -245,6 +246,8 @@ class LocalizationInputsMixin:
             ok = self._apply(t, lambda f, d=depth, s=self._depth_sigma:
                              f.update_depth(d, sigma=s))
             self._n['depth' if ok else 'depth_refused'] += 1
+            if ok:
+                self._note_seen('depth', time.monotonic())
         yaw = float(msg.yaw_deg)
         # NaN is the documented absence sentinel, and on srot it is now what a
         # board with an unhealthy BNO actually publishes. Feeding NaN into the
@@ -256,6 +259,11 @@ class LocalizationInputsMixin:
             ok = self._apply(t, lambda f, y=yaw, s=self._yaw_sigma_deg:
                              f.update_yaw(y, sigma_deg=s))
             self._n['yaw' if ok else 'yaw_refused'] += 1
+
+    def _note_seen(self, key: str, t: float) -> None:
+        """Arrival of a fused sample, for the state message's input ages."""
+        seen = self.__dict__.setdefault('_seen', {})
+        seen[key] = t
 
     def _flow_now(self, t_meas, vx: float, vy: float, var_x: float,
                   var_y: float):
@@ -330,6 +338,7 @@ class LocalizationInputsMixin:
         now = time.monotonic()
         dt = min(now - self._last_flow_t, 0.25) if self._last_flow_t > 0.0 else 0.0
         self._last_flow_t = now
+        self._note_seen('flow', now)
         state = self._motion.observe(self._model, v.x, v.y, dt)
         # Never learn from a hull that is not moving as told: a pinned hull
         # would teach the model that thrust makes no speed.

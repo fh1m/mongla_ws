@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from mongla_interfaces.action import Move
 
 from .vision_verbs import VisionVerbs
+from .localization_verbs import LocalizationVerbs
 from .fc.base      import FireResult, FIRE_NOT_READY, FIRE_THRUSTER_FAULT
 from .fc.base      import SUCCEEDED, FAILED, ABORTED
 from .errors       import NotArmedError
@@ -38,7 +39,7 @@ from .motion_writers import make_writers, _interruptible_sleep
 # motion demands while disarmed, so a motion verb would report success and
 # move nothing.
 _UNARM_SAFE = frozenset({'stop', 'pause', 'mission_reset', 'calibrate_depth',
-                         'calc_distance'})
+                         'calc_distance', 'locate'})
 
 # Board verbs and the axis each one moves, for calc_distance's projection.
 _BOARD_AXIS = {
@@ -73,7 +74,7 @@ def _fresh_depth(fc):
     return attitude['depth']
 
 
-class Mongla(VisionVerbs):
+class Mongla(VisionVerbs, LocalizationVerbs):
     """Serialised verb facade over the board driver.
 
     fc                    -- the board driver (`SrotFC`)
@@ -82,11 +83,14 @@ class Mongla(VisionVerbs):
     vision_state_provider -- camera name -> VisionState (injected by the manager
                              so this package stays rclpy-free)
     distance_provider     -- () -> DistanceState, for calc_distance
+    localization_provider -- () -> the newest LocalizationState while fresh, else
+                             None; for locate and go_to
     payload               -- `SrotPayload`, or None when the payload is disabled
     """
 
     def __init__(self, fc, log, *, yaw_source=None, vision_state_provider=None,
-                 distance_provider=None, payload=None):
+                 distance_provider=None, payload=None,
+                 localization_provider=None):
         self.fc                    = fc
         self.log                   = log
         # Reentrant, so a verb can call another scoped verb on the same thread.
@@ -95,6 +99,7 @@ class Mongla(VisionVerbs):
         self.yaw_source            = yaw_source
         self.vision_state_provider = vision_state_provider
         self._distance_provider    = distance_provider
+        self.localization_provider = localization_provider
         self._payload              = payload
         # calc_distance's projection axis: set by the LAST move_* verb.
         self._distance_axis        = 'axial'
