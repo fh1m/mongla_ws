@@ -9,7 +9,7 @@ import pytest
 
 from mongla_vision.detection.detector import Detection
 from mongla_vision.identity import (
-    Identity, identify, overlap_frac, pick_structure, side_of, sides,
+    identify, overlap_frac, pick_structure, side_of, sides,
 )
 
 

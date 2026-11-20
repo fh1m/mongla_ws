@@ -143,7 +143,7 @@ def test_the_localization_node_SENDS_the_moving_edge_and_the_anchor_edge():
     n.get_clock = lambda: type('C', (), {'now': lambda _s: Time()})()
     n.get_logger = lambda: type('L', (), {'info': lambda *a, **k: None,
                                           'warning': lambda *a, **k: None})()
-    t = T._fly_board(n, 100.0, 1.0, 30.0)
+    T._fly_board(n, 100.0, 1.0, 30.0)
     T._published_frame(n)
     assert sent and (sent[-1].header.frame_id, sent[-1].child_frame_id) == (
         F.ODOM, F.BODY)

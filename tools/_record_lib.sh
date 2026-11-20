@@ -82,7 +82,7 @@ kill_tree() {            # kill_tree <sig> <pid>...
 # stop_tree <pid> <name> -- INT the whole tree, then TERM, then KILL, and
 # report SURVIVORS. Never blocks forever.
 stop_tree() {
-  local pid="$1" name="$2" i tree alive left
+  local pid="$1" name="$2" tree alive left
   [ -n "$pid" ] || { echo "  $name: no pid recorded"; return 0; }
   if ! running "$pid"; then
     echo "  $name: already gone"
@@ -96,7 +96,7 @@ stop_tree() {
   # this long; the test spawns children that ignore SIGINT on purpose, and
   # would otherwise spend the full grace period three times over -- a guard
   # too slow to run habitually is not a guard.
-  for i in $(seq "${STOP_TREE_GRACE_S:-20}"); do
+  for _ in $(seq "${STOP_TREE_GRACE_S:-20}"); do
     alive=0
     for p in $tree; do running "$p" && alive=1 && break; done
     [ "$alive" = 0 ] && break
@@ -132,7 +132,7 @@ os.execvp(sys.argv[1], sys.argv[1:])' "$@"
 # stop <pid> <name> [group] -- pass 'group' when the pid leads its own process
 # group (i.e. it came from start_group); the whole group is then signalled.
 stop() {
-  local pid="$1" name="$2" mode="${3:-}" target i
+  local pid="$1" name="$2" mode="${3:-}" target
   [ -n "$pid" ] || return 0
   if [ "$mode" = group ] && kill -0 "-$pid" 2>/dev/null; then
     target="-$pid"          # negative pid = the process GROUP
@@ -145,13 +145,13 @@ stop() {
     echo "  $name: nothing to signal at $target (already gone, or wrong pid)"
     return 0
   fi
-  for i in $(seq 20); do
+  for _ in $(seq 20); do
     running "$pid" || { echo "  $name stopped cleanly"; return 0; }
     sleep 1
   done
   echo "  $name ignored SIGINT -- sending SIGTERM"
   kill -TERM "$target" 2>/dev/null
-  for i in $(seq 15); do
+  for _ in $(seq 15); do
     running "$pid" || { echo "  $name stopped on SIGTERM"; return 0; }
     sleep 1
   done

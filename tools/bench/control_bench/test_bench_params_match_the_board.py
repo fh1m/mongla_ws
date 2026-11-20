@@ -12,7 +12,6 @@ These tests are the guard that replaces the assumption.
 import json
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -21,7 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 sys.path.insert(1, str(Path(__file__).resolve().parents[2]))  # tools/: shared libraries
-from control_bench import BOARD_PARAMS, Board, firmware_rev  # noqa: E402
+from control_bench import BOARD_PARAMS, Board  # noqa: E402
 from plant import _load_pure                                 # noqa: E402
 
 # One copy of the band arithmetic. Both lines below used to read

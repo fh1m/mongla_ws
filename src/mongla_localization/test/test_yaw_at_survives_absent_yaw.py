@@ -21,7 +21,6 @@ INJECTION-VERIFIED: drop the `key=` from the sort in `yaw_at` and
 import bisect
 from collections import deque
 
-import pytest
 
 
 class _Hist:
