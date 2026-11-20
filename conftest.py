@@ -98,6 +98,28 @@ PINNED = _pin_to_source()
 # nothing left unreported, writes docs/stats.json and copies it into the README
 # and the site (tools/ci/published_counts.py). Anything less leaves them alone, so a
 # quick run of one file never publishes a smaller number.
+# Every launch leaves a file behind (BUGS B-142). launch_ros writes the
+# parameters of each Node given a dict to NamedTemporaryFile(delete=False), and
+# nothing removes it: 784,505 `launch_params_*` filled the dev box's 7.8 GB /tmp
+# (a RAM disk) by 2026-11-20. So the session gets its own TMPDIR, which every
+# launch subprocess inherits, and it is removed when the session ends. pytest's
+# own temp root is pinned first (PYTEST_DEBUG_TEMPROOT, which it reads before
+# TMPDIR), so tmp_path keeps its usual place and its retention.
+import os as _os          # noqa: E402
+import shutil as _shutil  # noqa: E402
+import tempfile as _tempfile  # noqa: E402
+
+_os.environ.setdefault('PYTEST_DEBUG_TEMPROOT', _tempfile.gettempdir())
+SESSION_TMP = _tempfile.mkdtemp(prefix='mongla-test-session-',
+                                dir=_os.environ['PYTEST_DEBUG_TEMPROOT'])
+_os.environ['TMPDIR'] = SESSION_TMP
+_tempfile.tempdir = None        # gettempdir() caches; read TMPDIR again
+
+
+def pytest_unconfigure(config):
+    _shutil.rmtree(SESSION_TMP, ignore_errors=True)
+
+
 _OUTCOMES = {}          # nodeid -> outcome ('passed', 'failed', 'skipped', ...)
 
 

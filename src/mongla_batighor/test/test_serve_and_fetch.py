@@ -29,7 +29,7 @@ def _tarball(tmp, files):
 def site(tmp_path):
     web = tmp_path / 'web'
     big = b'console.log(1);' * 200
-    tgz, digest = _tarball(tmp_path, {'index.html': b'<html>app</html>',
+    tgz, digest = _tarball(tmp_path, {'index.html': b'<html><head></head>app</html>',
                                       'main.0123456789abcdef01.js': big,
                                       'main.0123456789abcdef01.js.map': b'{}'})
     fetch.unpack(tgz, web, digest)
@@ -105,7 +105,8 @@ def test_hashed_assets_are_gzipped_and_cached_index_is_not(site):
     assert gzip.decompress(body) == big and len(body) < len(big) / 4
     assert 'immutable' in headers['Cache-Control']
     status, headers, body = _get(base + '/app/')
-    assert body == b'<html>app</html>' and headers['Cache-Control'] == 'no-cache'
+    assert body == serve.themed(b'<html><head></head>app</html>')
+    assert headers['Cache-Control'] == 'no-cache'
 
 
 def test_nothing_outside_the_web_folder_is_served(site, tmp_path):
@@ -287,3 +288,28 @@ def test_every_kind_of_file_lichtblick_ships_has_its_type():
     for ext in ('.html', '.js', '.png', '.wasm', '.ttf', '.ico', '.json'):
         assert ext in serve.TYPES, ext
     assert serve.TYPES['.wasm'] == 'application/wasm'
+
+
+def test_the_app_page_carries_the_first_visit_layout_fix_before_the_apps_scripts(site):
+    """B-141: on a fresh profile the app matched `?layout=` before its sync had
+    stored the organisation's layouts. The fix must be in the page the server
+    sends, inside the head, so it sees the database as the app first found it."""
+    base, _ = site
+    _, _, body = _get(base + '/app/')
+    assert serve.FIRST_VISIT_HEAD in body
+    page = serve.themed(b'<html><head><script src="main.js"></script></head></html>')
+    assert page.index(serve.FIRST_VISIT_HEAD) < page.index(b'</head>')
+
+
+def test_the_first_visit_fix_never_creates_the_apps_database():
+    """Opening `lichtblick-layouts` before the app does would create it empty
+    at version 1, and the app's upgrade, which makes the `layouts` store, would
+    never run: every later visit would hold no layouts at all. So the script
+    asks `indexedDB.databases()` first and opens only a database that exists,
+    and it reloads at most once per tab."""
+    js = serve.FIRST_VISIT_HEAD.decode()
+    assert js.index('indexedDB.databases()') < js.index('indexedDB.open(')
+    assert 'indexedDB.open(DB)' in js, 'open with no version: never an upgrade of its own'
+    assert 'objectStoreNames.contains("layouts")' in js
+    assert 'sessionStorage.setItem(flag' in js and 'sessionStorage.getItem(flag)' in js
+    assert js.count('location.reload()') == 1

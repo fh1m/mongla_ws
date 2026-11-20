@@ -817,6 +817,58 @@ injection-verified for each behaviour); the study's `--self-test`.
 rises with any change that makes matches agree with each other, right or not.
 The comment that justified bilinear compared it only with nearest.
 
+### B-141: `?layout=` opened a personal Default on a browser's first visit `REPRODUCED 2026-11-19` **FIXED 2026-11-20**
+
+**What.** `http://kutum:8000/?layout=chain` in a browser profile that had never
+opened Batighor showed a personal "Default" layout; the organisation's chain
+layout was listed and had to be opened by hand. A second visit opened it.
+
+**Cause.** Upstream, Lichtblick 1.30.0 `CurrentLayoutProvider`: the `layout=`
+name is matched against the layouts the app already holds, and it waits only
+if the layout manager is busy. `LayoutManagerProvider` syncs only while the
+tab is visible. A link opened in a background tab on a fresh profile has no
+sync running, so the organisation's layouts are absent, the match fails and a
+personal "Default" is made and selected. The sync stores the layouts when the
+tab is shown, which is why the second visit works. A foreground tab on
+localhost, even with 150 ms of emulated latency, did not reproduce it.
+
+**Fix.** `serve.FIRST_VISIT_HEAD`, served in the app page: when the named
+layout is not in the app's layout database at load, it waits for the sync to
+store it and loads the page once more (a session flag stops a loop; 15 s cap).
+A browser that already holds the layout is untouched. The database is opened
+only after the app has created it, because opening it first would create it
+empty and the app's upgrade would never make its store.
+
+**Measured** (fresh headless Chrome profile, the link opened in a background
+tab, then shown; Kutum's Lichtblick 1.30.0 served from this tree): without the
+fix the app selected a personal Default; with it the page reloaded once and
+opened chain. The unused personal Default is still created by the first load.
+
+**Guards.** `test_serve_and_fetch.py`: the page carries the script inside its
+head, and the script never opens the database before the app has made it.
+
+### B-142: every test launch left a parameter file in /tmp, forever `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** The dev box's /tmp, a 7.8 GB RAM disk, filled to 100 % and broke
+every command that wrote a temporary file. It held 784,505
+`launch_params_*` files, about 3 GB of tmpfs pages for 163 MB of YAML, written
+from 2026-11-10 on. Kutum held 628.
+
+**Cause.** launch_ros writes the parameter dict of every `Node` to
+`NamedTemporaryFile(prefix='launch_params_', delete=False)` and nothing
+removes it. The suites render every launch file and switch combination, so one
+file of them leaves 1,055.
+
+**Fix.** The root `conftest.py` gives each session its own TMPDIR, which every
+launch subprocess inherits, and removes it when the session ends. pytest's own
+temp root is pinned first (`PYTEST_DEBUG_TEMPROOT`), so `tmp_path` keeps its
+place and its retention.
+
+**Measured.** `test_every_launch_file_renders.py`: 1,055 new files in /tmp
+without the fix, 0 with it, and no session directory left behind.
+
+**Guards.** `test/test_launches_leave_nothing_in_tmp.py`.
+
 ### B-118: the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame `READ 2026-11-18` **FIXED 2026-11-18**
 
 **What.** The anchor resizes every frame to its backend grid (XFeat, 320x240)
