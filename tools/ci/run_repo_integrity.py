@@ -41,6 +41,7 @@ GUARDS = (
     'test/test_dependabot_respects_numpy_one.py',
     'test/test_python_names_resolve.py',
     'test/test_shell_scripts_pass_shellcheck.py',
+    'test/test_workflows_pass_actionlint.py',
     'src/mongla_control/test/test_doc_drift.py',
     'src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py',
     'src/mongla_vision/test/test_no_function_is_built_and_uncalled.py',
