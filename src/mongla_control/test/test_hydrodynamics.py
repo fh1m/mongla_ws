@@ -15,7 +15,6 @@ is one of the oldest exact results in hydrodynamics. The slender limit is the
 implementation that hits both limits and is monotone between them is right for
 the reason the limits are right, not because it agrees with something.
 """
-import math
 
 import pytest
 

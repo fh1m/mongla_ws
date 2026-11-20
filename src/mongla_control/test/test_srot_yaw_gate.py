@@ -130,7 +130,6 @@ def test_a_sub_gate_demand_does_not_disturb_the_boards_heading_hold():
     thrust -- nothing to do with the hold."""
     import math
     import sys
-    from pathlib import Path
     bench = HERE.parents[2] / 'tools' / 'bench' / 'control_bench'
     if not (bench / 'libcontrolbench.so').exists():
         pytest.skip('control bench not built')

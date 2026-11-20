@@ -6,7 +6,6 @@ backend-agnostic: the same `gate_sharks` is a `.pt` on a dev box and a
 only thing that makes that true, and getting it wrong is silent -- a stale
 `.pt` of the same stem runs at 3 Hz and looks like a slow chip.
 """
-import os
 import sys
 from pathlib import Path
 

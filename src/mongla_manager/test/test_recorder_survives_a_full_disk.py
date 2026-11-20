@@ -16,7 +16,6 @@ import collections
 import threading
 import time
 
-import pytest
 
 from mongla_manager.srot_recorder import SrotRecorder
 

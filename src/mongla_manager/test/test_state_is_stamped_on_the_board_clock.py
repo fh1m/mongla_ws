@@ -16,7 +16,6 @@ The verdict path is exercised directly -- a live graph would test rclpy.
 """
 import sys
 import time
-import types
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -25,7 +24,7 @@ from mongla_manager.auv_manager_node import AUVManagerNode   # noqa: E402
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of_file  # noqa: E402  (issue #22)
 
 
 class _Stamp:

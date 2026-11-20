@@ -85,7 +85,6 @@ def test_none_switches_the_file_off(settings, monkeypatch):
 
 def test_every_key_in_the_shipped_example_is_a_real_bringup_argument():
     """The example is generated; if it drifts from bringup it must fail here."""
-    import ast
     import pathlib
     import re
     import yaml

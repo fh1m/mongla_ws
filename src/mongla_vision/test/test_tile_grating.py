@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 
 from mongla_vision.flow.tile_grating import (
-    MIN_PEAK_FRACTION, Grating, detect, shift_from_phase,
+    Grating, detect, shift_from_phase,
 )
 
 RNG = np.random.default_rng(0)

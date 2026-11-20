@@ -46,7 +46,6 @@ from mongla_planner.missions.competition_config import (
     SAUVC_GATE_COMMIT_S,
     SAUVC_GATE_MOVE_S,
     SAUVC_GATE_PASS_DEPTH_M,
-    SAUVC_NAV_BUDGET_S,
     SAUVC_SEARCH_DEPTH_M,
     SAUVC_TETHER_PAUSE_S,
     SEARCH_CREEP_S,

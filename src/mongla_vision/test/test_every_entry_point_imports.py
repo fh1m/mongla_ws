@@ -23,7 +23,6 @@ skips those and fails on a name that does not exist in OUR code.
 """
 from __future__ import annotations
 
-import ast
 import importlib
 import pathlib
 import re

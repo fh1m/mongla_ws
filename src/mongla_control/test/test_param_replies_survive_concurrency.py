@@ -10,7 +10,6 @@ import threading
 import time
 from types import SimpleNamespace
 
-import mongla_control.fc.srot_fc as mod
 from test_srot_fc import _fc
 
 

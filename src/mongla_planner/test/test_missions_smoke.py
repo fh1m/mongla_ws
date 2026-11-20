@@ -64,8 +64,6 @@ def test_known_missions_are_present():
 #  Resilient registry: ONE broken mission file must not brick the whole runner #
 #  (a stale/half-edited file on comp day can't stop `mission <the-good-one>`). #
 # --------------------------------------------------------------------------- #
-import os
-import sys
 
 
 def test_one_broken_file_does_not_brick_registry(tmp_path, monkeypatch, capsys):
@@ -99,7 +97,7 @@ def test_syntax_error_file_is_skipped_not_fatal(tmp_path, monkeypatch):
 #  DSL-M2: the runner disarms on EVERY exit (success + failure), so a          #
 #  standalone task chunk can never finish ARMED.                               #
 # --------------------------------------------------------------------------- #
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 from mongla_planner.mission import _safe_shutdown
 
 

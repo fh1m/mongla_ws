@@ -2,7 +2,6 @@
 import time
 from unittest.mock import MagicMock
 
-import numpy as np
 
 from mongla_vision.detection import yolo as Y
 

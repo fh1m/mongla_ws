@@ -230,8 +230,12 @@ def node_params() -> dict[str, list[tuple[str, str]]]:
                       for f in [py] + mixin_files(py))
         if 'declare_parameter' not in src:
             continue
-        found = [(m.group(1), re.sub(r'\s+', ' ', m.group(2)).strip())
-                 for m in re.finditer(r"declare_parameter\(\s*'([\w.]+)'\s*,\s*([^,\)]+)", src)]
+        # A default may itself be a call (`float('nan')`), so one level of
+        # brackets is allowed inside it; NaN reads as the launch rows read it.
+        found = [(m.group(1), re.sub(r'\s+', ' ', m.group(2)).strip()
+                  .replace("float('nan')", 'nan'))
+                 for m in re.finditer(r"declare_parameter\(\s*'([\w.]+)'\s*,\s*((?:[^,()]|\([^()]*\))+)",
+                                      src)]
         if found:
             pkg_dir = next(q for q in py.parents if q.parent.name.startswith('mongla_')
                            and q.name == q.parent.name)

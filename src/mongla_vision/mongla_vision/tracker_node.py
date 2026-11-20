@@ -194,8 +194,8 @@ def smooth_sizes(ema: dict, tracked, frame_t: float) -> list:
 
 
 class TrackerNode(Node):
-    def __init__(self):
-        super().__init__('mongla_tracker')
+    def __init__(self, **node_kw):
+        super().__init__('mongla_tracker', **node_kw)
 
         self.declare_parameter('camera',                      'laptop')
         # tracker engine: ocsort (Roboflow, default — best dropout recovery) |
@@ -210,7 +210,10 @@ class TrackerNode(Node):
         self.declare_parameter('min_hits',                    1)
         self.declare_parameter('iou_threshold',               0.2)
         self.declare_parameter('track_activation_threshold',  0.40)
-        self.declare_parameter('high_conf_det_threshold',     0.6)
+        # Unset (NaN) means the detector's floor, which the backend clamps to
+        # anyway; only an operator's value above the floor is worth a warning.
+        # The library's 0.6 applies when the detector's floor is not told.
+        self.declare_parameter('high_conf_det_threshold',     float('nan'))
         # The conf the DETECTOR publishes at. The tracker's gates are clamped
         # to it, because a box the detector chose to emit must be allowed to
         # start a track. 0.0 = not told (old behaviour).
@@ -252,12 +255,15 @@ class TrackerNode(Node):
         # parameter the launch sets on the detector; 0 means "not told", which
         # leaves the old behaviour rather than guessing.
         detector_conf = float(self.get_parameter('detector_conf').value)
+        asked_high = not math.isnan(high_conf)
+        if not asked_high:
+            high_conf = detector_conf if detector_conf > 0.0 else 0.6
         self._tracker = _build_tracker(
             tracker_type, track_buffer=track_buffer,
             min_hits=min_hits, iou_threshold=iou_threshold,
             track_activation_threshold=act_thresh, high_conf_det_threshold=high_conf,
             detector_conf=detector_conf, log=self.get_logger())
-        if detector_conf > 0.0 and high_conf > detector_conf:
+        if asked_high and detector_conf > 0.0 and high_conf > detector_conf:
             self.get_logger().warn(
                 f'[TRK  ] high_conf_det_threshold {high_conf:.2f} is above the '
                 f'detector floor {detector_conf:.2f} -- clamped. Above it, NO '
@@ -405,6 +411,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        from mongla_runtime.spin import deaf_to_ctrl_c
+        deaf_to_ctrl_c()      # a second Ctrl-C must not interrupt the teardown
         node.destroy_node()
         try:
             rclpy.shutdown()

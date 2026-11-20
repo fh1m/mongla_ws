@@ -1,7 +1,6 @@
 """The benchmark must distinguish failed calls from measured chip execution."""
 import importlib.util
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
