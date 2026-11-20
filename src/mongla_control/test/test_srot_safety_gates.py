@@ -17,7 +17,7 @@ from mongla_control.fc import srot_protocol as sp     # noqa: E402
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of  # noqa: E402  (issue #22)
 
 
 def _all_good():
@@ -94,7 +94,6 @@ def test_the_table_NEVER_becomes_a_set_of_values_to_WRITE():
     """Enabling a failsafe threshold or a motor-spinning mode is an operator
     decision on a specific hull. A host that quietly set these would be worse
     than one that never looked -- so nothing in the reader may PARAM_SET."""
-    import inspect
     from mongla_manager import srot_connect
     src = code_of(srot_connect.read_safety_gates)
     assert 'param_set' not in src.lower()

@@ -39,6 +39,8 @@ GUARDS = (
     'test/test_every_camera_matrix_reader_removes_the_lens.py',
     'test/test_published_test_counts_are_the_last_run.py',
     'test/test_dependabot_respects_numpy_one.py',
+    'test/test_python_names_resolve.py',
+    'test/test_shell_scripts_pass_shellcheck.py',
     'src/mongla_control/test/test_doc_drift.py',
     'src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py',
     'src/mongla_vision/test/test_no_function_is_built_and_uncalled.py',

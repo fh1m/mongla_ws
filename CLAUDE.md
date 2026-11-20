@@ -434,7 +434,13 @@ not port it back. A capability that needs something from it is rebuilt against t
   build the whole stack from a clean container and run every test on both distros
   (`.github/workflows/ros.yml`, all of it in `tools/ci/ci_ros.sh`). The integrity gate runs
   `tools/ci/run_repo_integrity.py`, the one list of guards: a new guard is a line there, and
-  any skip or a guard file with no passing test fails it. Both workflows' shape is an
+  any skip or a guard file with no passing test fails it. Two of them are the linters,
+  pinned in the workflow and run by the edit hook on every save: `ruff check --select F,E9`
+  over every tracked Python file (`test/test_python_names_resolve.py`), the pyflakes rules
+  only, no style: an undefined name, an unused one (often an assertion never written), a
+  silent redefinition; and `shellcheck -S warning` over every script
+  (`test/test_shell_scripts_pass_shellcheck.py`). An exception is a `# noqa: F...` or a
+  `# shellcheck disable=` on the line, with its reason. Both workflows' shape is an
   allowlist in `tools/ci/ci_contract.py` (no `if:`, known actions, exact commands), which the
   provenance job also runs, because GitHub counts a skipped required job as passed. A PR
   description passes provenance with a filled `## AI Provenance` table, or the line

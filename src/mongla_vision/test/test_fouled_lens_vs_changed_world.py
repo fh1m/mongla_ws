@@ -11,13 +11,12 @@ purpose, so the thresholds are declared rather than measured and the tests say
 what the logic does, not what silt does. `measured-bars.md` records that
 distinction; a test cannot.
 """
-import pytest
 
 from mongla_vision.anchor import health
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of_file  # noqa: E402  (issue #22)
 
 
 def test_everything_scoring_is_healthy():
