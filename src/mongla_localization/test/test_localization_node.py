@@ -712,6 +712,7 @@ def test_a_floor_correction_is_KEPT_not_undone_by_the_board():
     n = _node(disarmed=True)
     t = _fly_board(n, 100.0, 1.0, 30.0)
     n._on_heading(type('F', (), {'data': -60.0})())
+    n._on_floor_grid(type('F', (), {'heading_deg': -60.0})())   # the reference
     t = _fly_board(n, t, 1.0, 32.0)                     # drifted board
     assert n._filter.X.yaw_deg() == pytest.approx(-58.0, abs=0.5)
     for _ in range(100):                                # 10 s of 10 Hz grid
@@ -782,6 +783,8 @@ def test_a_small_drift_is_corrected_by_the_floor():
     BNO drifts without bound. The floor's grid bounds it."""
     n = _node()
     n._anchored = True
+    n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())   # the reference
+    assert n._n['grid'] == 0, 'a reference is not a correction'
     n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())
     assert n._n['grid'] == 1
     assert n._n['grid_refused'] == 0
@@ -793,6 +796,7 @@ def test_a_large_disagreement_is_REFUSED_and_COUNTED():
     the wrong branch -- worse than the drift it was fixing."""
     n = _node()
     n._anchored = True
+    n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())   # reference at yaw 0
     n._filter.X.R = np.array([[0.0, -1.0, 0.0],      # yaw = +90 deg
                               [1.0, 0.0, 0.0],
                               [0.0, 0.0, 1.0]])
@@ -811,6 +815,8 @@ def test_the_lane_line_uses_its_OWN_symmetry_not_the_grids():
     this would be applied and the test fails."""
     n = _node()
     n._anchored = True
+    n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())   # references at yaw 0
+    n._on_lane_line(type('F', (), {'heading_deg': 0.0})())
     n._filter.X.R = np.array([[0.0, -1.0, 0.0],      # yaw = +90 deg
                               [1.0, 0.0, 0.0],
                               [0.0, 0.0, 1.0]])
@@ -824,6 +830,7 @@ def test_the_lane_line_uses_its_OWN_symmetry_not_the_grids():
 def test_a_lane_line_along_the_hull_is_applied_and_counted():
     n = _node()
     n._anchored = True
+    n._on_lane_line(type('F', (), {'heading_deg': 0.0})())   # the reference
     n._on_lane_line(type('F', (), {'heading_deg': 0.0})())
     assert n._n['lane'] == 1
 
@@ -1419,3 +1426,74 @@ def test_unaided_stays_unaided_whatever_the_calibration_says():
         n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
     n._report_aiding()
     assert n._pub_aiding.sent == ['unaided']
+
+
+# --------------------------------------------------------------------------- #
+#  BUGS B-133: the floor bound, from rendered images, under an unknown mount
+# --------------------------------------------------------------------------- #
+def _image_angle(pool_yaw_deg, feature_deg=0.0, mount_deg=37.0):
+    """The feature's angle in the downward image, in the flow's own axis
+    convention (image x = starboard, image y = forward: `flow_velocity`,
+    measured right on the bench in measured-bars 13), plus a camera mount yaw
+    no multiple of 90 cancels."""
+    rel = feature_deg - pool_yaw_deg            # feature bearing from the bow
+    return (90.0 - rel + mount_deg) % 180.0
+
+
+def _lane_image(angle_deg, h=480, w=640):
+    img = np.full((h, w), 180, np.uint8)
+    yy, xx = np.mgrid[0:h, 0:w]
+    a = math.radians(angle_deg)
+    d = np.abs(-(xx - w / 2) * math.sin(a) + (yy - h / 2) * math.cos(a))
+    img[d < 30] = 30
+    return img
+
+
+def _grid_image(angle_deg, h=480, w=640, period=40.0):
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float64)
+    a = math.radians(angle_deg)
+    u = (xx * math.cos(a) + yy * math.sin(a)) % period
+    v = (-xx * math.sin(a) + yy * math.cos(a)) % period
+    img = np.full((h, w), 190, np.uint8)
+    img[(u < 4) | (v < 4)] = 60
+    return img
+
+
+def _floor_msg(deg):
+    return type('F', (), {'heading_deg': float(deg)})()
+
+
+@pytest.mark.parametrize('feature', ['lane', 'grid'])
+def test_a_rendered_floor_bounds_drift_under_any_mount(feature):
+    """TRUTH. Anchored at pool -60 (board +30), the board then drifts +3 deg
+    while the hull holds; the floor, read from REAL detector output on a
+    rendered image, must pull yaw back to -60. Holding the residual at zero
+    refused every lane read (90 deg apart by the image convention) and pulled
+    the grid by the mount (B-133)."""
+    if feature == 'lane':
+        pl = pytest.importorskip('mongla_vision.flow.pool_lines')
+
+        def read(yaw):
+            return pl.detect(_lane_image(_image_angle(yaw))).heading_deg()
+        on = 'lane'
+    else:
+        tg = pytest.importorskip('mongla_vision.flow.tile_grating')
+
+        def read(yaw):
+            return tg.measure(_grid_image(_image_angle(yaw)), decimate=3).heading_deg()
+        on = 'grid'
+    n = _node(disarmed=True)
+    handler = n._on_lane_line if on == 'lane' else n._on_floor_grid
+    t = _fly_board(n, 100.0, 1.0, 30.0)
+    n._on_heading(type('F', (), {'data': -60.0})())
+    handler(_floor_msg(read(-60.0)))                  # the reference read
+    t = _fly_board(n, t, 1.0, 33.0)                   # board drifts, hull holds
+    assert n._filter.X.yaw_deg() == pytest.approx(-57.0, abs=0.5)
+    for _ in range(100):
+        t = _fly_board(n, t, 0.1, 33.0)
+        handler(_floor_msg(read(-60.0)))
+    t = _fly_board(n, t, 1.0, 33.0)
+    # The first few after the drift are refused by B-56 (yaw is not applied
+    # until a ZUPT has made velocity observable), not by the bound.
+    assert n._n[on] >= 90, (n._n[on], n._n[f'{on}_refused'])
+    assert n._filter.X.yaw_deg() == pytest.approx(-60.0, abs=0.5)

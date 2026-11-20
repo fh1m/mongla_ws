@@ -16,7 +16,7 @@ from .vision_state import VisionState
 
 
 class VisionLinkMixin:
-    def _vision_state_for(self, camera: str):
+    def _vision_state_for(self, camera: str, *, preflight: bool = True):
         """Return (and build on first call) the VisionState for `camera`.
 
         The control loop reads ``/detections`` directly (the topic the HUD
@@ -43,15 +43,20 @@ class VisionLinkMixin:
         # pipeline has time to warm up before the loop starts. The loop
         # itself tolerates no-detection (grace -> LOST -> DSL fallback), so
         # we cache the state either way and never pay this wait twice.
-        try:
-            wait_vision_state_ready(
-                vstate, timeout=10.0, require_detection=True,
-                log=self.get_logger())
-        except Exception as exc:
-            self.get_logger().warning(
-                f'[VST  ] preflight for {camera!r} did not pass within '
-                f'10s: {exc!r}; first goal starts cold (loop will search '
-                f'via its fallback)')
+        # The uplink timer skips it: it runs on `timer_group` beside telemetry,
+        # health and the board-link tick, and the wait froze `/mongla/state`
+        # for 10 s. It needs no warm-up -- with no box it sends nothing, which
+        # is its loss signal.
+        if preflight:
+            try:
+                wait_vision_state_ready(
+                    vstate, timeout=10.0, require_detection=True,
+                    log=self.get_logger())
+            except Exception as exc:
+                self.get_logger().warning(
+                    f'[VST  ] preflight for {camera!r} did not pass within '
+                    f'10s: {exc!r}; first goal starts cold (loop will search '
+                    f'via its fallback)')
 
         with self._vision_lock:
             # Check again under lock in case a concurrent goal built the same state.
@@ -159,7 +164,7 @@ class VisionLinkMixin:
                 '[VIS  ] uplink idle (vision_uplink_camera cleared)')
         if not cam:
             return
-        vstate = self._vision_state_for(cam)
+        vstate = self._vision_state_for(cam, preflight=False)
         if vstate is None:
             return
         want = str(self.get_parameter('vision_uplink_class').value).strip()

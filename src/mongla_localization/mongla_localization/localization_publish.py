@@ -24,7 +24,16 @@ PUBLISH_PERIOD_S = 0.1
 ODOM_MAX_AGE_S = 0.5
 
 
-def verdict(*, imu_age_s: float, anchored: bool, aiding: str | None) -> str:
+# How long since a velocity MEASUREMENT (flow or ZUPT) before position counts as
+# dead reckoning. Twice FLOW_FRESH_S: a still hull ZUPTs about once a second
+# (232 in 240 s on the bench recording, measured-bars 99), so this allows one
+# missed window. The observability gate alone is not enough: it reads aided on
+# a cold filter by design, and did for 20 s while the position ran 9 m.
+AID_MAX_AGE_S = 2.0
+
+
+def verdict(*, imu_age_s: float, anchored: bool, aiding: str | None,
+            aid_age_s: float) -> str:
     """Why the estimate is not usable, or '' when it is. Pure.
 
     Usable means a mission may steer on the pool position: the inertial stream
@@ -41,6 +50,11 @@ def verdict(*, imu_age_s: float, anchored: bool, aiding: str | None) -> str:
     if not (aiding or '').startswith('aided'):
         return ('unaided: no flow and no ZUPT fused, so horizontal position '
                 'is dead reckoning')
+    if not (math.isfinite(aid_age_s) and aid_age_s <= AID_MAX_AGE_S):
+        since = ('ever' if not math.isfinite(aid_age_s)
+                 else f'{aid_age_s:.1f} s')
+        return (f'unaided: no flow or ZUPT fused for {since}, so horizontal '
+                f'position is dead reckoning')
     return ''
 
 
@@ -217,8 +231,10 @@ class LocalizationPublishMixin:
         s.flow_fused = int(self._n['flow'])
         s.flow_refused = int(self._n['flow_refused'])
         s.fixes = int(self._n['fix'])
+        aid = [a for a in (age('flow'), age('zupt')) if math.isfinite(a)]
         s.reason = verdict(imu_age_s=s.imu_age_s, anchored=s.anchored,
-                           aiding=s.aiding)
+                           aiding=s.aiding,
+                           aid_age_s=min(aid) if aid else math.nan)
         s.usable = not s.reason
         pub.publish(s)
 

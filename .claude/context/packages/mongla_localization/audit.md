@@ -46,7 +46,13 @@ so a new package cannot go without a module map.
 | — | `use_course` said every unmeasured prop "refuses a dead-reckon"; only an unset one does | fixed: unset and nominal are logged apart |
 | — | `pose_cluster`'s paired path took the newest heading that was not None, so a NaN one gave `decided=True` with a NaN yaw (unreachable from today's node, which maps NaN to None) | fixed, as the legacy path already did |
 | — | `on_danger_circle` checked a three-prop solve that was never built | deleted with its tests and register entry |
-| open | a course naming a class the live model cannot emit is caught by nothing (robosub26 names four) | in progress: the detector publishes its classes |
+| — | a course naming a class the live model cannot emit was caught by nothing (robosub26 names four) | fixed: the detector publishes `<ns>/model_classes`; `use_course` and `set_model` warn |
+| B-132 | "aided" before any input; a never-thrust hull waited the 3 tau coast settle for its first ZUPT (0.71 m in 2.7 s on the real bench recording) | fixed, measured-bars 99 |
+| B-133 | the floor grid and lane line bounds held the image-to-heading residual at ZERO, so every lane read along the pool's x axis was refused and the grid pulled yaw under any mount not square to the hull | fixed: the residual is referenced at the first read after each anchor; a truth test renders lane and tile images through the real detectors under a 37 deg mount |
+| — | `usable` trusted the observability gate, which reads aided on a cold filter: 20 s of "aided" while the position ran 9 m | fixed: usable also needs a flow or ZUPT fused within `AID_MAX_AGE_S` (2 s) |
+| — | `tile_decimate:=1` turned the grating off silently: it refused a blurred, noisy grid at every angle | fixed: refused at start-up while `tile_m` is set |
+| — | `Grating.second_period_px` (rows-only bins, no consumer) and a two-axis `phase` that held one number | deleted / made one number |
+| B-134 | the manager's uplink tick ran the 10 s vision preflight on `timer_group`, stalling `/mongla/state`, health and the board-link tick | fixed: the uplink builds without the preflight |
 
 ## How a mission reaches it
 
@@ -98,3 +104,23 @@ fused without its lever arm and the frames health line says DEGRADED), and recor
 `course_survey.py`, `prop_placement.py`, `floor_plane.py`, `frames.py`, `pose_cluster.py`.
 Not yet read line by line: the two image readers now in `mongla_vision/flow/`, which belong
 to the next vision read.
+
+## Is this the right design? Research, 2026-11-20
+
+The question: is an invariant EKF on the board's IMU, aided by downward optical
+flow, ZUPT, depth, prop fixes and floor features, with no DVL, the right
+estimator for a pool AUV, or should something replace or join it?
+
+| Candidate | What the evidence says | Verdict |
+|---|---|---|
+| Invariant EKF itself | Published for underwater navigation with IMU + DVL ([Potokar et al., RA-L 2021](https://unpaywall.org/10.1109%2FLRA.2021.3085167)), better long-term than a quaternion EKF. Our flow is the same measurement as a DVL's: body velocity, so the invariant structure carries over | **keep** |
+| Off-the-shelf VIO (ORB-SLAM3, OpenVINS, VINS, SVIn2) | In texture-less pool sequences ORB-SLAM3 failed every one and SVIn2 failed one ([GeVI-SLAM, 2025](https://arxiv.org/pdf/2510.24533)); OpenVINS diverges without a static start ([Joshi et al.](https://ar5iv.labs.arxiv.org/html/1904.02215)); all show large errors under poor visibility ([AQUA-SLAM, 2025](https://arxiv.org/pdf/2503.11420)). Our own XFeat VO lost to LK flow inside the same solver (measured-bars 94) | **reject**, as primary; reconsider only with a stereo pair and a textured venue |
+| Downward camera + IMU + depth | The established DVL-free design on ROVs, pool-tested ([LIRMM](https://hal-lirmm.ccsd.cnrs.fr/lirmm-01567463/document)); a low-cost vision solution reported comparable to IMU-DVL dead reckoning ([UW APL, Oceans 2025](https://depts.washington.edu/uwaplopal/research/papers/Oceans2025_Marburg_Low_Cost_Visual_Mapping_and_Navigation.pdf)). Ours measured 1.09 cm worst on 30 cm slides (measured-bars 13) | **keep**: this is the design |
+| Drift without an external reference | Flow + IMU alone still drifts; an external reference is required (the point made in [this Blue Robotics thread](https://discuss.bluerobotics.com/t/optical-flow-for-rov-2d-trajectory-mapping/23165)). Ours are prop fixes (`fix_from_prop`), the heading anchor, and floor grid/lane bounds | **keep**; B-133 made the floor bounds actually work |
+| Learned inertial odometry ([TLIO](https://arxiv.org/pdf/2007.01867), [AirIO 2025](https://arxiv.org/html/2501.15659v2)) | A network regresses velocity or displacement into an EKF; AirIO reports 23.8 % from body-frame features on drones. Needs training data from this hull moving in water, and we have none | **defer**: the demand model (`command_velocity`) is the same idea fitted online; revisit after water data exists |
+| RoboSub teams without a DVL | METU (2025) uses VIO; IIT Bombay (2026) reports DVL-free localisation with a map-correction layer ([search results](https://robonation.org/app/uploads/sites/4/2026/07/RS26_TDR_IITBombay_AUV-IITB.pdf)). Their reports were fetched but could not be text-extracted here, so nothing beyond those summaries is claimed | read in full before the pool days; the map-correction idea matches our prop fixes |
+
+What would reverse this: a stereo camera on the hull, a DVL fitted, or in-water
+data where flow refuses most frames (then VIO on texture, or a learned inertial
+model trained on that data, is the next thing to A/B).
+
