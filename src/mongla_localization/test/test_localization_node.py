@@ -69,10 +69,11 @@ def _node(disarmed: bool = False):
     node logic go untested.
     """
     obj = ln.LocalizationNode.__new__(ln.LocalizationNode)
-    obj._filter = RIEKF()
+    obj._filter = RIEKF(P0_accel_bias=ln.ACCEL_BIAS_PRIOR,   # as the node builds it
+                         odometry_scale_sigma=ln.FLOW_SCALE_SIGMA)
     obj._last_imu_t = None
     obj._imu_gap_warned = True          # suppress the logger call
-    obj._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0,
+    obj._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0, 'fix_refused': 0,
               'flow_refused': 0, 'depth_refused': 0, 'yaw_refused': 0,
               'zupt': 0, 'grid': 0, 'grid_refused': 0,
               'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0, 'gated': 0}
@@ -1497,3 +1498,38 @@ def test_a_rendered_floor_bounds_drift_under_any_mount(feature):
     # until a ZUPT has made velocity observable), not by the bound.
     assert n._n[on] >= 90, (n._n[on], n._n[f'{on}_refused'])
     assert n._filter.X.yaw_deg() == pytest.approx(-60.0, abs=0.5)
+
+
+def test_the_accel_bias_prior_covers_the_measured_bias():
+    """measured-bars: this board's accelerometer bias is 0.167 m/s^2. A prior
+    of 0.01 (17 sigma away) could not learn it; a still hull walked 15.5 cm in
+    90 s of the real bench recording, 0.94 cm at 0.2 (measured-bars 99)."""
+    n = _node()
+    assert math.sqrt(n._filter.P[12, 12]) >= 0.167
+    assert math.sqrt(n._filter.P[9, 9]) == pytest.approx(0.01), 'gyro bias prior unchanged'
+
+
+def test_a_refused_fix_is_counted_and_said():
+    """fix_from_prop reports success once it publishes; the filter's gate can
+    still refuse the fix. Silently, that read as fused (fixes=1) to everyone."""
+    from types import SimpleNamespace
+    warned = []
+
+    class _Logger:
+        def info(self, *_a, **_k):
+            pass
+
+        def warning(self, msg, *_a, **_k):
+            warned.append(msg)
+
+    n = _node()
+    n.get_logger = lambda: _Logger()
+    n._filter.P[6, 6] = n._filter.P[7, 7] = 0.01 ** 2      # certain, at the origin
+    far = SimpleNamespace(header=SimpleNamespace(stamp=SimpleNamespace(sec=0, nanosec=0)),
+                          point=SimpleNamespace(x=5.0, y=0.0, z=0.05))
+    n._on_fix(far)
+    assert n._n['fix'] == 0 and n._n['fix_refused'] == 1
+    assert any('REFUSED' in m for m in warned)
+    near = SimpleNamespace(header=far.header, point=SimpleNamespace(x=0.01, y=0.0, z=0.05))
+    n._on_fix(near)
+    assert n._n['fix'] == 1

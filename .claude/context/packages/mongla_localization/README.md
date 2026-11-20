@@ -47,6 +47,71 @@ Applying it to *now* compares the past against the present and calls the differe
 describes, applies it there, and replays what followed. The cost scales with how late a
 measurement is, not with the length of the log.
 
+## What the filter is allowed to believe
+
+A Kalman filter carries two things: a guess, and how sure it is of the guess. The second is
+the dangerous one. A filter that is wrong and knows it takes the next correction gladly. A
+filter that is wrong and *sure* refuses it, because the chi-square gate that keeps a
+mislabelled prop out reads a correct-but-surprising fix exactly the same way. Most of this
+package's defects have been the covariance lying, not the estimate.
+
+**The accelerometer bias.** This board's accelerometer reads 0.167 m/s^2 on x with the hull
+at rest (measured-bars, the static IMU table). Integrated, that is 8 m of phantom travel in
+10 s. The filter can learn a bias, but only one it believes possible: its prior was
+0.01 m/s^2, 17 sigma short, so it never did, and a still hull walked 15.5 cm in 90 s. The
+prior is now 0.2 (B-135), and the same recording walks 0.94 cm.
+
+**Zero velocity.** When the hull is still (no demand on the thrusters, and the IMU quiet for
+a second) the filter is told its velocity is exactly zero. That one fact observes the
+velocity error, and through it the bias. With it off, the same bench recording ran away
+to 1665 m in 140 s. A hull that has never been commanded is still from the first sample
+(B-132).
+
+**A scale error grows with distance.** Flow's sigma is per-frame noise, and noise averages
+out: its contribution to position grows like a square root. A scale error does not
+average: 3 % long is 3 % long on every frame, so it grows in a straight line with distance
+flown. A filter that knows only the first kind, one fix in, believed itself to 0.15 m after
+15 m that had put it 0.6 m off, and refused the next correct fix (B-136). So the
+horizontal sigma is now held at no less than
+
+    sqrt(sigma_at_last_fix^2 + (0.035 x distance_since_fix)^2)
+
+0.035 is the worst of the three tape-measured slides. The cost is honest: `go_to` refuses
+about 13 m after a 0.15 m fix, until the next one.
+
+**The observability gate.** A depth or heading correction also nudges attitude, and
+while nothing measures horizontal velocity that nudge rotates a velocity nobody is
+watching: 564 m of error in 30 s on the bench plant. So those updates wait until velocity
+is measured (B-56). Position fixes are taken anyway, without their attitude term.
+
+**Usable.** `/mongla/localization/state` turns all of this into one yes or no, with the
+reason, in the order an operator fixes them: no IMU, IMU silent, heading not anchored, no
+flow or zero-velocity update fused in the last 2 s. `go_to` refuses unless usable and
+known to within its tolerance, and stops when either goes bad.
+
+## How the rest of Mongla navigates on it
+
+| Consumer | Reads | Does |
+|---|---|---|
+| `go_to` · `go_to_prop` (verbs, DSL) | the state | surge and sway to a pool point; the board holds depth and heading |
+| the vision lock (`mongla_vision`) | `/mongla/odom` | where a lost target should be now, from how the hull moved since |
+| `motion()` (DSL) | `/mongla/odom` | moving, still, or blocked: thrust commanded and the floor not moving |
+| `anchor_on` · `fix_from_prop` · `place_prop` | detections + course | heading, position, and props placed from where the hull is |
+| the manager's uplinks | `/mongla/odom` | position and velocity to the board, once its firmware reads them |
+| Batighor | the state | usable, reason, aiding and motion, live |
+| `localization_check` | everything | the in-water check, stage by stage |
+
+## What we researched, and what it changed
+
+A survey of top competition teams' design reports, recent papers, open-source stacks and
+practitioner forums (2026-11-20) found that every top team naming a velocity sensor
+carries a DVL, and no DVL-free pool vehicle publishes better than about 2-4 % of distance.
+Off-the-shelf visual-inertial odometry fails on texture-less pool floors; learned inertial
+odometry needs water data we do not yet have; a thruster model alone drifts. So the design
+stays: an invariant filter on the IMU, velocity from the floor, fixes from props. Eight
+candidates were ranked and each was tested, shipped, blocked or discarded; the table is in
+[the audit](audit.md#every-candidate-and-what-happened-to-it).
+
 ## The map
 
 | File | Role |
@@ -115,7 +180,9 @@ python3 -m pytest -q src/mongla_localization/test
 ```
 
 Most of the tests are built on truth by construction: generate a trajectory, feed the filter, compare
-against the trajectory it came from. The replay test compares a late measurement against the
+against the trajectory it came from. The same idea at the scale of a pool route, with the
+board's measured noise, is `python3 tools/studies/localization_candidates.py`; it refuses
+to report until its own self-test passes. The replay test compares a late measurement against the
 same measurement applied on time and asserts they land in the same place — with the old
 on-arrival behaviour failing that same check.
 
