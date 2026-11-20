@@ -1,0 +1,31 @@
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_fb1b9e158dbe28 510-538
+src/mongla_localization/mongla_localization/localization_inputs.py
+  s_4af8d6f83b24e8::t_8e9df3af0be98d 43-44,118-125,127-133,136-142,324-326,426,431-432,463,475-476,606-607
+src/mongla_localization/mongla_localization/pose_fuse_node.py
+  s_4af8d6f83b24e8::t_1cb46256a833b7 30-71,166
+src/mongla_localization/mongla_localization/resection.py
+  s_4af8d6f83b24e8::t_c92d3be5aa1ab3 15-25,33
+src/mongla_localization/test/test_fused_pose_says_nothing_it_did_not_fuse.py
+  s_4af8d6f83b24e8::t_b4ac0191c025fe 1-52
+src/mongla_localization/test/test_resection.py
+  s_4af8d6f83b24e8::t_27181996775f2e 15
+src/mongla_localization/test/test_a_refused_update_is_not_counted_as_fused.py
+  s_4af8d6f83b24e8::t_fd7ee6586c930a 1-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "9e945348404cdbe74facd42b50cb50c9461834a5",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
