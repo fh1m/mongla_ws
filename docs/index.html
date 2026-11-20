@@ -1609,12 +1609,12 @@
       <input type="range" id="where-k" min="0" max="6" step="0.1" value="0">
       <output id="where-k-o">0.0 %</output>
       <em>Zero is how it shipped until 2026-11-20: its doubt came only from per-frame noise, which
-        grows like a square root. Ours now allows <span class="num">3.5 %</span> of distance.</em></label>
+        grows like a square root. Ours now allows <span class="num">3.6 %</span> of distance.</em></label>
     <div class="lab__presets">
       <button class="key" type="button" data-where="5,15,0">before the fix</button>
-      <button class="key" type="button" data-where="5,15,3.5">as shipped</button>
+      <button class="key" type="button" data-where="5,15,3.6">as shipped</button>
       <button class="key" type="button" data-where="2.5,15,0">the in-air error</button>
-      <button class="key" type="button" data-where="3.5,28,3.5">a long leg</button>
+      <button class="key" type="button" data-where="3.6,28,3.6">a long leg</button>
     </div>
    </div>
   </div>
@@ -1642,8 +1642,10 @@
       <em>arrived</em>, three quarters of a metre from the goal. With honest doubt, the same
       filter says <em>I don't know well enough</em>, and the mission takes a fix first.</p>
     <p class="quiet">The cost is real and it is the right one: from a 0.15 m fix, the allowance
-      reaches the default 0.5 m tolerance after about 13.6 m. Past that, the vehicle has to look
-      at a prop again before it may claim to have arrived anywhere.</p>
+      reaches the default 0.5 m tolerance after about 13 m. Past that, the vehicle has to look
+      at a prop again before it may claim to have arrived anywhere. So a route is planned with
+      a fix every ten metres or so, and <code>go_to</code> warns before it starts a leg longer
+      than the estimate can fly.</p>
     <blockquote class="pull">Being wrong is survivable. Being <em>sure</em> and wrong locks out the
       measurement that would have fixed it.</blockquote>
    </div>
@@ -1677,18 +1679,18 @@
     <s></s><s></s><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">when seen</span></div>
    <div class="sv__row" role="row"><span>prop fix</span>
     <s></s><s></s><s></s><u></u><u></u><u></u><b></b><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">when asked</span></div>
-   <p class="sv__key"><b></b> measured directly &nbsp; <s></s> coupled: through the hull's distance from where it started for depth and a fix (<code>-skew(p)</code>), through roll and pitch for heading &nbsp; <u></u> not touched</p>
+   <p class="sv__key"><span><b></b> measured directly</span> <span><s></s> coupled: through the hull's distance from where it started for depth and a fix (<code>-skew(p)</code>), through roll and pitch for heading</span> <span><u></u> not touched</span></p>
   </div>
 
   <table class="ledger">
    <thead><tr><th>what lied, or held</th><th>measured on</th><th>before</th><th>after</th></tr></thead>
    <tbody>
-    <tr><td>accelerometer bias prior, 17&times; smaller than this board's</td><td>the real bench recording, 1&times; on Kutum</td><td class="numr">15.5 cm in 90 s, still</td><td class="num">0.94 cm</td></tr>
-    <tr><td>doubt with no scale error in it</td><td>a pool route with exact truth, 5 seeds</td><td class="numr">2 of 5 fixes taken</td><td class="num">5 of 5</td></tr>
-    <tr><td>a hull never commanded, waiting to be still</td><td>the real bench recording</td><td class="numr">0.71 m in 2.7 s</td><td class="num">0.08 m</td></tr>
-    <tr><td>stillness switched off entirely</td><td>the real bench recording</td><td class="numr">1665 m in 140 s</td><td class="num">0.94 cm, with it on</td></tr>
-    <tr><td>"aided" on a filter nothing had measured yet</td><td>the real bench recording</td><td class="numr">20 s aided, 9 m run</td><td class="num">usable needs a measurement within 2 s</td></tr>
-    <tr><td>a 12 s blind stretch of floor, mid-cruise</td><td>a pool route with exact truth</td><td class="num">8.8 cm, floor seen</td><td class="num">9.9 cm, 12 s blind</td></tr>
+    <tr><td data-l="what lied, or held">accelerometer bias prior, 17&times; smaller than this board's</td><td data-l="measured on">the real bench recording, 1&times; on Kutum</td><td class="numr" data-l="before">15.5 cm in 90 s, still</td><td class="num" data-l="after">0.94 cm</td></tr>
+    <tr><td data-l="what lied, or held">doubt with no scale error in it</td><td data-l="measured on">a pool route with exact truth, 5 seeds</td><td class="numr" data-l="before">2 of 5 fixes taken</td><td class="num" data-l="after">5 of 5</td></tr>
+    <tr><td data-l="what lied, or held">a hull never commanded, waiting to be still</td><td data-l="measured on">the real bench recording</td><td class="numr" data-l="before">0.71 m in 2.7 s</td><td class="num" data-l="after">0.08 m</td></tr>
+    <tr><td data-l="what lied, or held">stillness switched off entirely</td><td data-l="measured on">the real bench recording</td><td class="numr" data-l="before">1665 m in 140 s</td><td class="num" data-l="after">0.94 cm, with it on</td></tr>
+    <tr><td data-l="what lied, or held">"aided" on a filter nothing had measured yet</td><td data-l="measured on">the real bench recording</td><td class="numr" data-l="before">20 s aided, 9 m run</td><td class="num" data-l="after">usable needs a measurement within 2 s</td></tr>
+    <tr><td data-l="what lied, or held">a 12 s blind stretch of floor, mid-cruise</td><td data-l="measured on">a pool route with exact truth</td><td class="num" data-l="before">8.8 cm, floor seen</td><td class="num" data-l="after">9.9 cm, 12 s blind</td></tr>
    </tbody>
   </table>
   <p class="col quiet" style="margin-top:26px">None of this has been in water; each row was found

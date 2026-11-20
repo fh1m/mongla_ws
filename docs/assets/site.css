@@ -1973,3 +1973,17 @@ pre::-webkit-scrollbar-track,.scrollable::-webkit-scrollbar-track{background:tra
 .sv__rate{color:var(--ink-3);font-size:var(--fs-micro);letter-spacing:.08em;padding-left:8px}
 .sv__key{margin-top:12px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
 .sv__key b,.sv__key s,.sv__key u{display:inline-block;width:14px;height:12px;vertical-align:middle}
+.sv__key > span{display:inline}
+.sv__key > span > b,.sv__key > span > s,.sv__key > span > u{margin-right:6px}
+/* On a phone the fifteen columns keep the whole width: the row's name goes
+   above its cells and the rate column is dropped, so the bias columns the text
+   points at stay on screen instead of behind a sideways scroll. */
+@media (max-width:720px){
+  .sv{overflow-x:visible}
+  .sv__row{grid-template-columns:repeat(15,1fr);min-width:0;gap:2px}
+  .sv__row > span:first-child{grid-column:1/-1;padding:6px 0 2px}
+  .sv__head > span:first-child{display:none}
+  .sv__rate{display:none}
+  .sv__grp{letter-spacing:.06em}
+  .sv__idx > span{display:none}
+}

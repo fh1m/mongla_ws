@@ -12,7 +12,7 @@ import pytest
 
 from mongla_localization.pose_cluster import RULE_VIEWPOINT
 from mongla_localization.heading_anchor import (
-    Anchor, absolute_heading, anchor_from, apply_offset,
+    absolute_heading, anchor_from, apply_offset,
 )
 from mongla_localization.pose_cluster import Fused
 

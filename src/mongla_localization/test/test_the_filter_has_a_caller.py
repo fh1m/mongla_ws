@@ -12,7 +12,7 @@ from pathlib import Path
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of_file  # noqa: E402  (issue #22)
 
 ROOT = Path(__file__).resolve().parents[3]
 PKG = ROOT / 'src' / 'mongla_localization'

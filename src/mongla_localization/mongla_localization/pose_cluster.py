@@ -29,6 +29,10 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
+# Clustering across the wrap is a real case: a board seen from behind-left
+# reads +179 on one frame and -179 on the next, and those two agree.
+from mongla_localization.heading_anchor import _wrap180
+
 # A pose whose two flip branches disagree by less than this is not really
 # ambiguous; the solver already picked. Above it, the frame carries a genuine
 # fork and belongs in a cluster rather than being trusted alone.
@@ -128,16 +132,6 @@ class Fused:
     candidates: tuple = ()
 
 
-def _wrap180(deg: float) -> float:
-    """Fold an angle into (-180, 180]. Clustering across the wrap is a real
-    case: a board seen from behind-left reads +179 on one frame and -179 on the
-    next, and those two agree."""
-    d = math.fmod(float(deg) + 180.0, 360.0)
-    if d <= 0.0:
-        d += 360.0
-    return d - 180.0
-
-
 def _angdiff(a: float, b: float) -> float:
     return abs(_wrap180(a - b))
 
@@ -189,7 +183,6 @@ def _circular_median(angles: list[float]) -> float:
         return float('nan')
     ref = angles[0]
     return _wrap180(ref + _median([_wrap180(a - ref) for a in angles]))
-
 
 
 def _fit(xs: list, ys: list) -> tuple:

@@ -74,11 +74,13 @@ import numpy as np
 # replayed through 50 s of real board data at rest, that ran to 583 m; NED,
 # 0.036 m. At rest the accelerometer reads (0, 0, -g) level.
 from mongla_localization.frames import ned_z_from_altitude  # noqa: E402
+from mongla_localization.heading_anchor import _wrap180  # noqa: E402
 
 
 def _dup(v):
     """A copy where the value is mutable (state, arrays, dicts), else itself."""
     return v.copy() if hasattr(v, 'copy') else v
+
 
 GRAVITY = np.array([0.0, 0.0, 9.80665])
 
@@ -125,13 +127,6 @@ class State:
     bg: np.ndarray = field(default_factory=lambda: np.zeros(3))   # gyro bias
     ba: np.ndarray = field(default_factory=lambda: np.zeros(3))   # accel bias
 
-    def matrix(self) -> np.ndarray:
-        X = np.eye(5)
-        X[:3, :3] = self.R
-        X[:3, 3] = self.v
-        X[:3, 4] = self.p
-        return X
-
     def yaw_deg(self) -> float:
         return math.degrees(math.atan2(self.R[1, 0], self.R[0, 0]))
 
@@ -144,6 +139,15 @@ class State:
 # filter actually uses are listed, so a new measurement of an unlisted width
 # raises a KeyError instead of silently picking a wrong threshold.
 CHI2_99 = {1: 6.635, 2: 9.210, 3: 11.345}
+
+# Flow's scale error, 1 sigma, as a fraction of distance flown: the worst of
+# three taped 30 cm slides read 3.6 % long (measured-bars 13). The same
+# measurement is `FLOW_SCALE_SIGMA_FRAC` in mongla_vision's flow constants,
+# which this package does not import (it pulls in cv2), so
+# test_one_scale_error compares the two. Here, not in the node, because the
+# planner reads it too: how far `go_to` can drive before its sigma passes the
+# tolerance (measured-bars 99).
+FLOW_SCALE_SIGMA = 0.036
 
 # The gate's own failure mode, and it is worse than no gate.
 # A filter that has become CONFIDENTLY WRONG rejects every measurement that
@@ -707,11 +711,10 @@ class RIEKF:
             seen = np.any(H != 0.0, axis=0)
             d = np.where(seen, math.sqrt(REJECT_INFLATION), 1.0)
             self.P = self.P * np.outer(d, d)
+            # H D = sqrt(k) H, because D scales exactly the columns H reads, so
+            # the new S is k H P H^T + R: invertible whenever the first was.
             S = H @ self.P @ H.T + R_noise
-            try:
-                S_inv = np.linalg.inv(S)
-            except np.linalg.LinAlgError:
-                return False
+            S_inv = np.linalg.inv(S)
         self.reject_streak[kind] = 0
         K = self.P @ H.T @ S_inv
         dx = K @ y
@@ -744,10 +747,3 @@ class RIEKF:
         self.X.p = dR @ self.X.p + dp
         self.X.bg = self.X.bg + dx[9:12]
         self.X.ba = self.X.ba + dx[12:15]
-
-
-def _wrap180(deg: float) -> float:
-    d = math.fmod(float(deg) + 180.0, 360.0)
-    if d <= 0.0:
-        d += 360.0
-    return d - 180.0

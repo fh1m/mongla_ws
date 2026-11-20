@@ -56,6 +56,10 @@ so a new package cannot go without a module map.
 | B-135 | the accelerometer-bias prior (0.01) was 17 sigma off the measured 0.167 m/s^2; a still hull walked 15.5 cm in 90 s of the real bench recording | fixed: `ACCEL_BIAS_PRIOR` 0.2, 0.94 cm |
 | B-136 | one fix in, the filter was certain and wrong: flow's scale error grows with distance, its sigma did not, and the next correct fix was refused 3 times in 5 against exact truth | fixed: `FLOW_SCALE_SIGMA` floor, 15 of 15 accepted |
 | B-137 | a position fix the gate refused was silent; `fix_from_prop` had already said it worked | fixed: counted and warned |
+| B-138 | a zero quaternion was fused as a level hull at the board's 0.5 deg sigma | fixed: no attitude, sample skipped |
+| B-139 | the ZUPT's accelerometer veto read the magnitude, which a sideways push barely moves: a hull shoved along with the gyro quiet read as still | fixed: per-axis spread of the body's own acceleration; A/B on the real bench recording, no cost at rest |
+| — | flow's scale error stated twice, 0.036 in mongla_vision and a hand-rounded 0.035 here | one value, `test_one_scale_error.py`; the truth study re-run at 0.036, same verdicts |
+| — | `_wrap180` in four modules, `resection._wrap360` never called, an `except` after the reject inflation that cannot run | one `_wrap180` in `heading_anchor.py`; the dead ones deleted |
 
 ## How a mission reaches it
 
@@ -99,6 +103,24 @@ One mission, one verdict per stage, the first failure being the one to fix:
 
 Before it: tape `frames.yaml` (both lever arms and the baro offset; until then flow is
 fused without its lever arm and the frames health line says DEGRADED), and record a bag.
+
+## Every line, executed
+
+Read is not run. On 2026-11-20 the package's suite was measured with line coverage
+(`coverage run --source=mongla_localization -m pytest src/mongla_localization/test
+src/mongla_planner/test`): 91 % of 1603 statements. Every unexecuted line was then read
+again and given a test or deleted; three were defects (B-138, B-139, and the zero-sigma
+update that would have raised `LinAlgError` and killed the node, now refused).
+`test_the_unrun_branches.py` holds them, each injection-verified, and
+`test_the_real_node_constructs.py` builds the real node through rclpy, which no test did:
+the stubbed tests pass with a topic renamed on one side.
+
+Now **99 % of 1582**. What does not run under pytest, and where it does run:
+
+| Lines | What | Runs |
+|---|---|---|
+| `localization_node.main()` | `rclpy.init`, spin, shutdown | every `ros2 run` and every Kutum replay (measured-bars 99) |
+| `course_survey`, the `__main__` line | `sys.exit(main())` | `test_the_survey_runs_as_a_program`, in a subprocess coverage does not follow |
 
 ## Read, and judged sound
 
