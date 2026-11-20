@@ -1,0 +1,137 @@
+.claude/hooks/py_check.sh
+  s_4af8d6f83b24e8::t_babd3f7712dc77 2-5,13-20
+.github/workflows/repository-integrity.yml
+  s_4af8d6f83b24e8::t_b2f93a285b453f 31
+CLAUDE.md
+  s_4af8d6f83b24e8::t_23be6aab924ca0 437-443
+build_mongla.sh
+  s_4af8d6f83b24e8::t_ed146bbf4efac8 92-94
+src/mongla_control/mongla_control/fc/srot_arming.py
+  s_4af8d6f83b24e8::t_d4fa9314328033 136
+src/mongla_control/test/test_align_verifies_after_stopping.py
+  s_4af8d6f83b24e8::t_c3f64e441aa3fa 26
+src/mongla_control/test/test_allocation.py
+  s_4af8d6f83b24e8::t_90ef26b1a2a604 21
+src/mongla_control/test/test_bearing_refraction.py
+  s_4af8d6f83b24e8::t_fbe3db7ad07668 67
+src/mongla_control/test/test_loop_wakes_on_data.py
+  s_4af8d6f83b24e8::t_31b961f88c66c3 36
+src/mongla_control/test/test_motion_vision.py
+  s_4af8d6f83b24e8::t_58495ce57a51ea 20
+src/mongla_control/test/test_srot_kill_switch.py
+  s_4af8d6f83b24e8::t_dab42f362ee9f3 33
+src/mongla_control/test/test_srot_safety_gates.py
+  s_4af8d6f83b24e8::t_e4494482e9d368 20
+src/mongla_control/test/test_vision_derotation.py
+  s_4af8d6f83b24e8::t_82a606b8f485d1 104
+src/mongla_localization/test/test_frame_tree.py
+  s_4af8d6f83b24e8::t_8ae12304ed49be 146
+src/mongla_localization/test/test_heading_anchor.py
+  s_4af8d6f83b24e8::t_6a78fb01538010 15
+src/mongla_localization/test/test_localization_node.py
+  s_4af8d6f83b24e8::t_52233fda0a40c8 22
+src/mongla_localization/test/test_pnp_variant_topics.py
+  s_4af8d6f83b24e8::t_eb76415a5fd50b 19
+src/mongla_localization/test/test_pose_cluster.py
+  s_4af8d6f83b24e8::t_92ae7806235203 15
+src/mongla_localization/test/test_resection.py
+  s_4af8d6f83b24e8::t_3b8a20a7fe80bf 16
+src/mongla_localization/test/test_the_filter_has_a_caller.py
+  s_4af8d6f83b24e8::t_f11a998a36d58d 15
+src/mongla_localization/test/test_tile_grating.py
+  s_4af8d6f83b24e8::t_8566b834dcfc99 25
+src/mongla_manager/test/test_allocator_saturation_reporter.py
+  s_4af8d6f83b24e8::t_c63daf265c482c 25
+src/mongla_manager/test/test_bearing_resolution_invariant.py
+  s_4af8d6f83b24e8::t_db052cf887062f 27
+src/mongla_manager/test/test_pi_power_check.py
+  s_4af8d6f83b24e8::t_66ca6c6b8f139d 24
+src/mongla_manager/test/test_reboot_reconfigures_the_board.py
+  s_4af8d6f83b24e8::t_130497942a1726 27
+src/mongla_manager/test/test_srot_preflight_ordering.py
+  s_4af8d6f83b24e8::t_a8e7ce8cde0388 31
+src/mongla_manager/test/test_stack_headroom_verdict.py
+  s_4af8d6f83b24e8::t_f4e2f12e15dc22 77
+src/mongla_manager/test/test_state_is_stamped_on_the_board_clock.py
+  s_4af8d6f83b24e8::t_b784d22fc33f03 27
+src/mongla_manager/test/test_tool_aim_is_wired.py
+  s_4af8d6f83b24e8::t_583d9dd6d757b8 17
+src/mongla_manager/test/test_uplink_sends_water_bearings.py
+  s_4af8d6f83b24e8::t_f0b0dd17967245 26
+src/mongla_planner/test/test_floor_range.py
+  s_4af8d6f83b24e8::t_0b8fa0dc54fbae 77
+src/mongla_planner/test/test_missions_smoke.py
+  s_4af8d6f83b24e8::t_331e39b2e4272e 100
+src/mongla_planner/test/test_resilience.py
+  s_4af8d6f83b24e8::t_e16376f031923c 8,12
+src/mongla_planner/test/test_run_budget.py
+  s_4af8d6f83b24e8::t_13d724cc7faf83 11
+src/mongla_planner/test/test_sauvc_navigation.py
+  s_4af8d6f83b24e8::t_b3026e7fbcaa97 26
+src/mongla_planner/test/test_vision_evidence.py
+  s_4af8d6f83b24e8::t_ea9cdaf9708e9b 14
+src/mongla_vision/test/test_a_corner_count_is_not_trackability.py
+  s_4af8d6f83b24e8::t_0de2ccb7a032f3 35
+src/mongla_vision/test/test_anchor_heals_the_follower.py
+  s_4af8d6f83b24e8::t_8d009b52351132 34
+src/mongla_vision/test/test_assoc_conf.py
+  s_4af8d6f83b24e8::t_b242487066bc02 24
+src/mongla_vision/test/test_bringup_wrong_host_profile.py
+  s_4af8d6f83b24e8::t_691936fb8c314c 19
+src/mongla_vision/test/test_calibration_binding.py
+  s_4af8d6f83b24e8::t_f06f1c24cc2f43 38
+src/mongla_vision/test/test_detection_factory.py
+  s_4af8d6f83b24e8::t_191876e22d3d9f 59,98
+src/mongla_vision/test/test_fouled_lens_vs_changed_world.py
+  s_4af8d6f83b24e8::t_fa770b7a954680 19
+src/mongla_vision/test/test_identity.py
+  s_4af8d6f83b24e8::t_d7ec2082a5c421 12
+src/mongla_vision/test/test_lock_follows_the_mission_class.py
+  s_4af8d6f83b24e8::t_3c8d340f0df753 29
+src/mongla_vision/test/test_lock_ladder_is_wired_and_consumed.py
+  s_4af8d6f83b24e8::t_5d3f0d5817ae9f 28
+src/mongla_vision/test/test_pnp_node.py
+  s_4af8d6f83b24e8::t_64314b504036ce 18
+src/mongla_vision/test/test_rangecrop.py
+  s_4af8d6f83b24e8::t_e2f00e96413b4a 37
+src/mongla_vision/test/test_snap_pairs_the_right_frame.py
+  s_4af8d6f83b24e8::t_6598d4a735d9cf 24
+src/mongla_vision/test/test_target_geometry.py
+  s_4af8d6f83b24e8::t_6ac2a153d12c90 27
+src/mongla_vision/test/test_underwater.py
+  s_4af8d6f83b24e8::t_eabf611f7f743b 24
+test/test_fit_free_decay.py
+  s_4af8d6f83b24e8::t_14ce1a1647dc64 11
+test/test_python_names_resolve.py
+  s_4af8d6f83b24e8::t_c74409fbaf33b8 1-50
+test/test_shell_scripts_pass_shellcheck.py
+  s_4af8d6f83b24e8::t_13efb56f34f175 1-31
+tools/_record_lib.sh
+  s_4af8d6f83b24e8::t_a11a81b038525e 85,99,135,148,154
+tools/bench/control_bench/test_bench_params_match_the_board.py
+  s_4af8d6f83b24e8::t_3ff2ac53b3826f 23
+tools/bench/srot_vision_bench.py
+  s_4af8d6f83b24e8::t_7c48775c79ea6b 185
+tools/ci/run_repo_integrity.py
+  s_4af8d6f83b24e8::t_816c3cb4c71a01 42-43
+tools/pool/pool_session.sh
+  s_4af8d6f83b24e8::t_e1ee9393dfbb85 18,57
+tools/studies/recall_matrix.py
+  s_4af8d6f83b24e8::t_98dc8c47daeead 226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "9b1036262092e8e1837d022a2dbc713bd383a125",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
