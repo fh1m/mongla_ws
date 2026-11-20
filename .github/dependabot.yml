@@ -50,6 +50,11 @@ updates:
       - dependency-name: supervision
       - dependency-name: scipy
         versions: ['>=1.18']
+      # ROS's launch_testing plugin (Humble 1.0.14) declares the `path` hook
+      # argument pytest 9 removed, so every ROS test stops loading. The
+      # semver-major rule does not stop a range widening (#178 proposed <10).
+      - dependency-name: pytest
+        versions: ['>=9']
       - dependency-name: '*'
         update-types: [version-update:semver-major]
     commit-message:
