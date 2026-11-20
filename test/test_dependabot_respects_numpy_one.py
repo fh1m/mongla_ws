@@ -57,3 +57,18 @@ def test_each_requirements_file_has_exactly_one_scanner():
     root = next(u for u in pips if u['directory'] == '/')
     assert any(u['directory'] == '/kutum' for u in pips)
     assert 'kutum/**' in root.get('exclude-paths', [])
+
+
+def test_pytest_stays_where_ros_launch_testing_loads():
+    """requirements.txt caps pytest below 9 and Dependabot must not lift it.
+
+    Measured 2026-11-20 on Humble: under pytest 9.2.0, launch_testing 1.0.14
+    fails to load (`pytest_pycollect_makemodule(path, parent)`: the `path`
+    argument is gone), so no ROS test runs. Dependabot's semver-major rule
+    did not stop #178, which widened the range to <10.
+    """
+    cap = re.search(r'^pytest\b.*<\s*(\d+)', (ROOT / 'requirements.txt').read_text(), re.M)
+    assert cap and int(cap.group(1)) <= 9, 'pytest is no longer capped below 9'
+    root = [u for u in pip_updates() if u['directory'] == '/'][0]
+    assert {'dependency-name': 'pytest', 'versions': ['>=9']} in root.get('ignore', []), \
+        'dependabot.yml must ignore pytest>=9 while requirements.txt caps it'
