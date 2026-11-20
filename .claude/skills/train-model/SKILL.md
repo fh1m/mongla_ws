@@ -31,6 +31,12 @@ datasets/<task>/
 └── <task>.yaml                   # paths + names
 ```
 
+A set downloaded from another team keeps **that team's published split**:
+never re-split, cap or shuffle it. To ask whether a model works in a pool it
+has not seen, build the held-out split with `tools/studies/pool_holdout.py`
+(it drops copies of held-out frames that other teams forked); the steps and
+their gates are in `.claude/context/perception/model-pipeline.md`.
+
 Split by **session, not by frame** — neighbouring frames of one clip in both
 train and val make validation recall meaningless. Keep datasets out of
 `/tmp` (a RAM disk here; training is OOM-killed). Do not add image
