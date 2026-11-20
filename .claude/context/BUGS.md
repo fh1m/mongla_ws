@@ -661,6 +661,17 @@ that sample's board attitude. A/B on the real bench recording on Kutum (zupt on,
 232 and 232 ZUPTs, still-hull walk 9.3 and 9.4 mm, so no cost at rest. Guard
 `test_a_hull_shaking_without_turning_is_not_still`, which failed against the old code.
 
+### B-140: the published test counts froze when two packages arrived `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** A full run publishes `docs/stats.json` only when the suites it ran equal
+`published_counts.SUITE_NAMES`. `mongla_runtime` and `mongla_batighor` came with tests and
+were never added, so from then on no run counted as full and nothing was published. The
+guard kept comparing the README and the site with that frozen file and passed: the pages
+said 4 742 tests long after the suite held more than 5 300.
+
+**Fix.** Both suites are listed. Guard `test_every_package_with_tests_is_a_published_suite`
+fails when a package's tests are not a published suite; it failed with the two names removed.
+
 ### B-130: the old-host guard matched `mongla.localization()` `READ 2026-11-20` **FIXED 2026-11-20**
 
 **What.** `test_kutum_has_one_name` grepped a fixed string, so the DSL call

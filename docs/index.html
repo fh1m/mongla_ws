@@ -110,7 +110,7 @@
       <div class="tape" aria-hidden="true"><i></i><em>0</em><em>30 cm</em></div>
       <b>1.09 cm</b><span>worst error over a 30 cm slide, against a tape measure. The red sliver on the tape is that error, to scale.</span>
     </div>
-    <div class="f"><span class="silk">Tests</span><b>4 742</b><span>passing, none failing</span></div>
+    <div class="f"><span class="silk">Tests</span><b>5 391</b><span>passing, 4 failing</span></div>
     <div class="g warn"><span class="silk">In water</span><b>0 dives</b><span>The current platform, this stack on the SROT board and Kutum in the Mongla hull, has never been in water. Its predecessors competed at RoboSub 2025 and 2026 (<a href="https://github.com/fh1m/mongla_ws/blob/main/docs/evidence/lineage.md">lineage</a>).</span></div>
   </div>
  </div>
@@ -1646,6 +1646,12 @@
       at a prop again before it may claim to have arrived anywhere. So a route is planned with
       a fix every ten metres or so, and <code>go_to</code> warns before it starts a leg longer
       than the estimate can fly.</p>
+    <p class="quiet">Until this pass the filter answered nobody. Node plumbing other packages
+      needed lived inside it, image code lived inside it, and only one mission ever called it.
+      Now it is reached the way vision is: one state topic that says <em>usable</em> or why not,
+      <code>mongla locate</code> to read it, <code>go_to</code> and prop fixes to act on it, the
+      vision lock to predict a lost target from it, and <code>localization_check</code> to grade
+      it in water.</p>
     <blockquote class="pull">Being wrong is survivable. Being <em>sure</em> and wrong locks out the
       measurement that would have fixed it.</blockquote>
    </div>
@@ -1690,6 +1696,9 @@
     <tr><td data-l="what lied, or held">a hull never commanded, waiting to be still</td><td data-l="measured on">the real bench recording</td><td class="numr" data-l="before">0.71 m in 2.7 s</td><td class="num" data-l="after">0.08 m</td></tr>
     <tr><td data-l="what lied, or held">stillness switched off entirely</td><td data-l="measured on">the real bench recording</td><td class="numr" data-l="before">1665 m in 140 s</td><td class="num" data-l="after">0.94 cm, with it on</td></tr>
     <tr><td data-l="what lied, or held">"aided" on a filter nothing had measured yet</td><td data-l="measured on">the real bench recording</td><td class="numr" data-l="before">20 s aided, 9 m run</td><td class="num" data-l="after">usable needs a measurement within 2 s</td></tr>
+    <tr><td data-l="what lied, or held">stillness read from the accelerometer&rsquo;s size, not its direction</td><td data-l="measured on">a shove sideways, in a test; then the real bench recording</td><td class="numr" data-l="before">0.4 m/s&sup2; across moves it 0.008: read as still</td><td class="num" data-l="after">per axis, gravity removed; 232 of 232 rests kept</td></tr>
+    <tr><td data-l="what lied, or held">a correct fix, refused in silence</td><td data-l="measured on">the code, read</td><td class="numr" data-l="before">a counter, and nothing said</td><td class="num" data-l="after">the miss logged; a streak warns</td></tr>
+    <tr><td data-l="what lied, or held">a zero quaternion from the board</td><td data-l="measured on">a test feeding one</td><td class="numr" data-l="before">a level hull, 0.5&deg; sure</td><td class="num" data-l="after">no attitude; the sample skipped</td></tr>
     <tr><td data-l="what lied, or held">a 12 s blind stretch of floor, mid-cruise</td><td data-l="measured on">a pool route with exact truth</td><td class="num" data-l="before">8.8 cm, floor seen</td><td class="num" data-l="after">9.9 cm, 12 s blind</td></tr>
    </tbody>
   </table>
@@ -1937,7 +1946,7 @@
     <div><span class="silk">Blind</span><b>175</b><span>frames held with no detector</span></div>
     <div><span class="silk">Velocity</span><b>1.09 cm</b><span>worst error, 30 cm slide</span></div>
     <div><span class="silk">Mesh</span><b>0.9 mm</b><span>hull tessellation in the viewer</span></div>
-    <div class="wide"><span class="silk silk--lit">Suites</span><b>4 742</b><span>passing across six suites; 0 failed</span></div>
+    <div class="wide"><span class="silk silk--lit">Suites</span><b>5 391</b><span>passing across 8 suites; 4 failed</span></div>
   </div>
   <p class="col quiet" style="margin-top:34px">Each of these lives in a ledger with its method, its
     conditions and the bar it had to clear — and the tests read that file, so a number cannot drift

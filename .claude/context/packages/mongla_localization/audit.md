@@ -182,3 +182,18 @@ fallback only, and flow is the velocity.
 The study is `tools/studies/localization_candidates.py` (self-tested; bars written first);
 its output for 2026-11-20 is in measured-bars 99.
 
+
+## Open, and what decides it
+
+Every item still open for this package, with the GitHub issue and the bead that holds its bar.
+None of them can be settled at a desk; each needs the board moving, or the pool.
+
+| What | Issue | Bead | Decided by |
+|---|---|---|---|
+| flow scale in water | — | 5ag.1 | a taped floor target; pass at 2 % mean, 3 % worst |
+| a floor that slopes scales flow wrongly | [#35](https://github.com/fh1m/mongla_ws/issues/35), altimeter option [#50](https://github.com/fh1m/mongla_ws/issues/50) | es5.7 | the venue's floor surveyed into the course file, or a Ping2 fitted |
+| the board's attitude counted as independent of the gyro it came from | [#36](https://github.com/fh1m/mongla_ws/issues/36) | 5ag.5 | the board moving against an independent heading truth, scored by NEES. A still bench cannot size it: 10 min still, yaw Allan deviation at most 0.002 deg. The recovery half is fixed: the anchor is a yaw offset, not a gated update |
+| props as continuous landmark states | [#39](https://github.com/fh1m/mongla_ws/issues/39) | 5ag.6 | PnP yaw sigma on a prop at 2-4 m in the pool; built only if one-shot anchoring leaves more than 2 deg after a 10 m leg |
+| `localization_check`, all six stages | — | 5ag.2 | the first pool session |
+| `go_to`'s speed ramp | — | 5ag.3 | the same session |
+| camera-to-IMU lag, de-rotation gains | — | 5ag.4 | the board on Kutum |
