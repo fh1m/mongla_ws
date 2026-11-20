@@ -12,9 +12,7 @@ import math
 
 import pytest
 
-from mongla_localization.resection import (
-    Fix, circumcircle, fix_from_bearings, on_danger_circle,
-)
+from mongla_localization.resection import fix_from_bearings
 
 
 def _bearing(frm, to):
@@ -108,37 +106,6 @@ def test_a_wide_geometry_is_accepted():
     truth = (4.0, 4.0)
     got = fix_from_bearings(_sight(truth, props), props)
     assert got.ok and got.separation_deg > 80.0
-
-
-# --- the danger circle ------------------------------------------------------
-
-
-def test_the_circumcircle_of_three_points():
-    centre, r = circumcircle((0.0, 0.0), (2.0, 0.0), (0.0, 2.0))
-    assert centre == pytest.approx((1.0, 1.0))
-    assert r == pytest.approx(math.sqrt(2.0))
-
-
-def test_collinear_props_have_no_circumcircle():
-    assert circumcircle((0.0, 0.0), (1.0, 0.0), (2.0, 0.0)) is None
-
-
-def test_an_observer_on_the_circle_is_flagged():
-    a, b, c = (0.0, 0.0), (4.0, 0.0), (0.0, 4.0)
-    (ux, uy), r = circumcircle(a, b, c)
-    on = (ux + r * math.cos(2.2), uy + r * math.sin(2.2))
-    assert on_danger_circle(on, a, b, c)
-
-
-def test_an_observer_well_inside_the_circle_is_fine():
-    a, b, c = (0.0, 0.0), (4.0, 0.0), (0.0, 4.0)
-    (ux, uy), _ = circumcircle(a, b, c)
-    assert not on_danger_circle((ux, uy), a, b, c)
-
-
-def test_collinear_props_are_treated_as_dangerous():
-    # No circle means no angles-only fix either; saying "safe" would be worse.
-    assert on_danger_circle((1.0, 1.0), (0.0, 0.0), (1.0, 0.0), (2.0, 0.0))
 
 
 def test_two_props_nearly_opposite_are_refused_like_two_nearly_together():

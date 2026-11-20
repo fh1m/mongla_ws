@@ -12,16 +12,17 @@ So this is not SLAM. There is no map to build and no loop to close: the map is
 the rulebook plus a tape measure, and the only unknown is where WE are.
 Surveyors solved that in 1615.
 
-Two regimes, and the difference is the heading.
+The heading is what makes it two lines crossing. Once it is anchored on a
+landmark (`heading_anchor`), each sighting puts us on a LINE through that
+prop, and two lines cross: well conditioned unless the props are nearly in
+line with us, which is a geometry check, not a tuning knob.
 
-  * **Heading known** (Tier 3.2 anchored it on a landmark): each sighting puts
-    us on a LINE through that prop, and two lines cross. Well conditioned
-    unless the props are nearly in line with us, which is a geometry check, not
-    a tuning knob.
-
-  * **Heading unknown**: only the ANGLES BETWEEN sightings are usable, three
-    props are needed, and this is the Snellius-Pothenot problem. It carries a
-    failure that returns a perfectly plausible answer -- see `danger_circle`.
+Without a heading only the ANGLES BETWEEN sightings are usable, three props
+are needed (the Snellius-Pothenot problem), and every point on the circle
+through the three props gives the same answer, the danger circle. That solve
+is not built: a fix is asked for only after the anchor, and three props in
+view at once has never been recorded. Its degeneracy check went with it
+(2026-11-20); build both together if a heading-free fix is ever needed.
 
 Pure geometry. No ROS, no cv2.
 """
@@ -29,17 +30,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Sequence, Tuple
+from typing import Dict, Sequence, Tuple
 
 # Two bearings that differ by less than this cross at a shallow angle, and the
 # crossing point slides a long way for a small bearing error. A geometric
 # condition, not a tuned threshold: at 10 deg of separation, 1 deg of bearing
 # error moves the fix by roughly a tenth of the range.
 MIN_SEPARATION_DEG = 12.0
-
-# How close to the circle through the three props counts as ON it. Expressed as
-# a fraction of the circle's radius, because the ambiguity scales with it.
-DANGER_CIRCLE_FRAC = 0.06
 
 
 @dataclass(frozen=True)
@@ -158,44 +155,3 @@ def _widest_separation(bearings: Sequence[float]) -> float:
             sep = abs(_wrap180(bearings[i] - bearings[j]))
             widest = max(widest, min(sep, 180.0 - sep))
     return widest
-
-
-def circumcircle(a: Tuple[float, float], b: Tuple[float, float],
-                 c: Tuple[float, float]) -> Optional[Tuple[Tuple[float, float], float]]:
-    """(centre, radius) of the circle through three points, or None if collinear."""
-    (ax, ay), (bx, by), (cx, cy) = a, b, c
-    d = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
-    if abs(d) < 1e-12:
-        return None
-    a2, b2, c2 = ax * ax + ay * ay, bx * bx + by * by, cx * cx + cy * cy
-    ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d
-    uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d
-    return (ux, uy), math.hypot(ax - ux, ay - uy)
-
-
-def on_danger_circle(p: Tuple[float, float],
-                     a: Tuple[float, float], b: Tuple[float, float],
-                     c: Tuple[float, float], *,
-                     frac: float = DANGER_CIRCLE_FRAC) -> bool:
-    """Is the observer on the circle through the three props?
-
-    The failure that returns a plausible number. With the heading unknown,
-    only the angles BETWEEN sightings are measurable, and every point on the
-    circle through the three props subtends the SAME pair of angles. The
-    problem then has infinitely many solutions and a solver will still hand
-    back one of them, indistinguishable from a good fix. Surveyors have called
-    it the danger circle since the 1600s and the instruction has always been to
-    avoid observing from it, not to solve harder.
-
-    Two consequences for a mission. Detect it and refuse. And when a fix is
-    refused for this reason, MOVING OFF the circle is what fixes it -- a metre
-    in any direction off the arc, which is a thing a vehicle can do and a
-    solver cannot.
-    """
-    circ = circumcircle(a, b, c)
-    if circ is None:
-        return True            # collinear props: no circle, and no fix either
-    (ux, uy), r = circ
-    if r <= 1e-9:
-        return True
-    return abs(math.hypot(p[0] - ux, p[1] - uy) - r) <= frac * r
