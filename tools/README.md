@@ -192,6 +192,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `model_select.py` | Rank candidate models by what deployment actually needs. |
 | `negative_clip_check.py` | What does the model say when the prop is NOT there? The gap this closes. |
 | `pipeline_visual_check.py` | Render what the ladder SEES, frame by frame, so it can be checked by eye. |
+| `pool_holdout.py` | Hold one pool out: does a detector work in water it has never seen? Why this exists. |
 | `pose_precision.py` | How PRECISELY does XFeat recover a pose at 320x240 versus 640x480? Recall and precision are different questions, and this project has only ever measured the first. |
 | `recall_matrix.py` | REAL RECALL -- against ground truth labels, per water regime. |
 | `return_check.py` | A2 -- RETURN: 2,882 raw frames + 302 labelled. |
