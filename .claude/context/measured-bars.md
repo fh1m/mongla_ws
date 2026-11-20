@@ -8772,4 +8772,54 @@ of 10^6 m. Every number above is from a run with 0 gaps and no player left after
   refused (peak share 0.008-0.019 against the 0.01 bar, the peak spread over more bins
   than the share window holds); at x2 and x3 every angle read within 0.2 deg, share
   0.034. The node now refuses x1 while `tile_m` is set.
+- **The accelerometer bias prior was 17 sigma off what this board measures.** The
+  ledger's static IMU table measures the bias at 0.167 m/s^2; the filter's prior was
+  0.01 (`P0_bias`, shared with the gyro), so it could not learn it, and every ZUPT
+  shoved position by the same biased innovation. A/B, bar written first (pre-anchor
+  drift under 5 cm, no new rejects or gate flips), same 240 s replay, prior printed
+  in-process by the node:
+
+  | `ACCEL_BIAS_PRIOR` | first 5 s | walk 5-95 s | after anchor, 120 s | rejects | flips |
+  |---|---|---|---|---|---|
+  | 0.01 | 0.083 m | 0.155 m | 0.078 m | 0 | 1 |
+  | **0.2** | 0.083 m | **0.0094 m** | **0.0089 m** | 0 | 1 |
+
+  **Shipped 0.2** (covers 0.167). The bar as written still fails on the first second:
+  0.083 m is the bias integrated before the first ZUPT can fire, 0.5 * 0.167 * 1^2,
+  on deck and before any anchor or fix. After it the still hull holds under 1 cm,
+  through the 98 s bench knock that moved the old filter 0.21 m.
+- **Truth, before water: `tools/studies/localization_candidates.py`.** A 60 s pool route
+  (15.2 m, two cruises at 0.4 m/s, a 90 deg turn, four stops) flown kinematically, every
+  input synthesised at the node's rates and sigmas (board numbers from the static IMU table
+  above), the real `RIEKF` scored against the route; 5 seeds per arm. Bars in the file's
+  docstring, written first. `--self-test`: perfect sensors 0.001 m; a 5 % scale error
+  chosen on purpose reads 3.71 % of distance (window 3.5-6.5 %). PASS.
+
+  | arm | result | bar |
+  |---|---|---|
+  | A1 bias prior 0.01 / **0.2**, in motion | rms 0.051 / **0.050 m** | 0.2 within +10 %: **PASS** |
+  | A2 flow scale 0 / 2.5 / 5 % | final 0.58 / 1.65 / 3.46 % of distance | characterisation |
+  | A3 one fix at 6 s, 5 % scale, second correct fix at 59 s, **no floor** | **accepted 2 of 5**; believed 0.153 m, was 0.5-0.7 m off | after <= own error + 5 cm: **FAIL** |
+  | A3 the same, fix at 20 s, no floor | accepted 4 of 5 | **FAIL** |
+  | A3 both, **`FLOW_SCALE_SIGMA` 0.035** | **accepted 5 of 5, and 5 of 5**; believed 0.58 / 0.38 m | **PASS** |
+  | A4 12 s flow dropout mid-cruise | 0.099 m at its end, against 0.088 m with no dropout | characterisation |
+
+  The bar first written for A3, "under 0.30 m after the fix", failed in every arm including
+  the accepted ones: a sigma-0.15 m fix lands over 0.30 m from truth 13.5 % of the time on its
+  own, so that bar scored the fix's noise, not the filter. Kept here; the bar meant was
+  "accepted, and no worse than the fix's own error plus 5 cm".
+
+  **Shipped: `FLOW_SCALE_SIGMA = 0.035`** (`localization_node.py`), the worst of the three
+  §13 slides (3.6 %): after a fix the horizontal sigma is held at no less than
+  sqrt(sigma_fix^2 + (0.035 x distance)^2). Without it the filter's position sigma came from
+  per-sample flow noise only, which integrates like a square root while a scale error grows
+  with distance; a filter one fix in was certain and wrong, and refused the correction.
+  A1, A2 and A4 are unchanged by it to the millimetre. `test_scale_error_floor.py` fails
+  with the floor removed. Consequence for `go_to`: from a 0.15 m fix, sigma reaches the
+  0.5 m default tolerance after about 13.6 m, and `go_to` then refuses until the next fix,
+  which is the honest answer.
+
+  Not covered by 0.035: a sloping floor. Flow scale is height above the floor; the course
+  file's floor goes from 1.28 to 2.0 m, so one assumed depth is up to 30 % wrong at 0.5 m
+  hull depth. A floor-depth map is bead es5.7.
 

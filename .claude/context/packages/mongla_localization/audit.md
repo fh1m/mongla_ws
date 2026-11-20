@@ -53,6 +53,9 @@ so a new package cannot go without a module map.
 | — | `tile_decimate:=1` turned the grating off silently: it refused a blurred, noisy grid at every angle | fixed: refused at start-up while `tile_m` is set |
 | — | `Grating.second_period_px` (rows-only bins, no consumer) and a two-axis `phase` that held one number | deleted / made one number |
 | B-134 | the manager's uplink tick ran the 10 s vision preflight on `timer_group`, stalling `/mongla/state`, health and the board-link tick | fixed: the uplink builds without the preflight |
+| B-135 | the accelerometer-bias prior (0.01) was 17 sigma off the measured 0.167 m/s^2; a still hull walked 15.5 cm in 90 s of the real bench recording | fixed: `ACCEL_BIAS_PRIOR` 0.2, 0.94 cm |
+| B-136 | one fix in, the filter was certain and wrong: flow's scale error grows with distance, its sigma did not, and the next correct fix was refused 3 times in 5 against exact truth | fixed: `FLOW_SCALE_SIGMA` floor, 15 of 15 accepted |
+| B-137 | a position fix the gate refused was silent; `fix_from_prop` had already said it worked | fixed: counted and warned |
 
 ## How a mission reaches it
 
@@ -101,9 +104,11 @@ fused without its lever arm and the frames health line says DEGRADED), and recor
 
 `inekf.py`, `localization_node.py`, `localization_inputs.py`, `localization_publish.py`,
 `command_velocity.py`, `retro.py`, `heading_anchor.py`, `resection.py`, `course_map.py`,
-`course_survey.py`, `prop_placement.py`, `floor_plane.py`, `frames.py`, `pose_cluster.py`.
-Not yet read line by line: the two image readers now in `mongla_vision/flow/`, which belong
-to the next vision read.
+`course_survey.py`, `prop_placement.py`, `floor_plane.py`, `frames.py`, `pose_cluster.py`,
+`frames.yaml`, the three course files, `courses/__init__.py`, `__init__.py`, `package.xml`
+(every declared dependency is imported), `setup.py`, `setup.cfg` and the package README.
+`inekf.py` was read a second time for the fix path, which found B-136. The two image readers
+moved to `mongla_vision/flow/` were read with B-133 (`tile_grating`, `pool_lines`).
 
 ## Is this the right design? Research, 2026-11-20
 
@@ -123,4 +128,34 @@ estimator for a pool AUV, or should something replace or join it?
 What would reverse this: a stereo camera on the hull, a DVL fitted, or in-water
 data where flow refuses most frames (then VIO on texture, or a learned inertial
 model trained on that data, is the next thing to A/B).
+
+### What the wider survey changed (2026-11-20, second pass)
+
+A survey of the top RoboSub teams' design reports, competition teams without a DVL, recent
+papers and practitioner forums found no DVL-free pool vehicle reporting better than about
+2-4 % of distance travelled (DeepVL, [arXiv 2502.07726](https://arxiv.org/abs/2502.07726)).
+Every verified top RoboSub team that names a velocity sensor carries a DVL, with dead
+reckoning only as the dropout bridge; CMU fuses object detections as factors (GTSAM). An
+open-source low-cost competition AUV with no DVL ([OpenMantaClaus](https://github.com/kushagra77/OpenMantaClaus))
+runs an EKF on a thruster-feedback model plus YOLO landmark corrections, and its author
+calls the thruster model "a huge source of drift and error": our demand model stays a
+fallback only, and flow is the velocity.
+
+### Every candidate, and what happened to it
+
+| # | Candidate (survey rank) | Tested on | Result | Verdict |
+|---|---|---|---|---|
+| 1 | flow scale against a taped floor target | — | needs water; in air it is 3.6 % worst (measured-bars 13) | **pool day**, bar <= 2 % mean |
+| 2 | close the at-rest miss | the real bench recording, 1x on Kutum | the bias prior; walk 15.5 cm -> 0.94 cm in 90 s | **shipped** (B-135) |
+| 2b | the same prior, in motion | truth study A1 | rms 0.050 vs 0.051 m | **shipped**, no cost |
+| 3 | altitude for flow scale: floor map, else a Ping2 | course file arithmetic | a sloping floor is up to 30 % of scale at 0.5 m depth | **bead es5.7**, needs the venue floor surveyed |
+| 4 | camera-to-IMU lag and de-rotation | — | the board is not on Kutum; no recording has camera and gyro together in rotation | **blocked** (po7.13) |
+| 5 | heading at surveyed headings | — | needs the pool | **pool day**, bar <= 2 deg |
+| 6 | prop fixes gated into the filter | truth study A3 | the gate refused correct fixes from a confidently wrong filter | **fixed and shipped** (B-136, B-137) |
+| 7 | thruster model only as a dropout bridge | truth study A4 | a 12 s flow dropout costs 1.1 cm on this route; the demand model stays a fallback | **kept as is** |
+| 8 | IMU or FOG upgrade | — | only if 2 had failed on a measured bias; it did not | **discarded** |
+| — | off-the-shelf VIO as primary, compass near thrusters, Ping360, USBL, hydrophone ranging | evidence only | no pool result beats what we have, or the sensor is not fitted | **discarded** |
+
+The study is `tools/studies/localization_candidates.py` (self-tested; bars written first);
+its output for 2026-11-20 is in measured-bars 99.
 

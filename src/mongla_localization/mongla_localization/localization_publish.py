@@ -263,7 +263,7 @@ class LocalizationPublishMixin:
             f"zupt={n['zupt']} depth={n['depth']} "
             f"yaw={n['yaw']} grid={n['grid']}/{n['grid'] + n['grid_refused']} "
             f"lane={n['lane']}/{n['lane'] + n['lane_refused']} "
-            f"model={n['model']} fix={n['fix']} gaps={n['gap']} "
+            f"model={n['model']} fix={n['fix']}/{n['fix'] + n['fix_refused']} gaps={n['gap']} "
             f"gated={self._filter.gated} "
             f"rej={self._filter.rejected} brk={self._filter.lockout_breaks} "
             + (f"late={self._retro.late} replay={self._retro.replayed} "

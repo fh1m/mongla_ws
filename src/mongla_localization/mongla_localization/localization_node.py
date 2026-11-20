@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from collections import deque
 
+import math
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import (QoSDurabilityPolicy, QoSProfile,
@@ -64,11 +65,23 @@ from .localization_inputs import STILL_WINDOW, LocalizationInputsMixin
 from .localization_publish import PUBLISH_PERIOD_S, LocalizationPublishMixin
 
 
+# The accelerometer bias prior, 1 sigma, m/s^2: wide enough for the 0.167
+# measured on this board. At 0.01 the filter could not learn it, and a still
+# hull walked 15.5 cm in 90 s; at 0.2, 0.94 cm (measured-bars 99).
+ACCEL_BIAS_PRIOR = 0.2
+# The flow's scale error, 1 sigma, as a fraction of distance flown: the worst
+# of the three 30 cm slides read 3.6 % long (measured-bars 13). Without it a
+# filter one fix in held 0.15 m across 15 m of 5 %-scale flow and refused the
+# next correct fix 3 times in 5; with it, 0 in 15 (measured-bars 99).
+FLOW_SCALE_SIGMA = 0.035
+
+
 class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
     def __init__(self, **kw):
         super().__init__('mongla_localization', **kw)
 
-        self._filter = RIEKF()
+        self._filter = RIEKF(P0_accel_bias=ACCEL_BIAS_PRIOR,
+                             odometry_scale_sigma=FLOW_SCALE_SIGMA)
         self._last_imu_t: float | None = None
         self._last_accel = None          # body specific force, latest IMU
         self._imu_gap_warned = False
@@ -77,7 +90,7 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
         # of zero on one input is invisible in the pose itself.
         self._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0,
                    'flow_refused': 0, 'depth_refused': 0, 'yaw_refused': 0,
-                   'fix': 0, 'zupt': 0, 'grid': 0, 'grid_refused': 0,
+                   'fix': 0, 'fix_refused': 0, 'zupt': 0, 'grid': 0, 'grid_refused': 0,
                    'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0,
                    # World-frame updates the observability gate refused. A
                    # non-zero count is not an error -- it is the gate doing its
@@ -239,7 +252,8 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
         self.create_timer(5.0, self._diagnose)
         self.get_logger().info(
             f'[LOCAL] invariant filter up: imu=/mongla/imu '
-            f'flow=/mongla/vision/{cam}/velocity use_yaw={self._use_yaw}')
+            f'flow=/mongla/vision/{cam}/velocity use_yaw={self._use_yaw} '
+            f'accel_bias_prior={math.sqrt(self._filter.P[12, 12]):.3f} m/s^2')
 
 
 def main(args=None):

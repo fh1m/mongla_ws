@@ -602,6 +602,42 @@ heartbeat thread was not affected.
 **Fix.** The uplink builds its VisionState with `preflight=False`; vision verbs keep the
 warm-up. Guard `test_the_uplink_builds_without_the_preflight_wait`.
 
+### B-135: the accelerometer-bias prior was 17 sigma off the board's measured bias `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `RIEKF` used one prior, `P0_bias = 0.01`, for both biases. The ledger's static
+IMU table measures this board's accelerometer bias at 0.167 m/s^2, so the filter could not
+learn it, and every ZUPT corrected the same biased velocity again. On the real bench
+recording, replayed at 1x on Kutum, a still hull walked 15.5 cm in 90 s.
+
+**Fix.** `P0_accel_bias` is its own argument; the node passes `ACCEL_BIAS_PRIOR = 0.2`.
+Walk 0.94 cm on the same replay, and no worse in motion on the truth study (measured-bars
+99). Guard `test_the_accel_bias_prior_covers_the_measured_bias`, failing at 0.01.
+
+### B-136: one fix in, the filter was certain and wrong, and refused the next correct fix `REPRODUCED 2026-11-20` **FIXED 2026-11-20**
+
+**What.** Flow's sigma is per-sample noise; integrated, it grows like a square root of time.
+A flow scale error grows with distance. With nothing modelling the second, the position
+sigma after a 0.15 m fix stayed at 0.153 m across 15 m of 5 %-scale flow while the estimate
+drifted 0.5-0.7 m, and the chi-square gate refused the next correct fix 3 times in 5
+(`tools/studies/localization_candidates.py`, against exact truth). `go_to` would have
+arrived at the wrong place reporting 0.15 m.
+
+**Fix.** `odometry_scale_sigma`: the horizontal position sigma is held at no less than
+sqrt(sigma_at_last_fix^2 + (k x distance since)^2), with k = `FLOW_SCALE_SIGMA` = 0.035,
+the worst slide in measured-bars 13. 15 of 15 accepted. Guard
+`test_scale_error_floor.py`, failing with the floor removed. Not covered: a sloping floor's
+scale error (bead es5.7).
+
+### B-137: a refused position fix was silent `READ 2026-11-20` **FIXED 2026-11-20**
+
+**What.** `_on_fix` returned without a word when the gate or the replay horizon refused a
+fix. `fix_from_prop` had already reported success, so a mission believed it had fixed
+position, and the counter was the only place the truth showed.
+
+**Fix.** A `fix_refused` counter in the diagnostic line (`fix=accepted/offered`) and a
+warning naming the fix, the estimate and both sigmas. Guard
+`test_a_refused_fix_is_counted_and_said`.
+
 ### B-130: the old-host guard matched `mongla.localization()` `READ 2026-11-20` **FIXED 2026-11-20**
 
 **What.** `test_kutum_has_one_name` grepped a fixed string, so the DSL call

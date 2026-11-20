@@ -58,7 +58,7 @@ def test_the_filter_is_actually_constructed_by_the_node():
     """Guards against the node importing the filter and never using it, which
     is what a refactor does when it moves logic out and forgets to move it in."""
     src = code_of_file(PKG / 'mongla_localization' / 'localization_node.py')
-    assert 'RIEKF()' in src
+    assert 'RIEKF(' in src and 'self._filter = RIEKF(' in src
     for method in ('predict', 'update_depth', 'update_body_velocity_xy',
                    'update_position', 'update_attitude',
                    'update_zero_velocity'):

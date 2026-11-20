@@ -681,7 +681,18 @@ class LocalizationInputsMixin:
         if not self._apply(_opt_stamp(msg),
                            lambda f, xy=(msg.point.x, msg.point.y), s=sigma:
                            f.update_position(xy, sigma=s)):
-            return                      # older than the replay horizon: refused
+            # Older than the replay horizon, or refused by the chi-square gate.
+            # Said out loud: the caller of fix_from_prop believes it worked.
+            self._n['fix_refused'] += 1
+            p = self._filter.X.p
+            self.get_logger().warning(
+                f'[LOCAL] position fix ({msg.point.x:+.2f}, {msg.point.y:+.2f}) '
+                f'sigma {sigma:.2f} m REFUSED against the estimate '
+                f'({p[0]:+.2f}, {p[1]:+.2f}) sigma '
+                f'{math.sqrt(max(self._filter.P[6, 6], self._filter.P[7, 7])):.2f} m: '
+                f'the gate or the replay horizon; a wrong prop, or a filter '
+                f'certain and wrong')
+            return
         self._n['fix'] += 1
 
 def _wrap_period(deg: float, period: float) -> float:

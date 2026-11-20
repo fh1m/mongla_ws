@@ -411,7 +411,34 @@ dynamics independent of the state for this class of system — the property Barr
 prove, and the reason it converges where a textbook EKF can diverge.
 </details>
 
-**See it yourself:** `ros2 topic echo /mongla/odom` with `localization:=true` · the package page,
+**The dangerous half is the confidence.** A filter carries a guess and how sure it is of the
+guess. Wrong and unsure, it takes the next correction. Wrong and *sure*, it refuses it: the
+gate that keeps a mislabelled prop out cannot tell a correct-but-surprising fix from a bad one.
+Three of this package's defects were the confidence lying, each found against a known truth:
+
+| What lied | Measured | Now |
+|---|---|---|
+| the accelerometer bias, assumed 17x smaller than this board's | a still hull walked **15.5 cm in 90 s** of the real bench recording | **0.94 cm** |
+| flow's sigma, which grows like a square root while a scale error grows with distance | one fix in, the next correct fix **refused 3 times in 5** on a pool route with known truth | **0 in 15** |
+| "aided" on a cold filter | 20 s of "aided" while the estimate ran 9 m | usable needs flow or a zero-velocity update in the last 2 s |
+
+And the one that is not a lie: told "you are still" for a second whenever the thrusters rest,
+the filter holds centimetres. Without it the same recording ran to **1665 m in 140 s**.
+
+**What it is for.** One topic, `/mongla/localization/state`, says *usable* or why not. On it,
+`go_to(x, y)` drives to a pool point and refuses before any thrust when the answer is no; the
+vision lock predicts where a lost target went from how the hull moved; `motion()` tells
+moving from stuck; and the mission `localization_check` grades it in water, stage by stage,
+ending on a prop fix the filter did not make.
+
+**What we checked it against.** Top teams carry a DVL; no DVL-free pool vehicle publishes
+better than about 2-4 % of distance; visual-inertial odometry fails on bare pool floors. So
+the design stays, and the eight ranked candidates were each tested, shipped or discarded
+([the audit](.claude/context/packages/mongla_localization/audit.md#every-candidate-and-what-happened-to-it)).
+
+**See it yourself:** `ros2 topic echo /mongla/localization/state` with `localization:=true` ·
+`ros2 run mongla_planner mongla locate` · [the chapter on the site](https://fh1m.github.io/mongla_ws/#where) ·
+`python3 tools/studies/localization_candidates.py` (truth, before water) · the package page,
 [`mongla_localization`](.claude/context/packages/mongla_localization/README.md).
 
 ### 3. The DVL we do not have

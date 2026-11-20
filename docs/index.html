@@ -1571,6 +1571,134 @@
  </div>
 </section>
 
+<!-- 09d ─────────────────────────── -->
+<section id="where" data-chapter="where am I">
+ <div class="wrap">
+  <p class="mark">Play with it <i>//</i> the filter that was sure, and wrong</p>
+  <h2 class="col">Knowing where you are is half the job. Knowing how well you know it is the other half.</h2>
+  <p class="lede col quiet">Underwater there is no GPS and we fly no DVL, so the vehicle's position
+    is an argument between sensors: the IMU predicts, and the floor camera, the depth gauge, a
+    second of stillness and a prop whose place we taped each correct it. The filter keeps two
+    things, a guess and how sure it is of the guess. The guess is rarely what goes wrong. The
+    confidence is.</p>
+
+  <div class="lab">
+   <div class="lab__stage">
+    <canvas id="where-view" width="900" height="380" role="img"
+      aria-label="Top view of a pool route: the true path, the filter's estimate drifting with a flow scale error, the uncertainty it believes, and a correct prop fix arriving at the gate"></canvas>
+    <div class="lab__read">
+      <div><span class="silk silk--b">estimate is off by</span><b id="where-off">—</b></div>
+      <div><span class="silk silk--b">filter believes &plusmn;</span><b id="where-sig">—</b></div>
+      <div><span class="silk silk--b">the correct fix</span><b id="where-gate">—</b></div>
+      <div><span class="silk silk--b">go_to, 0.5 m</span><b id="where-goto">—</b></div>
+    </div>
+   </div>
+   <div class="lab__knobs">
+    <label class="knob"><span class="silk silk--b">flow scale error</span>
+      <input type="range" id="where-s" min="0" max="8" step="0.1" value="5">
+      <output id="where-s-o">5.0 %</output>
+      <em>The floor camera reads every metre a little long or short. In air, on a tape, ours read
+        up to <span class="num">3.6 %</span> long. It does not average out: 3 % long is 3 % long on
+        every frame.</em></label>
+    <label class="knob"><span class="silk silk--b">metres since the last fix</span>
+      <input type="range" id="where-d" min="1" max="30" step="0.5" value="15">
+      <output id="where-d-o">15.0 m</output>
+      <em>A fix off a taped prop resets the error to the fix's own, about
+        <span class="num">0.15 m</span>. Then the scale error builds again, metre by metre.</em></label>
+    <label class="knob"><span class="silk silk--b">scale error the filter allows for</span>
+      <input type="range" id="where-k" min="0" max="6" step="0.1" value="0">
+      <output id="where-k-o">0.0 %</output>
+      <em>Zero is how it shipped until 2026-11-20: its doubt came only from per-frame noise, which
+        grows like a square root. Ours now allows <span class="num">3.5 %</span> of distance.</em></label>
+    <div class="lab__presets">
+      <button class="key" type="button" data-where="5,15,0">before the fix</button>
+      <button class="key" type="button" data-where="5,15,3.5">as shipped</button>
+      <button class="key" type="button" data-where="2.5,15,0">the in-air error</button>
+      <button class="key" type="button" data-where="3.5,28,3.5">a long leg</button>
+    </div>
+   </div>
+  </div>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>Why a sure filter refuses the truth</h3>
+    <p class="quiet">Every correction passes a gate first. The filter asks how surprising the
+      measurement is, given how sure it already is: the squared miss, divided by the doubt the
+      two of them carry together. Past <span class="num">9.21</span>, the 99th percentile of
+      that ratio for a two-axis measurement, the measurement is thrown away. That gate is what
+      keeps one mislabelled prop from teleporting the vehicle a metre.</p>
+    <p class="quiet">It is also a trap. Drag the filter's allowance to zero: its doubt barely
+      grows across fifteen metres, because noise that averages out is all it knows about. The
+      scale error has put it 0.75 m off. A correct fix arrives, the miss looks enormous against
+      such certainty, and the gate throws away the one measurement that was right. Against a
+      route with exact truth this happened to the second fix <span class="num">3 times in 5</span>.
+      With the allowance, <span class="num">0 in 15</span>.</p>
+   </div>
+   <div>
+    <h3>Why it matters to everything that moves</h3>
+    <p class="quiet"><code>go_to(x, y)</code> drives to a point in the pool, and it refuses to
+      start when the filter cannot say where the hull is to within the arrival tolerance. A
+      filter that is sure and wrong passes that check, drives, and reports
+      <em>arrived</em>, three quarters of a metre from the goal. With honest doubt, the same
+      filter says <em>I don't know well enough</em>, and the mission takes a fix first.</p>
+    <p class="quiet">The cost is real and it is the right one: from a 0.15 m fix, the allowance
+      reaches the default 0.5 m tolerance after about 13.6 m. Past that, the vehicle has to look
+      at a prop again before it may claim to have arrived anywhere.</p>
+    <blockquote class="pull">Being wrong is survivable. Being <em>sure</em> and wrong locks out the
+      measurement that would have fixed it.</blockquote>
+   </div>
+  </div>
+
+  <h3 style="margin-top:var(--s5)">The fifteen numbers, and who is allowed to touch them</h3>
+  <p class="col quiet">This is the whole state, in the order <code>inekf.py</code> keeps it, and
+    each row is one kind of measurement with a cell lit wherever its Jacobian is not zero. Read
+    the last six columns: <em>nothing measures a bias</em>. The filter learns them only through
+    what they do to everything else, which is why the accelerometer's prior has to be wide
+    enough to hold the real one.</p>
+  <div class="sv" role="table" aria-label="Which measurement updates which of the fifteen filter states">
+   <div class="sv__row sv__head" role="row"><span role="columnheader"></span>
+    <span class="sv__grp" style="grid-column:span 3">attitude &theta;</span>
+    <span class="sv__grp" style="grid-column:span 3">velocity v</span>
+    <span class="sv__grp" style="grid-column:span 3">position p</span>
+    <span class="sv__grp" style="grid-column:span 3">gyro bias</span>
+    <span class="sv__grp" style="grid-column:span 3">accel bias</span>
+    <span class="sv__rate">rate</span></div>
+   <div class="sv__row sv__idx" role="row"><span></span>
+    <i>0</i><i>1</i><i>2</i><i>3</i><i>4</i><i>5</i><i>6</i><i>7</i><i>8</i><i>9</i><i>10</i><i>11</i><i>12</i><i>13</i><i>14</i><span></span></div>
+   <div class="sv__row" role="row"><span>board attitude</span>
+    <b></b><b></b><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">50 Hz</span></div>
+   <div class="sv__row" role="row"><span>floor flow, x and y</span>
+    <u></u><u></u><u></u><b></b><b></b><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">camera</span></div>
+   <div class="sv__row" role="row"><span>stillness (ZUPT)</span>
+    <u></u><u></u><u></u><b></b><b></b><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">1 Hz, still</span></div>
+   <div class="sv__row" role="row"><span>depth</span>
+    <s></s><s></s><u></u><u></u><u></u><u></u><u></u><u></u><b></b><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">board</span></div>
+   <div class="sv__row" role="row"><span>heading (anchor, floor)</span>
+    <s></s><s></s><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">when seen</span></div>
+   <div class="sv__row" role="row"><span>prop fix</span>
+    <s></s><s></s><s></s><u></u><u></u><u></u><b></b><b></b><u></u><u></u><u></u><u></u><u></u><u></u><u></u><span class="sv__rate">when asked</span></div>
+   <p class="sv__key"><b></b> measured directly &nbsp; <s></s> coupled: through the hull's distance from where it started for depth and a fix (<code>-skew(p)</code>), through roll and pitch for heading &nbsp; <u></u> not touched</p>
+  </div>
+
+  <table class="ledger">
+   <thead><tr><th>what lied, or held</th><th>measured on</th><th>before</th><th>after</th></tr></thead>
+   <tbody>
+    <tr><td>accelerometer bias prior, 17&times; smaller than this board's</td><td>the real bench recording, 1&times; on Kutum</td><td class="numr">15.5 cm in 90 s, still</td><td class="num">0.94 cm</td></tr>
+    <tr><td>doubt with no scale error in it</td><td>a pool route with exact truth, 5 seeds</td><td class="numr">2 of 5 fixes taken</td><td class="num">5 of 5</td></tr>
+    <tr><td>a hull never commanded, waiting to be still</td><td>the real bench recording</td><td class="numr">0.71 m in 2.7 s</td><td class="num">0.08 m</td></tr>
+    <tr><td>stillness switched off entirely</td><td>the real bench recording</td><td class="numr">1665 m in 140 s</td><td class="num">0.94 cm, with it on</td></tr>
+    <tr><td>"aided" on a filter nothing had measured yet</td><td>the real bench recording</td><td class="numr">20 s aided, 9 m run</td><td class="num">usable needs a measurement within 2 s</td></tr>
+    <tr><td>a 12 s blind stretch of floor, mid-cruise</td><td>a pool route with exact truth</td><td class="num">8.8 cm, floor seen</td><td class="num">9.9 cm, 12 s blind</td></tr>
+   </tbody>
+  </table>
+  <p class="col quiet" style="margin-top:26px">None of this has been in water; each row was found
+    against something whose answer was known in advance, which is the only way to rank an
+    estimator. The first pool session runs <code>localization_check</code>: live, aided,
+    anchored, out, back, and last a prop fix the filter did not make, compared with where the
+    filter thinks it is.</p>
+ </div>
+</section>
+
 <section class="chapter">
  <div class="wrap" data-no="III">
   <div class="no">III</div>
@@ -2970,6 +3098,133 @@
     b.addEventListener('click', function(){
       var p = b.dataset.late.split(',');
       el.lat.value = p[0]; el.v.value = p[1]; el.yaw.value = p[2]; draw();
+    });
+  });
+  draw();
+})();
+
+(function(){
+  /* The sure, wrong filter. One straight leg from a fix at the origin. Truth
+     ends at d; the estimate, flown on flow reading s long, ends at (1+s)d.
+     The filter's doubt is sqrt(n(d) + (k d)^2): n(d) is what per-frame flow
+     noise alone gives, fitted to the truth study (0.150 m -> 0.153 m over
+     15 m, measured-bars 99), and k the scale error it allows for. A correct
+     fix lands on the truth with its own sigma 0.15 m, and the gate is the
+     filter's own: accept while miss^2 <= 9.21 (sigma^2 + sigma_fix^2), the
+     two-axis chi-square 99th percentile in inekf.py. The gate circle drawn
+     round the estimate is exactly that radius. */
+  var cv = document.getElementById('where-view');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), DPR = 2, W = 900, H = 380;
+  cv.width = W * DPR; cv.height = H * DPR; ctx.scale(DPR, DPR);
+  var SF = 0.15, N0 = 0.15 * 0.15, NQ = (0.153 * 0.153 - 0.15 * 0.15) / 15, GATE = 9.21, TOL = 0.5;
+  var el = {s: document.getElementById('where-s'), d: document.getElementById('where-d'),
+            k: document.getElementById('where-k')};
+  var out = {s: document.getElementById('where-s-o'), d: document.getElementById('where-d-o'),
+             k: document.getElementById('where-k-o'), off: document.getElementById('where-off'),
+             sig: document.getElementById('where-sig'), gate: document.getElementById('where-gate'),
+             go: document.getElementById('where-goto')};
+  var css = getComputedStyle(document.documentElement);
+  var INK3 = css.getPropertyValue('--ink-3').trim() || '#7b8598',
+      RED = css.getPropertyValue('--signal-text').trim() || '#ff2a14',
+      SEA = css.getPropertyValue('--medium-text').trim() || '#5a8dff',
+      OK = css.getPropertyValue('--state-water').trim() || '#22d3c5',
+      SUNK = css.getPropertyValue('--d0').trim() || '#000';
+
+  function draw(){
+    var s = +el.s.value / 100, d = +el.d.value, k = +el.k.value / 100;
+    var off = s * d;
+    var sig = Math.sqrt(N0 + NQ * d + (k * d) * (k * d));
+    var gateR = Math.sqrt(GATE * (sig * sig + SF * SF));
+    var nis = off * off / (sig * sig + SF * SF);
+    var taken = nis <= GATE;
+
+    /* the view: the end of the leg, where everything happens, zoomed so the
+       doubt and the gate are visible; the whole leg goes in an inset */
+    var span = Math.max(2.2 * gateR + 0.6, off + 2 * gateR + 0.4, 1.6);
+    var sc = (W - 300) / span;
+    var cx = d + off / 2, ox = W / 2 + 40 - cx * sc, oy = H / 2 + 10;
+    function X(x){ return ox + x * sc; }
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
+
+    // the pool floor: 0.5 m tiles, so the scale is the floor itself
+    ctx.strokeStyle = 'rgba(255,255,255,.05)'; ctx.lineWidth = 1;
+    var g0 = Math.floor((cx - span) / 0.5) * 0.5;
+    for (var gx = g0; gx < cx + span; gx += 0.5){
+      ctx.beginPath(); ctx.moveTo(X(gx), 0); ctx.lineTo(X(gx), H); ctx.stroke();
+    }
+    for (var gy = -span; gy < span; gy += 0.5){
+      ctx.beginPath(); ctx.moveTo(0, oy + gy * sc); ctx.lineTo(W, oy + gy * sc); ctx.stroke();
+    }
+    // the leg: truth, and the estimate laid a hair beside it so both read
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.75)';
+    ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(X(d), oy); ctx.stroke();
+    ctx.setLineDash([5, 4]); ctx.strokeStyle = 'rgba(255,42,20,.55)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, oy - 3); ctx.lineTo(X(d + off), oy - 3); ctx.stroke();
+    ctx.setLineDash([]);
+
+    function ring(x, r, col, dash, width){
+      ctx.beginPath(); ctx.setLineDash(dash || []); ctx.arc(X(x), oy, r * sc, 0, 6.3);
+      ctx.strokeStyle = col; ctx.lineWidth = width || 1.5; ctx.stroke(); ctx.setLineDash([]);
+    }
+    function dot(x, col, r){
+      ctx.beginPath(); ctx.arc(X(x), oy, r, 0, 6.3); ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = SUNK; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    ring(d + off, gateR, 'rgba(255,255,255,.35)', [3, 4], 1);
+    ctx.fillStyle = 'rgba(255,42,20,.10)';
+    ctx.beginPath(); ctx.arc(X(d + off), oy, sig * sc, 0, 6.3); ctx.fill();
+    ring(d + off, sig, RED, [], 1.5);
+    ring(d, SF, taken ? OK : SEA, [2, 3], 1);
+    dot(d, '#ffffff', 5);
+    dot(d + off, RED, 6);
+    dot(d, taken ? OK : SEA, 3);
+
+    var key = [['rgba(255,255,255,.75)', 'where the vehicle really is'],
+               [RED, 'where the filter says it is, and how sure it is'],
+               ['rgba(255,255,255,.35)', 'the gate: a fix outside this ring is thrown away'],
+               [taken ? OK : SEA, 'a correct fix off a taped prop, ±0.15 m: ' + (taken ? 'taken' : 'REFUSED')]];
+    ctx.font = '11px ui-monospace, monospace';
+    key.forEach(function(q, i){
+      var ky = 26 + i * 18;
+      ctx.fillStyle = q[0]; ctx.beginPath(); ctx.arc(24, ky - 4, 4, 0, 6.3); ctx.fill();
+      ctx.fillStyle = i ? INK3 : 'rgba(255,255,255,.8)'; ctx.fillText(q[1], 36, ky);
+    });
+    var barM = span > 4 ? 1 : 0.5;
+    ctx.strokeStyle = INK3; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(W - 40 - barM * sc, H - 26); ctx.lineTo(W - 40, H - 26); ctx.stroke();
+    ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText(barM + ' m', W - 40 - barM * sc, H - 36);
+
+    // inset: the whole leg from the fix, so the zoom has a context
+    var iw = 170, ih = 64, ix = W - iw - 22, iy = 22;
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(ix, iy, iw, ih);
+    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.strokeRect(ix, iy, iw, ih);
+    var isc = (iw - 30) / (d * (1 + s) + 0.01), iox = ix + 12, ioy = iy + ih / 2 - 4;
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(iox, ioy); ctx.lineTo(iox + d * isc, ioy); ctx.stroke();
+    ctx.fillStyle = SEA; ctx.beginPath(); ctx.arc(iox, ioy, 3, 0, 6.3); ctx.fill();
+    ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText('first fix, then ' + d.toFixed(1) + ' m', ix + 8, iy + ih - 8);
+
+    out.s.textContent = (s * 100).toFixed(1) + ' %';
+    out.d.textContent = d.toFixed(1) + ' m';
+    out.k.textContent = (k * 100).toFixed(1) + ' %';
+    out.off.textContent = (off * 100).toFixed(0) + ' cm';
+    out.sig.textContent = (sig * 100).toFixed(0) + ' cm';
+    out.gate.textContent = (taken ? 'taken' : 'refused') + ', ' + nis.toFixed(1) + ' / 9.21';
+    out.gate.style.color = taken ? '' : RED;
+    var go = sig > TOL ? 'refuses: fix first'
+           : off > TOL ? 'ARRIVED, ' + (off * 100).toFixed(0) + ' cm out'
+           : 'arrives, honestly';
+    out.go.textContent = go;
+    out.go.style.color = (sig <= TOL && off > TOL) ? RED : '';
+  }
+  ['s', 'd', 'k'].forEach(function(n){ el[n].addEventListener('input', draw); });
+  document.querySelectorAll('[data-where]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var p = b.dataset.where.split(',');
+      el.s.value = p[0]; el.d.value = p[1]; el.k.value = p[2]; draw();
     });
   });
   draw();
