@@ -134,6 +134,36 @@ case "$np" in
   "")  fail "numpy or cv2 does not import" ;;
   *)   fail "numpy $np -- the system cv2 is built against numpy 1 and every vision node dies at import (E1)" ;;
 esac
+# The vehicle's pins. deploy.sh does not install them (setup.sh does, into
+# ~/.local, which every release shares), so a release whose pins the machine
+# does not have would deploy and run against the old versions. Graded here,
+# where deploy runs the staged release's doctor, so it refuses before the switch.
+REQ="$HERE/requirements.txt"
+[ -f "$REQ" ] || REQ="$HOME/mongla_ws/kutum/requirements.txt"
+if [ -f "$REQ" ]; then
+  while read -r verdict line; do
+    case "$verdict" in
+      ok)   ok "pin $line" ;;
+      DIFF) fail "pin $line -- run kutum/setup.sh (the user half, no sudo) from this release, then deploy again" ;;
+    esac
+  done < <(python3 - "$REQ" <<'PY' 2>/dev/null
+import importlib.metadata as md, re, sys
+for raw in open(sys.argv[1]):
+    line = raw.split('#')[0].strip()
+    if '==' not in line:
+        continue
+    name, want = (x.strip() for x in line.split('==', 1))
+    name = re.sub(r'\[.*\]', '', name)
+    try:
+        got = md.version(name)
+    except md.PackageNotFoundError:
+        got = 'missing'
+    print('ok' if got == want else 'DIFF', f'{name}=={want}' + ('' if got == want else f', installed {got}'))
+PY
+)
+else
+  warn "kutum/requirements.txt not found beside the doctor -- the pins were not checked"
+fi
 case "$cv2f" in
   /usr/*) ok "cv2 is the system build" ;;
   "")     ;;
