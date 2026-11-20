@@ -164,8 +164,10 @@ def generate_launch_description():
         DeclareLaunchArgument('debug_image_hz', default_value='10.0',
                               description='Annotated image_debug publish rate (raise toward inference '
                                           'FPS for a smoother vision_display picture)'),
-        DeclareLaunchArgument('viewer',        default_value='true',
-                              description='Open the OpenCV vision_display HUD (viewer:=false = headless)'),
+        DeclareLaunchArgument('viewer',        default_value=launch_defaults.has_screen(),
+                              description='Open the OpenCV vision_display HUD. Default: '
+                                          'only when there is a screen (DISPLAY or '
+                                          'WAYLAND_DISPLAY), so a headless Kutum keeps running'),
         DeclareLaunchArgument('tracking',      default_value='true',
                               description='Start tracker_node (Roboflow OC-SORT/ByteTrack + Kalman)'),
         DeclareLaunchArgument('tracker_type',  default_value='ocsort',

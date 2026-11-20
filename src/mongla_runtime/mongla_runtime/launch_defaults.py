@@ -81,6 +81,18 @@ SECTIONS = ('batighor', 'calibrate', 'video', 'vision', 'vision_dual', 'vision_p
 DEFAULT_PATH = Path.home() / '.mongla' / 'bringup.yaml'
 
 
+def has_screen(env=None) -> str:
+    """'true' when this session can open a window, else 'false'.
+
+    The default for every launch file's `viewer`. Kutum has no screen, and a
+    viewer that aborts there took `vision_dual` down 5 s after it started,
+    because its exit is wired to shut the launch (on a desk, `q` quits all).
+    `viewer:=true` typed still wins.
+    """
+    env = os.environ if env is None else env
+    return 'true' if (env.get('DISPLAY') or env.get('WAYLAND_DISPLAY')) else 'false'
+
+
 def config_path() -> Path | None:
     """The file bringup will read, or None if there is none to read."""
     env = os.environ.get(ENV, '').strip()

@@ -136,7 +136,9 @@ def generate_launch_description():
         DeclareLaunchArgument('debug_image_hz', default_value='10.0',
                               description='Annotated image_debug publish rate (the browser-stream '
                                           'smoothness knob; raise toward inference FPS for a web viewer)'),
-        DeclareLaunchArgument('viewer',       default_value='true'),
+        # Only with a screen: the viewer's exit shuts this launch, so one that
+        # aborts on a headless Kutum took the whole stack down in 5 s.
+        DeclareLaunchArgument('viewer',       default_value=launch_defaults.has_screen()),
         DeclareLaunchArgument('tracking',     default_value='true'),
         DeclareLaunchArgument('tracker_type', default_value='ocsort',
                               description='Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack'),
