@@ -4222,6 +4222,28 @@ need water footage the archive does not hold.
 
 ---
 
+### 20.6 Whole-image language-vision encoders (2026-11-20)
+
+CLIP and SigLIP2 are in the Hailo Model Zoo's image-encoder category, so they
+are the last retrievers on hand that the chip could run. Both as their
+authors run them, through open_clip: `ViT-B-32-quickgelu` (OpenAI weights) and
+`ViT-B-32-SigLIP2-256` (WebLI), the L2-normalised image embedding as the
+signature, scored by the same tool and footage as 20.5 against VLAD-16.
+**Bar:** the 20.5 bar, unchanged, written down before the runs.
+
+| signature | in-clip forward r@1 | in-clip downward r@1 | revisit r@1 | Recall@1 vs VLAD-16, forward; downward; revisit (95 %) |
+|---|---|---|---|---|
+| CLIP ViT-B/32 | 46.7 % | 31.2 % | 14.1 % | **-19.2 (-28.3, -10.0); -45.8 (-64.6, -27.1); -7.3 (-12.2, -2.4)** |
+| SigLIP2 ViT-B/32 | 46.7 % | 41.7 % | 12.0 % | **-19.2 (-29.2, -9.2); -35.4 (-52.1, -18.8); -9.5 (-14.7, -4.3)** |
+
+**Both fail, on every clause, with every interval below zero; VLAD-16
+stays.** They lose more than the 20.5 candidates did, which fits 20.5's first
+lesson: an encoder trained to say what a whole image shows ranks a floor
+texture and a small prop worse than words learnt from our own descriptors.
+Nothing was compiled. The scorer was a copy of `bank_shortlist_accuracy.py`
+with two signatures added; it is not shipped, and the logs are on the dev
+box under `~/attic/2026-11-20/clip_siglip/`.
+
 ## 21. A reference does NOT decay to death — and a correction
 
 **2026-09-24.** §20 and the bank's own docstring were written around a claim
