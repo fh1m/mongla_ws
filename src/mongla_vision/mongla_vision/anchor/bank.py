@@ -98,9 +98,11 @@ CAPACITY = 64
 #
 #     k=1  17.6 %     k=2  9.3 %     k=3  6.3 %     k=5  1.9 %     k=8  0.7 %
 #
-# The VLAD signature that replaced it (section 20.2) loses 0.8 % at k=5 on the
+# The VLAD signature that replaced it (section 20.3) loses 0.8 % at k=5 on the
 # forward clips and 1.3 % on the downward ones, against 3.1 % and 6.2 % for the
-# mean on the same queries. Recall@1 is not the number to steer by: several
+# mean on the same queries. On a revisit (bank from one run, queries from a
+# later one, section 20.5) k=5 still keeps an identity-grade match for 91.6 %
+# of queries and k=8 for 94.7 %; no learned signature tried did better. Recall@1 is not the number to steer by: several
 # references are nearly as good, so a "wrong" shortlist costs yield rather than
 # the lock. k=5 is the knee. 8 is the ceiling this constant sets, not the
 # default -- the default is whatever the time budget affords, below.
