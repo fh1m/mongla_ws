@@ -69,10 +69,11 @@ def _node(disarmed: bool = False):
     node logic go untested.
     """
     obj = ln.LocalizationNode.__new__(ln.LocalizationNode)
-    obj._filter = RIEKF()
+    obj._filter = RIEKF(P0_accel_bias=ln.ACCEL_BIAS_PRIOR,   # as the node builds it
+                         odometry_scale_sigma=ln.FLOW_SCALE_SIGMA)
     obj._last_imu_t = None
     obj._imu_gap_warned = True          # suppress the logger call
-    obj._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0,
+    obj._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0, 'fix_refused': 0,
               'flow_refused': 0, 'depth_refused': 0, 'yaw_refused': 0,
               'zupt': 0, 'grid': 0, 'grid_refused': 0,
               'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0, 'gated': 0}
@@ -711,6 +712,7 @@ def test_a_floor_correction_is_KEPT_not_undone_by_the_board():
     n = _node(disarmed=True)
     t = _fly_board(n, 100.0, 1.0, 30.0)
     n._on_heading(type('F', (), {'data': -60.0})())
+    n._on_floor_grid(type('F', (), {'heading_deg': -60.0})())   # the reference
     t = _fly_board(n, t, 1.0, 32.0)                     # drifted board
     assert n._filter.X.yaw_deg() == pytest.approx(-58.0, abs=0.5)
     for _ in range(100):                                # 10 s of 10 Hz grid
@@ -781,6 +783,8 @@ def test_a_small_drift_is_corrected_by_the_floor():
     BNO drifts without bound. The floor's grid bounds it."""
     n = _node()
     n._anchored = True
+    n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())   # the reference
+    assert n._n['grid'] == 0, 'a reference is not a correction'
     n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())
     assert n._n['grid'] == 1
     assert n._n['grid_refused'] == 0
@@ -792,6 +796,7 @@ def test_a_large_disagreement_is_REFUSED_and_COUNTED():
     the wrong branch -- worse than the drift it was fixing."""
     n = _node()
     n._anchored = True
+    n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())   # reference at yaw 0
     n._filter.X.R = np.array([[0.0, -1.0, 0.0],      # yaw = +90 deg
                               [1.0, 0.0, 0.0],
                               [0.0, 0.0, 1.0]])
@@ -810,6 +815,8 @@ def test_the_lane_line_uses_its_OWN_symmetry_not_the_grids():
     this would be applied and the test fails."""
     n = _node()
     n._anchored = True
+    n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())   # references at yaw 0
+    n._on_lane_line(type('F', (), {'heading_deg': 0.0})())
     n._filter.X.R = np.array([[0.0, -1.0, 0.0],      # yaw = +90 deg
                               [1.0, 0.0, 0.0],
                               [0.0, 0.0, 1.0]])
@@ -823,6 +830,7 @@ def test_the_lane_line_uses_its_OWN_symmetry_not_the_grids():
 def test_a_lane_line_along_the_hull_is_applied_and_counted():
     n = _node()
     n._anchored = True
+    n._on_lane_line(type('F', (), {'heading_deg': 0.0})())   # the reference
     n._on_lane_line(type('F', (), {'heading_deg': 0.0})())
     assert n._n['lane'] == 1
 
@@ -1096,6 +1104,7 @@ class _Recorder:
 def test_aiding_is_reported_as_aided_on_a_healthy_filter():
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     n._report_aiding()
     assert n._pub_aiding.sent == ['aided']
 
@@ -1104,6 +1113,7 @@ def test_an_unreadable_aiding_gate_reports_unaided():
     """Issue #52: the feed is a safety input, so it fails closed."""
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
 
     def boom():
         raise RuntimeError('covariance is not finite')
@@ -1119,6 +1129,7 @@ def test_aiding_flips_to_unaided_when_velocity_stops_being_observed():
     warning the node already logs."""
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     n._report_aiding()
     for _ in range(200):
         n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
@@ -1131,6 +1142,7 @@ def test_aiding_is_published_only_on_CHANGE():
     restatement of an unchanged fact is noise an operator learns to ignore."""
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     for _ in range(5):
         n._report_aiding()
     assert n._pub_aiding.sent == ['aided']
@@ -1139,6 +1151,7 @@ def test_aiding_is_published_only_on_CHANGE():
 def test_aiding_recovers_when_velocity_is_measured_again():
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     n._report_aiding()
     for _ in range(200):
         n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
@@ -1154,6 +1167,7 @@ def test_a_filter_without_the_gate_reports_unaided_and_does_not_crash():
     unaided: a gate that is not there has not vouched for the position (#52)."""
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
 
     class _Old:
         pass
@@ -1170,6 +1184,7 @@ def test_the_aiding_topic_is_not_the_motion_topic():
     hull is perfectly well localised; an unaided one is not."""
     n = _node()
     n._pub_aiding, n._pub_motion = _Recorder(), _Recorder()
+    n._last_input_t = 100.0                     # has heard an input
     for _ in range(200):
         n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
     n._report_aiding()
@@ -1281,9 +1296,29 @@ def test_an_UNKNOWN_demand_is_not_stillness():
 def test_a_centred_demand_must_hold_long_enough_to_have_stopped():
     """Thrust off is not hull stopped: it coasts for ~3 time constants."""
     n = _node()
-    n._on_demand(_Demand(0.0, 0.0))            # centred just now
+    n._on_demand(_Demand(0.6, 0.0))            # thrust ...
+    n._on_demand(_Demand(0.0, 0.0))            # ... centred just now
     _cruise(n, demand=(0.0, 0.0), seconds=1.5, v=0.0)
     assert n._n['zupt'] == 0
+
+
+def test_a_hull_never_thrust_is_settled_from_the_start():
+    """Nothing to coast out of: the real bench recording dead-reckoned
+    0.71 m in the 3 s settle before its first ZUPT (measured-bars 99)."""
+    n = _node()
+    n._on_demand(_Demand(0.0, 0.0))
+    _cruise(n, demand=(0.0, 0.0), seconds=1.5, v=0.0)
+    assert n._n['zupt'] >= 1
+
+
+def test_aiding_is_not_reported_before_any_input():
+    """The cold covariance is a prior, not an observation: no 'aiding
+    restored' line, and no aided state, from a node that has heard nothing."""
+    n = _node()
+    sent = []
+    n._pub_aiding = type('P', (), {'publish': lambda self, m: sent.append(m.data)})()
+    n._report_aiding()
+    assert sent == [] and n._aiding_state is None
 
 
 def test_a_long_centred_demand_with_a_still_hull_still_zupts():
@@ -1371,6 +1406,7 @@ def test_aiding_by_uncalibrated_flow_is_reported_as_such():
     import types
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     n._on_flow_calibration(types.SimpleNamespace(
         data="uncalibrated: none was passed (-p calibration:=<json>)"))
     n._report_aiding()
@@ -1383,8 +1419,115 @@ def test_unaided_stays_unaided_whatever_the_calibration_says():
     import types
     n = _node()
     n._pub_aiding = _Recorder()
+    n._last_input_t = 100.0   # has heard an input
     n._on_flow_calibration(types.SimpleNamespace(data='uncalibrated: x'))
     for _ in range(200):
         n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
     n._report_aiding()
     assert n._pub_aiding.sent == ['unaided']
+
+
+# --------------------------------------------------------------------------- #
+#  BUGS B-133: the floor bound, from rendered images, under an unknown mount
+# --------------------------------------------------------------------------- #
+def _image_angle(pool_yaw_deg, feature_deg=0.0, mount_deg=37.0):
+    """The feature's angle in the downward image, in the flow's own axis
+    convention (image x = starboard, image y = forward: `flow_velocity`,
+    measured right on the bench in measured-bars 13), plus a camera mount yaw
+    no multiple of 90 cancels."""
+    rel = feature_deg - pool_yaw_deg            # feature bearing from the bow
+    return (90.0 - rel + mount_deg) % 180.0
+
+
+def _lane_image(angle_deg, h=480, w=640):
+    img = np.full((h, w), 180, np.uint8)
+    yy, xx = np.mgrid[0:h, 0:w]
+    a = math.radians(angle_deg)
+    d = np.abs(-(xx - w / 2) * math.sin(a) + (yy - h / 2) * math.cos(a))
+    img[d < 30] = 30
+    return img
+
+
+def _grid_image(angle_deg, h=480, w=640, period=40.0):
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float64)
+    a = math.radians(angle_deg)
+    u = (xx * math.cos(a) + yy * math.sin(a)) % period
+    v = (-xx * math.sin(a) + yy * math.cos(a)) % period
+    img = np.full((h, w), 190, np.uint8)
+    img[(u < 4) | (v < 4)] = 60
+    return img
+
+
+def _floor_msg(deg):
+    return type('F', (), {'heading_deg': float(deg)})()
+
+
+@pytest.mark.parametrize('feature', ['lane', 'grid'])
+def test_a_rendered_floor_bounds_drift_under_any_mount(feature):
+    """TRUTH. Anchored at pool -60 (board +30), the board then drifts +3 deg
+    while the hull holds; the floor, read from REAL detector output on a
+    rendered image, must pull yaw back to -60. Holding the residual at zero
+    refused every lane read (90 deg apart by the image convention) and pulled
+    the grid by the mount (B-133)."""
+    if feature == 'lane':
+        pl = pytest.importorskip('mongla_vision.flow.pool_lines')
+
+        def read(yaw):
+            return pl.detect(_lane_image(_image_angle(yaw))).heading_deg()
+        on = 'lane'
+    else:
+        tg = pytest.importorskip('mongla_vision.flow.tile_grating')
+
+        def read(yaw):
+            return tg.measure(_grid_image(_image_angle(yaw)), decimate=3).heading_deg()
+        on = 'grid'
+    n = _node(disarmed=True)
+    handler = n._on_lane_line if on == 'lane' else n._on_floor_grid
+    t = _fly_board(n, 100.0, 1.0, 30.0)
+    n._on_heading(type('F', (), {'data': -60.0})())
+    handler(_floor_msg(read(-60.0)))                  # the reference read
+    t = _fly_board(n, t, 1.0, 33.0)                   # board drifts, hull holds
+    assert n._filter.X.yaw_deg() == pytest.approx(-57.0, abs=0.5)
+    for _ in range(100):
+        t = _fly_board(n, t, 0.1, 33.0)
+        handler(_floor_msg(read(-60.0)))
+    t = _fly_board(n, t, 1.0, 33.0)
+    # The first few after the drift are refused by B-56 (yaw is not applied
+    # until a ZUPT has made velocity observable), not by the bound.
+    assert n._n[on] >= 90, (n._n[on], n._n[f'{on}_refused'])
+    assert n._filter.X.yaw_deg() == pytest.approx(-60.0, abs=0.5)
+
+
+def test_the_accel_bias_prior_covers_the_measured_bias():
+    """measured-bars: this board's accelerometer bias is 0.167 m/s^2. A prior
+    of 0.01 (17 sigma away) could not learn it; a still hull walked 15.5 cm in
+    90 s of the real bench recording, 0.94 cm at 0.2 (measured-bars 99)."""
+    n = _node()
+    assert math.sqrt(n._filter.P[12, 12]) >= 0.167
+    assert math.sqrt(n._filter.P[9, 9]) == pytest.approx(0.01), 'gyro bias prior unchanged'
+
+
+def test_a_refused_fix_is_counted_and_said():
+    """fix_from_prop reports success once it publishes; the filter's gate can
+    still refuse the fix. Silently, that read as fused (fixes=1) to everyone."""
+    from types import SimpleNamespace
+    warned = []
+
+    class _Logger:
+        def info(self, *_a, **_k):
+            pass
+
+        def warning(self, msg, *_a, **_k):
+            warned.append(msg)
+
+    n = _node()
+    n.get_logger = lambda: _Logger()
+    n._filter.P[6, 6] = n._filter.P[7, 7] = 0.01 ** 2      # certain, at the origin
+    far = SimpleNamespace(header=SimpleNamespace(stamp=SimpleNamespace(sec=0, nanosec=0)),
+                          point=SimpleNamespace(x=5.0, y=0.0, z=0.05))
+    n._on_fix(far)
+    assert n._n['fix'] == 0 and n._n['fix_refused'] == 1
+    assert any('REFUSED' in m for m in warned)
+    near = SimpleNamespace(header=far.header, point=SimpleNamespace(x=0.01, y=0.0, z=0.05))
+    n._on_fix(near)
+    assert n._n['fix'] == 1

@@ -368,7 +368,7 @@ def _check_flow_height() -> tuple[str, str]:
     has no floor, and a missing height is a refusal, not a wrong number."""
     try:
         import yaml
-        from mongla_localization import launch_defaults as ld
+        from mongla_runtime import launch_defaults as ld
         path = ld.config_path()
         body = (yaml.safe_load(path.read_text()) or {}) if path is not None else {}
     except Exception as exc:                        # noqa: BLE001
@@ -384,7 +384,7 @@ def _check_depth_floor() -> tuple[str, str]:
     place an unset floor is seen before the hull is wet.
     """
     try:
-        from mongla_localization import launch_defaults as ld
+        from mongla_runtime import launch_defaults as ld
         path = ld.config_path()
         nodes = ld.read_nodes(path) if path is not None else {}
     except Exception as exc:                        # noqa: BLE001

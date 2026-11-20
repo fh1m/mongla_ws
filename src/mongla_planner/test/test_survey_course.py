@@ -54,3 +54,22 @@ def test_unfilled_tunables_refuse_before_arming():
     sc.run(m, lines.append)
     m.arm.assert_not_called()
     assert 'fill' in lines[0]
+
+
+def test_a_failed_anchor_places_nothing_and_still_surfaces(monkeypatch):
+    """Unanchored, every placement is refused (bearings relative to boot), so
+    flying the route would cost the run for nothing. It stops, says why, and
+    the cleanup still surfaces and disarms."""
+    monkeypatch.setattr(sc, 'COURSE', 't')
+    monkeypatch.setattr(sc, 'ANCHOR_PROP', 'gate')
+    monkeypatch.setattr(sc, 'MODEL', 'any_model')
+    monkeypatch.setattr(sc, 'SURVEY_PROPS', ('bucket',))
+    m = MagicMock()
+    m.anchor_on.return_value = SimpleNamespace(ok=False, reason='no fused pose')
+    lines = []
+    sc.run(m, lines.append)
+    m.vision.align.assert_not_called()
+    m.place_prop.assert_not_called()
+    assert 'no fused pose' in lines[-1]
+    names = [c[0] for c in m.method_calls]
+    assert names[-2:] == ['surface', 'disarm']

@@ -4,9 +4,8 @@
 # The rulebook gives ZONES, not points: the gate "anywhere on a horizontal line
 # ... approximately 16m away from the starting zone", the orange flare "anywhere
 # in a rectangular zone 4m-8m from side of the arena", the bump flares
-# "anywhere" in the 8-16 m band, the drum order unstated. The sim course
-# (`sim/.../courses/sauvc26_final.yaml`) is "one legal arrangement", not the
-# venue. So this file ships structure, classes and dimensions only.
+# "anywhere" in the 8-16 m band, the drum order unstated. So this file ships
+# structure, classes and dimensions only.
 #
 # Fill it in AT THE VENUE with the survey tool, no rebuild:
 #

@@ -5,17 +5,19 @@
   <version>0.1.0</version>
   <description>
     Where the vehicle is, and which way it faces. The estimation layer that sits
-    between perception and control: the invariant filter, the landmark heading
-    anchor, prop resection, and the pose fuser that decides which PnP branch to
-    believe. Split out of mongla_vision because none of it is about pixels --
-    every one of these takes measurements in and produces a pose, and keeping
-    them beside the detector made both harder to read.
+    between perception and control: the invariant filter and its replay of late
+    measurements, the course priors, the landmark heading anchor, prop
+    resection and placement. None of it touches a pixel: every module takes
+    measurements in and produces a pose. The image readers (PnP, the tile
+    grating, the lane line) live in mongla_vision; the node plumbing in
+    mongla_runtime.
   </description>
   <maintainer email="fh1m.dev@gmail.com">Muhammad Fahim Faisal</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>mongla_interfaces</depend>
+  <depend>mongla_runtime</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
@@ -23,7 +25,6 @@
   <depend>python3-numpy</depend>
 
   <!-- imported by the code; test_package_xml_declares_imports.py keeps these true -->
-  <exec_depend>python3-opencv</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
 

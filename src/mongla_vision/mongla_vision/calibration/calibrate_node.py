@@ -387,8 +387,8 @@ class CalibrateNode:
 
 def main(args=None):
     import rclpy
-    from mongla_localization.params_file import refuse_unknown
-    from mongla_localization.spin import spin
+    from mongla_runtime.params_file import refuse_unknown
+    from mongla_runtime.spin import spin
     rclpy.init(args=args)
     node = CalibrateNode.build()()
     refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
@@ -398,6 +398,8 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        from mongla_runtime.spin import deaf_to_ctrl_c
+        deaf_to_ctrl_c()      # a second Ctrl-C must not interrupt the teardown
         node.cap.stop()
         node.destroy_node()
         if rclpy.ok():

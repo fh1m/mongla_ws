@@ -21,7 +21,8 @@ HISTORY = {
 
 
 def test_no_live_file_names_the_old_host():
-    files = subprocess.run(['git', 'grep', '-l', '-F', OLD], cwd=ROOT,
+    # The host name, not a prefix of it: `mongla.localization()` is a DSL call.
+    files = subprocess.run(['git', 'grep', '-l', '-P', OLD.replace('.', r'\.') + r'(?![A-Za-z_])'], cwd=ROOT,
                            capture_output=True, text=True).stdout.split()
     stale = [f for f in files if f not in HISTORY]
     assert not stale, f'{OLD} is now kutum.local: {stale}'

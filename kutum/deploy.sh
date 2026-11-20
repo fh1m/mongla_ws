@@ -14,7 +14,7 @@
 # plausible sequence. The measured result on that machine:
 #
 #     rsync      144 MB after the excludes below (3.8 GB before them)
-#     colcon     7 packages finished [42.1s], zero failures
+#     colcon     8 packages finished [42.1s], zero failures
 #     gate       bringup_check ran and correctly FAILED on the absent Bar30
 #
 # Usage:
