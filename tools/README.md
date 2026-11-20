@@ -166,6 +166,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `anchor_lifetime.py` | How long does ONE XFeat reference stay usable? The bank refreshes a checkpoint when the best one decays, but "decays" needed a timescale. |
 | `anchor_roi_bars.py` | Re-derive the identity bar for the references PRODUCTION actually builds. |
 | `approach_band.py` | Where does confidence actually peak, in the unit the CONTROLLER uses? The gap this closes. |
+| `aqualoc_replay.py` | Replay real underwater data through the shipped filter and flow chain. |
 | `attenuation_range.py` | Is the WATER ITSELF a rangefinder? Turbidity as signal, not noise. |
 | `bag_gaps.py` | Read a recorded session and report what it is WORTH as a fixture. |
 | `bank_scaling_bench.py` | How large can the checkpoint bank get before it stops fitting the budget? `CheckpointBank` ships a capacity of 5, ported from a prototype gallery rather than measured. |
