@@ -15,8 +15,12 @@ archive), one dataset with:
     own way ('Red pail', 'red_tub', 'Blue Bucket', 'ember-biru' are one prop).
     Colour stays out of the class: teams disagree on it, and the hue of a box
     is read after detection. Classes nothing maps are dropped, not guessed;
-  * train = every image of the other sources (optionally capped per source),
-    val = their own validation splits, test = every image of the held-out one;
+  * each team's own split, as the team published it: never re-split, capped
+    or shuffled. train = the other sources' train splits, val = their valid
+    splits, test = the held-out source's own test split (its train and valid
+    are left out entirely). Each other source's own test split is written as
+    `tests/<source>.txt`, so the same model is also scored in-pool on splits
+    nobody here chose;
   * no held-out image in train under another name. Teams fork each other's
     datasets, so the same frame can sit in two sources. Every training image
     whose 64-bit difference hash is within `--hamming` bits of a held-out one
@@ -27,7 +31,7 @@ Images are symlinked, labels rewritten. The output is a `data.yaml` that
 
     python3 tools/studies/pool_holdout.py --self-test
     python3 tools/studies/pool_holdout.py --holdout ntu \\
-        --sources $MONGLA_DATA/datasets/universe/* --cap 3000
+        --sources $MONGLA_DATA/datasets/universe/*
 
 Falsifier for the dedupe, in the self-test: a planted copy of a held-out
 image in a training source must be found and dropped, and a different image
@@ -39,7 +43,6 @@ import argparse
 import json
 import os
 import pathlib
-import random
 import sys
 import tempfile
 
@@ -50,10 +53,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) 
 # Coarse class by keyword, first match wins. Order matters: 'gate pole' is a
 # pole, not a gate; 'tubs' (a group box around several tubs) is not one drum.
 COARSE = (
-    ('pole', None),
+    ('pole', None), ('tiang', None),   # tiang: Indonesian for pole
     ('tubs', None),
     ('gate', 'gate'),
-    ('flare', 'flare'),
+    ('flare', 'flare'), ('suar', 'flare'),   # suar: Indonesian for flare
     ('pail', 'drum'), ('bucket', 'drum'), ('tub', 'drum'), ('drum', 'drum'),
     ('ember', 'drum'),             # Indonesian for bucket
 )
@@ -128,57 +131,62 @@ def rewrite(label: pathlib.Path, cmap: dict) -> list[str]:
     return lines
 
 
-def build(sources, holdout: str, out: pathlib.Path, cap: int = 0,
-          hamming: int = 4, seed: int = 0) -> dict:
+def build(sources, holdout: str, out: pathlib.Path, hamming: int = 4) -> dict:
     sources = [pathlib.Path(s) for s in sources]
     held = [s for s in sources if holdout in s.name]
     if len(held) != 1:
         raise SystemExit(f'--holdout {holdout!r} matches {[s.name for s in held]}; need one')
     held = held[0]
-    rng = random.Random(seed)
-    for sub in ('train', 'val', 'test'):
+    for sub in ('train', 'val', 'test', 'own_test'):
         (out / sub / 'images').mkdir(parents=True, exist_ok=True)
         (out / sub / 'labels').mkdir(parents=True, exist_ok=True)
     report = {'holdout': held.name, 'classes': list(CLASSES), 'sources': {},
               'dropped_as_holdout_copies': 0}
 
-    def place(sub, src, img, lines, tag):
+    (out / 'tests').mkdir(exist_ok=True)
+
+    def place(sub, img, lines, tag):
         name = f'{tag}__{img.name}'
         dst = out / sub / 'images' / name
         if not dst.exists():
             os.symlink(img.resolve(), dst)
         (out / sub / 'labels' / (pathlib.Path(name).stem + '.txt')).write_text(
             '\n'.join(lines) + ('\n' if lines else ''))
+        return dst
 
     items, cmap = source_items(held)
+    test = [i for i in items if i[0] == 'test']
+    if not test:
+        raise SystemExit(f'{held.name} publishes no test split; hold out a source that does')
     bank = []
-    for split, img, lab in items:
-        place('test', held, img, rewrite(lab, cmap), held.name)
+    for _, img, lab in test:
+        place('test', img, rewrite(lab, cmap), held.name)
         h = dhash(img)
         if h is not None:
             bank.append(h)
     bank = np.array(bank, dtype=np.uint64)
-    report['sources'][held.name] = {'test': len(items),
+    report['sources'][held.name] = {'test': len(test), 'left_out': len(items) - len(test),
                                     'map': {str(k): v for k, v in cmap.items()}}
 
     for src in sources:
         if src == held:
             continue
         items, cmap = source_items(src)
-        tr = [i for i in items if i[0] == 'train']
-        va = [i for i in items if i[0] in ('valid', 'val')]
-        rng.shuffle(tr)
-        if cap:
-            tr = tr[:cap]
-        kept = {'train': 0, 'val': 0, 'dropped': 0}
-        for sub, group in (('train', tr), ('val', va)):
-            for _, img, lab in group:
-                h = dhash(img)
-                if h is not None and near(h, bank, hamming):
-                    kept['dropped'] += 1
-                    continue
-                place(sub, src, img, rewrite(lab, cmap), src.name)
-                kept[sub] += 1
+        kept: dict = {'train': 0, 'val': 0, 'test': 0, 'dropped': 0}
+        own_test = []
+        for split, img, lab in items:
+            sub = {'train': 'train', 'valid': 'val', 'val': 'val', 'test': 'test'}[split]
+            h = dhash(img)
+            if h is not None and near(h, bank, hamming):
+                kept['dropped'] += 1
+                continue
+            if sub == 'test':      # scored in-pool, never trained on
+                own_test.append(str(place('own_test', img, rewrite(lab, cmap), src.name)))
+            else:
+                place(sub, img, rewrite(lab, cmap), src.name)
+            kept[sub] += 1
+        if own_test:
+            (out / 'tests' / f'{src.name}.txt').write_text('\n'.join(own_test) + '\n')
         report['dropped_as_holdout_copies'] += kept['dropped']
         kept['map'] = {str(k): v for k, v in cmap.items()}
         report['sources'][src.name] = kept
@@ -197,7 +205,7 @@ def _self_test() -> int:
         td = pathlib.Path(td)
 
         def make(name, names, frames):
-            for split in ('train', 'valid'):
+            for split in ('train', 'valid', 'test'):
                 (td / name / split / 'images').mkdir(parents=True)
                 (td / name / split / 'labels').mkdir(parents=True)
             (td / name / 'data.yaml').write_text(
@@ -211,12 +219,14 @@ def _self_test() -> int:
 
         held_frame = img()
         make('team_a', ['Gate', 'Red pail', 'Cloth'],
-             [('train', held_frame, '0 .5 .5 .2 .2\n1 .3 .3 .1 .1\n2 .1 .1 .1 .1\n')])
+             [('test', held_frame, '0 .5 .5 .2 .2\n1 .3 .3 .1 .1\n2 .1 .1 .1 .1\n'),
+              ('train', img(), '0 .5 .5 .1 .1\n')])
         copy = cv2.resize(cv2.resize(held_frame, (80, 54)), (96, 64))  # a re-encoded fork
         make('team_b', ['gate pole', 'flare', 'blue_tub', 'tubs'],
              [('train', copy, '1 .5 .5 .1 .1\n'),
               ('train', img(), '0 .5 .5 .1 .1\n1 .2 .2 .1 .1\n2 .7 .7 .1 .1\n3 .5 .5 .9 .9\n'),
-              ('valid', img(), '2 .4 .4 .1 .1\n')])
+              ('valid', img(), '2 .4 .4 .1 .1\n'),
+              ('test', img(), '1 .4 .4 .1 .1\n')])
         rep = build([td / 'team_a', td / 'team_b'], 'team_a', td / 'out')
         ok = True
 
@@ -227,6 +237,10 @@ def _self_test() -> int:
 
         check(rep['dropped_as_holdout_copies'] == 1, 'the re-encoded copy of a held-out frame is dropped')
         check(rep['sources']['team_b']['train'] == 1, 'the other training frame is kept')
+        check(rep['sources']['team_a'] ['left_out'] == 1 and rep['sources']['team_b']['test'] == 1
+              and not any('team_a' in f.name for f in (td / 'out/train/images').iterdir())
+              and (td / 'out/tests/team_b.txt').exists(),
+              "the held-out team's train split stays out; the other team's test split is kept apart")
         test_lab = (td / 'out/test/labels/team_a__f0.txt').read_text().split('\n')
         check(test_lab[:2] == ['0 .5 .5 .2 .2', '2 .3 .3 .1 .1'] and len([x for x in test_lab if x]) == 2,
               'Gate -> gate, Red pail -> drum, Cloth dropped')
@@ -234,7 +248,8 @@ def _self_test() -> int:
         lab = next(iter(tr)).read_text().split('\n')
         check([x for x in lab if x] == ['1 .2 .2 .1 .1', '2 .7 .7 .1 .1'],
               "'gate pole' and the 'tubs' group box dropped; flare and blue_tub kept")
-        check(coarse('ember-biru') == 'drum' and coarse('Blue Bucket') == 'drum'
+        check(coarse('suar') == 'flare' and coarse('tiang-golf') is None
+              and coarse('ember-biru') == 'drum' and coarse('Blue Bucket') == 'drum'
               and coarse('gate-loreng') == 'gate' and coarse('golf-merah') is None,
               'other teams\' names map')
         print('self-test', 'PASSED' if ok else 'FAILED')
@@ -246,7 +261,6 @@ def main(argv=None) -> int:
     ap.add_argument('--sources', nargs='+')
     ap.add_argument('--holdout', help='substring naming the one source to hold out')
     ap.add_argument('--out', help='output dir (default: <data root>/holdout/<holdout>)')
-    ap.add_argument('--cap', type=int, default=0, help='max training images per source (0 = all)')
     ap.add_argument('--hamming', type=int, default=4)
     ap.add_argument('--self-test', action='store_true')
     a = ap.parse_args(argv)
@@ -259,7 +273,7 @@ def main(argv=None) -> int:
     else:
         from data_root import data_root
         out = pathlib.Path(data_root('holdout', a.holdout))
-    rep = build(a.sources, a.holdout, out, cap=a.cap, hamming=a.hamming)
+    rep = build(a.sources, a.holdout, out, hamming=a.hamming)
     print(json.dumps({k: (v if k != 'sources' else
                           {s: {x: y for x, y in d.items() if x != 'map'} for s, d in v.items()})
                       for k, v in rep.items()}, indent=1))
