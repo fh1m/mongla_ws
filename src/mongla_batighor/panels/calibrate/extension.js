@@ -87,6 +87,8 @@ function initPanel(context) {
       // The cameras and the saved calibrations come from the node too: say so
       // rather than leave two empty boxes that read as "none on this vehicle".
       cameras.textContent = library.textContent = "listed once a calibration runs";
+      fit.replaceChildren(el("span", { class: "note" }, "no fit until poses are captured"));
+      solveOut.textContent = "";
       library.dataset.key = "";
       return;
     }
