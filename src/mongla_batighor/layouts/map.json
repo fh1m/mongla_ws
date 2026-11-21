@@ -1,8 +1,7 @@
 {
   "configById": {
     "mongla.batighor.Map!map": {},
-    "mongla.batighor.Mission!mission": {},
-    "mongla.batighor.Navigation!navigation": {},
+    "mongla.batighor.Vehicle!vehicle": {},
     "3D!hull": {
       "followTf": "mongla",
       "followMode": "follow-position",
@@ -67,15 +66,10 @@
     "first": "mongla.batighor.Map!map",
     "second": {
       "direction": "column",
-      "first": "mongla.batighor.Mission!mission",
-      "second": {
-        "direction": "row",
-        "first": "mongla.batighor.Navigation!navigation",
-        "second": "3D!hull",
-        "splitPercentage": 50.0
-      },
-      "splitPercentage": 55.6
+      "first": "mongla.batighor.Vehicle!vehicle",
+      "second": "3D!hull",
+      "splitPercentage": 60.0
     },
-    "splitPercentage": 60.0
+    "splitPercentage": 74.0
   }
 }

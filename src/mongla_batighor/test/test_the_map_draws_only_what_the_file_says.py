@@ -2,9 +2,11 @@
 
 Run in node against the served panel, with a DOM that records what is drawn:
 - a prop the file calls a nominal is drawn dashed amber and named "(nominal)";
-- the hull is drawn only once the filter is anchored in the pool frame: its
-  odom position is in another frame, and on the map it would sit among the
-  props as if it were placed;
+- Mongla is always on the map once there is a pose: solid red when the
+  filter is anchored in the pool, hollow amber and labelled "by its start"
+  when it is only placed by where it started, so an assumption never looks
+  like a measurement;
+- placing by the start turns odometry into the pool frame correctly;
 - a go_to target is circled at its own tolerance.
 """
 import json
@@ -27,8 +29,8 @@ global.document = { createElementNS: (_, t) => node(t), createElement: (t) => no
 const module = { exports: {} };
 const CAMERAS = ["forward", "downward"], VERBS = {}, TUNABLE = {}, THEME_CSS = "";
 %(src)s
-const [course, loc, target] = JSON.parse(process.argv[process.argv.length - 1]);
-module.exports.poolMap(course, loc, [], [], target);
+const [course, pose, target] = JSON.parse(process.argv[process.argv.length - 1]);
+module.exports.poolMap(course, pose, [], [], target);
 process.stdout.write(JSON.stringify(drawn.map((n) => ({ tag: n.tag, attrs: n.attrs,
   text: n.kids.filter((k) => typeof k === "string").join("") }))));
 """
@@ -41,16 +43,18 @@ COURSE = {'course': 't', 'pool': {'outline': [[0, -5], [0, 5], [20, 5], [20, -5]
           'unplaced': [{'name': 'drum'}]}
 
 
-def _draw(loc, target=None):
+def _draw(pose, target=None):
     src = (PANELS / 'common.js').read_text() + (PANELS / 'instruments' / 'extension.js').read_text()
-    out = subprocess.run(['node', '-e', HARNESS % {'src': src}, json.dumps([COURSE, loc, target])],
+    out = subprocess.run(['node', '-e', HARNESS % {'src': src}, json.dumps([COURSE, pose, target])],
                          capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
 
 
-def _hull(drawn):
-    return [n for n in drawn if n['tag'] == 'polygon' and n['attrs'].get('fill') == 'var(--mb-red)']
+def _hulls(drawn):
+    # The hull is the one polygon in Mongla's inks; the pool outline is sea-blue.
+    return [n for n in drawn if n['tag'] == 'polygon'
+            and n['attrs'].get('stroke') != 'var(--mb-sea)']
 
 
 def test_a_nominal_prop_says_so_and_a_measured_one_is_solid():
@@ -62,11 +66,28 @@ def test_a_nominal_prop_says_so_and_a_measured_one_is_solid():
     assert flare and all(n['attrs'].get('stroke-dasharray') for n in flare)
 
 
-def test_the_hull_is_on_the_map_only_once_anchored_in_the_pool():
-    loc = {'frame': 'odom_ned', 'anchored': False, 'x_m': 3.0, 'y_m': 1.0, 'yaw_deg': 0.0,
-           'sigma_xy_m': 0.3}
-    assert _hull(_draw(loc)) == [], 'an unanchored hull was drawn among the props'
-    assert len(_hull(_draw({**loc, 'frame': 'pool', 'anchored': True}))) == 1
+def test_mongla_is_drawn_as_what_its_position_is():
+    assert _hulls(_draw(None)) == []
+    pose = {'x': 3.0, 'y': 1.0, 'yaw': 0.0, 'sigma': 0.3}
+    (solid,) = _hulls(_draw({**pose, 'placed': False}))
+    assert solid['attrs']['fill'] == 'var(--mb-red)'
+    d = _draw({**pose, 'placed': True})
+    (hollow,) = _hulls(d)
+    assert hollow['attrs']['fill'] == 'none' and hollow['attrs']['stroke'] == 'var(--mb-amber)'
+    assert 'by its start' in {n['text'] for n in d if n['tag'] == 'text'}
+
+
+def test_placing_by_the_start_turns_odometry_into_the_pool():
+    """Started at odom (1, 2) heading east: a metre further east is a metre
+    toward the gate (+x), and its heading there is bearing 0."""
+    out = subprocess.run(['node', '-e', HARNESS.split('const [course')[0] % {
+        'src': (PANELS / 'common.js').read_text() + (PANELS / 'instruments' / 'extension.js').read_text()}
+        + 'process.stdout.write(JSON.stringify(module.exports.placeByStart('
+          '{x: 1, y: 3, yaw: Math.PI / 2}, {x: 1, y: 2, yaw: Math.PI / 2})));'],
+        capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    p = json.loads(out.stdout)
+    assert abs(p['x'] - 1.0) < 1e-9 and abs(p['y']) < 1e-9 and abs(p['yaw']) < 1e-9, p
 
 
 def test_a_go_to_is_circled_at_its_tolerance():

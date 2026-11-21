@@ -1,5 +1,7 @@
 {
   "configById": {
+    "mongla.batighor.LocalizationMap!locmap": {},
+    "mongla.batighor.Navigation!navigation": {},
     "3D!nav": {
       "followTf": "mongla",
       "followMode": "follow-position",
@@ -53,7 +55,6 @@
         }
       }
     },
-    "mongla.batighor.Navigation!navigation": {},
     "StateTransitions!aiding": {
       "paths": [
         {
@@ -119,6 +120,23 @@
       "isSynced": true,
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "pos"
+    },
+    "Plot!sigma": {
+      "paths": [
+        {
+          "value": "/mongla/localization/state.sigma_xy_m",
+          "label": "sigma xy m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "sigma"
     },
     "Plot!vel": {
       "paths": [
@@ -214,8 +232,13 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "3D!nav",
-      "second": "mongla.batighor.Navigation!navigation",
+      "first": "mongla.batighor.LocalizationMap!locmap",
+      "second": {
+        "direction": "row",
+        "first": "mongla.batighor.Navigation!navigation",
+        "second": "3D!nav",
+        "splitPercentage": 50.0
+      },
       "splitPercentage": 60.0
     },
     "second": {
@@ -226,18 +249,23 @@
         "first": "Plot!pos",
         "second": {
           "direction": "column",
-          "first": "Plot!vel",
+          "first": "Plot!sigma",
           "second": {
             "direction": "column",
-            "first": "Plot!heading",
-            "second": "Plot!floor",
-            "splitPercentage": 50.0
+            "first": "Plot!vel",
+            "second": {
+              "direction": "column",
+              "first": "Plot!heading",
+              "second": "Plot!floor",
+              "splitPercentage": 50.0
+            },
+            "splitPercentage": 33.3
           },
-          "splitPercentage": 33.3
+          "splitPercentage": 18.2
         },
-        "splitPercentage": 25.0
+        "splitPercentage": 21.4
       },
-      "splitPercentage": 14.3
+      "splitPercentage": 12.5
     },
     "splitPercentage": 50.0
   }

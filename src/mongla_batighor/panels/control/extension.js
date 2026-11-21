@@ -146,6 +146,13 @@ function initPanel(context) {
   // each frame would wipe what an operator is typing.
   const camButtons = CAMERAS.map((c) =>
     el("button", { onclick: () => call("camera", { cmd: c }) }, c));
+  // What a setting left at the detector's declared default does: a bare "" or
+  // 0 reads as nothing set, when each one means something (detector_setup.py).
+  const UNSET = {
+    active_model: ["", "model_path, as launched"],
+    classes: ["", "every class the model emits"],
+    nms_iou: [0, "as compiled"],
+  };
   const now = {};            // "camera.setting" -> the cell showing its value
   const setButtons = [];
   const modelLists = {};     // camera -> the datalist of its registry keys
@@ -223,7 +230,9 @@ function initPanel(context) {
     for (const [key, cell] of Object.entries(now)) {
       const [cam, s] = key.split(".");
       const v = (tuning[cam] || {})[s];
-      cell.textContent = tuning[cam] ? (v === "" ? '""' : String(v)) : "--";
+      const unset = UNSET[s] && v === UNSET[s][0];
+      cell.textContent = !tuning[cam] ? "--" : unset ? UNSET[s][1] : v === "" ? '""' : String(v);
+      cell.className = unset ? "note" : "live";
     }
     for (const [cam, list] of Object.entries(modelLists)) {
       // `models` is "key=stem,key2=stem2" or bare stems; the key is what
