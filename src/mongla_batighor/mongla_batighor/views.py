@@ -198,9 +198,10 @@ def _ladder_lines() -> list:
             series(f'{V}/active_camera.data', 'live camera', True)]
 
 
-# Each column of cameras is as wide as its 4:3 pictures, stacked two high:
-# wider, the panel was black beside the picture (test_views measures it).
-CAMERA_COLUMN = 30
+# Each column of cameras is as wide as its pictures, stacked two high. The
+# vehicle streams 16:9 (640x360, cameras.yaml); a column sized for 4:3 left
+# a fifth of each panel black (test_views measures it against the profiles).
+CAMERA_COLUMN = 37
 
 
 def _cameras(v: View, *, synced: bool = False):
@@ -216,8 +217,8 @@ def cockpit(v: View):
     below the fold); the vehicle's numbers and attitude over what holds the
     target now and which stages run. The lock's history is in `vision`."""
     return row((CAMERA_COLUMN, _cameras(v)),
-               (32, v('control', instrument('ControlCenter'))),
-               (38, col((4, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
+               (30, v('control', instrument('ControlCenter'))),
+               (33, col((4, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
                         (5, v('vision', instrument('Vision'))))))
 
 
@@ -252,14 +253,19 @@ def flow(v: View):
     """The downward camera as a speed sensor: the floor tracked, and what it measured."""
     d = f'{V}/downward'
     return row(
-        (58, v('floorcam', image(f'{d}/stream/compressed', f'{d}/flow_annotations',
-                              f'{d}/floor_annotations'))),
-        (42, col(
+        # The floor camera at its 16:9 shape; under it how far it says it went
+        # and how many points it held.
+        (62, col((80, v('floorcam', image(f'{d}/stream/compressed', f'{d}/flow_annotations',
+                                          f'{d}/floor_annotations'))),
+                 (20, row(v('distance', plot(series(f'{d}/distance_traveled.data', 'distance m',
+                                                    True))),
+                          v('tracks', plot(series(f'{d}/distance_debug.data[2]', 'tracks',
+                                                  True))))))),
+        (38, col(
             (3, v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s', True),
                                series(f'{d}/velocity.twist.twist.linear.y', 'flow vy m/s', True),
                                series('/mongla/odom.twist.twist.linear.x', 'filter vx m/s'),
                                series('/mongla/odom.twist.twist.linear.y', 'filter vy m/s')))),
-            (2, v('distance', plot(series(f'{d}/distance_traveled.data', 'distance m', True)))),
             (3, v('calibration', states(series(f'{d}/flow_calibration.data', 'scale from',
                                                True),
                                         # tiles | survey | survey, no position |
@@ -270,9 +276,7 @@ def flow(v: View):
             # ~160, and on one axis it flattened them onto the floor.
             (3, v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
                                   series(f'{d}/distance_debug.data[1]', 'height m', True),
-                                  series(f'{d}/floor_height.range', 'floor m')))),
-            (2, v('tracks', plot(series(f'{d}/distance_debug.data[2]', 'tracks', True)))))))
-
+                                  series(f'{d}/floor_height.range', 'floor m')))))))
 
 def localization(v: View):
     """Navigation: where the filter puts the vehicle on the pool, and why.
@@ -395,13 +399,14 @@ def downward(v: View):
     return row(
         # Synchronised, a frame shows only when every layer answered it; the
         # flow and the floor read do not answer every frame, so they are the
-        # Flow view's. Here the boxes sit on their own frame.
-        (59, v('down', camera('downward', synced=True))),
-        (41, col(
+        # Flow view's. Here the boxes sit on their own frame, the panel as
+        # tall as the 16:9 picture, and under it the error an alignment closes.
+        (62, col((80, v('down', camera('downward', synced=True))),
+                 (20, v('align', align('align x px', 'align y px'))))),
+        (38, col(
             (5, v('vision', instrument('Vision'))),
             (4, v('ladder', states(series(f'{d}/lock{RUNG}.class_id', 'downward rung'),
                                    series(f'{V}/active_camera.data', 'live camera', True)))),
-            (3, v('align', align('align x px', 'align y px'))),
             (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor m'),
                                 series('/mongla/state.depth_m', 'depth m')))),
             (3, v('anchor', plot(series(f'{d}/anchor_decomposition.vector.x', 'rotation'),
@@ -419,8 +424,8 @@ def calibrate(v: View):
 def weak_link(v: View):
     """For a slow connection: the small previews, and the vehicle's numbers."""
     return row((CAMERA_COLUMN, col(*(v(c, camera(c, stream='preview')) for c in CAMERAS))),
-               (28, v('vehicle', instrument('Vehicle'))),
-               (42, v('control', instrument('ControlCenter'))))
+               (25, v('vehicle', instrument('Vehicle'))),
+               (38, v('control', instrument('ControlCenter'))))
 
 
 # What the stack publishes and no view shows, each with the reason. A topic
