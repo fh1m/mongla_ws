@@ -925,6 +925,28 @@ section (its lane witness and its fisheye lens could not grade it).
 peak accuracy. Injection: the old module fails 15 of them, the new one
 without fading 20, fading any dark blob fails a negative control.
 
+### B-145: a declaration was refused as a live change, and five kinds of node died at start `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
+
+**What.** rclpy runs a node's on-set-parameters callbacks when a parameter is
+first declared, not only when it is changed. `spin` declares `tether_bound` on
+every node after the node is built, and every callback that refuses the names
+it cannot apply live (`read once at startup`) refused that declaration too. On
+Kutum, `bringup.launch.py replay:=true batighor:=true` against the fake board:
+every tracker, PnP and pose-fusion node raised `InvalidParameterValueException`
+at start and respawned forever, so the lock ladder had no tracks and nothing
+reached Batighor's overlay. Every unit test passed, because none started a node
+through `spin`.
+
+**Fix.** `mongla_runtime.tether.changes(node, params)` keeps only the names
+already declared, and every refusing callback (`live_params.apply_live`, the
+tracker, the detector, the lock ladder, the manager) refuses only those. A real
+change to a fixed name is still refused.
+
+**Guards.** `mongla_runtime/test/test_declaring_is_not_changing.py`: a node that
+refuses fixed names survives `tether.declare`; a real change is still refused;
+every callback in `src/` that says `read once at startup` goes through
+`changes(`. Injection: reverting two of the five callbacks fails the third test.
+
 ### B-118: the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame `READ 2026-11-18` **FIXED 2026-11-18**
 
 **What.** The anchor resizes every frame to its backend grid (XFeat, 320x240)
