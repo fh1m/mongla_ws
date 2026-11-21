@@ -66,6 +66,11 @@ def test_a_changed_view_is_named_with_how_to_refresh_it(desk, capsys):
     out = capsys.readouterr().out
     assert 'WARNING: thrust changed' in out and 'delete thrust' in out
     assert json.loads((desk.LAYOUTS / 'thrust.json').read_text())['v'] == 2
+    # Without launching too: --no-launch once returned before the warning,
+    # and the app kept the old view with nothing said.
+    desk.served['thrust'] = {'layout': 'thrust', 'v': 3}
+    assert desk.main(['h', '--no-launch']) == 0
+    assert 'WARNING: thrust changed' in capsys.readouterr().out
 
 
 def test_a_dense_screen_starts_the_app_at_a_scale_it_can_be_read_at(desk):
