@@ -139,13 +139,17 @@ candidates were ranked and each was tested, shipped, blocked or discarded; the t
 
 ## Venue priors, without hard-coding a pool
 
-A competition course is known in advance — roughly. `courses/*.yaml` holds each prop's class,
-size and position. Nothing is baked into a mission: the loader prefers your own copy
-(`~/.mongla/courses`) over the packaged one, so a survey on the day overrides the shipped
-guess with no rebuild.
+A competition course is known in advance — roughly. A course file holds the whole venue:
+the pool's floor and depth floor, and each prop's class, position, facing and measured
+width. Nothing is baked into a mission: the deck names the venue (`course:` in
+`~/mongla/deck/bringup.yaml`), and the loader prefers the deck copy
+(`~/mongla/deck/courses`) over the packaged template, so a survey on the day overrides the
+shipped guess with no rebuild. Every key, who reads it, and the order of a pool day:
+**[the course file](../../missions/course-file.md)**.
 
 ```bash
-ros2 run mongla_localization course_survey --course sauvc26 --prop gate --x 3.5 --y 0.0
+ros2 run mongla_localization course_survey --course venue --prop gate --x 3.5 --y 0.0 --width 1.5
+ros2 run mongla_localization course_survey --course venue --floor 0 0 1.28 --floor 17.5 0 2.0
 ```
 
 Positions that were never measured are left empty rather than invented, and marked as such.

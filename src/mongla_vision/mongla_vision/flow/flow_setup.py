@@ -47,6 +47,12 @@ class FlowSetupMixin:
         # silent one. Tile height, when it is seen, replaces both.
         self.declare_parameter('pool_depth_min_m', float('nan'))
         self.declare_parameter('pool_depth_max_m', float('nan'))
+        # The floor surveyed at points, flat [x, y, depth, x, y, depth, ...] in
+        # the course's pool frame, depth positive. With it, and a pool-frame
+        # position from localization, the height is taken from the floor UNDER
+        # the hull rather than from one typed depth (flow_math.floor_depth_at).
+        # Given by the course a mission or the deck names; empty = not surveyed.
+        self.declare_parameter('pool_floor_xyz', [0.0])
         self.declare_parameter('medium', 'water')          # 'air' | 'water'
         self.declare_parameter('focal_air_px', _F_AIR_PX)
         self.declare_parameter('focal_water_px', _F_WATER_PX)
@@ -155,8 +161,10 @@ class FlowSetupMixin:
     # ── scale sanity ────────────────────────────────────────────────────────
     def _scale_ready(self):
         """Both scale terms known? Returns (ok, why_not)."""
-        if not math.isfinite(self._pool_depth) or self._pool_depth <= 0.0:
-            return False, 'pool_depth_m was never set'
+        if ((not math.isfinite(self._pool_depth) or self._pool_depth <= 0.0)
+                and not self._floor_pts):
+            return False, ('no height source: no pool depth and no surveyed '
+                           'floor (the course\'s pool:, or pool_depth_m)')
         if self._medium not in ('air', 'water'):
             return False, f'medium={self._medium!r} is not air|water'
         if self._f_px <= 0.0:
@@ -344,6 +352,49 @@ class FlowSetupMixin:
         # possible without adding a sensor.
         self._rate_buf.append((t, float(msg.vector.x), float(msg.vector.y)))
         self._yaw_rate_buf.append((t, float(msg.vector.z)))
+
+    def _set_floor(self, flat) -> None:
+        """Surveyed floor points from a flat [x, y, depth, ...] list.
+
+        A length that is not a multiple of three, or a non-positive depth, is
+        refused rather than trimmed: a mis-typed survey is a wrong height.
+        A single 0.0 is the declared default and means "none".
+        """
+        vals = [float(v) for v in (flat or [])]
+        if vals == [0.0]:
+            vals = []
+        if len(vals) % 3:
+            raise ValueError(f'pool_floor_xyz has {len(vals)} numbers; it is '
+                             f'x, y, depth triples')
+        pts = [tuple(vals[i:i + 3]) for i in range(0, len(vals), 3)]
+        if any(not (math.isfinite(d) and d > 0.0) for _, _, d in pts):
+            raise ValueError('pool_floor_xyz: every floor depth must be a '
+                             'positive number of metres')
+        self._floor_pts = pts
+        if pts:
+            self.get_logger().info(
+                f'[FLOW ] floor surveyed at {len(pts)} points, '
+                f'{min(p[2] for p in pts):.2f}-{max(p[2] for p in pts):.2f} m: '
+                f'height follows the floor under the hull once localization '
+                f'is anchored and has a prop position fix')
+
+    def _on_loc_state(self, msg) -> None:
+        """Pool position for the floor model, only once it IS a pool position.
+
+        A heading anchor turns the frame to `pool`, but only the AXES: the
+        origin stays where the filter started until a prop position fix moves
+        it (`RIEKF.rotate_world_yaw`). Reading the survey at that origin would
+        be a confident wrong floor, so the survey is used only when the state
+        is anchored AND at least one position fix has been fused. Before then
+        `_floor_depth_now` scales on the middle of the surveyed depths with
+        their spread.
+        """
+        if not (msg.frame == 'pool' and msg.anchored and msg.fixes > 0
+                and math.isfinite(msg.x_m) and math.isfinite(msg.y_m)):
+            self._odom_xy = None
+            return
+        sig = float(msg.sigma_xy_m) if math.isfinite(msg.sigma_xy_m) else 1.0
+        self._odom_xy = (float(msg.x_m), float(msg.y_m), sig, time.monotonic())
 
     def _on_state(self, msg: MonglaState) -> None:
         """Depth, stamped when it was MEASURED rather than when it arrived.

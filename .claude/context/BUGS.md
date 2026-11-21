@@ -869,6 +869,36 @@ without the fix, 0 with it, and no session directory left behind.
 
 **Guards.** `test/test_launches_leave_nothing_in_tmp.py`.
 
+### B-143: a run with no floor started, and navigated on the IMU alone `READ 2026-11-21` **FIXED 2026-11-21**
+
+**What.** Flow needs the height above the floor to turn pixels into metres,
+and the vehicle measures only its own depth. With no floor depth set, flow
+refused every interval, localization ran on the IMU alone, and the mission
+started and reported nothing wrong. `bringup_check` warned, and the warning
+scrolled past. On a sloping floor one typed depth was a scale error of up to
+0.72 m in 1.7 m (1.28 to 2.00 m over 17.5 m). The venue's numbers were spread
+over three places: the deck file, the course and the geometry override.
+
+**Fix.** The course file is the venue's one file (`missions/course-file.md`):
+pool depth and range, floor soundings, tile size, lane lines, the depth floor
+and every prop's measured width. Bringup takes them from the deck's `course:`
+and refuses a deck file that repeats one. Flow follows the surveyed floor
+under the hull (`flow_math.floor_depth_at`), but only once localization has
+an anchored heading and a prop position fix. It publishes its height source,
+latched, and the mission runner refuses to start on `none`
+(`--allow-no-height` for a bench). An unset depth floor is printed at every
+mission start.
+
+**Measured.** Synthetic slope, position known to 1 m: RMS height error under
+0.05 m against up to 0.72 m for one typed depth. The first bar, worst case
+under 0.10 m, missed at 0.107 m; the test says why.
+
+**Guards.** `test_floor_depth_follows_the_slope.py`,
+`test_a_run_without_a_floor_does_not_start.py`,
+`test_the_course_is_the_venues_one_file.py`,
+`test_course_floor_reaches_flow.py`, and the course cases in
+`test_mission_keepalive.py`. Each was injection-verified.
+
 ### B-118: the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame `READ 2026-11-18` **FIXED 2026-11-18**
 
 **What.** The anchor resizes every frame to its backend grid (XFeat, 320x240)

@@ -1,0 +1,16 @@
+# The deck file: the vehicle and the run. Read by every bringup launch.
+# Uncomment only what the day changes; every key and its default is in
+# src/mongla_manager/config/bringup.example.yaml. A typo stops the launch.
+#
+# The venue is NOT set here. It is the course file below, in courses/:
+# pool depth and floor, tiles, lane lines, the depth floor and the props.
+course: pool
+
+# Models for the day (one line each, the stem in ~/models):
+# fwd_model: gate_sharks
+# dwn_model: bin_fire_blood
+
+# Node settings that are not about the venue, under the node's name:
+# nodes:
+#   mongla_manager:
+#     allow_unknown_kill_switch: false     # bench only

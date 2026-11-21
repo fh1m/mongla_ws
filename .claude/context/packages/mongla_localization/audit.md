@@ -170,7 +170,7 @@ fallback only, and flow is the velocity.
 | 1 | flow scale against a taped floor target | — | needs water; in air it is 3.6 % worst (measured-bars 13) | **pool day**, bar <= 2 % mean |
 | 2 | close the at-rest miss | the real bench recording, 1x on Kutum | the bias prior; walk 15.5 cm -> 0.94 cm in 90 s | **shipped** (B-135) |
 | 2b | the same prior, in motion | truth study A1 | rms 0.050 vs 0.051 m | **shipped**, no cost |
-| 3 | altitude for flow scale: floor map, else a Ping2 | course file arithmetic | a sloping floor is up to 30 % of scale at 0.5 m depth | **bead es5.7**, needs the venue floor surveyed |
+| 3 | altitude for flow scale: floor map, else a Ping2 | course file arithmetic | a sloping floor is up to 30 % of scale at 0.5 m depth; the floor model (`flow_math.floor_depth_at`, B-143) holds height RMS under 0.05 m against 0.72 m worst for one typed depth, on a synthetic slope | **built, never flown** (B-143): needs the venue's floor sounded into the course; the Ping2 half is a hardware ask |
 | 3b | the same chain on real underwater data | AQUALOC harbour, sequences 02-07, height fitted on 01 (`tools/studies/aqualoc_replay.py`) | flow holds 5.8-29.5 m final error (24-104 % of path) against kilometres for IMU and depth alone; a fitted height does not carry between runs (1.52 vs 0.60 m) | **runs on real water; not an accuracy result**: harbour floor, fitted height and a poor gyro, against 2-4 % for the best DVL-free systems |
 | 4 | camera-to-IMU lag and de-rotation | — | the board is not on Kutum; no recording has camera and gyro together in rotation | **blocked** (po7.13) |
 | 5 | heading at surveyed headings | — | needs the pool | **pool day**, bar <= 2 deg |

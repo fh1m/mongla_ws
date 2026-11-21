@@ -33,7 +33,7 @@
 # the venue's makes every range 40 % wrong -- in whichever direction, silently.
 # Override per class, WITHOUT editing this file and WITHOUT a colcon build:
 #
-#     ~/.mongla/target_geometry.yaml          picked up with no env var
+#     ~/mongla/deck/target_geometry.yaml          picked up with no env var
 #     MONGLA_TARGET_GEOMETRY=~/my_props.yaml  a file, or a directory holding
 #                                             target_geometry.yaml
 #
@@ -287,7 +287,7 @@ robosub:
     # The standoff shot rides `align(fwd=)`, which servos on ANGULAR SIZE -- a
     # ratio of pixels to a commanded fill -- so it needs no absolute width and
     # is unaffected. Measure our own opening with a tape and put it in
-    # ~/.mongla/target_geometry.yaml to turn the metric path on for our pool.
+    # ~/mongla/deck/target_geometry.yaml to turn the metric path on for our pool.
     no_published_dimension: true
     boxes: single-opening
     source: "RoboSub 2025/26 handbook 3.2: the board is dimensioned, its openings are not"

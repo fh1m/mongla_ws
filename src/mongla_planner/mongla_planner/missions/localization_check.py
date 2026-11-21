@@ -23,7 +23,7 @@ Fill the tunables, then:
     ros2 run mongla_planner mission localization_check
 """
 
-COURSE = None          # course name, the file stem under ~/.mongla/courses
+COURSE = None          # course name, the file stem under ~/mongla/deck/courses
 ANCHOR_PROP = None     # a prop with a taped position and bearing, in view from the start
 MODEL = None           # a detector model that emits ANCHOR_PROP's class
 

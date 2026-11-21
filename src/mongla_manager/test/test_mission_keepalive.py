@@ -436,3 +436,31 @@ def test_bringup_check_says_when_flow_cannot_measure(top, want):
     run with no velocity sensor that looks healthy."""
     from mongla_manager import bringup_grade as G, bringup_host as H
     assert H.flow_height_verdict(top)[0] == getattr(G, want)
+
+
+@pytest.mark.parametrize('pool, want', [
+    ('  depth_m: 1.6\n  floor: [[0, 0, 1.28], [17.5, 0, 2.0]]\n', 'PASS'),
+    ('  depth_m: 1.6\n  depth_min_m: 1.28\n  depth_max_m: 2.0\n', 'PASS'),
+    ('  depth_m: 1.6\n', 'WARN'),                          # slope unknown
+    ('  {}\n', 'WARN'),                                     # no floor at all
+])
+def test_the_deck_course_gives_flow_its_floor(pool, want, tmp_path, monkeypatch):
+    """`course:` in the deck file: bringup_check grades the course's floor."""
+    from mongla_manager import bringup_grade as G, bringup_host as H
+    monkeypatch.setenv('MONGLA_COURSE_DIR', str(tmp_path))
+    (tmp_path / 'venue.yaml').write_text(
+        'course: venue\nframe: pool\npool:\n' + pool + 'props: {}\n')
+    assert H.flow_height_verdict({'course': 'venue'})[0] == getattr(G, want)
+    assert H.flow_height_verdict({'course': 'nowhere'})[0] == G.WARN
+
+
+
+def test_the_course_sets_the_depth_floor(tmp_path, monkeypatch):
+    from mongla_manager import bringup_grade as G, bringup_host as H
+    monkeypatch.setenv('MONGLA_COURSE_DIR', str(tmp_path))
+    (tmp_path / 'venue.yaml').write_text(
+        'course: venue\nframe: pool\npool:\n  shield_max_depth_m: 1.4\nprops: {}\n')
+    (tmp_path / 'open.yaml').write_text('course: open\nframe: pool\nprops: {}\n')
+    assert H.depth_floor_verdict({}, 'venue')[0] == G.PASS
+    assert H.depth_floor_verdict({}, 'open')[0] == G.WARN
+    assert H.depth_floor_verdict({}, 'missing')[0] == G.WARN

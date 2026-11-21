@@ -72,7 +72,7 @@ selector** — no backend, heading-source or connection-mode parameter.
 
 **Two default layers.** A bare `ros2 run mongla_manager start` gets the node's
 `declare_parameter` defaults; `bringup.launch.py` declares its own, and
-`~/.mongla/bringup.yaml` (or `$MONGLA_BRINGUP`) can override those. Anything typed as
+`~/mongla/deck/bringup.yaml` (or `$MONGLA_BRINGUP`) can override those. Anything typed as
 `name:=value` still wins, and bringup prints which values came from the file.
 
 ---

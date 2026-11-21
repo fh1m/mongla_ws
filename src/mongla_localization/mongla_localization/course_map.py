@@ -45,8 +45,17 @@ _HOME = pathlib.Path.home() / '.mongla' / 'courses'
 # `bearing:` for `bearing_deg:` would otherwise load as "unset" and surface
 # minutes later as a refusal that names the right key, on the venue's day.
 TOP_KEYS = ('course', 'frame', 'pool', 'props')
-PROP_KEYS = ('x_m', 'y_m', 'depth_m', 'bearing_deg', 'detect_class', 'measured', 'note')
-POOL_KEYS = ('depth_m', 'depth_min_m', 'depth_max_m')
+PROP_KEYS = ('x_m', 'y_m', 'depth_m', 'bearing_deg', 'detect_class', 'measured',
+             'note', 'width_m')
+POOL_KEYS = ('depth_m', 'depth_min_m', 'depth_max_m', 'floor', 'tile_m',
+             'lane_lines', 'shield_max_depth_m')
+
+# The venue's numbers that are bringup launch arguments: pool key -> argument.
+# The course is their ONE place. A deck file that also sets one is refused at
+# launch (two copies of one fact), and a typed name:=value still wins.
+VENUE_LAUNCH = {'depth_m': 'pool_depth_m', 'depth_min_m': 'pool_depth_min_m',
+                'depth_max_m': 'pool_depth_max_m', 'tile_m': 'tile_m',
+                'lane_lines': 'lane_lines'}
 
 
 @dataclass(frozen=True)
@@ -58,6 +67,7 @@ class Prop:
     depth_m: Optional[float] = None      # NEGATIVE below surface, this stack's sign
     bearing_deg: Optional[float] = None  # compass bearing its FACE points along
     detect_class: str = ''               # the class the detector emits for it
+    width_m: Optional[float] = None      # what the detector BOXES, for metric range
     measured: bool = False               # false = rulebook nominal, not our pool
     note: str = ''
 
@@ -92,6 +102,29 @@ class Course:
         nan = float('nan')
         return (float(d), nan if lo is None else float(lo),
                 nan if hi is None else float(hi))
+
+    def launch_values(self) -> Dict[str, str]:
+        """{bringup argument: value} for every venue number this course sets."""
+        out = {}
+        for key, arg in VENUE_LAUNCH.items():
+            v = self.pool.get(key)
+            if v is None:
+                continue
+            out[arg] = ('true' if v else 'false') if isinstance(v, bool) else repr(float(v))
+        return out
+
+    def shield_max_depth_m(self) -> Optional[float]:
+        """The depth the hull must never pass in this venue, or None."""
+        return self.pool.get('shield_max_depth_m')
+
+    def widths_by_class(self) -> Dict[str, float]:
+        """{detector class: width_m} for every prop whose size was measured here."""
+        return {(p.detect_class or p.name): p.width_m
+                for p in self.props.values() if p.width_m is not None}
+
+    def pool_floor(self):
+        """Surveyed floor points [(x, y, depth), ...]; [] when not surveyed."""
+        return list(self.pool.get('floor') or [])
 
     def prop(self, name: str) -> Prop:
         key = str(name).strip().lower()
@@ -172,13 +205,48 @@ def load_course(name: str) -> Course:
                 bearing_deg=_opt_float(body.get('bearing_deg')),
                 detect_class=str(body.get('detect_class', '') or ''),
                 measured=measured,
-                note=str(body.get('note', '') or ''))
+                note=str(body.get('note', '') or ''),
+                width_m=_opt_float(body.get('width_m')))
         pool = {k: _opt_float((raw.get('pool') or {}).get(k))
                 for k in ('depth_m', 'depth_min_m', 'depth_max_m')}
+        rp = raw.get('pool') or {}
+        pool['floor'] = _floor_points(rp.get('floor'), path)
+        pool['tile_m'] = _opt_float(rp.get('tile_m'))
+        pool['shield_max_depth_m'] = _opt_float(rp.get('shield_max_depth_m'))
+        if 'lane_lines' in rp:
+            if not isinstance(rp['lane_lines'], bool):
+                raise ValueError(f'{path}: pool.lane_lines is {rp["lane_lines"]!r}; '
+                                 f'write true or false unquoted')
+            pool['lane_lines'] = rp['lane_lines']
         return Course(stem, props, source=str(path), pool=pool)
     raise FileNotFoundError(
         f'no course {stem!r}. Looked in: '
         f'{[str(d) for d in _search_dirs()]}')
+
+
+def _floor_points(raw, path):
+    """`pool: floor:` as [(x, y, depth), ...], depth positive; [] when unset.
+
+    Surveyed points of the floor in the course's pool frame: a tape or a pole
+    at a few places, more where it slopes. Anything that is not a list of
+    three positive-depth numbers is refused, because a mis-typed survey is a
+    wrong height on every velocity.
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(f'{path}: pool.floor must be a list of [x_m, y_m, depth_m]')
+    pts = []
+    for i, row in enumerate(raw):
+        if not (isinstance(row, (list, tuple)) and len(row) == 3):
+            raise ValueError(f'{path}: pool.floor[{i}] is {row!r}; write '
+                             f'[x_m, y_m, depth_m]')
+        x, y, d = (float(v) for v in row)
+        if not d > 0.0:
+            raise ValueError(f'{path}: pool.floor[{i}] depth {d!r} must be positive '
+                             f'metres (the floor is BELOW the surface)')
+        pts.append((x, y, d))
+    return pts
 
 
 def _refuse_unknown(section, allowed, path, where) -> None:

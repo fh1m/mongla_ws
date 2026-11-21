@@ -89,6 +89,8 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
+        self._odom_xy = None
+        self._set_floor(self.get_parameter('pool_floor_xyz').value)
         self._set_pool(float(self.get_parameter('pool_depth_m').value),
                        float(self.get_parameter('pool_depth_min_m').value),
                        float(self.get_parameter('pool_depth_max_m').value))
@@ -195,6 +197,17 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
                                  self._on_rates, 50)
         self.create_subscription(MonglaState, '/mongla/state', self._on_state,
                                  10)
+        from mongla_interfaces.msg import LocalizationState
+        self.create_subscription(LocalizationState, '/mongla/localization/state',
+                                 self._on_loc_state, 10)
+        # Where the height comes from, latched, so a mission runner can refuse
+        # to start a run whose velocity sensor would refuse every interval.
+        self._pub_hsrc = self.create_publisher(
+            String, '/mongla/flow/height_source',
+            QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                       durability=QoSDurabilityPolicy.TRANSIENT_LOCAL))
+        self._hsrc_last = None
+        self.create_timer(1.0, self._publish_height_source)
         ctrl_qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
                               durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(String, f'{ns}/distance_control',
@@ -330,7 +343,31 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
                 self._pool_depth, float(v), self._pool_hi, live=True),
             'pool_depth_max_m': lambda v: self._set_pool(
                 self._pool_depth, self._pool_lo, float(v), live=True),
+            'pool_floor_xyz': self._set_floor,
         })
+
+    def height_source(self) -> str:
+        """'tiles', 'survey', 'survey, no position', 'pool_depth' or 'none'."""
+        if getattr(self, '_tile_height', None) is not None:
+            return 'tiles'
+        if getattr(self, '_floor_pts', None):
+            odom = getattr(self, '_odom_xy', None)
+            from mongla_localization.localization_publish import ODOM_MAX_AGE_S
+            fresh = odom is not None and time.monotonic() - odom[3] <= ODOM_MAX_AGE_S
+            return 'survey' if fresh else 'survey, no position'
+        if math.isfinite(self._pool_depth) and self._pool_depth > 0.0:
+            return 'pool_depth'
+        return 'none'
+
+    def _publish_height_source(self) -> None:
+        src = self.height_source()
+        if src != self._hsrc_last:
+            self._hsrc_last = src
+            self._pub_hsrc.publish(String(data=src))
+            (self.get_logger().warn if src == 'none' else self.get_logger().info)(
+                f'[FLOW ] height source: {src}'
+                + (' -- every interval is refused until a course or pool_depth_m '
+                   'gives the floor' if src == 'none' else ''))
 
     def _set_pool(self, depth: float, lo: float, hi: float, *,
                   live: bool = False) -> None:
@@ -350,6 +387,7 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         a, b = lo - depth, hi - depth
         self._floor_sigma_m = (math.sqrt(max(0.0, (a * a + a * b + b * b) / 3.0))
                                if all(map(math.isfinite, (a, b))) else 0.0)
+        self._range_sigma_m = self._floor_sigma_m
         if depth > 0.0 and self._floor_sigma_m == 0.0 and not (lo == lo and hi == hi):
             # Not invented: no spread is added, and the operator is told the
             # velocity's covariance treats the typed depth as exact.

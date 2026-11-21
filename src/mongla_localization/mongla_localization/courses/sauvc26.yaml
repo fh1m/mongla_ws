@@ -12,7 +12,7 @@
 #     ros2 run mongla_localization course_survey --course sauvc26 \
 #         --prop final_gate --x 16.0 --y 0.0 --bearing 0
 #
-# which writes ~/.mongla/courses/sauvc26.yaml (or $MONGLA_COURSE_DIR) with
+# which writes ~/mongla/deck/courses/sauvc26.yaml (or $MONGLA_COURSE_DIR) with
 # measured: true. The loader reads that copy first.
 #
 # Frame, stated once. Origin: the centre of the starting zone. +x runs from
@@ -25,6 +25,29 @@
 
 course: sauvc26
 frame: "pool: origin starting-zone centre, +x toward the gate (bearing 0), +y right (bearing 90)"
+
+# The venue, in one place: every package reads these from here, and a deck
+# file that also sets one is refused at launch. Unset until measured; the
+# guide is .claude/context/missions/course-file.md.
+#
+#   depth_m              flow's height above the floor when nothing better is
+#                        known (metres, POSITIVE below the surface)
+#   depth_min_m/_max_m   where a sloping or stepped floor actually lies; widens
+#                        flow's uncertainty to match
+#   floor                soundings [x, y, depth] in this frame; with a fixed
+#                        pool position, flow follows the slope under the hull
+#   tile_m               floor tile pitch: a second height and a yaw bound
+#   lane_lines           true when the floor has lane lines (a yaw bound)
+#   shield_max_depth_m   the manager surfaces a hull past this depth
+#
+# course_survey writes them: --floor X Y DEPTH (repeat), --tile, --shield.
+pool:
+  depth_m:
+  depth_min_m:
+  depth_max_m:
+  floor: []
+  tile_m:
+  shield_max_depth_m:
 
 props:
   starting_zone:

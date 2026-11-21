@@ -241,7 +241,11 @@ def flow(v: View):
                                series('/mongla/odom.twist.twist.linear.y', 'filter vy m/s'))),
             v('distance', plot(series(f'{d}/distance_traveled.data', 'distance m', True))),
             v('calibration', states(series(f'{d}/flow_calibration.data', 'scale from',
-                                           True))),
+                                           True),
+                                    # tiles | survey | survey, no position |
+                                    # pool_depth | none (a mission refuses none)
+                                    series('/mongla/flow/height_source.data',
+                                           'height from', True))),
             # Quality and heights read 0 to a few; the track count reads to
             # ~160, and on one axis it flattened them onto the floor.
             v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),

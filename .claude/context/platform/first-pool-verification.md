@@ -124,7 +124,7 @@ a test stands the node up with it on; the real XFeat matcher has still never
 closed a loop on the vehicle.
 
 ```yaml
-# ~/.mongla/bringup.yaml
+# ~/mongla/deck/bringup.yaml
 nodes:
   mongla_lock_downward:
     loop_closure: true

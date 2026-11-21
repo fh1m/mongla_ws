@@ -67,53 +67,54 @@ lives, whole, at the tag `last-with-pixhawk-and-sim`.
 36. [Precision terminal alignment — hold steady & don't miss the hole](missions/precision-alignment.md)
 37. [`mongla.detected()` paradigm — complete reference](missions/detected-paradigm.md)
 38. [Mongla Mission Cookbook](missions/mission-cookbook.md)
-39. [The verbs the board could give us, and has not yet](missions/verbs-srot-unlocks.md)
+39. [The course file — the venue in one place](missions/course-file.md)
+40. [The verbs the board could give us, and has not yet](missions/verbs-srot-unlocks.md)
 
 ## Part V — Running it
 
-40. [The operator runbook — every command, verified](platform/launch-combinations.md)
-41. [First pool day — what to verify, in order](platform/first-pool-verification.md)
-42. [Pool day](platform/pool-day.md)
-43. [The first swim — control only, as a script](platform/first-swim.md)
-44. [Round 4a — the identification pool day, as a script](platform/pool-day-round-4a.md)
-45. [Environment traps — dependency pitfalls that take down the vision launch](kutum/pi-and-env-traps.md)
-46. [Ground-station remote access — drive the Pi without a remote desktop](kutum/remote-access.md)
-47. [Operator tooling — Foxglove, rosbag record/replay, scorecards](platform/foxglove-and-bags.md)
-48. [Batighor, view by view — what the operator sees](platform/batighor-views.md)
-49. [ROS 2 conventions — the surface and the coding standards](platform/ros2-conventions.md)
+41. [The operator runbook — every command, verified](platform/launch-combinations.md)
+42. [First pool day — what to verify, in order](platform/first-pool-verification.md)
+43. [Pool day](platform/pool-day.md)
+44. [The first swim — control only, as a script](platform/first-swim.md)
+45. [Round 4a — the identification pool day, as a script](platform/pool-day-round-4a.md)
+46. [Environment traps — dependency pitfalls that take down the vision launch](kutum/pi-and-env-traps.md)
+47. [Ground-station remote access — drive the Pi without a remote desktop](kutum/remote-access.md)
+48. [Operator tooling — Foxglove, rosbag record/replay, scorecards](platform/foxglove-and-bags.md)
+49. [Batighor, view by view — what the operator sees](platform/batighor-views.md)
+50. [ROS 2 conventions — the surface and the coding standards](platform/ros2-conventions.md)
 
 ## Part VI — Reference
 
-50. [Command reference — generated from the code](reference/commands.md)
-51. [The packages](packages/README.md)
-52. [How the docs stay true — the wiki, the files, and the guards](reference/how-the-docs-stay-true.md)
+51. [Command reference — generated from the code](reference/commands.md)
+52. [The packages](packages/README.md)
+53. [How the docs stay true — the wiki, the files, and the guards](reference/how-the-docs-stay-true.md)
 
 ## Part VII — The record
 
-53. [Measured bars — every number the stack ships, and what measured it](measured-bars.md)
-54. [Bug register — every defect in mongla_ws, open and fixed](BUGS.md)
-55. [Upstream asks — `mongla_ws` → `srot-control-board`](upstream/README.md)
-56. [Read coverage of the SROT / Hengla / Bondor repos](upstream/COVERAGE.md)
+54. [Measured bars — every number the stack ships, and what measured it](measured-bars.md)
+55. [Bug register — every defect in mongla_ws, open and fixed](BUGS.md)
+56. [Upstream asks — `mongla_ws` → `srot-control-board`](upstream/README.md)
+57. [Read coverage of the SROT / Hengla / Bondor repos](upstream/COVERAGE.md)
 
 ## Part VIII — Against the world
 
-57. [The verdict — Mongla against the world, in one document](sota/VERDICT.md)
-58. [Against the world — how Mongla compares to the best work there is](sota/README.md)
-59. [Control, against the world](sota/control.md)
-60. [Vision, against the world](sota/vision.md)
-61. [Localization, against the world](sota/localization.md)
-62. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
-63. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
+58. [The verdict — Mongla against the world, in one document](sota/VERDICT.md)
+59. [Against the world — how Mongla compares to the best work there is](sota/README.md)
+60. [Control, against the world](sota/control.md)
+61. [Vision, against the world](sota/vision.md)
+62. [Localization, against the world](sota/localization.md)
+63. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
+64. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
 
 ## Part IX — The workbench
 
-64. [The workbench — what is being measured, and what it said](workbench/README.md)
-65. [Bench — everything provable without water](workbench/BENCH.md)
-66. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
-67. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
+65. [The workbench — what is being measured, and what it said](workbench/README.md)
+66. [Bench — everything provable without water](workbench/BENCH.md)
+67. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
+68. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
 
 ## Appendix — Elsewhere
 
-68. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
-69. [Bumblebee — RoboSub 2025 (1st Place)](scouting/bumblebee-2025.md)
-70. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
+69. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
+70. [Bumblebee — RoboSub 2025 (1st Place)](scouting/bumblebee-2025.md)
+71. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)

@@ -280,14 +280,14 @@ fi
 # =========================================================================== #
 [ "$(id -u)" -ne 0 ] || { echo "the user half runs as the vehicle user, not root" >&2; exit 2; }
 
-say "1/5  Python: undo the two traps that break the system cv2 (E1, E2)"
+say "1/6  Python: undo the two traps that break the system cv2 (E1, E2)"
 # Noble ships numpy 1.26.4 and a cv2 4.6.0 that is built
 # against numpy 1. A pip numpy>=2 or a pip opencv-python in ~/.local shadows
 # them and every vision node dies with "_ARRAY_API not found".
 python3 -m pip uninstall -y -q --break-system-packages numpy opencv-python \
         opencv-python-headless 2>/dev/null || true
 
-say "2/5  Python: the vision dependencies, pinned (kutum/requirements.txt)"
+say "2/6  Python: the vision dependencies, pinned (kutum/requirements.txt)"
 # --no-deps on the two that hard-require opencv-python, which would re-shadow
 # the system cv2. supervision 0.30 needs numpy 2; trackers 2.5.0 on PyPI ships
 # no code (E3).
@@ -296,7 +296,7 @@ python3 -m pip install -q --user --break-system-packages \
 python3 -m pip install -q --user --break-system-packages --no-deps \
         'supervision==0.26.1' 'trackers==2.4.0'
 
-say "3/5  HailoRT Python bindings (not on PyPI: built from source)"
+say "3/6  HailoRT Python bindings (not on PyPI: built from source)"
 if [ "$(python3 -c 'import hailo_platform; print(hailo_platform.__version__)' 2>/dev/null)" != "$HAILORT_V" ]; then
   # The wheel is behind a Hailo Developer Zone login, so build it from the
   # same tree the runtime came from (--system step 2). -DHAILO_BUILD_PYBIND
@@ -308,7 +308,7 @@ if [ "$(python3 -c 'import hailo_platform; print(hailo_platform.__version__)' 2>
       && python3 -m pip install --user --break-system-packages --no-build-isolation .)
 fi
 
-say "4/5  Every shell sources kutum/env.sh"
+say "4/6  Every shell sources kutum/env.sh"
 # The login shell is zsh, and ROS ships a setup file per shell; ~/.zshrc used to
 # source nothing, so every ssh terminal started without ROS. Lines that source
 # a retired workspace or ~/pi_env.sh are commented out, not deleted.
@@ -320,13 +320,47 @@ for rc in ~/.zshrc ~/.bashrc; do
 done
 mkdir -p ~/.hailo/hailort
 
-say "5/5  Batighor: the Lichtblick web build the operators' browsers load"
+say "5/6  Batighor: the Lichtblick web build the operators' browsers load"
 # The pinned release, checked against its hash (src/mongla_batighor/LICHTBLICK.json),
 # into ~/.mongla/batighor/web/. Run from the source tree: this half can come
 # before the workspace is built.
 PYTHONPATH="$KUTUM/../src/mongla_batighor${PYTHONPATH:+:$PYTHONPATH}" \
   python3 -m mongla_batighor.fetch \
   || echo "  WARNING: Lichtblick not installed; batighor:=true will say so. Retry with network."
+
+say "6/6  The deck: ~/mongla/deck, where the operator looks on the day"
+# The vehicle's settings and the venue's course files, in one visible folder
+# beside the releases. ~/.mongla stays, as a link to it, because every node
+# reads that path; nothing moves twice.
+#   ~/mongla/deck/bringup.yaml           the vehicle and the run (course: names the venue)
+#   ~/mongla/deck/courses/<venue>.yaml   the venue: pool, floor, depth floor, props
+deck="$HOME/mongla/deck"
+mkdir -p "$HOME/mongla"
+if [ -d "$HOME/.mongla" ] && [ ! -L "$HOME/.mongla" ]; then
+  if [ -e "$deck" ]; then
+    echo "  WARNING: both ~/.mongla and $deck exist; left as they are. Merge by hand,"
+    echo "           then: rm -r ~/.mongla && ln -s mongla/deck ~/.mongla"
+  else
+    mv "$HOME/.mongla" "$deck" && ln -s mongla/deck "$HOME/.mongla"
+    echo "  ~/.mongla moved to $deck (a link stays at ~/.mongla)"
+  fi
+elif [ ! -e "$HOME/.mongla" ]; then
+  mkdir -p "$deck" && ln -s mongla/deck "$HOME/.mongla"
+fi
+mkdir -p "$deck/courses"
+[ -f "$deck/README.txt" ] || cp "$KUTUM/deck-README.txt" "$deck/README.txt"
+# A starter deck, only where there is none: it names the blank pool course, so
+# bringup_check and every mission start say exactly what is still unmeasured.
+# An existing file is never touched.
+if [ ! -f "$deck/bringup.yaml" ]; then
+  cp "$KUTUM/deck-bringup.yaml" "$deck/bringup.yaml"
+  echo "  wrote $deck/bringup.yaml (course: pool)"
+fi
+if [ ! -f "$deck/courses/pool.yaml" ]; then
+  cp "$KUTUM/../src/mongla_localization/mongla_localization/courses/pool.yaml" "$deck/courses/pool.yaml"
+  echo "  wrote $deck/courses/pool.yaml (blank: survey it at the pool)"
+fi
+echo "  deck: $deck ($(ls "$deck/courses" | wc -l) course files)"
 
 echo
 echo "User half done. On a fresh machine the machine half comes first:"
