@@ -1,0 +1,39 @@
+.claude/context/packages/mongla_batighor/README.md
+  s_4af8d6f83b24e8::t_5977159b7c68c7 59,62,199
+.claude/context/platform/batighor-views.md
+  s_4af8d6f83b24e8::t_bf76daece0dda8 104-110
+src/mongla_batighor/layouts/batighor.json
+  s_4af8d6f83b24e8::t_2a487968dbafba 39-41,99-101,481-483
+src/mongla_batighor/layouts/localization.json
+  s_4af8d6f83b24e8::t_e2f0752acac153 11-13
+src/mongla_batighor/layouts/map.json
+  s_4af8d6f83b24e8::t_09eb9b5cfc3945 11-13
+src/mongla_batighor/layouts/mongla_layout.json
+  s_4af8d6f83b24e8::t_8934c85d38a475 39-41
+src/mongla_batighor/mongla_batighor/overlay.py
+  s_4af8d6f83b24e8::t_9762984e8d8081 30-33,443-488,685-695
+src/mongla_batighor/mongla_batighor/views.py
+  s_4af8d6f83b24e8::t_5766d30ffd9a70 117-119
+src/mongla_batighor/package.xml
+  s_4af8d6f83b24e8::t_1a4de41ad86f1a 19
+src/mongla_batighor/test/test_overlay.py
+  s_4af8d6f83b24e8::t_32bc415b3f3d0b 6,330-353
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  s_4af8d6f83b24e8::t_a06699ddb6cbab 91-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "cf99ce4936c6ea0c326dd010aef9e7b69a300064",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
