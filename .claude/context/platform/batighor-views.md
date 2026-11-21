@@ -117,9 +117,10 @@ picture points, and neither is measured yet (`frames.yaml`).
 
 ## Thrust (`thrust`)
 
-![The thrust view: the Thrust panel with the surge and sway demand as centred bars and a note that the board has not announced its ESCs, beside plots of the battery, the demand and the body rates.](../../../docs/imgs/batighor/thrust.webp)
+![The thrust view: the Thrust panel with the surge and sway demand as centred bars and a note that the board has not announced its ESCs, beside plots of the thruster pack, the demand and the body rates.](../../../docs/imgs/batighor/thrust.webp)
 
-The demand sent to the board, centred bars from -1 to 1, and one bar per ESC the
+The cost is the thruster pack (PM2, `MonglaState.thruster_voltage`), not the
+electronics rail the Health view plots beside it. The demand sent to the board, centred bars from -1 to 1, and one bar per ESC the
 board reports. The bench board announces no ESCs, so the panel says so instead of
 drawing zeros.
 

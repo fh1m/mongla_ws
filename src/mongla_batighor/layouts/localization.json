@@ -73,7 +73,7 @@
         },
         {
           "value": "/mongla/localization/aiding.data",
-          "label": "aided by",
+          "label": "aiding",
           "timestampMethod": "receiveTime"
         }
       ],
