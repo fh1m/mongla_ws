@@ -326,7 +326,10 @@ class TrackerNode(Node):
         parameter successful" on the deck and changed nothing.
         """
         from rcl_interfaces.msg import SetParametersResult
-        fixed = [p.name for p in changes(self, params) if p.name != 'classes']
+        params = changes(self, params)     # a declaration is not a change (B-145)
+        if not params:
+            return SetParametersResult(successful=True)
+        fixed = [p.name for p in params if p.name != 'classes']
         if fixed:
             return SetParametersResult(
                 successful=False,

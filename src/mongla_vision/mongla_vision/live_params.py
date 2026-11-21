@@ -17,7 +17,10 @@ def apply_live(node, live: dict, *, restart_hint='set it under `nodes:` in bring
     node.LIVE_PARAMS = tuple(sorted(live))
 
     def on_set(params):
-        fixed = [p.name for p in changes(node, params) if p.name not in live]
+        params = changes(node, params)     # a declaration is not a change (B-145)
+        if not params:
+            return SetParametersResult(successful=True)
+        fixed = [p.name for p in params if p.name not in live]
         if fixed:
             return SetParametersResult(successful=False, reason=(
                 f'{", ".join(fixed)}: read once at startup -- {restart_hint}. '

@@ -53,20 +53,34 @@ def test_a_real_change_to_a_fixed_name_is_still_refused(node):
     assert node.get_parameter('track_buffer').value == 30
 
 
-def _callbacks_that_refuse():
-    for f in sorted(SRC.glob('*/*/**/*.py')):
-        if '/test/' in str(f):
-            continue
-        text = f.read_text(errors='replace')
-        for m in re.finditer(r'read once at startup', text):
-            start = text.rfind('\n    def ', 0, m.start())
-            start = max(start, text.rfind('\ndef ', 0, m.start()))
-            yield f, text[start:m.start()]
+def test_apply_live_survives_spin_declaring_on_it(node):
+    """The live table holds only its own names: a declaration reaching it raised KeyError."""
+    from mongla_vision.live_params import apply_live
+    node.declare_parameter('max_reproj_px', 4.0)
+    got = []
+    apply_live(node, {'max_reproj_px': got.append})
+    tether.declare(node)
+    assert node.has_parameter(tether.PARAM) and got == []
 
 
-def test_every_callback_that_refuses_a_fixed_name_skips_declarations():
-    found = list(_callbacks_that_refuse())
-    assert len(found) >= 5, [str(f) for f, _ in found]
-    bad = [str(f.relative_to(SRC)) for f, body in found
-           if 'fixed' in body and 'changes(' not in body]
-    assert not bad, f'refuses a declaration as if it were a change: {bad}'
+def _body(text, name):
+    i = text.find(f'def {name}(')
+    if i < 0:
+        return None
+    j = text.find('\n    def ', i + 1)
+    return text[i:j if j > 0 else len(text)]
+
+
+def test_every_parameter_callback_skips_declarations():
+    """Every registered on-set callback drops declarations before it refuses or applies."""
+    files = {f: f.read_text(errors='replace') for f in sorted(SRC.glob('*/*/**/*.py'))
+             if '/test/' not in str(f)}
+    names = sorted({m.group(1).split('.')[-1] for t in files.values()
+                    for m in re.finditer(r'add_on_set_parameters_callback\(([\w.]+)\)', t)})
+    assert len(names) >= 5, names
+    bad = []
+    for n in names:
+        bodies = [b for t in files.values() if (b := _body(t, n))]
+        if not bodies or not all('params = changes(' in b for b in bodies):
+            bad.append(n)
+    assert not bad, f'a declaration reaches these callbacks as a change: {bad}'
