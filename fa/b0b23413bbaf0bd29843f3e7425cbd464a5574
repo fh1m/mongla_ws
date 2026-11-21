@@ -1,0 +1,25 @@
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_3d7c116788ccd0 168,9142-9172
+.claude/context/perception/model-pipeline.md
+  s_4af8d6f83b24e8::t_ccb7f355c274fe 114-130
+README.md
+  s_4af8d6f83b24e8::t_8fd0f5137a89da 64,865,868
+docs/index.html
+  s_4af8d6f83b24e8::t_663436123ecc95 1873-1875,1877
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "fab0b23413bbaf0bd29843f3e7425cbd464a5574",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
