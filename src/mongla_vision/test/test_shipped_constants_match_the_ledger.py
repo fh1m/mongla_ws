@@ -67,6 +67,10 @@ LEDGER_BOUND = {
         'FLOW_TD_MEASURED_S': (-0.0134, 'td = -13.4 ms',
                                'camera<->gyro offset the online estimator '
                                'starts from, in the flight camera mode'),
+        '_GYRO_GAIN_X_DEFAULT': (-1.102, 'fitted, -1.102 / -1.024',
+                                 'de-rotation roll gain fitted on the rig (107)'),
+        '_GYRO_GAIN_Y_DEFAULT': (-1.024, 'fitted, -1.102 / -1.024',
+                                 'de-rotation pitch gain fitted on the rig (107)'),
         'FLOW_ROT_RESIDUAL_CALIBRATED': (0.10, '575.7 → 57.1 mm/s',
                                          'rotation left after a calibrated '
                                          'de-rotation gain (#23)'),

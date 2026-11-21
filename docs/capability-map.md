@@ -132,7 +132,7 @@ IMU, the depth sensor and the downward camera. Without it, a distance move is a 
 
 | Capability | How it works | Evidence | State |
 |---|---|---|---|
-| Velocity over the floor | optical flow from the downward camera, with rotation removed before scaling: on a rigid board-and-camera rig, **98.5 %** of a taped 30 cm slide with the fitted gains, against 63 % with rotation left in | `mongla_vision/flow/flow_node.py`; `measured-bars.md` §10, §107 | RIG |
+| Velocity over the floor | optical flow from the downward camera, with rotation removed before scaling: on a rigid board-and-camera rig, **98.5 %** of a taped 30 cm slide with gains fitted on that rig, against 63 % with rotation left in; the rig's gains ship as the default and the hull re-fits them before water | `mongla_vision/flow/flow_node.py`; `measured-bars.md` §10, §107 | RIG |
 | Camera-to-IMU time offset | the image's rotation correlated with the board's gyro, in the flight mode: **−13.4 ms**, two 15 s windows within 0.02 ms; flow starts from it | `tools/bench/td_measure.py`; `measured-bars.md` §108 | RIG |
 | Distance accuracy | three 30 cm slides: worst error **1.09 cm (3.6 %)**; recovered height 0.72 / 0.69 / 0.70 m against a 0.72 m tape | `measured-bars.md` §13 | BENCH |
 | Refusing to guess | 727 static intervals produced **zero** velocity reports: an unmeasurable interval is never published as "0 m/s" | `measured-bars.md` §10 | BENCH |

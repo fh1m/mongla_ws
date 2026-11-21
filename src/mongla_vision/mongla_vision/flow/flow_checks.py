@@ -270,6 +270,7 @@ class FlowChecksMixin:
             var += (speed * getattr(self, '_floor_sigma_m', 0.0) / float(h)) ** 2
         pr, rr = getattr(self, '_last_rates', (0.0, 0.0))
         for rate, gain in ((pr, self._gy), (rr, self._gx)):
-            residual = 1.0 if gain == 0.0 else FLOW_ROT_RESIDUAL_CALIBRATED
+            fitted = gain != 0.0 and getattr(self, '_gains_fitted', True)
+            residual = FLOW_ROT_RESIDUAL_CALIBRATED if fitted else 1.0
             var += (residual * float(h) * float(rate)) ** 2
         return var

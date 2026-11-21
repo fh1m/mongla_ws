@@ -9312,6 +9312,12 @@ intervals as rotation-dominated and loses a third of the travel; the old rig's g
 opposite in sign, read 9 % long. The sign flip is the mount: S is a property of how the
 camera sits on the IMU (section 12 said so), so these numbers do not carry to the hull.
 The shipped default stays 0 until the hull's own fit passes this same A/B (bead po7.13).
+
+**Changed the same night, by the owner's decision:** the fitted pair ships as the default
+(`_GYRO_GAIN_X_DEFAULT` / `_Y`), because the hull will be re-fitted before any water run. Two
+guards hold the gap: the flow node warns at start-up that the gains are the rig's, and the
+published sigma keeps the full uncorrected rotation term for them (only gains set for the
+mount earn the 0.10 residual), so a hull whose coupling differs is not reported as corrected.
 Not covered: water, the hull's pivot, slides along the other axis.
 
 ## 108. THE CAMERA-TO-GYRO OFFSET IN THE FLIGHT MODE: td = -13.4 ms (2026-11-22)
