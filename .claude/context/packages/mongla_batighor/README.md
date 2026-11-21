@@ -116,6 +116,12 @@ tmux showed the same three lines and refused its own `stop` with "the manager is
 /mongla/move", since no manager ran. The browser panel that carries the heartbeat comes with our
 Lichtblick build: the release cannot load server panels (its `apiUrl` is unset).
 
+The heartbeat belongs to the page, not to the Control Center: opening a view without it
+unmounts the panel, and Lichtblick refuses a service call from an unmounted panel, so the
+beat goes through whichever Batighor panel is mounted (`callAny` in `common.js`; the Status
+strip is above the tabs in every view). Kept in the panel, it stopped on a tab switch, the
+pilot lost the helm 3 s later and the helm stopped their verb.
+
 ## Where things go on the screen
 
 `views.py` places every panel by these rules. A view that breaks one says why in its docstring.
@@ -177,8 +183,12 @@ menu takes Kutum's. `kutum/deploy.sh` runs the desktop step after a release when
 installed on the dev box and Batighor answers; with the stack down it says to run
 `tools/pool/batighor_desktop.py kutum --no-launch` after bringup. On a dense screen the app is started at a scale read from
 the screen's pixels and millimetres (`--force-device-scale-factor`, `--scale` to set it): a 4K
-15-inch panel at scale 1 drew the panels' 12 px type 1 mm tall. If the app is already open it
-keeps its view, and the tool says so.
+15-inch panel at scale 1 drew the panels' 12 px type 1 mm tall. On Linux, where the GPU in
+use has its Vulkan driver, the app draws through Vulkan (`--use-angle=vulkan`;
+`--no-vulkan` to refuse): through ANGLE's default OpenGL a tab switch blocked the page for
+1.5-4.9 s while every WebGL panel compiled its shaders again, and on Vulkan 70-390 ms
+(measured-bars 105). A blocked page holds back a STOP press too. If the app is already
+open it keeps its view, and the tool says so.
 
 Kutum does not re-encode a camera's frame for an operator. `camera_node` republishes the
 JPEG the camera sent, unchanged, on `<cam>/stream/compressed` (the camera's rate, capped at

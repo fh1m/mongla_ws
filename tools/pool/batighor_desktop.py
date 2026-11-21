@@ -168,6 +168,38 @@ def scale_flag(asked: float | None) -> list[str]:
     return [f'--force-device-scale-factor={found:g}'] if found and found > 1 else []
 
 
+# A kernel GPU driver and the Vulkan driver (ICD) that serves it.
+_VULKAN_ICD = {'nvidia': 'nvidia_icd', 'amdgpu': 'radeon_icd', 'i915': 'intel_icd',
+               'xe': 'intel_icd'}
+_ICD_DIRS = ('/usr/share/vulkan/icd.d', '/etc/vulkan/icd.d',
+             '/usr/local/share/vulkan/icd.d', '~/.local/share/vulkan/icd.d')
+
+
+def vulkan_flag(drm: Path = Path('/sys/class/drm'), icd_dirs=_ICD_DIRS) -> list[str]:
+    """`--use-angle=vulkan` on Linux when a GPU in use has its Vulkan driver.
+
+    Lichtblick builds its WebGL panels again on every tab switch. Through
+    ANGLE's default OpenGL backend each shader compile waits, and a switch
+    blocked the page for 1.5-4.9 s; on Vulkan, 70-390 ms (measured-bars 105).
+    A blocked page also holds back a STOP press and the helm's heartbeat.
+    Without a Vulkan driver the flag leaves no WebGL at all, so it is given
+    only when the kernel's GPU driver has its ICD installed. Mesa installs
+    ICDs for GPUs a machine does not have, so a file alone proves nothing;
+    lavapipe, a CPU, has no kernel driver and never qualifies.
+    """
+    if not sys.platform.startswith('linux'):
+        return []                     # ANGLE is on D3D (Windows) or Metal (macOS)
+    drivers = set()
+    for card in drm.glob('card[0-9]*'):
+        try:
+            drivers.add(Path(os.readlink(card / 'device' / 'driver')).name)
+        except OSError:
+            continue
+    icds = {f.name.split('.')[0] for d in icd_dirs
+            for f in Path(d).expanduser().glob('*.json')}
+    return ['--use-angle=vulkan'] if any(_VULKAN_ICD.get(d) in icds for d in drivers) else []
+
+
 def running() -> bool:
     """Whether the desktop app is open already (Linux and macOS; False if unknown)."""
     if shutil.which('pgrep') is None:
@@ -189,6 +221,8 @@ def main(argv=None) -> int:
     ap.add_argument('--scale', type=float, help='the app\'s scale (default: from the screen\'s density)')
     ap.add_argument('--list', action='store_true', help="print Kutum's views and exit")
     ap.add_argument('--no-launch', action='store_true', help='install the panels only')
+    ap.add_argument('--no-vulkan', action='store_true',
+                    help="render through ANGLE's OpenGL backend even where Vulkan is found")
     a = ap.parse_args(argv)
     base = f'http://{a.host}:{a.port}'
     try:
@@ -226,9 +260,11 @@ def main(argv=None) -> int:
         print(f'WARNING: the app is already open and keeps its view; pick {view} under '
               f'Layouts, or close the app and run this again')
     flags = scale_flag(a.scale)
-    subprocess.Popen([app, *flags, f'--defaultLayout={view}', url], start_new_session=True,
+    gpu = [] if a.no_vulkan else vulkan_flag()
+    subprocess.Popen([app, *flags, *gpu, f'--defaultLayout={view}', url], start_new_session=True,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f'ok  opened {view} on {a.host}' + (f' at scale {flags[0].split("=")[1]}' if flags else ''))
+    print(f'ok  opened {view} on {a.host}' + (f' at scale {flags[0].split("=")[1]}' if flags else '')
+          + (', drawing through Vulkan' if gpu else ''))
     for name in changed:
         print(f'WARNING: {name} changed on Kutum and the app keeps its older copy: in '
               f'Layouts, delete {name}, then restart the app to import the new one')
