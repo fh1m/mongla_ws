@@ -382,7 +382,10 @@ class DetectorSetupMixin:
 
     def _on_parameter_change(self, params):
         from rcl_interfaces.msg import SetParametersResult
-        fixed = [p.name for p in changes(self, params) if p.name not in LIVE_PARAMS]
+        params = changes(self, params)     # a declaration is not a change (B-145)
+        if not params:
+            return SetParametersResult(successful=True)
+        fixed = [p.name for p in params if p.name not in LIVE_PARAMS]
         if fixed:
             if fixed == ['iou']:
                 return SetParametersResult(

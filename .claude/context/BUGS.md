@@ -938,14 +938,19 @@ reached Batighor's overlay. Every unit test passed, because none started a node
 through `spin`.
 
 **Fix.** `mongla_runtime.tether.changes(node, params)` keeps only the names
-already declared, and every refusing callback (`live_params.apply_live`, the
-tracker, the detector, the lock ladder, the manager) refuses only those. A real
-change to a fixed name is still refused.
+already declared. Every registered callback (`live_params.apply_live`, the
+camera, the tracker, the detector, the lock ladder, the manager) drops
+declarations first and returns success when nothing is left, so it neither
+refuses a declaration nor tries to apply one (`apply_live` raised `KeyError`
+on it). A real change to a fixed name is still refused.
 
 **Guards.** `mongla_runtime/test/test_declaring_is_not_changing.py`: a node that
 refuses fixed names survives `tether.declare`; a real change is still refused;
 every callback in `src/` that says `read once at startup` goes through
-`changes(`. Injection: reverting two of the five callbacks fails the third test.
+`params = changes(` (found by its `add_on_set_parameters_callback` registration,
+not by its wording: the camera said `read once when the camera opens`); and
+`apply_live` survives a declaration. Injection: reverting the camera and
+`apply_live` fails both of the last two.
 
 ### B-118: the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame `READ 2026-11-18` **FIXED 2026-11-18**
 

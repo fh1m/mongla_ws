@@ -40,7 +40,10 @@ class SetupMixin:
 
     def _on_set_parameters(self, params):
         from rcl_interfaces.msg import SetParametersResult
-        fixed = [p.name for p in changes(self, params)
+        params = changes(self, params)     # a declaration is not a change (B-145)
+        if not params:
+            return SetParametersResult(successful=True)
+        fixed = [p.name for p in params
                  if not p.name.startswith('vision.') and p.name not in self.LIVE_PARAMS]
         if fixed:
             return SetParametersResult(successful=False, reason=(
