@@ -122,9 +122,11 @@ def scene() -> tuple:
                   # only, and the panel alerts without it once /tf exists.
                   'scene': {'backgroundColor': '#05070c', 'labelScaleFactor': 0.3,
                             'transforms': {'showLabel': False, 'enablePreloading': True}},
-                  # Close enough that the 0.7 m hull fills the panel, from
-                  # behind and above the way a pilot looks at a vehicle.
-                  'cameraState': {'distance': 2.2, 'perspective': True, 'phi': 55,
+                  # From behind and above, the way a pilot looks at a
+                  # vehicle. At 2.2 m a 45-degree view of a wide panel is
+                  # 3.4 m across and the 0.7 m hull filled a fifth of it;
+                  # at 1.3 m it is 2 m, room for the hull and the demand.
+                  'cameraState': {'distance': 1.3, 'perspective': True, 'phi': 55,
                                   'thetaOffset': 200, 'targetOffset': [0, 0, 0],
                                   'target': [0, 0, 0], 'targetOrientation': [0, 0, 0, 1],
                                   'fovy': 45, 'near': 0.01, 'far': 5000},
