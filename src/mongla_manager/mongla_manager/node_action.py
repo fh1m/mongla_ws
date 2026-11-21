@@ -21,6 +21,7 @@ from mongla_interfaces.action import Move
 from mongla_control import COMMANDS, fields_for
 from mongla_control.fc.srot_fc import MOVE_VERBS as _BOARD_VERBS_WITH_PROGRESS
 
+from . import doing as _doing
 from .dispatch_policy import SAFETY_VERBS, goal_acceptance, _CommandGate
 from .vision_tunables import runtime_defaults_for_command, snapshot_from_node
 
@@ -136,6 +137,25 @@ class ActionMixin:
             cancel_callback=self.cancel_callback,
             callback_group=self.action_group,
         )
+        # What the vehicle is doing, for every operator (doing.py). Latched, so
+        # a browser that opens later sees the last verb and how it ended.
+        from rclpy.qos import DurabilityPolicy, QoSProfile
+        from std_msgs.msg import String
+        self._doing, self._doing_lock = _doing.Doing(), threading.Lock()
+        self._doing_msg = String
+        self._doing_pub = self.create_publisher(
+            String, _doing.TOPIC, QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        # Idle, said at start: silence would read as no manager at all.
+        self._say_doing('text')
+
+    def _say_doing(self, method: str, *args, **kw) -> None:
+        """Update and publish the record. Never fatal: it reports, it never steers."""
+        try:
+            with self._doing_lock:
+                text = getattr(self._doing, method)(*args, **kw)
+            self._doing_pub.publish(self._doing_msg(data=text))
+        except Exception as exc:                # noqa: BLE001 -- see the docstring
+            self.get_logger().warn(f'[ACT  ] /mongla/doing not published: {exc}')
 
     # ================================================================== #
     #  MAVLink reader -- only place recv_match() is called                #
@@ -161,6 +181,7 @@ class ActionMixin:
         # for COMMAND_GATE_STALE_S and every real verb in that window bounced.
         if goal_request.cmd not in COMMANDS:
             self.get_logger().warn(f'[ACT  ] Rejected unknown command {goal_request.cmd!r}')
+            self._say_doing('refused', goal_request.cmd, goal_request, 'not a verb')
             return GoalResponse.REJECT
         # A latched safety fault refuses everything but the safety verbs, so no
         # ordinary move can overwrite a recovery the board has not confirmed
@@ -169,6 +190,7 @@ class ActionMixin:
         latch = self.safety_latch_reason()
         if latch and goal_request.cmd not in SAFETY_VERBS:
             self.get_logger().error(f'[ACT  ] Rejected {goal_request.cmd} -- {latch}')
+            self._say_doing('refused', goal_request.cmd, goal_request, latch)
             return GoalResponse.REJECT
         # ONE atomic operation: decide and claim together. `goal_acceptance` stays
         # the pure policy (and stays unit-testable); the gate applies it under its
@@ -177,6 +199,8 @@ class ActionMixin:
         if not accept:
             self.get_logger().warn(
                 f'[ACT  ] Rejected {goal_request.cmd} -- command already active')
+            self._say_doing('refused', goal_request.cmd, goal_request,
+                            'another verb is running')
             return GoalResponse.REJECT
         if signal_abort:
             # Safety command accepted while busy: signal abort so the running
@@ -256,6 +280,8 @@ class ActionMixin:
         except Exception:                   # noqa: BLE001 -- a log field only
             gid = '?'
         self.get_logger().info(f'[ACT  ] {cmd} -> EXECUTING (goal {gid})')
+        self._say_doing('start', cmd, request, gid)
+        ended = (_doing.FAILED, 'ended without a result', None)
 
         try:
             with FeedbackPump(self.fc, goal_handle,
@@ -273,6 +299,7 @@ class ActionMixin:
                     kwargs['on_progress'] = self._progress_relay(cmd, goal_handle)
                 result = method(**kwargs)
 
+            ended = (_doing.DONE, result.message, result.final_value)
             if result.success:
                 goal_handle.succeed()
                 self.get_logger().info(
@@ -287,10 +314,12 @@ class ActionMixin:
                 if result.code not in (Move.Result.ABORTED, Move.Result.PREEMPTED):
                     result.code = Move.Result.ABORTED
                 goal_handle.canceled()
+                ended = (_doing.CANCELED, result.message, result.final_value)
                 self.get_logger().warning(
                     f'[ACT  ] {cmd} -> CANCELED ({result.message})')
             else:
                 goal_handle.abort()
+                ended = (_doing.FAILED, result.message, result.final_value)
                 self.get_logger().error(
                     f'[ACT  ] {cmd} -> REJECTED ({result.message})')
             return result
@@ -308,6 +337,7 @@ class ActionMixin:
             result.error_value = 0.0
             goal_handle.abort()
             self.get_logger().error(f'[ACT  ] {cmd} FAILED: {exc}')
+            ended = (_doing.FAILED, result.message, None)
 
             # A verb that raised mid-loop skipped its own neutral, so the
             # last MANUAL_CONTROL demand may still be in force. Zero it so
@@ -321,6 +351,7 @@ class ActionMixin:
 
         finally:
             self._gate.release(token)
+            self._say_doing('end', gid, *ended)
 
     @staticmethod
     def _progress_relay(cmd, goal_handle):

@@ -7,6 +7,7 @@ registers here: the names it can apply live, each with the function that
 applies it, and a reasoned refusal for every other name.
 """
 from rcl_interfaces.msg import SetParametersResult
+from mongla_runtime.tether import changes
 
 
 def apply_live(node, live: dict, *, restart_hint='set it under `nodes:` in bringup.yaml and restart'):
@@ -16,6 +17,9 @@ def apply_live(node, live: dict, *, restart_hint='set it under `nodes:` in bring
     node.LIVE_PARAMS = tuple(sorted(live))
 
     def on_set(params):
+        params = changes(node, params)     # a declaration is not a change (B-145)
+        if not params:
+            return SetParametersResult(successful=True)
         fixed = [p.name for p in params if p.name not in live]
         if fixed:
             return SetParametersResult(successful=False, reason=(

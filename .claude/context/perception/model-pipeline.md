@@ -111,3 +111,20 @@ it; the numbers above are kept only as the record of the bug.
 the unmatched boxes against the team's original class names, on a random sample big enough to
 count (48, not 16), cropped so the object is visible. Sixteen boxes in file order were one video
 sequence and gave a confident wrong cause.
+
+**The rebuilt split, both families (2026-11-21, beads 5ew.2 and 5ew.1).** Same bar, same data,
+COCO start, 20 epochs, seed 0. measured-bars 102 has every in-pool source.
+
+| model | held-out mAP50 | gate | flare | drum | in-pool mean (9 sources) | gap |
+|---|---|---|---|---|---|---|
+| yolov8n | 0.882 | 0.992 | 0.680 | 0.975 | 0.922 | 0.040 |
+| yolo11n | 0.872 | 0.992 | 0.687 | 0.937 | 0.925 | 0.053 |
+
+- **Family: yolov8n stays.** yolo11n would have had to score 0.02 higher on the held-out team; it
+  scored 0.010 lower (one seed), and yolov8n is the faster one on the chip (measured-bars 98).
+- **Premise: inconclusive.** The bar confirms a held-out drop above 0.05 and rejects one under
+  0.01. yolov8n's 0.040 sits between; yolo11n's 0.053 confirms. The drop is concentrated in the
+  flare (0.68 against 0.84-1.00 in-pool), which is also where teams label the prop most
+  differently, so this split cannot separate water from labelling convention.
+- The next lever for the flare is the data, not the family: the flare is a thin coloured pole,
+  and the held-out team's flare boxes are recalled at 0.53 (v8n) and 0.63 (11n).

@@ -41,15 +41,24 @@ _NAME = re.compile(r'^[A-Za-z0-9_-]+$')
 _HOST = re.compile(r'^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])'
                    r'(?::[0-9]{1,5})?$')
 # Read only, and fetched by the desktop app from a page that is a file, which
-# a browser allows only with CORS: the hull and the theme's fonts.
-_SHARED = ('/model/', '/theme/')
+# a browser allows only with CORS: the hull, the theme's fonts, and the layouts
+# (the instruments extension keeps the app's copies in step: layout_sync).
+_SHARED = ('/model/', '/theme/', '/layouts/')
 _HASHED = re.compile(r'\.[0-9a-f]{16,}\.')
-_THEME_FILE = re.compile(r'^(?:fonts/)?[a-z0-9-]+\.(?:css|woff2)$')
+_THEME_FILE = re.compile(r'^(?:fonts/)?[a-z0-9-]+\.(?:css|woff2|svg)$')
 
 # The site's look over Lichtblick's (theme/batighor.css), and its dark scheme
 # until the operator picks another in Lichtblick's settings: the key is
 # lichtblick 1.30.0's LocalStorageAppConfiguration, values JSON-encoded.
 THEME_HEAD = (b'<link rel="stylesheet" href="/theme/batighor.css">'
+              # The site's mark, the red diamond on its line, for the tab.
+              b'<link rel="icon" type="image/svg+xml" href="/theme/mongla.svg">'
+              # Lichtblick names the tab itself on every connection ("<source> -
+              # Lichtblick"); an operator with three tabs open reads the end.
+              b'<script>(function(){function fix(){var t=document.title;'
+              b'if(t.indexOf("Lichtblick")>=0)document.title=t.replace(/Lichtblick/g,"Batighor")}'
+              b'new MutationObserver(fix).observe(document.head,{subtree:true,childList:true,'
+              b'characterData:true});fix()})()</script>'
               b'<script>try{var k="studio.app-configuration.colorScheme";'
               b'if(localStorage.getItem(k)===null)localStorage.setItem(k,\'"dark"\')}'
               b'catch(e){}</script>')
@@ -90,7 +99,12 @@ FIRST_VISIT_HEAD = (
 def themed(html: bytes) -> bytes:
     """The app page with Batighor's theme linked in, before the app's own head
     ends, and the first-visit layout fix (`FIRST_VISIT_HEAD`)."""
+    html = _APP_ICON.sub(b'', html).replace(b'<title>Lichtblick</title>', b'<title>Batighor</title>', 1)
     return html.replace(b'</head>', THEME_HEAD + FIRST_VISIT_HEAD + b'</head>', 1)
+
+
+# Lichtblick's own tab icons, removed so the browser cannot pick one over ours.
+_APP_ICON = re.compile(rb'<link rel="(?:icon|apple-touch-icon)"[^>]*>')
 
 
 # The types Kutum serves, from a fixed table: a type guessed from the asked-for
@@ -197,6 +211,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Location', app_link(host, self.bridge_port, layout))
             self.end_headers()
             return
+        if url.path == '/layouts/index.json':
+            # The names, for the desktop app's layout sync; never a layout called index.
+            names = sorted(k.removesuffix('.json') for k in index(self.layouts)
+                           if k.endswith('.json'))
+            return self._bytes(json.dumps(names).encode(), 'application/json', cache=False)
         if url.path.startswith('/layouts/'):
             name = url.path[len('/layouts/'):].removesuffix('.json')
             if not _NAME.match(name):

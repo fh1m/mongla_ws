@@ -127,6 +127,9 @@ class MonglaClient:
         # OPT-IN task deadline (monotonic seconds), set by `mongla.task(...)`.
         self._task_deadline = None
         self.last_goal_id = ''
+        # Called with the verb just before each goal is sent; the runner sets
+        # it to say which line of the mission sent it (mission.MissionText).
+        self.on_send = None
 
     # ------------------------------------------------------------------ #
     #  Deadline helpers                                                   #
@@ -237,6 +240,8 @@ class MonglaClient:
         # and not "unset" (issue #14; see Move.action `set_fields`).
         goal.set_fields = given
 
+        if self.on_send is not None:
+            self.on_send(cmd)
         send_future = self._client.send_goal_async(
             goal, feedback_callback=self._on_feedback)
         # Bounded goal-ACCEPT wait: a server that never acknowledges must not

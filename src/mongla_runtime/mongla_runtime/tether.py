@@ -47,6 +47,21 @@ def tether_bound(env=None, *, has_tty=None, sighup_ignored=None) -> str:
             'tether hangs it up. Start the stack in tmux (tmux new -s run)')
 
 
+def changes(node, params) -> list:
+    """The parameters in a set-parameters call that are CHANGES, not declarations.
+
+    rclpy runs a node's on-set callbacks when a parameter is first declared,
+    and `has_parameter` is still False during that call. A callback that
+    refuses every name it cannot apply live therefore refused `tether_bound`,
+    which `spin` declares on every node: the trackers, PnP and pose fusion
+    died at start and respawned forever (BUGS B-145). A declaration is not a
+    live change; only a name already declared is.
+    """
+    if not hasattr(node, 'has_parameter'):         # a stand-in node in a test
+        return list(params)
+    return [p for p in params if node.has_parameter(p.name)]
+
+
 def declare(node) -> str:
     """Declare `tether_bound` on `node` (read-only) and warn when bound."""
     from rcl_interfaces.msg import ParameterDescriptor

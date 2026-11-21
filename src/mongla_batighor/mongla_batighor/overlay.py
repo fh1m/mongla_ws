@@ -14,7 +14,9 @@ For each camera this turns into `foxglove_msgs/ImageAnnotations` on
   * the anchor's matched features (its learned points), while it runs.
 
 The flow node's tracked pairs go to `<cam>/flow_annotations` (a segment from
-where each point was on the anchor frame to where it is now), and a running
+where each point was on the anchor frame to where it is now), what it read off
+the floor to `<cam>/floor_annotations` (every grout line the tile grating puts
+on the picture, and the lane line's centreline), and a running
 calibration's state to `/mongla/vision/calibration/annotations` (the corners,
 the cell the next pose belongs in, the point the fit is least sure of).
 Lichtblick's image panel draws them over `<cam>/stream/compressed`, the JPEG
@@ -25,6 +27,10 @@ subscribes to what it publishes (`Watched`).
 
 Kept out of `mongla_vision` so the vision stack does not depend on a viewer's
 message package: this is the one node that knows both.
+
+For the 3D scene it also turns `/mongla/demand` into an arrow on the hull
+(`demand_scene`, on `/mongla/batighor/scene`), the same way: only while
+watched.
 """
 from __future__ import annotations
 
@@ -250,9 +256,23 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     weak = [_box(d) for d in (candidates.detections if candidates else [])
             if _key(_box(d)) not in shown]
     trks = [(d.id, _box(d)) for d in (tracks.detections if tracks else [])]
+    # Each track is named on one box, its best overlap, and each box carries
+    # one track. Matched by any overlap, two boxes on one bin each said
+    # "#783 #785" and neither said which track was following it.
+    boxes = dets + weak
+    pairs = sorted(((iou(b, t), i, j) for i, b in enumerate(boxes)
+                    for j, (tid, t) in enumerate(trks) if tid), reverse=True)
+    owner, held = {}, set()
+    for ov, i, j in pairs:
+        if ov < SAME_THING_IOU:
+            break
+        if i not in owner and j not in held:
+            owner[i] = trks[j][0]
+            held.add(j)
 
     def carried(b):
-        return [tid for tid, t in trks if tid and iou(b, t) >= SAME_THING_IOU]
+        i = next(k for k, x in enumerate(boxes) if x is b)
+        return [owner[i]] if i in owner else []
 
     if contours is not None:
         rgba, th = CONTOUR
@@ -301,8 +321,8 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
         texts.append(labels.place(_slots(b, small)[3:] + _slots(b, small)[:3], words, rgba, small))
     for b in dets:
         out.points.append(_loop(stamp, _corners(b), class_colour(b[4]), 2.5))
-    for tid, t in trks:
-        if any(iou(t, b) >= SAME_THING_IOU for b in dets + weak):
+    for j, (tid, t) in enumerate(trks):
+        if j in held or (not tid and any(iou(t, b) >= SAME_THING_IOU for b in boxes)):
             continue                          # named on the box it carries
         rgba, th = COASTING
         out.points.append(_loop(stamp, _corners(t), rgba, th))
@@ -355,6 +375,55 @@ def flow_annotate(tracks, size=None) -> ImageAnnotations:
     return out
 
 
+# The floor as the flow node read it: the grout in pale glass, so the tiles
+# stay visible beneath it, the lane's centreline in amber.
+GROUT = (_hex('#c4e2f3', 0.55), 1.5)
+LANE = (AMBER, 3.0)
+
+
+def floor_annotate(read) -> ImageAnnotations:
+    """One floor read (`FloorRead`) over its frame: every grout line the
+    grating's period, angle and offsets put on the picture, the lane line's
+    centreline, and what each one says in words, top left."""
+    from mongla_vision.flow.floor_read import grid_segments, lane_segment
+    stamp = read.header.stamp
+    out = ImageAnnotations(timestamp=stamp)
+    size = (read.width, read.height)
+    words = []
+    if read.tiles and read.period_px > 0 and len(read.grout_normal_deg) == len(read.grout_offset_px):
+        segs = grid_segments(list(zip(read.grout_normal_deg, read.grout_offset_px)),
+                             read.period_px, size)
+        rgba, th = GROUT
+        out.points.append(PointsAnnotation(
+            timestamp=stamp, type=PointsAnnotation.LINE_LIST, outline_color=_color(rgba),
+            thickness=th, points=[Point2(x=float(x), y=float(y)) for s in segs for x, y in s]))
+        h = read.tile_height_m
+        words.append((f'tiles {read.period_px:.0f} px'
+                      + (f'  {h:.2f} m above' if h == h else '  no tile size')
+                      + f'  grid {read.grout_normal_deg[0] % 90:.0f} deg', GROUT[0]))
+    else:
+        words.append(('tiles: none read', INK_2))
+    if read.lane:
+        seg = lane_segment(read.lane_direction_deg, read.lane_offset_px, size)
+        if seg:
+            rgba, th = LANE
+            out.points.append(PointsAnnotation(
+                timestamp=stamp, type=PointsAnnotation.LINE_STRIP, outline_color=_color(rgba),
+                thickness=th, points=[Point2(x=float(x), y=float(y)) for x, y in seg]))
+        words.append((f'lane {read.lane_direction_deg:.0f} deg  {read.lane_offset_px:+.0f} px off centre',
+                      AMBER))
+    # Each line in the colour of what it names: keyed on the read rather than
+    # the line, "tiles: none read" was drawn in the lane's amber whenever a
+    # lane was read.
+    for k, (line, rgba) in enumerate(words):
+        out.texts.append(TextAnnotation(
+            timestamp=stamp, position=Point2(x=8.0, y=LABEL_PX + 6 + k * (LABEL_PX + 6)),
+            text=line, font_size=LABEL_PX * 0.9,
+            text_color=_color(rgba),
+            background_color=_TEXT_BG))
+    return out
+
+
 def calibrate_annotate(state: dict, stamp) -> ImageAnnotations:
     """A calibration's state (`calibrate_node.state_dict`) over its camera:
     the board corners found, the cell the next pose belongs in, the point
@@ -387,6 +456,52 @@ def calibrate_annotate(state: dict, stamp) -> ImageAnnotations:
             font_size=LABEL_PX + 4, text_color=_color(TARGET[0] if k else FLOW[0]),
             background_color=_TEXT_BG))
     return out
+
+
+# The demand in the 3D scene: one arrow from the body origin, in the body
+# frame the hull hangs on, its length the demand's share of full force times
+# DEMAND_ARROW_M (a full demand reaches about the 0.7 m hull's length).
+DEMAND_TOPIC = '/mongla/batighor/scene'
+DEMAND_ARROW_M = 0.6
+# 14 px read about 7 px tall in the cockpit's 3D tile (desktop app, 2026-11-21).
+DEMAND_LABEL_PX = 22.0
+
+
+def demand_scene(x, y, stamp, frame):
+    """`foxglove_msgs/SceneUpdate` for a (surge, sway) demand in [-1, 1].
+
+    The arrow points where the board is told to push, in FRD: rotating x
+    toward y is a turn about +z (down). NaN, which the manager publishes
+    when it does not know the demand, is said in words with no arrow; zero
+    is a known demand of nothing and also draws none, but says so.
+    """
+    import math
+
+    from builtin_interfaces.msg import Duration
+    from foxglove_msgs.msg import (ArrowPrimitive, SceneEntity, SceneEntityDeletion,
+                                   SceneUpdate, TextPrimitive)
+    from geometry_msgs.msg import Point, Pose, Quaternion
+    update = SceneUpdate()
+    update.deletions.append(SceneEntityDeletion(
+        timestamp=stamp, type=SceneEntityDeletion.MATCHING_ID, id='demand'))
+    e = SceneEntity(timestamp=stamp, frame_id=frame, id='demand',
+                    lifetime=Duration(sec=1), frame_locked=True)
+    known = not (math.isnan(x) or math.isnan(y))
+    size = math.hypot(x, y) if known else 0.0
+    if size > 1e-3:
+        yaw = math.atan2(y, x)
+        length = DEMAND_ARROW_M * min(size, 1.0)
+        e.arrows.append(ArrowPrimitive(
+            pose=Pose(orientation=Quaternion(z=math.sin(yaw / 2), w=math.cos(yaw / 2))),
+            shaft_length=0.75 * length, head_length=0.25 * length,
+            shaft_diameter=0.025, head_diameter=0.07, color=_color(SEA)))
+    words = (f'demand {size:.0%}' if size > 1e-3 else 'demand none') if known \
+        else 'demand unknown'
+    e.texts.append(TextPrimitive(
+        pose=Pose(position=Point(z=-0.25)), billboard=True, font_size=DEMAND_LABEL_PX,
+        scale_invariant=True, color=_color(SEA if known else INK_2), text=words))
+    update.entities.append(e)
+    return update
 
 
 class Watched:
@@ -473,7 +588,7 @@ def main(args=None):
     from std_msgs.msg import String
     from vision_msgs.msg import Detection2DArray, VisionInfo
 
-    from mongla_interfaces.msg import FlowTracks, TargetContours, TargetCorrespondences
+    from mongla_interfaces.msg import FloorRead, FlowTracks, TargetContours, TargetCorrespondences
     from mongla_vision import qos
 
     LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -556,12 +671,23 @@ def main(args=None):
                 ], on_drop=lambda latest=latest: (latest.update(dict.fromkeys(LAYERS)),
                                                   latest.update(arrivals=deque(maxlen=RATE_WINDOW)))))
 
+                floor_pub = self.create_publisher(
+                    ImageAnnotations, f'{ns}/floor_annotations', 5)
+                self.watched.append(Watched(self, floor_pub, [
+                    (FloorRead, f'{ns}/floor_read',
+                     lambda msg, p=floor_pub: p.publish(floor_annotate(msg)), 5)]))
+
                 flow_pub = self.create_publisher(
                     ImageAnnotations, f'{ns}/flow_annotations', 5)
                 self.watched.append(Watched(self, flow_pub, [
                     (FlowTracks, f'{ns}/flow_tracks',
                      lambda msg, p=flow_pub, latest=latest:
-                     p.publish(flow_annotate(msg, latest['size'])), 5)]))
+                     p.publish(flow_annotate(msg, latest['size'])), 5),
+                    # Its own reader of the size: with only the Flow view
+                    # open, the camera's layers above are unwatched, the size
+                    # stayed unknown, and the flow line sat on the floor
+                    # read's caption at the top (seen 2026-11-21).
+                    (CameraInfo, f'{ns}/camera_info', on_info, qos.CAMERA_INFO)]))
 
             # A calibration, when one runs (`calibrate.launch.py`): its state
             # is latched, so a new viewer gets the current one at once.
@@ -574,6 +700,17 @@ def main(args=None):
 
             self.watched.append(Watched(self, cal_pub, [
                 (String, f'{cal}/state', on_calibration, LATCHED)]))
+            # The demand, for the 3D scene, at the manager's 20 Hz.
+            from foxglove_msgs.msg import SceneUpdate
+            from geometry_msgs.msg import Vector3Stamped
+            scene_pub = self.create_publisher(SceneUpdate, DEMAND_TOPIC, 5)
+
+            def on_demand(msg):
+                scene_pub.publish(demand_scene(msg.vector.x, msg.vector.y,
+                                               msg.header.stamp, msg.header.frame_id))
+
+            self.watched.append(Watched(self, scene_pub, [
+                (Vector3Stamped, '/mongla/demand', on_demand, 5)]))
             self.create_timer(WATCH_PERIOD_S, self._poll)
             self.cams = cams
             self.stages_pub = self.create_publisher(String, '/mongla/batighor/stages', LATCHED)

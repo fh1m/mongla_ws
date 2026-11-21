@@ -62,3 +62,20 @@ def test_the_survey_writes_the_venue_numbers(tmp_path, monkeypatch):
     assert c.shield_max_depth_m() == 1.5 and c.pool['tile_m'] == 0.25
     assert c.widths_by_class()['final_gate'] == 1.5
     assert cs.main(['--course', 'sauvc26', '--floor', '1', '1', '-1.2']) == 2
+
+
+def test_the_survey_writes_the_pool_outline_and_refuses_a_line(tmp_path, monkeypatch):
+    """`--corner` (Batighor's map): three corners or more, written in order, read back."""
+    from mongla_localization import course_survey as cs
+    from mongla_localization.course_map import load_course
+    monkeypatch.setenv('MONGLA_COURSE_DIR', str(tmp_path))
+    assert load_course('sauvc26').pool_outline() == []
+    corners = ['--corner', '0', '-8', '--corner', '0', '8', '--corner', '25', '8',
+               '--corner', '25', '-8']
+    assert cs.main(['--course', 'sauvc26', *corners]) == 0
+    assert load_course('sauvc26').pool_outline() == [(0, -8), (0, 8), (25, 8), (25, -8)]
+    assert cs.main(['--course', 'sauvc26', '--corner', '0', '0', '--corner', '1', '1']) == 2
+    bad = tmp_path / 'sauvc26.yaml'
+    bad.write_text(bad.read_text().replace('- - 25.0\n    - 8.0\n', '- - 25.0\n'))
+    with pytest.raises(ValueError, match='outline'):
+        load_course('sauvc26')

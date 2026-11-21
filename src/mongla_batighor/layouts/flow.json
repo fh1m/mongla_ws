@@ -1,14 +1,18 @@
 {
   "configById": {
-    "Image!floor": {
+    "Image!floorcam": {
       "imageMode": {
         "imageTopic": "/mongla/vision/downward/stream/compressed",
         "annotations": {
           "/mongla/vision/downward/flow_annotations": {
             "visible": true
+          },
+          "/mongla/vision/downward/floor_annotations": {
+            "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "downward camera, the floor read"
     },
     "Plot!velocity": {
       "paths": [
@@ -74,6 +78,7 @@
         }
       ],
       "isSynced": false,
+      "xAxisRange": 60,
       "lichtblickPanelTitle": "velocity scale"
     },
     "Plot!quality": {
@@ -129,7 +134,7 @@
   },
   "layout": {
     "direction": "row",
-    "first": "Image!floor",
+    "first": "Image!floorcam",
     "second": {
       "direction": "column",
       "first": "Plot!velocity",
@@ -143,13 +148,13 @@
             "direction": "column",
             "first": "Plot!quality",
             "second": "Plot!tracks",
-            "splitPercentage": 50.0
+            "splitPercentage": 60.0
           },
-          "splitPercentage": 33.3
+          "splitPercentage": 37.5
         },
-        "splitPercentage": 25.0
+        "splitPercentage": 20.0
       },
-      "splitPercentage": 20.0
+      "splitPercentage": 23.1
     },
     "splitPercentage": 58.0
   }

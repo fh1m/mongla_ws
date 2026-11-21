@@ -3,6 +3,7 @@
 `overlay.annotate` is the whole of the overlay node's logic; these build the
 messages the vision stack publishes and read back what Lichtblick would draw.
 """
+import pytest
 from builtin_interfaces.msg import Time
 from foxglove_msgs.msg import PointsAnnotation
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
@@ -301,3 +302,77 @@ def test_the_stats_sit_at_the_bottom_once_the_camera_has_said_its_size():
     out = annotate(STAMP, _arr(), size=(640, 480), hud=['a', 'b'])
     ys = [t.position.y for t in out.texts]
     assert ys[-1] == 472 and ys[0] < ys[1]
+
+
+def test_the_floor_read_is_drawn_as_the_grid_and_the_lane_it_says():
+    """A FloorRead becomes its grout lines (both families, every line across
+    the frame), the lane centreline, and what each says in words; a read that
+    found nothing draws no lines and says so."""
+    from foxglove_msgs.msg import PointsAnnotation
+    from mongla_batighor.overlay import floor_annotate
+    from mongla_interfaces.msg import FloorRead
+    m = FloorRead()
+    m.width, m.height = 640, 480
+    m.tiles, m.period_px = True, 64.0
+    m.grout_normal_deg, m.grout_offset_px = [0.0, 90.0], [10.0, 20.0]
+    m.tile_height_m = 1.25
+    m.lane, m.lane_direction_deg, m.lane_offset_px = True, 0.0, 30.0
+    a = floor_annotate(m)
+    grid = [p for p in a.points if p.type == PointsAnnotation.LINE_LIST]
+    (lane,) = [p for p in a.points if p.type == PointsAnnotation.LINE_STRIP]
+    # Vertical lines at x = 10, 74, ... 586 (10) and horizontal at y = 20 ... 468 (8).
+    assert len(grid[0].points) == 2 * (10 + 8)
+    assert {round(p.y) for p in lane.points} == {270}       # centre 240, +30 along +y
+    words = ' '.join(t.text for t in a.texts)
+    assert 'tiles 64 px' in words and '1.25 m above' in words and 'lane 0 deg' in words
+    empty = floor_annotate(FloorRead(width=640, height=480))
+    assert not empty.points and 'none read' in empty.texts[0].text
+    # Each line in the colour of what it names: no tiles beside a lane read
+    # once drew "tiles: none read" in the lane's amber.
+    from mongla_batighor.overlay import AMBER, INK_2
+    lane_only = floor_annotate(FloorRead(width=640, height=480, lane=True,
+                                         lane_direction_deg=0.0, lane_offset_px=0.0))
+    tiles_line, lane_line = lane_only.texts
+    assert 'none read' in tiles_line.text and tiles_line.text_color == _color(INK_2)
+    assert lane_line.text_color == _color(AMBER)
+
+
+def test_the_demand_arrow_points_where_the_board_is_told_to_push():
+    """FRD: a pure sway right turns the arrow +90 deg about z (down), a pure
+    reverse 180; its length is the demand's share of full force."""
+    import math
+    from builtin_interfaces.msg import Time
+    from mongla_batighor.overlay import DEMAND_ARROW_M, demand_scene
+    for (x, y), yaw in (((1.0, 0.0), 0.0), ((0.0, 0.5), 90.0), ((-0.8, 0.0), 180.0)):
+        e = demand_scene(x, y, Time(), 'mongla').entities[0]
+        assert e.frame_id == 'mongla'
+        (a,) = e.arrows
+        q = a.pose.orientation
+        assert math.degrees(2 * math.atan2(q.z, q.w)) == pytest.approx(yaw)
+        assert a.shaft_length + a.head_length == pytest.approx(DEMAND_ARROW_M * math.hypot(x, y))
+
+
+def test_an_unknown_demand_is_said_and_never_drawn_as_none():
+    from builtin_interfaces.msg import Time
+    from mongla_batighor.overlay import demand_scene
+    unknown = demand_scene(float('nan'), 0.2, Time(), 'mongla').entities[0]
+    none = demand_scene(0.0, 0.0, Time(), 'mongla').entities[0]
+    assert not unknown.arrows and unknown.texts[0].text == 'demand unknown'
+    assert not none.arrows and none.texts[0].text == 'demand none'
+
+
+def test_two_boxes_on_one_thing_each_name_the_track_that_follows_it():
+    """Two overlapping boxes on one bin, each overlapping both tracks, each
+    said "#783 #785" (seen on the bench, Bins view): neither named the track
+    following it. The pairing is one to one, best overlap first."""
+    out = annotate(STAMP, _arr(_det(100, 100, 40, 40, label='fire', score=0.51),
+                               _det(104, 104, 40, 40, label='fire', score=0.50)),
+                   tracks=_arr(_det(105, 105, 40, 40, label='fire', track='785'),
+                               _det(100, 100, 40, 40, label='fire', track='783')))
+    texts = sorted(t.text for t in out.texts)
+    assert texts == ['fire 0.50 #785', 'fire 0.51 #783'], texts
+    # A third track with no box of its own still shows, as coasting.
+    out = annotate(STAMP, _arr(_det(100, 100, 40, 40, label='fire')),
+                   tracks=_arr(_det(100, 100, 40, 40, label='fire', track='1'),
+                               _det(103, 103, 40, 40, label='fire', track='2')))
+    assert sorted(t.text for t in out.texts) == ['#2 fire coasting', 'fire 0.80 #1']

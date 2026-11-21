@@ -925,6 +925,94 @@ section (its lane witness and its fisheye lens could not grade it).
 peak accuracy. Injection: the old module fails 15 of them, the new one
 without fading 20, fading any dark blob fails a negative control.
 
+### B-147: under replay the composed lock starved both detectors `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
+
+**What.** On Kutum's bench (`replay:=true`, two looped clips at 30 fps,
+detectors unpaused), Batighor's boxes trailed the video and the lock flickered
+"silent". Measured with a foxglove client for 15 s: forward detections 2.7 Hz
+and downward 0.4 Hz with the lock composed, against 22.9 and 16.2 Hz with
+`lock:=false`. py-spy put every thread of the vision process in a wait for a
+frame; the executor thread sat idle. Under replay the detector, the lock and
+the flow each subscribed to `image_raw` themselves (the detector by keeping
+`direct_feed` false). A stand-alone check showed the cost of readers in one
+process: three nodes subscribed to the same 640x480 image on a multi-threaded
+executor received 8.7 Hz each where one received 21.7. Ruled out: the chip
+(`anchor_hz` 0.5 against 4.5 changed nothing; measured-bars 95), and the
+executor kind (the classic one gave 4.8 Hz).
+
+**Fix.** `_ReplayFeed` in `detector_dual_node.py`: one reader per camera,
+decoded once and handed to the same `_Tee` a live camera feeds, and the
+detector is `direct_feed` in both modes. Replay now exercises the live
+by-reference path. After it, the same bench: forward detections 10.9 Hz,
+downward 12.0, the lock 11.8 and 13.5 Hz. Guards:
+`test_replay_reads_each_image_once_and_feeds_everything_by_reference` and
+`test_the_detector_is_fed_by_reference_live_and_under_replay`, both
+injection-verified.
+
+**What was left was not replay.** The bar was within 20 % of the lock-off
+rates (18.3 and 13 Hz), and forward still failed. A GIL profile of the composed
+process (`py-spy --nonblocking --gil`) put a fifth of its held-GIL samples in
+the anchor rung: XFeat's keypoint and descriptor extraction and the bank's
+matching, in NumPy, in the process both detectors run in. With only
+`lock_anchor` off, the same bench reached 21.8 to 22.0 Hz forward and 20.9 to
+22.7 Hz downward, at the lock-off rate, and 12.5 to 14.6 Hz with it on again
+(A-B-A, measured-bars 104). So replay no longer costs anything a live camera
+does not. The anchor's cost is the same on the vehicle, and is its own item
+(bead `mongla_ws-7ue`). The earlier "ruled out: the chip, `anchor_hz` 0.5
+changed nothing" was measured while the extra readers held the rate at 2.7 Hz,
+where nothing else could show.
+
+**Also seen.** A blocking `py-spy record` (it stops the process to sample)
+across the whole launch was followed within a minute by the Hailo-8 leaving
+the PCIe bus (`Channel 2 hw state out of sync`, then `Device disconnected while
+opening device` on every open). No undervoltage, 57 C. Recovered without a
+reboot: `echo 1 | sudo tee /sys/bus/pci/devices/0000:01:00.0/remove`, then
+`echo 1 | sudo tee /sys/bus/pci/rescan`. Use `py-spy record --nonblocking` on
+anything that holds the chip; that run kept it.
+
+### B-146: a typed course drew its map but set none of its venue `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
+
+**What.** `bringup.launch.py` read the venue (pool depth, tile size, the depth
+floor `shield_max_depth_m`) only from the deck's `course:`. Typed as
+`course:=bench_demo` with no deck entry, the argument reached Batighor's
+course node, so the map drew that pool, while the manager started with
+`shield_max_depth_m` 0: no depth floor, under a map that showed one. Seen on
+Kutum's bench: the course node logged the course, the manager logged
+`[SHLD ] no depth floor`.
+
+**Fix.** `launch_defaults.typed_value('course')` wins over the deck's
+`course:`, as every typed argument does, and the venue comes from the course
+it names. `test_a_typed_course_brings_its_venue_too` (injection-verified:
+fails with the deck-only read). On the bench afterwards: `venue from course
+bench_demo ... shield_max_depth_m=1.8`, `[SHLD ] depth floor 1.80 m`.
+
+### B-145: a declaration was refused as a live change, and five kinds of node died at start `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
+
+**What.** rclpy runs a node's on-set-parameters callbacks when a parameter is
+first declared, not only when it is changed. `spin` declares `tether_bound` on
+every node after the node is built, and every callback that refuses the names
+it cannot apply live (`read once at startup`) refused that declaration too. On
+Kutum, `bringup.launch.py replay:=true batighor:=true` against the fake board:
+every tracker, PnP and pose-fusion node raised `InvalidParameterValueException`
+at start and respawned forever, so the lock ladder had no tracks and nothing
+reached Batighor's overlay. Every unit test passed, because none started a node
+through `spin`.
+
+**Fix.** `mongla_runtime.tether.changes(node, params)` keeps only the names
+already declared. Every registered callback (`live_params.apply_live`, the
+camera, the tracker, the detector, the lock ladder, the manager) drops
+declarations first and returns success when nothing is left, so it neither
+refuses a declaration nor tries to apply one (`apply_live` raised `KeyError`
+on it). A real change to a fixed name is still refused.
+
+**Guards.** `mongla_runtime/test/test_declaring_is_not_changing.py`: a node that
+refuses fixed names survives `tether.declare`; a real change is still refused;
+every callback in `src/` that says `read once at startup` goes through
+`params = changes(` (found by its `add_on_set_parameters_callback` registration,
+not by its wording: the camera said `read once when the camera opens`); and
+`apply_live` survives a declaration. Injection: reverting the camera and
+`apply_live` fails both of the last two.
+
 ### B-118: the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame `READ 2026-11-18` **FIXED 2026-11-18**
 
 **What.** The anchor resizes every frame to its backend grid (XFeat, 320x240)

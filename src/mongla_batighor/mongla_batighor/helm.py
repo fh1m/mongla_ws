@@ -305,10 +305,12 @@ class HelmNode(Node):
         running = self._mission_running()
         if running:
             return Verdict(False, f'mission {running} is already running')
-        out = open(self.log_path.parent / f'mission_{int(time.time())}_{name}.log', 'w')
-        proc = subprocess.Popen(['ros2', 'run', 'mongla_planner', 'mission', name],
-                                stdout=out, stderr=subprocess.STDOUT,
-                                start_new_session=True)
+        # The child keeps its own copy of the file; the helm's is closed here,
+        # or every run would hold one descriptor open for the helm's life.
+        with open(self.log_path.parent / f'mission_{int(time.time())}_{name}.log', 'w') as out:
+            proc = subprocess.Popen(['ros2', 'run', 'mongla_planner', 'mission', name],
+                                    stdout=out, stderr=subprocess.STDOUT,
+                                    start_new_session=True)
         self.mission = (name, who, proc)
         return Verdict(True, f'mission {name} started (pid {proc.pid})')
 

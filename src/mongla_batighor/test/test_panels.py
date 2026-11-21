@@ -22,6 +22,9 @@ from mongla_batighor import panels, seat, serve
 PANELS = Path(__file__).resolve().parents[1] / 'panels'
 HELM_JS = (PANELS / 'control' / 'extension.js').read_text()   # the Control Center
 SWITCH = b'const r={apiUrl:void 0,version:"1.30.0",devWorkspace:""};'
+# The panels' tests run their JavaScript in node; CI's Humble image has node 12,
+# older than the syntax the panels use, so they run on the dev box.
+NEEDS_NODE = pytest.mark.skipif(not shutil.which('node'), reason='node not installed (the Pi, CI)')
 
 
 def _web(tmp, main=b'x;' + SWITCH + b'y;'):
@@ -175,7 +178,7 @@ def test_the_calibrate_layout_draws_the_overlay_on_the_calibration_camera():
     assert 'mongla.batighor.Calibrate!calibrate' in json.dumps(layout['layout'])
 
 
-@pytest.mark.skipif(not shutil.which('node'), reason='node not installed (the Pi, CI)')
+@NEEDS_NODE
 @pytest.mark.parametrize('name', sorted(p.name for p in PANELS.iterdir()
                                         if (p / 'extension.js').is_file()))
 def test_every_served_panel_parses(tmp_path, name):
@@ -198,7 +201,13 @@ def _instruments():
     from mongla_batighor.seat import CAMERAS
     out = {}
     for name, body in re.findall(r'^  (\w+): \{\n(.*?)^  \},$', INSTRUMENTS_JS, re.M | re.S):
-        topics = re.search(r'topics: \[(.*?)\],\n', body, re.S).group(1)
+        topics = re.search(r'topics: (\[.*?\]|[A-Z_]+),\n', body, re.S).group(1)
+        # A shared list (`topics: MAP_TOPICS`, or `...MAP_TOPICS` inside one)
+        # is read from its own declaration: one copy, parsed as written.
+        for const in re.findall(r'\b([A-Z][A-Z_]+)\b', topics):
+            decl = re.search(rf'^const {const} = \[(.*?)\];', INSTRUMENTS_JS, re.M | re.S)
+            if decl:
+                topics += decl.group(1)
         names = set(re.findall(r'"(/[\w/]+)"', topics))
         for tmpl in re.findall(r'(lockTopic|seeingTopic)\(c\)', topics):
             names |= {f'/mongla/vision/{c}/{tmpl[:-5]}' for c in CAMERAS}
@@ -398,5 +407,257 @@ def test_the_vehicle_panel_calls_a_mission_running_as_the_helm_does():
     import pathlib
     from mongla_batighor import helm
     js = (pathlib.Path(__file__).resolve().parents[1] / 'panels' / 'instruments' / 'extension.js').read_text()
-    (limit,) = re.findall(r'ageS\(s\.aliveAt\) < ([0-9.]+)', js)
+    (limit,) = re.findall(r'const MISSION_ALIVE_S = ([0-9.]+);', js)
     assert float(limit) == helm.MISSION_ALIVE_S
+    # Every instrument that says a mission runs uses that one constant.
+    uses = re.findall(r'ageS\(s\.aliveAt\) < ([\w.]+)', js)
+    assert len(uses) >= 2 and set(uses) == {'MISSION_ALIVE_S'}, uses
+
+
+def test_what_an_unset_setting_means_is_the_detectors_own_default():
+    """The Control Center says what a default does (`UNSET`), and each value it
+    calls the default is the one the detector declares."""
+    import pathlib
+    import re as _re
+    from mongla_batighor.seat import TUNABLE
+    root = pathlib.Path(__file__).resolve().parents[2]
+    js = (root / 'mongla_batighor' / 'panels' / 'control' / 'extension.js').read_text()
+    setup = (root / 'mongla_vision' / 'mongla_vision' / 'detector_setup.py').read_text()
+    block = _re.search(r'const UNSET = \{(.*?)\n  \};', js, _re.S).group(1)
+    rows = _re.findall(r'(\w+): \[("[^"]*"|[0-9.]+), "', block)
+    assert len(rows) >= 3
+    for name, unset in rows:
+        assert name in TUNABLE, name
+        (declared,) = _re.findall(rf"declare_parameter\('{name}',\s*([^)]+)\)", setup)
+        assert float(declared) == float(unset) if TUNABLE[name] is float \
+            else declared.strip().strip("'") == unset.strip('"'), (name, declared, unset)
+
+
+@NEEDS_NODE
+def test_the_desktop_app_takes_kutums_layout_unless_the_operator_edited_it():
+    """layoutUpdates: a stale copy from one of Kutum's files is replaced, an
+    edited one (`working`) is kept, a current one and one of the operator's
+    own (no `from`) are untouched."""
+    import json as _json
+    import subprocess as _sp
+    src = (PANELS / 'common.js').read_text() + INSTRUMENTS_JS
+    rec = lambda name, data, working=None, frm=True: {  # noqa: E731
+        'namespace': 'local', 'layout': {'id': name, 'name': name,
+                                         **({'from': f'{name}.json'} if frm else {}),
+                                         'baseline': {'data': data, 'savedAt': 'old'},
+                                         'working': working}}
+    console = lambda v, tab: {'v': v, 'configById': {  # noqa: E731
+        'Tab!console': {'activeTabIdx': tab, 'tabs': [{}, {}, {}]}}}
+    records = [rec('map', {'v': 1}), rec('flow', {'v': 1}, working={'data': {}}),
+               rec('vision', {'v': 2}), rec('mine', {'v': 1}, frm=False),
+               # Only a tab chosen since: not an edit, and the choice survives.
+               rec('batighor', console(1, 0), working={'data': console(1, 2)}),
+               # The app's own defaults written in on mount: not an edit either,
+               # and kept beneath Kutum's values.
+               rec('cockpit', {'configById': {'Plot!a': {'paths': [1]}}},
+                   working={'data': {'configById': {'Plot!a': {'paths': [1], 'showXAxisLabels': True}}}}),
+               # A value the file set, changed: an edit, kept.
+               rec('thrust', {'configById': {'Plot!a': {'paths': [1]}}},
+                   working={'data': {'configById': {'Plot!a': {'paths': [2]}}}})]
+    served = {'map': {'v': 2}, 'flow': {'v': 2}, 'vision': {'v': 2}, 'mine': {'v': 2},
+              'batighor': console(2, 0), 'cockpit': {'configById': {'Plot!a': {'paths': [9]}}},
+              'thrust': {'configById': {'Plot!a': {'paths': [9]}}}}
+    js = (src + '\nprocess.stdout.write(JSON.stringify(module.exports.layoutUpdates('
+          + _json.dumps(records) + ',' + _json.dumps(served) + ',"now")));')
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    out = _sp.run(['node', '-e', pre + js],
+                  capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = _json.loads(out.stdout)
+    assert [r['layout']['name'] for r in got['update']] == ['map', 'batighor', 'cockpit']
+    assert got['update'][2]['layout']['baseline']['data'] == {
+        'configById': {'Plot!a': {'paths': [9], 'showXAxisLabels': True}}}
+    assert got['update'][0]['layout']['baseline'] == {'data': {'v': 2}, 'savedAt': 'now'}
+    console_now = got['update'][1]['layout']
+    assert console_now['baseline']['data'] == console(2, 2) and 'working' not in console_now
+    assert got['edited'] == ['flow', 'thrust']
+
+
+@NEEDS_NODE
+def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
+    """statusOf: a held lock names its rung, an unknown health row is not a
+    fault, and an armed vehicle marks the cockpit live."""
+    import json as _json
+    import subprocess as _sp
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    lock = {'detections': [{'id': 'gate', 'results': [{'hypothesis': {'class_id': 'held', 'score': 0.8}}]}]}
+    s = {'v': {'armed': True, 'mode': 'AUTO', 'depth_m': -1.2, 'yaw_deg': 90, 'battery_voltage': 14.8},
+         'vAt': 1000, 'locks': {'forward': {'m': lock, 'at': 1000}, 'downward': {'m': {}, 'at': 1000}},
+         'health': [{'name': 'baro', 'level': 3}, {'name': 'imu', 'level': 0}]}
+    js = (pre + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS
+          + f'\nprocess.stdout.write(JSON.stringify(module.exports.statusOf({_json.dumps(s)}, 1500)));')
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = _json.loads(out.stdout)
+    cells = {k: (v, lvl) for k, v, lvl in got['cells']}
+    assert cells['lock'] == ('forward held', 'live')
+    assert cells['health'] == ('1 unknown', 'stale')
+    assert cells['vehicle'] == ('ARMED', 'armed') and cells['depth'][0] == '1.20 m'
+    assert got['tabs']['Cockpit'] == 'live' and got['tabs']['Vision'] == 'live'
+
+
+@NEEDS_NODE
+def test_the_mission_text_marks_the_line_that_sent_the_verb():
+    """missionText: every line numbered, the running one marked, the mission
+    named live while its runner beats and 'ended' after; nothing published is
+    said as such, never as an empty page."""
+    import json as _json
+    import subprocess as _sp
+    shim = ('const document={createElement:(t)=>({t,className:"",kids:[],attrs:{},'
+            'append(...k){this.kids.push(...k)},setAttribute(k,v){this.attrs[k]=v},'
+            'addEventListener(){}})};'
+            'const text=(e)=>typeof e==="string"?e:(e.kids||[]).map(text).join("");'
+            'const flat=(e)=>typeof e==="string"?[]:[e,...(e.kids||[]).flatMap(flat)];')
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    src = {'name': 'gate_run', 'file': '/x/missions/gate_run.py', 'first_line': 3,
+           'text': 'import x\n\ndef run(m, log):\n    m.arm()\n    m.move_forward(duration=4)\n'}
+    probe = ('\nconst I=module.exports.INSTRUMENTS.MissionText, s={};'
+             'const out=[];'
+             'out.push(I.draw(s).map(text).join("|"));'
+             f'I.fold(s,"/mongla/mission/source",{{data:{_json.dumps(_json.dumps(src))}}});'
+             'I.fold(s,"/mongla/mission_alive",{data:"gate_run"});'
+             'I.fold(s,"/mongla/mission/line",{data:JSON.stringify({line:5,cmd:"move_forward"})});'
+             'let d=I.draw(s);'
+             'const rows=flat(d[1]).filter((e)=>/\\bln\\b/.test(e.className));'
+             'out.push(rows.length, rows.filter((e)=>/now/.test(e.className)).map(text).join(""),'
+             '  rows.filter((e)=>/entry/.test(e.className)).map(text).join(""), text(d[0]));'
+             's.aliveAt=Date.now()-60000; out.push(text(I.draw(s)[0]));'
+             'process.stdout.write(JSON.stringify(out));')
+    js = pre + shim + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS + probe
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    empty, n, now, entry, head, ended = _json.loads(out.stdout)
+    assert 'no /mongla/mission/source' in empty
+    assert n == 6                                        # five lines and the trailing newline
+    assert now == '5    m.move_forward(duration=4)'
+    assert entry == '3def run(m, log):'
+    assert 'gate_run' in head and 'line 5 sent move_forward' in head and 'ended' not in head
+    assert 'gate_run.py, ended' in ended
+
+
+@NEEDS_NODE
+def test_a_panel_that_mounts_late_is_handed_what_came_before_at_its_own_age():
+    """Lichtblick hands a panel only what arrives after it mounts, so the
+    latched course reached the first Map and never a second one (seen in the
+    desktop app: the Mission view's map waiting for a course the Map view
+    showed). A later panel is handed the last message, stamped with when it
+    came, so a beat a minute old does not read as a mission running."""
+    import json as _json
+    import subprocess as _sp
+    shim = ('const document={createElement:(t)=>({t,className:"",kids:[],attrs:{},'
+            'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
+            'setAttribute(k,v){this.attrs[k]=v},addEventListener(){}}),'
+            'querySelector:()=>true,head:{append(){}}};'
+            'const requestAnimationFrame=(f)=>0,cancelAnimationFrame=()=>{};'
+            'const intervals=[];globalThis.setInterval=(f)=>{intervals.push(f);return 0};'
+            'globalThis.clearInterval=()=>{};')
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    probe = ('\nconst X=module.exports, spec=X.INSTRUMENTS.Mission;'
+             'const ctx=()=>({panelElement:{append(){}},subscribe(){},watch(){}});'
+             'const a=ctx(); X.makePanel(spec)(a);'
+             'const doing={verb:"surface",fields:{},since:1};'
+             'a.onRender({currentFrame:[{topic:"/mongla/doing",message:{data:JSON.stringify({now:doing,recent:[],stamp:2})}},'
+             '{topic:"/mongla/mission_alive",message:{data:"gate_run"}}]},()=>{});'
+             'const at=X.LAST.get("/mongla/mission_alive").at;'
+             'X.LAST.get("/mongla/mission_alive").at=at-60000;'
+             'const spy={}; const s2=Object.assign({},spec,{fold(s,t,m){spy.s=s;spec.fold(s,t,m)}});'
+             'X.makePanel(s2)(ctx());'
+             'process.stdout.write(JSON.stringify([spy.s.doing&&spy.s.doing.now.verb,'
+             ' Math.round((Date.now()-spy.s.aliveAt)/1000)]));')
+    js = pre + shim + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS + probe
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    verb, alive_age = _json.loads(out.stdout)
+    assert verb == 'surface'                 # the second panel has /mongla/doing
+    assert alive_age >= 59                   # and the old beat reads as old
+
+
+@NEEDS_NODE
+def test_the_pilot_keeps_the_helm_while_another_view_is_open():
+    """Opening another view unmounts the Control Center. A beat kept in the
+    panel stopped with it, the pilot lost the helm 3 s later and the helm
+    stopped the verb they had sent (seen in the desktop app). The beat
+    belongs to the page: it goes on after the panel is gone, and stops when
+    the helm answers that this browser is no longer the pilot."""
+    import json as _json
+    import subprocess as _sp
+    shim = ('function E(t){return{t,className:"",style:{},dataset:{},kids:[],value:t==="select"?"go":"",checked:false,'
+            'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
+            'setAttribute(){},addEventListener(){},querySelectorAll(){return[]},'
+            'classList:{toggle(){}},options:[]}}'
+            'const document={createElement:E,querySelector:()=>true,head:{append(){}}};'
+            'const localStorage={getItem:()=>"ana",setItem(){}};'
+            'const timers=[];globalThis.setInterval=(f)=>{timers.push(f);return timers.length};'
+            'globalThis.clearInterval=(i)=>{timers[i-1]=()=>{}};')
+    pre = ('const module={exports:{}};const CAMERAS=["forward"],'
+           'VERBS={go:{help:"",fields:{},defaults:{}}},TUNABLE={},THEME_CSS="";')
+    # Lichtblick's own words for a call from an unmounted panel (its
+    # PanelExtensionAdapter); the Status strip stands for the panel that stays.
+    probe = ('\nconst calls=[]; let answer="pilot", gone=false;'
+             'const reply=(who)=>(s,r)=>{calls.push(who);return Promise.resolve({ok:true,message:answer})};'
+             'const ctx={panelElement:{append(){}},subscribe(){},watch(){},'
+             ' callService:(s,r)=>gone?Promise.reject(new Error("Service call after panel was unmounted"))'
+             '  :reply("control")(s,r)};'
+             'module.exports.activate({registerPanel:({initPanel})=>{'
+             ' const off=initPanel(ctx); if(off) off();'
+             ' ctx.onRender({currentFrame:[{topic:"/mongla/batighor/helm_state",'
+             '  message:{data:JSON.stringify({pilot:"ana"})}}]},()=>{});'
+             ' gone=true;}});'                              # another view opens
+             'mount({panelElement:{append(){}},callService:reply("status")});'
+             'const tick=async()=>{for(const f of timers)f(); await new Promise(r=>setTimeout(r,0));};'
+             '(async()=>{await tick();await tick();const while_pilot=calls.length;'
+             ' answer="watching"; await tick(); await tick(); await tick();'
+             ' process.stdout.write(JSON.stringify([while_pilot, calls.length, calls]));})();')
+    js = pre + shim + (PANELS / 'common.js').read_text() + HELM_JS + probe
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    while_pilot, total, who = _json.loads(out.stdout)
+    assert while_pilot == 2, 'the beat goes on after the panel is gone'
+    assert set(who) == {'status'}, 'through a panel that is still mounted'
+    assert total == 3, 'and stops on the first answer that is not "pilot"'
+
+
+@NEEDS_NODE
+def test_a_calibration_button_outlives_the_states_that_follow_it():
+    """The calibration state comes up to 4 times a second while a board is in
+    view. Its library's apply buttons were built again on every one, and a
+    button replaced between press and release loses the click."""
+    import json as _json
+    import subprocess as _sp
+    shim = ('function E(t){return{t,className:"",style:{},dataset:{},kids:[],value:"",'
+            'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
+            'setAttribute(){},addEventListener(){}}}'
+            'globalThis.Node=function(){};'
+            'const document={createElement:E,querySelector:()=>true,head:{append(){}}};'
+            'const localStorage={getItem:()=>"ana",setItem(){}};')
+    pre = 'const module={exports:{}};const THEME_CSS="";'
+    probe = ('\nconst ctx={panelElement:{append(){}},subscribe(){},watch(){},callService(){}};'
+             'const lib=[{file:"pi_downward_water.yaml",medium:"water",width:640,height:480,'
+             ' fx:500,max_ere_px:0.4}];'
+             'const st=(hold)=>({topic:"x",message:{data:JSON.stringify({i:0,n:20,applies_to:"pi_downward",'
+             ' medium:"water",grid:"8x6",square:0.025,cell:"centre",band:"near",hold,library:lib})}});'
+             'const find=(e)=>e.t==="button"&&e.kids[0]==="apply"?e:(e.kids||[]).map(find).find(Boolean);'
+             'module.exports.activate({registerPanel:({initPanel})=>{initPanel(ctx);'
+             ' ctx.onRender({currentFrame:[st(0.1)]},()=>{}); const lb=ctx._lib;'
+             ' const a=find(globalThis.ROOT); ctx.onRender({currentFrame:[st(0.6)]},()=>{});'
+             ' const b=find(globalThis.ROOT); lib.push({file:"second.yaml"});'
+             ' ctx.onRender({currentFrame:[st(0.7)]},()=>{}); const c=find(globalThis.ROOT);'
+             ' process.stdout.write(JSON.stringify([Boolean(a), a===b, b===c, a.disabled]));}});')
+    common = (PANELS / 'common.js').read_text().replace(
+        'context.panelElement.append(box);', 'context.panelElement.append(box); globalThis.ROOT = box;')
+    js = pre + shim + common + (PANELS / 'calibrate' / 'extension.js').read_text() + probe
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    found, kept, rebuilt_same, disabled = _json.loads(out.stdout)
+    assert found and not disabled, 'a named operator sees an apply button'
+    assert kept, 'a new hold value does not replace the button'
+    assert not rebuilt_same, 'a changed library does'

@@ -13,6 +13,8 @@ from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSDurabilityPolicy
 
 from .dsl_support import FUSED_POSE_MAX_AGE_S
 
+COURSE_TOPIC = '/mongla/course'     # the course a mission flies, latched
+
 
 class HeadingMixin:
     def use_course(self, name: str):
@@ -54,7 +56,28 @@ class HeadingMixin:
                 f'one arrives only as near as that guess.')
         self._course_floor_to_flow(course)
         self._check_course_classes()
+        self._say_course(course.name)
         return course
+
+    def _say_course(self, name: str) -> None:
+        """The course this mission flies, on `COURSE_TOPIC`, latched.
+
+        Batighor's map draws the deck's course until a mission names its own,
+        and then that one: a map of the wrong pool is worse than none.
+        Best-effort: a report never stops a mission.
+        """
+        try:
+            from rclpy.qos import DurabilityPolicy, QoSProfile
+            from std_msgs.msg import String
+            pub = self.__dict__.get('_course_pub')
+            if pub is None:
+                pub = self.client.node.create_publisher(
+                    String, COURSE_TOPIC,
+                    QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+                self.__dict__['_course_pub'] = pub
+            pub.publish(String(data=str(name)))
+        except Exception as exc:            # noqa: BLE001 -- see the docstring
+            self.log.warning(f'[CRSE ] {name}: not published ({exc})')
 
     def model_classes(self, camera: str, *, timeout: float = 0.5):
         """The classes the running model(s) on `camera` can emit, or None.

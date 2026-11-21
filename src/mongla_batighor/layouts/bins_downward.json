@@ -9,10 +9,12 @@
           }
         },
         "synchronize": true
-      }
+      },
+      "lichtblickPanelTitle": "downward camera"
     },
     "RawMessages!dets": {
-      "topicPath": "/mongla/vision/downward/detections"
+      "topicPath": "/mongla/vision/downward/detections",
+      "lichtblickPanelTitle": "downward detections"
     },
     "Plot!align": {
       "paths": [

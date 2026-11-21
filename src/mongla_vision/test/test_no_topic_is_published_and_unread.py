@@ -58,6 +58,19 @@ PUBLISHED_UNREAD = {
         'the flow node\'s tracked point pairs, for a human: overlay.py turns '
         '`flow_tracks` into them and Batighor\'s `flow` layout draws them '
         'over the downward camera. Built only while someone watches.',
+    '/floor_read':
+        'where on the picture the tile grating and the lane line were read '
+        '(flow/floor_read.py), as data. mongla_batighor/overlay.py reads it '
+        'while someone watches (`Watched`) and draws /floor_annotations; the '
+        'flow node builds it only while it has a subscriber.',
+    '/floor_annotations':
+        'the floor read drawn for a human: every grout line and the lane '
+        'centreline over the downward camera, in Batighor\'s cockpit, flow '
+        'and mission views. Built only while someone watches.',
+    '/mongla/batighor/course':
+        'for a human: the course file a run uses (pool outline, props, '
+        'soundings), from mongla_batighor/course.py, latched; the Map and '
+        'Localization map instruments draw it.',
     '/flow_tracks':
         'the tracked pairs as data. mongla_batighor/overlay.py reads it, but '
         'subscribes only while someone watches (`Watched`, a table of '
@@ -75,6 +88,18 @@ PUBLISHED_UNREAD = {
         'for a human: each chain stage\'s rate and age, from '
         'mongla_batighor/chain.py twice a second; the Chain instrument '
         '(panels/instruments/extension.js) draws it.',
+    '/mongla/mission/source':
+        'for a human: the running mission\'s file, latched by the runner '
+        '(mongla_planner/mission.py, MissionText); the MissionText instrument '
+        '(panels/instruments/extension.js) shows it in Batighor\'s mission view.',
+    '/mongla/mission/line':
+        'for a human: the line of the mission\'s file that sent each verb, '
+        'latched by the runner (mission.py, MissionText); the MissionText '
+        'instrument marks it.',
+    '/mongla/batighor/scene':
+        'for a human: the demand as an arrow on the hull, from '
+        'mongla_batighor/overlay.py (demand_scene), built only while someone '
+        'watches; Lichtblick\'s 3D panel draws it (views.py, scene()).',
     '/mongla/localization/aiding':
         'a DIAGNOSTIC of which aiding sources the filter accepted. Read in a '
         'bag after a run, never in the loop.',

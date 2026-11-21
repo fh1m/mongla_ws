@@ -6,6 +6,7 @@ import os
 from typing import List, Optional
 from mongla_vision.detection.factory   import make_detector
 from .detector_params import CONF, NMS_FLOOR, _model_stem, _parse_model_conf, _split_active
+from mongla_runtime.tether import changes
 
 
 
@@ -381,6 +382,9 @@ class DetectorSetupMixin:
 
     def _on_parameter_change(self, params):
         from rcl_interfaces.msg import SetParametersResult
+        params = changes(self, params)     # a declaration is not a change (B-145)
+        if not params:
+            return SetParametersResult(successful=True)
         fixed = [p.name for p in params if p.name not in LIVE_PARAMS]
         if fixed:
             if fixed == ['iou']:

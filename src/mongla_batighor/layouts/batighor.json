@@ -1,0 +1,1218 @@
+{
+  "configById": {
+    "Image!cockpit.forward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/forward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/forward/annotations": {
+            "visible": true
+          }
+        }
+      },
+      "lichtblickPanelTitle": "forward camera"
+    },
+    "Image!cockpit.downward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          },
+          "/mongla/vision/downward/flow_annotations": {
+            "visible": true
+          },
+          "/mongla/vision/downward/floor_annotations": {
+            "visible": true
+          }
+        }
+      },
+      "lichtblickPanelTitle": "downward camera"
+    },
+    "mongla.batighor.ControlCenter!cockpit.control": {},
+    "mongla.batighor.Vehicle!cockpit.vehicle": {},
+    "3D!cockpit.hull": {
+      "followTf": "mongla",
+      "followMode": "follow-position",
+      "topics": {
+        "/mongla/odom": {
+          "visible": true
+        },
+        "/mongla/batighor/scene": {
+          "visible": true
+        }
+      },
+      "scene": {
+        "backgroundColor": "#05070c",
+        "labelScaleFactor": 0.3,
+        "transforms": {
+          "showLabel": false,
+          "enablePreloading": true
+        }
+      },
+      "cameraState": {
+        "distance": 1.3,
+        "perspective": true,
+        "phi": 55,
+        "thetaOffset": 200,
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "layers": {
+        "hull": {
+          "visible": true,
+          "label": "Mongla",
+          "layerId": "foxglove.Urdf",
+          "instanceId": "hull",
+          "sourceType": "url",
+          "url": "/model/mongla.urdf",
+          "order": 1
+        }
+      },
+      "lichtblickPanelTitle": "attitude"
+    },
+    "mongla.batighor.Vision!cockpit.vision": {},
+    "mongla.batighor.Map!map.map": {},
+    "mongla.batighor.Vehicle!map.vehicle": {},
+    "3D!map.hull": {
+      "followTf": "mongla",
+      "followMode": "follow-position",
+      "topics": {
+        "/mongla/odom": {
+          "visible": true
+        },
+        "/mongla/batighor/scene": {
+          "visible": true
+        }
+      },
+      "scene": {
+        "backgroundColor": "#05070c",
+        "labelScaleFactor": 0.3,
+        "transforms": {
+          "showLabel": false,
+          "enablePreloading": true
+        }
+      },
+      "cameraState": {
+        "distance": 1.3,
+        "perspective": true,
+        "phi": 55,
+        "thetaOffset": 200,
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "layers": {
+        "hull": {
+          "visible": true,
+          "label": "Mongla",
+          "layerId": "foxglove.Urdf",
+          "instanceId": "hull",
+          "sourceType": "url",
+          "url": "/model/mongla.urdf",
+          "order": 1
+        }
+      },
+      "lichtblickPanelTitle": "attitude"
+    },
+    "mongla.batighor.Map!mission.map": {},
+    "mongla.batighor.MissionText!mission.text": {},
+    "mongla.batighor.Mission!mission.mission": {},
+    "Plot!mission.demand": {
+      "paths": [
+        {
+          "value": "/mongla/demand.vector.x",
+          "label": "surge",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/demand.vector.y",
+          "label": "sway",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "demand"
+    },
+    "Image!vision.forward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/forward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/forward/annotations": {
+            "visible": true
+          }
+        },
+        "synchronize": true
+      },
+      "lichtblickPanelTitle": "forward camera"
+    },
+    "Image!vision.downward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          }
+        },
+        "synchronize": true
+      },
+      "lichtblickPanelTitle": "downward camera"
+    },
+    "mongla.batighor.Vision!vision.vision": {},
+    "StateTransitions!vision.ladder": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.class_id",
+          "label": "forward rung"
+        },
+        {
+          "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.class_id",
+          "label": "downward rung"
+        },
+        {
+          "value": "/mongla/vision/active_camera.data",
+          "label": "live camera",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": false,
+      "xAxisRange": 60,
+      "lichtblickPanelTitle": "lock ladder"
+    },
+    "Plot!vision.authority": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.score",
+          "label": "forward",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.score",
+          "label": "downward",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "lock authority"
+    },
+    "Plot!vision.target_range": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/target_pose_fused.range_m",
+          "label": "range m",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "target range"
+    },
+    "Plot!vision.pose": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/target_pose_fused.bearing_deg",
+          "label": "bearing deg",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_fused.yaw_deg",
+          "label": "yaw deg",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "target pose"
+    },
+    "Plot!vision.anchor": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/anchor_decomposition.vector.x",
+          "label": "rotation",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
+          "label": "scale",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/anchor_decomposition.vector.z",
+          "label": "range m",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "anchor (XFeat)"
+    },
+    "Plot!vision.align": {
+      "paths": [
+        {
+          "value": "/mongla/move/_action/feedback.feedback.err_x_px",
+          "label": "align x px",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/move/_action/feedback.feedback.err_y_px",
+          "label": "align y px",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_fused.reproj_px",
+          "label": "reproj px",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "pixel error"
+    },
+    "Image!flow.floorcam": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/flow_annotations": {
+            "visible": true
+          },
+          "/mongla/vision/downward/floor_annotations": {
+            "visible": true
+          }
+        }
+      },
+      "lichtblickPanelTitle": "downward camera, the floor read"
+    },
+    "Plot!flow.velocity": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/velocity.twist.twist.linear.x",
+          "label": "flow vx m/s",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/velocity.twist.twist.linear.y",
+          "label": "flow vy m/s",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/odom.twist.twist.linear.x",
+          "label": "filter vx m/s",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/odom.twist.twist.linear.y",
+          "label": "filter vy m/s",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "velocity"
+    },
+    "Plot!flow.distance": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/distance_traveled.data",
+          "label": "distance m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "distance"
+    },
+    "StateTransitions!flow.calibration": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/flow_calibration.data",
+          "label": "scale from",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/flow/height_source.data",
+          "label": "height from",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": false,
+      "xAxisRange": 60,
+      "lichtblickPanelTitle": "velocity scale"
+    },
+    "Plot!flow.quality": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/flow_quality.data",
+          "label": "quality",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/distance_debug.data[1]",
+          "label": "height m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/floor_height.range",
+          "label": "floor m",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "flow quality and heights"
+    },
+    "Plot!flow.tracks": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/distance_debug.data[2]",
+          "label": "tracks",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "tracks"
+    },
+    "mongla.batighor.LocalizationMap!localization.locmap": {},
+    "mongla.batighor.Navigation!localization.navigation": {},
+    "3D!localization.nav": {
+      "followTf": "mongla",
+      "followMode": "follow-position",
+      "topics": {
+        "/mongla/odom": {
+          "visible": true
+        },
+        "/mongla/batighor/scene": {
+          "visible": true
+        }
+      },
+      "scene": {
+        "backgroundColor": "#05070c",
+        "labelScaleFactor": 0.3,
+        "transforms": {
+          "showLabel": false,
+          "enablePreloading": true
+        }
+      },
+      "cameraState": {
+        "distance": 1.3,
+        "perspective": true,
+        "phi": 55,
+        "thetaOffset": 200,
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "layers": {
+        "hull": {
+          "visible": true,
+          "label": "Mongla",
+          "layerId": "foxglove.Urdf",
+          "instanceId": "hull",
+          "sourceType": "url",
+          "url": "/model/mongla.urdf",
+          "order": 1
+        }
+      },
+      "lichtblickPanelTitle": "odometry, 3D"
+    },
+    "StateTransitions!localization.aiding": {
+      "paths": [
+        {
+          "value": "/mongla/localization/state.usable",
+          "label": "usable",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/localization/state.reason",
+          "label": "why not",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/localization/aiding.data",
+          "label": "aided by",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": false,
+      "xAxisRange": 60,
+      "lichtblickPanelTitle": "aiding"
+    },
+    "Plot!localization.pos": {
+      "paths": [
+        {
+          "value": "/mongla/odom.pose.pose.position.x",
+          "label": "x m",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/odom.pose.pose.position.y",
+          "label": "y m",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/odom.pose.pose.position.z",
+          "label": "z m (down)",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/localization/fix.point.x",
+          "label": "prop fix x",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/localization/fix.point.y",
+          "label": "prop fix y",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "pos"
+    },
+    "Plot!localization.sigma": {
+      "paths": [
+        {
+          "value": "/mongla/localization/state.sigma_xy_m",
+          "label": "sigma xy m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "sigma"
+    },
+    "Plot!localization.vel": {
+      "paths": [
+        {
+          "value": "/mongla/odom.twist.twist.linear.x",
+          "label": "filter vx",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/velocity.twist.twist.linear.x",
+          "label": "flow vx",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/odom.twist.twist.linear.y",
+          "label": "filter vy",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/velocity.twist.twist.linear.y",
+          "label": "flow vy",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "velocity"
+    },
+    "Plot!localization.heading": {
+      "paths": [
+        {
+          "value": "/mongla/state.yaw_deg",
+          "label": "board heading",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/localization/heading.data",
+          "label": "given heading",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/floor_grid_deg.heading_deg",
+          "label": "floor grid",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/lane_heading_deg.heading_deg",
+          "label": "lane line",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "heading"
+    },
+    "Plot!localization.floor": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/floor_height.range",
+          "label": "floor m",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/state.depth_m",
+          "label": "depth m",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "heights (depth negative down)"
+    },
+    "mongla.batighor.Thrust!thrust.thrust": {},
+    "Plot!thrust.demand": {
+      "paths": [
+        {
+          "value": "/mongla/demand.vector.x",
+          "label": "surge",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/demand.vector.y",
+          "label": "sway",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "demand"
+    },
+    "Plot!thrust.power": {
+      "paths": [
+        {
+          "value": "/mongla/state.battery_voltage",
+          "label": "PM1 V",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "battery"
+    },
+    "Plot!thrust.rates": {
+      "paths": [
+        {
+          "value": "/mongla/imu.angular_velocity.x",
+          "label": "roll rate",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu.angular_velocity.y",
+          "label": "pitch rate",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu.angular_velocity.z",
+          "label": "yaw rate",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "body rates"
+    },
+    "Plot!board_health.depthyaw": {
+      "paths": [
+        {
+          "value": "/mongla/state.depth_m",
+          "label": "depth m",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "depth"
+    },
+    "Plot!board_health.battery": {
+      "paths": [
+        {
+          "value": "/mongla/state.battery_voltage",
+          "label": "PM1 V",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "battery"
+    },
+    "Plot!board_health.gyro": {
+      "paths": [
+        {
+          "value": "/mongla/imu.angular_velocity.x",
+          "label": "gx",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu.angular_velocity.y",
+          "label": "gy",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu.angular_velocity.z",
+          "label": "gz",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "gyro"
+    },
+    "mongla.batighor.Health!board_health.health": {},
+    "mongla.batighor.Kutum!board_health.kutum": {},
+    "Plot!board_link.bytes": {
+      "paths": [
+        {
+          "value": "/mongla/board_link.bytes_per_s",
+          "label": "bytes/s",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/board_link.capacity_bytes_per_s",
+          "label": "capacity",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "bytes per second"
+    },
+    "Plot!board_link.drops": {
+      "paths": [
+        {
+          "value": "/mongla/board_link.board_drop_pct",
+          "label": "drop %",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/board_link.board_errors",
+          "label": "errors",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "board drops"
+    },
+    "mongla.batighor.Link!board_link.link": {},
+    "Image!chain.forward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/forward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/forward/annotations": {
+            "visible": true
+          }
+        }
+      },
+      "lichtblickPanelTitle": "forward camera"
+    },
+    "Image!chain.downward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          }
+        }
+      },
+      "lichtblickPanelTitle": "downward camera"
+    },
+    "mongla.batighor.Chain!chain.chain": {},
+    "Image!bins_downward.down": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          }
+        },
+        "synchronize": true
+      },
+      "lichtblickPanelTitle": "downward camera"
+    },
+    "RawMessages!bins_downward.dets": {
+      "topicPath": "/mongla/vision/downward/detections",
+      "lichtblickPanelTitle": "downward detections"
+    },
+    "Plot!bins_downward.align": {
+      "paths": [
+        {
+          "value": "/mongla/move/_action/feedback.feedback.err_x_px",
+          "label": "align x px",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/move/_action/feedback.feedback.err_y_px",
+          "label": "align y px",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "pixel error"
+    },
+    "Image!calibrate.camera": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/calibration/stream/compressed",
+        "annotations": {
+          "/mongla/vision/calibration/annotations": {
+            "visible": true
+          }
+        }
+      },
+      "lichtblickPanelTitle": "calibration camera"
+    },
+    "Image!calibrate.undistorted": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/calibration/undistorted/compressed"
+      },
+      "lichtblickPanelTitle": "undistorted"
+    },
+    "mongla.batighor.Calibrate!calibrate.calibrate": {},
+    "Tab!console": {
+      "activeTabIdx": 0,
+      "tabs": [
+        {
+          "title": "Cockpit",
+          "layout": {
+            "direction": "row",
+            "first": {
+              "direction": "column",
+              "first": "Image!cockpit.forward",
+              "second": "Image!cockpit.downward",
+              "splitPercentage": 60.0
+            },
+            "second": {
+              "direction": "column",
+              "first": "mongla.batighor.ControlCenter!cockpit.control",
+              "second": {
+                "direction": "column",
+                "first": {
+                  "direction": "row",
+                  "first": "mongla.batighor.Vehicle!cockpit.vehicle",
+                  "second": "3D!cockpit.hull",
+                  "splitPercentage": 50.0
+                },
+                "second": "mongla.batighor.Vision!cockpit.vision",
+                "splitPercentage": 46.2
+              },
+              "splitPercentage": 40.9
+            },
+            "splitPercentage": 60.0
+          }
+        },
+        {
+          "title": "Map",
+          "layout": {
+            "direction": "row",
+            "first": "mongla.batighor.Map!map.map",
+            "second": {
+              "direction": "column",
+              "first": "mongla.batighor.Vehicle!map.vehicle",
+              "second": "3D!map.hull",
+              "splitPercentage": 60.0
+            },
+            "splitPercentage": 74.0
+          }
+        },
+        {
+          "title": "Mission",
+          "layout": {
+            "direction": "row",
+            "first": "mongla.batighor.Map!mission.map",
+            "second": {
+              "direction": "row",
+              "first": "mongla.batighor.MissionText!mission.text",
+              "second": {
+                "direction": "column",
+                "first": "mongla.batighor.Mission!mission.mission",
+                "second": "Plot!mission.demand",
+                "splitPercentage": 60.0
+              },
+              "splitPercentage": 53.1
+            },
+            "splitPercentage": 36.0
+          }
+        },
+        {
+          "title": "Vision",
+          "layout": {
+            "direction": "row",
+            "first": {
+              "direction": "column",
+              "first": "Image!vision.forward",
+              "second": "Image!vision.downward",
+              "splitPercentage": 50.0
+            },
+            "second": {
+              "direction": "column",
+              "first": "mongla.batighor.Vision!vision.vision",
+              "second": {
+                "direction": "column",
+                "first": "StateTransitions!vision.ladder",
+                "second": {
+                  "direction": "column",
+                  "first": "Plot!vision.authority",
+                  "second": {
+                    "direction": "column",
+                    "first": {
+                      "direction": "row",
+                      "first": "Plot!vision.target_range",
+                      "second": "Plot!vision.pose",
+                      "splitPercentage": 50.0
+                    },
+                    "second": {
+                      "direction": "column",
+                      "first": "Plot!vision.anchor",
+                      "second": "Plot!vision.align",
+                      "splitPercentage": 50.0
+                    },
+                    "splitPercentage": 33.3
+                  },
+                  "splitPercentage": 25.0
+                },
+                "splitPercentage": 42.9
+              },
+              "splitPercentage": 26.3
+            },
+            "splitPercentage": 55.0
+          }
+        },
+        {
+          "title": "Flow",
+          "layout": {
+            "direction": "row",
+            "first": "Image!flow.floorcam",
+            "second": {
+              "direction": "column",
+              "first": "Plot!flow.velocity",
+              "second": {
+                "direction": "column",
+                "first": "Plot!flow.distance",
+                "second": {
+                  "direction": "column",
+                  "first": "StateTransitions!flow.calibration",
+                  "second": {
+                    "direction": "column",
+                    "first": "Plot!flow.quality",
+                    "second": "Plot!flow.tracks",
+                    "splitPercentage": 60.0
+                  },
+                  "splitPercentage": 37.5
+                },
+                "splitPercentage": 20.0
+              },
+              "splitPercentage": 23.1
+            },
+            "splitPercentage": 58.0
+          }
+        },
+        {
+          "title": "Localization",
+          "layout": {
+            "direction": "row",
+            "first": {
+              "direction": "column",
+              "first": "mongla.batighor.LocalizationMap!localization.locmap",
+              "second": {
+                "direction": "row",
+                "first": "mongla.batighor.Navigation!localization.navigation",
+                "second": "3D!localization.nav",
+                "splitPercentage": 50.0
+              },
+              "splitPercentage": 60.0
+            },
+            "second": {
+              "direction": "column",
+              "first": "StateTransitions!localization.aiding",
+              "second": {
+                "direction": "column",
+                "first": "Plot!localization.pos",
+                "second": {
+                  "direction": "column",
+                  "first": "Plot!localization.sigma",
+                  "second": {
+                    "direction": "column",
+                    "first": "Plot!localization.vel",
+                    "second": {
+                      "direction": "column",
+                      "first": "Plot!localization.heading",
+                      "second": "Plot!localization.floor",
+                      "splitPercentage": 50.0
+                    },
+                    "splitPercentage": 33.3
+                  },
+                  "splitPercentage": 18.2
+                },
+                "splitPercentage": 21.4
+              },
+              "splitPercentage": 30.0
+            },
+            "splitPercentage": 50.0
+          }
+        },
+        {
+          "title": "Thrust",
+          "layout": {
+            "direction": "row",
+            "first": {
+              "direction": "column",
+              "first": "mongla.batighor.Thrust!thrust.thrust",
+              "second": "Plot!thrust.demand",
+              "splitPercentage": 40.0
+            },
+            "second": {
+              "direction": "column",
+              "first": "Plot!thrust.power",
+              "second": "Plot!thrust.rates",
+              "splitPercentage": 50.0
+            },
+            "splitPercentage": 50.0
+          }
+        },
+        {
+          "title": "Health",
+          "layout": {
+            "direction": "row",
+            "first": {
+              "direction": "column",
+              "first": "Plot!board_health.depthyaw",
+              "second": {
+                "direction": "column",
+                "first": "Plot!board_health.battery",
+                "second": "Plot!board_health.gyro",
+                "splitPercentage": 50.0
+              },
+              "splitPercentage": 33.3
+            },
+            "second": {
+              "direction": "column",
+              "first": "mongla.batighor.Health!board_health.health",
+              "second": "mongla.batighor.Kutum!board_health.kutum",
+              "splitPercentage": 60.0
+            },
+            "splitPercentage": 55.0
+          }
+        },
+        {
+          "title": "Link",
+          "layout": {
+            "direction": "row",
+            "first": {
+              "direction": "column",
+              "first": "Plot!board_link.bytes",
+              "second": "Plot!board_link.drops",
+              "splitPercentage": 50.0
+            },
+            "second": "mongla.batighor.Link!board_link.link",
+            "splitPercentage": 55.0
+          }
+        },
+        {
+          "title": "Chain",
+          "layout": {
+            "direction": "row",
+            "first": {
+              "direction": "column",
+              "first": "Image!chain.forward",
+              "second": "Image!chain.downward",
+              "splitPercentage": 50.0
+            },
+            "second": "mongla.batighor.Chain!chain.chain",
+            "splitPercentage": 40.0
+          }
+        },
+        {
+          "title": "Bins",
+          "layout": {
+            "direction": "row",
+            "first": "Image!bins_downward.down",
+            "second": {
+              "direction": "column",
+              "first": "RawMessages!bins_downward.dets",
+              "second": "Plot!bins_downward.align",
+              "splitPercentage": 50.0
+            },
+            "splitPercentage": 60.0
+          }
+        },
+        {
+          "title": "Calibrate",
+          "layout": {
+            "direction": "row",
+            "first": {
+              "direction": "column",
+              "first": "Image!calibrate.camera",
+              "second": "Image!calibrate.undistorted",
+              "splitPercentage": 65.0
+            },
+            "second": "mongla.batighor.Calibrate!calibrate.calibrate",
+            "splitPercentage": 62.0
+          }
+        }
+      ]
+    },
+    "mongla.batighor.Status!status": {}
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "column",
+    "first": "mongla.batighor.Status!status",
+    "second": "Tab!console",
+    "splitPercentage": 5.0
+  }
+}

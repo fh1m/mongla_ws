@@ -8,14 +8,14 @@ from mongla_batighor.seat import CAMERAS
 
 
 def test_every_committed_layout_is_what_the_table_generates():
-    for name in views.VIEWS:
+    for name in [views.CONSOLE, *views.VIEWS]:
         path = views.LAYOUTS / f'{views.FILE.get(name, name)}.json'
         assert path.read_text() == views.render(name), \
             f'{path.name} is stale: ros2 run mongla_batighor views --write'
 
 
 def test_no_layout_is_made_by_hand():
-    made = {views.FILE.get(n, n) for n in views.VIEWS}
+    made = {views.CONSOLE} | {views.FILE.get(n, n) for n in views.VIEWS}
     assert {p.stem for p in views.LAYOUTS.glob('*.json')} == made
 
 
@@ -126,6 +126,9 @@ def test_every_plot_follows_the_last_minute_with_a_narrow_legend():
         for k, c in views.build(name)['configById'].items():
             if k.startswith('StateTransitions!'):
                 assert c['isSynced'] is False, (name, k)
+                # Unsynced with no range it spans the whole connection: two
+                # hours in, the last minute was a sliver and read as empty.
+                assert c['xAxisRange'] == views.PLOT_WINDOW_S, (name, k)
 
 
 def test_no_plot_mixes_units():
@@ -151,3 +154,48 @@ def test_every_plot_says_what_it_is_and_its_legend_fits():
             if k.startswith('Plot!'):
                 for p in c['paths']:
                     assert len(p.get('label', '')) <= views.LABEL_CHARS, (name, k, p['label'])
+
+
+def test_the_console_holds_every_view_as_a_tab_with_its_own_panels():
+    """One layout, a tab per view, built by the same functions: every panel a
+    view places is in its tab, under an id no other tab uses."""
+    data = views.build(views.CONSOLE)
+    tabs = data['configById']['Tab!console']['tabs']
+    assert [t['title'] for t in tabs] == [title for _, title in views.TABS]
+    assert set(v for v, _ in views.TABS) <= set(views.VIEWS)
+    for (view, _), tab in zip(views.TABS, tabs):
+        alone = views.build(view)
+        placed = set(re.findall(r'"([^"!]+![^"]+)"', json.dumps(tab['layout'])))
+        assert placed == {pid.replace('!', f'!{view}.', 1) for pid in alone['configById']}
+        for pid in placed:
+            assert data['configById'][pid] == alone['configById'][pid.replace(f'!{view}.', '!', 1)]
+
+
+# Lichtblick draws each state row 64 px tall, plus 30 for the axis, and
+# scrolls what does not fit (its StateTransitions bundle, 2026-11-21). A tab's
+# body is ~860 px in the desktop app on a 1080 p screen, and a panel's title
+# bar takes ~28 of its own.
+STATE_ROW_PX, STATE_AXIS_PX, TAB_BODY_PX, TITLE_PX = 64, 30, 860, 28
+
+
+def _heights(node, h, out):
+    if isinstance(node, str):
+        out[node] = h
+        return out
+    f = node['splitPercentage'] / 100 if node['direction'] == 'column' else 1.0
+    _heights(node['first'], h * f, out)
+    _heights(node['second'], h * (1 - f) if node['direction'] == 'column' else h, out)
+    return out
+
+
+def test_every_state_row_is_visible_without_scrolling():
+    """The Vision tab's lock ladder had seven rows in ~150 px: the forward
+    camera's two showed and the downward camera's were below the fold. The
+    Localization tab's aiding strip showed one row of five."""
+    data = views.build(views.CONSOLE)
+    for tab in data['configById']['Tab!console']['tabs']:
+        for pid, h in _heights(tab['layout'], TAB_BODY_PX, {}).items():
+            if pid.startswith('StateTransitions!'):
+                rows = len(data['configById'][pid]['paths'])
+                need = rows * STATE_ROW_PX + STATE_AXIS_PX
+                assert h - TITLE_PX >= need, (tab['title'], pid, round(h), need)

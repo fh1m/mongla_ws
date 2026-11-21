@@ -27,9 +27,13 @@ class FlowFloorMixin:
         if t < self._tile_next_t:
             return
         self._tile_next_t = t + self._tile_period_s
+        # What was read, as picture geometry, only while someone watches.
+        read = self._pub_read.get_subscription_count() > 0
+        self._read = {} if read else None
         if self._lane_lines:
             self._read_the_lane(gray, t)
         if self._tile_m <= 0.0:
+            self._say_the_read(gray, t)
             return
         try:
             from mongla_vision.flow.tile_grating import measure
@@ -37,16 +41,20 @@ class FlowFloorMixin:
             self._tile_m = 0.0                  # not installed: stop asking
             return
         g = measure(gray, decimate=self._tile_decimate)
+        if self._read is not None and g is not None:
+            self._read['grating'] = g
         if g is None:
             # The common case on an untiled floor, and NOT an error. Clearing
             # rather than holding: a stale height is worse than no height,
             # because the caller cannot tell it is stale.
             self._tile_height = None
             self._tile_angle = None
+            self._say_the_read(gray, t)
             return
         f_px = self._f_px
         if not f_px or f_px <= 0.0:
             self._tile_height = None
+            self._say_the_read(gray, t)
             return
         h = g.height_m(f_px, self._tile_m)
         # Only a finite positive height is kept: `_evaluate` prefers this one
@@ -64,6 +72,7 @@ class FlowFloorMixin:
             r.range = float(self._tile_height)
             self._pub_floor_h.publish(r)
         self._pub_grid.publish(_floor_heading(t, self._cam, self._tile_angle))
+        self._say_the_read(gray, t)
         # Report the disagreement, never silently pick. Same rule the existing
         # optical cross-check follows: a divergence does not say WHICH input is
         # wrong, and `pool_depth_m` is the one nobody measures.
@@ -115,11 +124,38 @@ class FlowFloorMixin:
         small = gray if d == 1 else cv2.resize(
             gray, None, fx=1.0 / d, fy=1.0 / d, interpolation=cv2.INTER_AREA)
         line = detect(small)
+        if self._read is not None and line is not None:
+            self._read['lane'] = line
         if line is None:
             self._lane_angle = None             # bare floor: say nothing
             return
         self._lane_angle = line.heading_deg()
         self._pub_lane.publish(_floor_heading(t, self._cam, self._lane_angle))
+
+    def _say_the_read(self, gray, t: float) -> None:
+        """Publish this read as picture geometry (`FloorRead`), if someone watches."""
+        read, self._read = getattr(self, '_read', None), None
+        if read is None:
+            return
+        from mongla_vision.flow.floor_read import grout_lines, lane_axis
+        h, w = gray.shape[:2]
+        m = self._read_msg()
+        m.header = _floor_heading(t, self._cam, 0.0).header
+        m.width, m.height = int(w), int(h)
+        g, line = read.get('grating'), read.get('lane')
+        m.tile_height_m = float('nan')
+        if g is not None:
+            fam = grout_lines(gray, g.period_px, g.angle_deg, self._tile_decimate)
+            m.tiles, m.period_px, m.strength = True, float(g.period_px), float(g.strength)
+            m.grout_normal_deg = [float(n) for n, _ in fam]
+            m.grout_offset_px = [float(o) for _, o in fam]
+            if self._tile_height is not None:
+                m.tile_height_m = float(self._tile_height)
+        if line is not None:
+            d, off = lane_axis(line.angle_deg, line.offset_px, self._tile_decimate, (w, h))
+            m.lane, m.lane_direction_deg, m.lane_offset_px = True, float(d), float(off)
+            m.lane_elongation = float(line.elongation)
+        self._pub_read.publish(m)
 
 
 def _floor_heading(t: float, cam: str, angle_deg: float) -> FloorHeading:

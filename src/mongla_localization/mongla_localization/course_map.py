@@ -48,7 +48,7 @@ TOP_KEYS = ('course', 'frame', 'pool', 'props')
 PROP_KEYS = ('x_m', 'y_m', 'depth_m', 'bearing_deg', 'detect_class', 'measured',
              'note', 'width_m')
 POOL_KEYS = ('depth_m', 'depth_min_m', 'depth_max_m', 'floor', 'tile_m',
-             'lane_lines', 'shield_max_depth_m')
+             'lane_lines', 'shield_max_depth_m', 'outline')
 
 # The venue's numbers that are bringup launch arguments: pool key -> argument.
 # The course is their ONE place. A deck file that also sets one is refused at
@@ -125,6 +125,14 @@ class Course:
     def pool_floor(self):
         """Surveyed floor points [(x, y, depth), ...]; [] when not surveyed."""
         return list(self.pool.get('floor') or [])
+
+    def pool_outline(self):
+        """The pool's edge as corners [(x, y), ...] in order; [] when not surveyed.
+
+        Drawn by Batighor's map. Nothing steers by it: a wall the vehicle
+        can find is a sensor's job, not a line in a file.
+        """
+        return list(self.pool.get('outline') or [])
 
     def prop(self, name: str) -> Prop:
         key = str(name).strip().lower()
@@ -211,6 +219,7 @@ def load_course(name: str) -> Course:
                 for k in ('depth_m', 'depth_min_m', 'depth_max_m')}
         rp = raw.get('pool') or {}
         pool['floor'] = _floor_points(rp.get('floor'), path)
+        pool['outline'] = _outline_points(rp.get('outline'), path)
         pool['tile_m'] = _opt_float(rp.get('tile_m'))
         pool['shield_max_depth_m'] = _opt_float(rp.get('shield_max_depth_m'))
         if 'lane_lines' in rp:
@@ -246,6 +255,21 @@ def _floor_points(raw, path):
             raise ValueError(f'{path}: pool.floor[{i}] depth {d!r} must be positive '
                              f'metres (the floor is BELOW the surface)')
         pts.append((x, y, d))
+    return pts
+
+
+def _outline_points(raw, path):
+    """`pool: outline:` as [(x, y), ...], three corners or more; [] when unset."""
+    if not raw:
+        return []
+    if not isinstance(raw, list) or len(raw) < 3:
+        raise ValueError(f'{path}: pool.outline must list three corners or more, '
+                         f'each [x_m, y_m], in order round the pool')
+    pts = []
+    for i, row in enumerate(raw):
+        if not (isinstance(row, (list, tuple)) and len(row) == 2):
+            raise ValueError(f'{path}: pool.outline[{i}] is {row!r}; write [x_m, y_m]')
+        pts.append((float(row[0]), float(row[1])))
     return pts
 
 

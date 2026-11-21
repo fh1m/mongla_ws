@@ -48,8 +48,11 @@ LABEL_CHARS = 13
 TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'anchor (XFeat)',
           'align': 'pixel error', 'ladder': 'lock ladder', 'calibration': 'velocity scale',
           'quality': 'flow quality and heights', 'vel': 'velocity',
-          'floor': 'heights (depth negative down)', 'power': 'battery', 'rates': 'body rates',
-          'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops'}
+          'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates',
+          'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops',
+          'forward': 'forward camera', 'downward': 'downward camera', 'hull': 'attitude',
+          'nav': 'odometry, 3D', 'down': 'downward camera', 'dets': 'downward detections',
+          'camera': 'calibration camera', 'locmap': 'localization map'}
 # The last minute, following the newest sample. Unset, the axis spans the whole
 # connection, and a panel opened later drew its data in the right-hand sliver
 # (desktop app, 2026-11-12).
@@ -70,9 +73,14 @@ def plot(*lines: dict) -> tuple:
 def states(*lines: dict) -> tuple:
     # Not synced: a synced state panel spans the whole connection and pulled
     # every plot in its view out of the last minute (`Reset view`, desktop
-    # app 2026-11-12). The plots line up by each following the last minute.
+    # app 2026-11-12). The plots line up by each following the last minute,
+    # and so does this, by `xAxisRange`: without it an unsynced panel also
+    # spans the whole connection, and two hours in, the last minute was a
+    # sliver at its right edge and the panel read as empty (desktop app,
+    # 2026-11-21).
     return 'StateTransitions', {'paths': [{k: v for k, v in s.items() if k != 'enabled'}
-                                          for s in lines], 'isSynced': False}
+                                          for s in lines], 'isSynced': False,
+                                'xAxisRange': PLOT_WINDOW_S}
 
 
 def image(topic: str, *layers: str, synced: bool = False) -> tuple:
@@ -111,15 +119,19 @@ def raw(topic: str) -> tuple:
 def scene() -> tuple:
     """Lichtblick's 3D panel, following the vehicle in the odometry frame."""
     return '3D', {'followTf': 'mongla', 'followMode': 'follow-position',
-                  'topics': {'/mongla/odom': {'visible': True}},
+                  # The odometry, and the demand as an arrow on the hull (overlay.py).
+                  'topics': {'/mongla/odom': {'visible': True},
+                             '/mongla/batighor/scene': {'visible': True}},
                   # The hull says where the body is; seven frame names drawn
                   # on one point say nothing. Preloading acts on a recording
                   # only, and the panel alerts without it once /tf exists.
                   'scene': {'backgroundColor': '#05070c', 'labelScaleFactor': 0.3,
                             'transforms': {'showLabel': False, 'enablePreloading': True}},
-                  # Close enough that the 0.7 m hull fills the panel, from
-                  # behind and above the way a pilot looks at a vehicle.
-                  'cameraState': {'distance': 2.2, 'perspective': True, 'phi': 55,
+                  # From behind and above, the way a pilot looks at a
+                  # vehicle. At 2.2 m a 45-degree view of a wide panel is
+                  # 3.4 m across and the 0.7 m hull filled a fifth of it;
+                  # at 1.3 m it is 2 m, room for the hull and the demand.
+                  'cameraState': {'distance': 1.3, 'perspective': True, 'phi': 55,
                                   'thetaOffset': 200, 'targetOffset': [0, 0, 0],
                                   'target': [0, 0, 0], 'targetOrientation': [0, 0, 0, 1],
                                   'fovy': 45, 'near': 0.01, 'far': 5000},
@@ -139,20 +151,23 @@ def instrument(name: str) -> tuple:
 # -- where it goes ----------------------------------------------------------
 
 class View:
-    """A layout under construction: panels by id, and the tree that places them."""
+    """A layout under construction: panels by id, and the tree that places them.
 
-    def __init__(self):
+    `prefix` keeps ids apart when several views share one layout (the console's
+    tabs): Lichtblick keys every panel's settings by id, layout-wide."""
+
+    def __init__(self, prefix: str = ''):
         self.config: dict = {}
+        self.prefix = prefix
 
     def __call__(self, name: str, panel: tuple) -> str:
         kind, cfg = panel
-        pid = f'{kind}!{name}'
+        pid = f'{kind}!{self.prefix}{name}'
         assert pid not in self.config, pid
-        if kind in ('Plot', 'StateTransitions'):
-            # Untitled, every one read "Plot", and the legend had to say what
-            # the plot was: "forward authority" cut to "forward author". The
-            # key is Lichtblick's own: Foxglove's `foxglovePanelTitle` is
-            # ignored by this build (read off its bundle, 2026-11-18).
+        if not kind.startswith(PANEL):
+            # Untitled, every plot read "Plot" and every camera its topic path.
+            # Ours title themselves. The key is Lichtblick's own: Foxglove's
+            # `foxglovePanelTitle` is ignored by this build (its bundle, 2026-11-18).
             cfg = {**cfg, 'lichtblickPanelTitle': TITLES.get(name, name.replace('_', ' '))}
         self.config[pid] = cfg
         return pid
@@ -179,15 +194,12 @@ def col(*parts):
 
 # -- the views --------------------------------------------------------------
 
-def _ladder_lines(detail: bool) -> list:
-    out = []
-    for c in CAMERAS:
-        out.append(series(f'{V}/{c}/lock{RUNG}.class_id', f'{c} rung'))
-        if detail:
-            out.append(series(f'{V}/{c}/lock.detections[0].id', f'{c} holds'))
-            out.append(series(f'{V}/{c}/seeing.data', f'{c} seeing', True))
-    out.append(series(f'{V}/active_camera.data', 'live camera', True))
-    return out
+def _ladder_lines() -> list:
+    # Each camera's rung over time and which camera is live. What each holds
+    # and sees now is the Vision instrument's: as rows here too, the strip
+    # needed seven rows of 64 px and scrolled the downward camera out of view.
+    return [*(series(f'{V}/{c}/lock{RUNG}.class_id', f'{c} rung') for c in CAMERAS),
+            series(f'{V}/active_camera.data', 'live camera', True)]
 
 
 def cockpit(v: View):
@@ -196,7 +208,7 @@ def cockpit(v: View):
     The cameras take the left column whole. The lock's history is in `vision`;
     here the Vision instrument says what holds the target now and which
     stages run, and it needs the room more than a strip of history does."""
-    extra = {'downward': ['flow_annotations']}
+    extra = {'downward': ['flow_annotations', 'floor_annotations']}
     cams = [(3 if i == 0 else 2, v(c, camera(c, *extra.get(c, []))))
             for i, c in enumerate(CAMERAS)]
     return row((60, col(*cams)),
@@ -212,8 +224,8 @@ def vision(v: View):
     # Both cameras' rungs and stages, side by side: at a sixth of the column
     # the instrument scrolled and hid the downward camera.
     right = col(
-        (6, v('vision', instrument('Vision'))),
-        (3, v('ladder', states(*_ladder_lines(True)))),
+        (5, v('vision', instrument('Vision'))),
+        (6, v('ladder', states(*_ladder_lines()))),
         (2, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c)
                                   for c in CAMERAS)))),
         # One unit per plot (test_views): metres, degrees and pixels on one
@@ -233,43 +245,49 @@ def flow(v: View):
     """The downward camera as a speed sensor: the floor tracked, and what it measured."""
     d = f'{V}/downward'
     return row(
-        (58, v('floor', image(f'{d}/stream/compressed', f'{d}/flow_annotations'))),
+        (58, v('floorcam', image(f'{d}/stream/compressed', f'{d}/flow_annotations',
+                              f'{d}/floor_annotations'))),
         (42, col(
-            v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s', True),
+            (3, v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s', True),
                                series(f'{d}/velocity.twist.twist.linear.y', 'flow vy m/s', True),
                                series('/mongla/odom.twist.twist.linear.x', 'filter vx m/s'),
-                               series('/mongla/odom.twist.twist.linear.y', 'filter vy m/s'))),
-            v('distance', plot(series(f'{d}/distance_traveled.data', 'distance m', True))),
-            v('calibration', states(series(f'{d}/flow_calibration.data', 'scale from',
-                                           True),
-                                    # tiles | survey | survey, no position |
-                                    # pool_depth | none (a mission refuses none)
-                                    series('/mongla/flow/height_source.data',
-                                           'height from', True))),
+                               series('/mongla/odom.twist.twist.linear.y', 'filter vy m/s')))),
+            (2, v('distance', plot(series(f'{d}/distance_traveled.data', 'distance m', True)))),
+            (3, v('calibration', states(series(f'{d}/flow_calibration.data', 'scale from',
+                                               True),
+                                        # tiles | survey | survey, no position |
+                                        # pool_depth | none (a mission refuses none)
+                                        series('/mongla/flow/height_source.data',
+                                               'height from', True)))),
             # Quality and heights read 0 to a few; the track count reads to
             # ~160, and on one axis it flattened them onto the floor.
-            v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
-                              series(f'{d}/distance_debug.data[1]', 'height m', True),
-                              series(f'{d}/floor_height.range', 'floor m'))),
-            v('tracks', plot(series(f'{d}/distance_debug.data[2]', 'tracks', True))))))
+            (3, v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
+                                  series(f'{d}/distance_debug.data[1]', 'height m', True),
+                                  series(f'{d}/floor_height.range', 'floor m')))),
+            (2, v('tracks', plot(series(f'{d}/distance_debug.data[2]', 'tracks', True)))))))
 
 
 def localization(v: View):
-    """Navigation: where the filter puts the vehicle, in 3D and over time, and why."""
+    """Navigation: where the filter puts the vehicle on the pool, and why.
+
+    The localization map on the left (each fix with the correction it made,
+    the filter's and the flow's velocity); over time on the right."""
     d = f'{V}/downward'
     return row(
-        (50, col((3, v('nav', scene())), (2, v('navigation', instrument('Navigation'))))),
+        (50, col((3, v('locmap', instrument('LocalizationMap'))),
+                 (2, row(v('navigation', instrument('Navigation')), v('nav', scene()))))),
         (50, col(
-            (2, v('aiding', states(series('/mongla/localization/state.usable', 'usable', True),
+            # Motion is on the localization map and the mode on the status
+            # strip; as rows here the strip needed 350 px and showed one row.
+            (6, v('aiding', states(series('/mongla/localization/state.usable', 'usable', True),
                                    series('/mongla/localization/state.reason', 'why not', True),
-                                   series('/mongla/localization/aiding.data', 'aided by', True),
-                                   series('/mongla/localization/motion.data', 'motion', True),
-                                   series('/mongla/state.mode', 'mode')))),
+                                   series('/mongla/localization/aiding.data', 'aided by', True)))),
             (3, v('pos', plot(series('/mongla/odom.pose.pose.position.x', 'x m'),
                               series('/mongla/odom.pose.pose.position.y', 'y m'),
                               series('/mongla/odom.pose.pose.position.z', 'z m (down)'),
                               series('/mongla/localization/fix.point.x', 'prop fix x'),
                               series('/mongla/localization/fix.point.y', 'prop fix y')))),
+            (2, v('sigma', plot(series('/mongla/localization/state.sigma_xy_m', 'sigma xy m', True)))),
             (3, v('vel', plot(series('/mongla/odom.twist.twist.linear.x', 'filter vx'),
                               series(f'{d}/velocity.twist.twist.linear.x', 'flow vx'),
                               series('/mongla/odom.twist.twist.linear.y', 'filter vy'),
@@ -334,6 +352,27 @@ def chain(v: View):
                (60, v('chain', instrument('Chain'))))
 
 
+def map_(v: View):
+    """Planning a run: the pool from the course file, the props, and Mongla on it.
+
+    The map takes three quarters: a plan is read off it. Beside it only what
+    the plan view cannot show: the vehicle's state and its attitude."""
+    return row((74, v('map', instrument('Map'))),
+               (26, col((3, v('vehicle', instrument('Vehicle'))), (2, v('hull', scene())))))
+
+
+def mission(v: View):
+    """The plan beside the pool: the map, the mission's text with the line that
+    sent the running verb marked, and the decision layer (task and clock, the
+    verb, how each ended) over the demand it sends. Read left to right: where,
+    what the plan says, what the vehicle is doing about it."""
+    return row((36, v('map', instrument('Map'))),
+               (34, v('text', instrument('MissionText'))),
+               (30, col((3, v('mission', instrument('Mission'))),
+                        (2, v('demand', plot(series('/mongla/demand.vector.x', 'surge'),
+                                             series('/mongla/demand.vector.y', 'sway')))))))
+
+
 def bins_downward(v: View):
     """Aligning over a target below: the floor with boxes, the detections, the error."""
     return row((60, v('down', camera('downward', synced=True))),
@@ -370,14 +409,35 @@ NOT_SHOWN = {
     'video_speed': "a replay command from the display node",
 }
 
-VIEWS = {f.__name__: f for f in (cockpit, vision, flow, localization, thrust, board_health,
-                                 board_link, chain, bins_downward, calibrate, weak_link)}
+VIEWS = {f.__name__.rstrip('_'): f for f in (cockpit, mission, map_, vision, flow, localization,
+                                             thrust, board_health, board_link, chain,
+                                             bins_downward, calibrate, weak_link)}
 FILE = {'cockpit': 'mongla_layout'}            # the default keeps the name links use
+
+# The console: every view as a tab of one layout, in the order a run is read.
+# Each view stays its own layout too (links and the layout menu name them);
+# here they are one place, and only the open tab's panels subscribe.
+CONSOLE = 'batighor'
+TABS = [('cockpit', 'Cockpit'), ('map', 'Map'), ('mission', 'Mission'), ('vision', 'Vision'),
+        ('flow', 'Flow'), ('localization', 'Localization'), ('thrust', 'Thrust'),
+        ('board_health', 'Health'), ('board_link', 'Link'), ('chain', 'Chain'),
+        ('bins_downward', 'Bins'), ('calibrate', 'Calibrate')]
 
 
 def build(name: str) -> dict:
-    v = View()
-    tree = VIEWS[name](v)
+    if name == CONSOLE:
+        v, tabs = View(), []
+        for view, title in TABS:
+            v.prefix = f'{view}.'
+            tabs.append({'title': title, 'layout': VIEWS[view](v)})
+        v.config['Tab!console'] = {'activeTabIdx': 0, 'tabs': tabs}
+        # The status strip on every tab: a split is a percentage of the window,
+        # and 5 % is one line of cells on a laptop's 1000 px of height.
+        v.prefix = ''
+        tree = col((5, v('status', instrument('Status'))), (95, 'Tab!console'))
+    else:
+        v = View()
+        tree = VIEWS[name](v)
     return {'configById': v.config, 'globalVariables': {}, 'userNodes': {},
             'playbackConfig': {'speed': 1}, 'layout': tree}
 
@@ -400,7 +460,7 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 2
     stale = []
-    for name in VIEWS:
+    for name in [CONSOLE, *VIEWS]:
         path = out / f'{FILE.get(name, name)}.json'
         text = render(name)
         if a.write:

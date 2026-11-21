@@ -96,6 +96,10 @@ ros2 run mongla_planner mission --list
 ros2 run mongla_planner mission sauvc_full
 ```
 
+While a mission runs, the runner publishes its file on `/mongla/mission/source` and, for
+every verb, the line of that file that sent it on `/mongla/mission/line` (both latched JSON,
+`mission.MissionText`); Batighor's mission view shows the text with that line marked.
+
 `sauvc_full` is the current shape of a full run: the gate, then the drum, then — optionally —
 the flares. One dive, budgeted, each task bounded by a deadline, every outcome recorded.
 **No mission has been flown on this platform yet**; their guards check names, depths, budgets,

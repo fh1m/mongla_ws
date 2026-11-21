@@ -49,6 +49,28 @@ is what to do and what the vehicle is doing.
   its boxes are behind the frame), and on the downward camera the flow node's tracked
   points, anchor to now, with their count.
 
+## The plan beside the pool (`mission`)
+
+![The mission view during a bench run of demo_square: the pool map from the course file with its props and Mongla, the mission's text with line 37, the move_forward that is running, marked, and the Mission panel with the verb, its fields and the verbs before it.](../../../docs/imgs/batighor/mission.webp)
+
+Read left to right: where, what the plan says, what the vehicle is doing about it.
+
+- **Map**: the pool from the course file, its floor soundings and props (measured
+  solid, nominal dashed amber, unplaced named below), and Mongla: solid once anchored
+  in the pool, a hollow hull "by its start" before.
+- **Mission text**: the running mission's file as its runner published it
+  (`/mongla/mission/source`), numbered, and the line that sent the verb running now
+  marked and scrolled to (`/mongla/mission/line`). A run that stopped stays on the
+  line it stopped at, marked "ended", for as long as the panel is open. A helper the
+  mission calls in another file reads as the mission's line that called it.
+- **Mission**: the task and its clock, the verb with what it was asked, and every
+  recent verb with how it ended, refusals in red with their reason.
+
+A panel shows what a topic last said even when it opens after the message:
+Lichtblick hands a panel only what arrives after it mounts, so the instruments keep
+the last message of each topic, with when it came, and give it to a panel that opens
+later. An old message keeps its age.
+
 ## Vision (`vision`)
 
 ![The vision view: both cameras with their boxes, the Vision panel with both cameras side by side, the lock ladder's history, and plots of authority, target range, bearing and yaw, the anchor and the alignment error.](../../../docs/imgs/batighor/vision.webp)
@@ -78,6 +100,13 @@ Where the filter puts the vehicle, in 3D and as a north-up plan, and why: which
 sources aid it (`aided (flow uncalibrated)` here), its position, its velocity beside
 the flow's, the board's heading beside the one given, and the floor's height against
 the depth.
+
+On the hull in 3D, an arrow from its origin is the demand: where the board is told
+to push and what share of full force, with the words under it. While the board runs
+a move in AUTO it owns the demand and reports none here, so the scene says
+`demand unknown` and draws no arrow. The cameras' frusta and the detections are not
+in the scene: both need where each camera sits on the hull and which way its
+picture points, and neither is measured yet (`frames.yaml`).
 
 ## Thrust (`thrust`)
 
