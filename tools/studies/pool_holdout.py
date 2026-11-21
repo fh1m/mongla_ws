@@ -51,9 +51,15 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # tools/
 
 # Coarse class by keyword, first match wins. Order matters: 'gate pole' is a
-# pole, not a gate; 'tubs' (a group box around several tubs) is not one drum.
+# gate's post, not a gate; 'tubs' (a group box around several tubs) is not one
+# drum. A bare 'pole' IS a flare: two teams label the flare (a coloured pole on
+# a weighted base) 'pole', 5 804 boxes; dropping them taught the model those
+# flares were background and scored its correct boxes as false (2026-11-21,
+# sheets in studies/holdout_flare/labels_*_pole.jpg). 'tiang-golf' is the pole
+# of a different task and stays dropped.
 COARSE = (
-    ('pole', None), ('tiang', None),   # tiang: Indonesian for pole
+    ('gate pole', None), ('tiang', None),   # tiang: Indonesian for pole
+    ('pole', 'flare'),
     ('tubs', None),
     ('gate', 'gate'),
     ('flare', 'flare'), ('suar', 'flare'),   # suar: Indonesian for flare
@@ -248,6 +254,8 @@ def _self_test() -> int:
         lab = next(iter(tr)).read_text().split('\n')
         check([x for x in lab if x] == ['1 .2 .2 .1 .1', '2 .7 .7 .1 .1'],
               "'gate pole' and the 'tubs' group box dropped; flare and blue_tub kept")
+        check(coarse('pole') == 'flare' and coarse('gate pole') is None,
+              "a bare 'pole' is a flare; a 'gate pole' is dropped")
         check(coarse('suar') == 'flare' and coarse('tiang-golf') is None
               and coarse('ember-biru') == 'drum' and coarse('Blue Bucket') == 'drum'
               and coarse('gate-loreng') == 'gate' and coarse('golf-merah') is None,
