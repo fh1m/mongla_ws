@@ -140,3 +140,13 @@ def test_the_bar_sits_between_the_two_measured_regimes():
     """Guard the constant itself. The floating pin steps a median 6.48 V; a pack
     sags about 1 V. A bar outside that gap silently stops separating them."""
     assert 1.0 < sp.BATTERY_MAX_STEP_V < 6.48
+
+
+def test_the_battery_on_the_state_topic_is_guarded_too(fc):
+    """Kutum on the real board, 2026-11-22: /mongla/state read 1.39, 2.47,
+    13.77, 1.39 V within a minute from the unwired PM1 pin. The guard sat in
+    get_batteries(); the manager reads get_battery(), which skipped it."""
+    _feed(fc, FLOATING_PIN_V, bid=0)
+    assert math.isnan(fc.get_battery()['voltage'])
+    _feed(fc, REAL_PACK_V, bid=0)
+    assert not math.isnan(fc.get_battery()['voltage'])

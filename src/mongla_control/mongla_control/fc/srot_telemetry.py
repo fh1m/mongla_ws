@@ -397,6 +397,8 @@ class SrotTelemetry:
         if hit is None:
             return None
         voltage, current, _ = hit
+        if not self.battery_trusted(sp.BATTERY_ID_MAIN):
+            voltage = math.nan            # a floating pin is absence (battery_trusted)
         return {'voltage': voltage, 'current': current}
 
     def get_statustext(self):
