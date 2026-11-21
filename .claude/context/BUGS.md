@@ -925,6 +925,43 @@ section (its lane witness and its fisheye lens could not grade it).
 peak accuracy. Injection: the old module fails 15 of them, the new one
 without fading 20, fading any dark blob fails a negative control.
 
+### B-147: under replay the composed lock starved both detectors `REPRODUCED 2026-11-21` **PARTLY FIXED 2026-11-21**
+
+**What.** On Kutum's bench (`replay:=true`, two looped clips at 30 fps,
+detectors unpaused), Batighor's boxes trailed the video and the lock flickered
+"silent". Measured with a foxglove client for 15 s: forward detections 2.7 Hz
+and downward 0.4 Hz with the lock composed, against 22.9 and 16.2 Hz with
+`lock:=false`. py-spy put every thread of the vision process in a wait for a
+frame; the executor thread sat idle. Under replay the detector, the lock and
+the flow each subscribed to `image_raw` themselves (the detector by keeping
+`direct_feed` false). A stand-alone check showed the cost of readers in one
+process: three nodes subscribed to the same 640x480 image on a multi-threaded
+executor received 8.7 Hz each where one received 21.7. Ruled out: the chip
+(`anchor_hz` 0.5 against 4.5 changed nothing; measured-bars 95), and the
+executor kind (the classic one gave 4.8 Hz).
+
+**Fix.** `_ReplayFeed` in `detector_dual_node.py`: one reader per camera,
+decoded once and handed to the same `_Tee` a live camera feeds, and the
+detector is `direct_feed` in both modes. Replay now exercises the live
+by-reference path. After it, the same bench: forward detections 10.9 Hz,
+downward 12.0, the lock 11.8 and 13.5 Hz. Guards:
+`test_replay_reads_each_image_once_and_feeds_everything_by_reference` and
+`test_the_detector_is_fed_by_reference_live_and_under_replay`, both
+injection-verified.
+
+**Open.** The bar was within 20 % of the lock-off rates (18.3 and 13 Hz), so
+forward still fails. The lock's lock-step work in this process still halves the
+frames that reach it. Bead `mongla_ws-cui` holds the next measurement. On the
+vehicle the cameras feed by reference and none of this applies.
+
+**Also seen.** A blocking `py-spy record` (it stops the process to sample)
+across the whole launch was followed within a minute by the Hailo-8 leaving
+the PCIe bus (`Channel 2 hw state out of sync`, then `Device disconnected while
+opening device` on every open). No undervoltage, 57 C. Recovered without a
+reboot: `echo 1 | sudo tee /sys/bus/pci/devices/0000:01:00.0/remove`, then
+`echo 1 | sudo tee /sys/bus/pci/rescan`. Use `py-spy record --nonblocking` on
+anything that holds the chip; that run kept it.
+
 ### B-146: a typed course drew its map but set none of its venue `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
 
 **What.** `bringup.launch.py` read the venue (pool depth, tile size, the depth

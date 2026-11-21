@@ -257,3 +257,46 @@ def test_a_per_camera_lock_override_beats_the_generic_one():
     finally:
         if started:
             rclpy.shutdown()
+
+
+def test_replay_reads_each_image_once_and_feeds_everything_by_reference():
+    """One reader per camera under replay (B-147): the lock and flow are
+    built direct, and only the launcher subscribes to image_raw."""
+    def factory(role):
+        raise AssertionError('replay must not construct a camera')
+
+    lock_cls = MagicMock()
+    with patch('mongla_vision.lock_node.LockNode', lock_cls):
+        launcher, built, code = _run(factory, replay=True, lock=True, flow=True)
+    assert code is None and built == []
+    images = [c.args[1] for c in launcher.create_subscription.call_args_list
+              if c.args[1].endswith('/image_raw')]
+    assert sorted(images) == ['/mongla/vision/downward/image_raw',
+                              '/mongla/vision/forward/image_raw']
+    for c in lock_cls.call_args_list:
+        direct = [p.value for p in c.kwargs['parameter_overrides'] if p.name == 'direct_feed']
+        assert direct == [True], 'the replay lock subscribed for itself'
+
+
+def test_the_replay_feed_decodes_once_and_hands_the_header_on():
+    sink = MagicMock(spec=['submit_frame'])
+    launcher = MagicMock()
+    feed = dn._ReplayFeed(launcher, 'forward', sink)
+    msg = MagicMock(encoding='bgr8', height=2, width=3, step=9, is_bigendian=0,
+                    data=bytes(range(18)))
+    feed._on_image(msg)
+    frame, header = sink.submit_frame.call_args.args
+    assert frame.shape == (2, 3, 3) and header is msg.header
+    assert launcher.create_subscription.call_count == 1   # no submit_info on this sink
+
+
+
+@pytest.mark.parametrize('replay', (False, True))
+def test_the_detector_is_fed_by_reference_live_and_under_replay(replay):
+    """B-147: under replay `_ReplayFeed` is the camera, so the detector must
+    not also subscribe -- the real `overrides`, not a mocked launcher."""
+    fake = MagicMock()
+    fake.get_parameter.side_effect = lambda name: MagicMock(
+        value=replay if name == 'replay' else 0)
+    out = {p.name: p.value for p in dn._Launcher.overrides(fake, 'fwd', 'forward')}
+    assert out['direct_feed'] is True
