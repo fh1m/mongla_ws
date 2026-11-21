@@ -178,7 +178,8 @@ and replaces every copy that came from one of Kutum's files and that nobody edit
 once (`syncLayouts`, the pure decision is `layoutUpdates`). "Edited" means a value the file
 holds was changed; the defaults the app writes into a panel when it mounts, and the tab an
 operator last chose, are not edits, and are kept under Kutum's values (the console never updated
-while they counted). A real edit is kept and named in the console log; Revert in the layout's
+while they counted). Where a 3D panel's camera looks is not an edit either: the panel writes it
+back as it renders, so it takes Kutum's camera. A real edit is kept and named in the console log; Revert in the layout's
 menu takes Kutum's. `kutum/deploy.sh` runs the desktop step after a release when the app is
 installed on the dev box and Batighor answers; with the stack down it says to run
 `tools/pool/batighor_desktop.py kutum --no-launch` after bringup. On a dense screen the app is started at a scale read from

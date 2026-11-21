@@ -448,6 +448,8 @@ def test_the_desktop_app_takes_kutums_layout_unless_the_operator_edited_it():
                                          'working': working}}
     console = lambda v, tab: {'v': v, 'configById': {  # noqa: E731
         'Tab!console': {'activeTabIdx': tab, 'tabs': [{}, {}, {}]}}}
+    cam3d = lambda d, th: {'configById': {'3D!hull': {  # noqa: E731
+        'followTf': 'mongla', 'cameraState': {'distance': d, 'thetaOffset': th}}}}
     records = [rec('map', {'v': 1}), rec('flow', {'v': 1}, working={'data': {}}),
                rec('vision', {'v': 2}), rec('mine', {'v': 1}, frm=False),
                # Only a tab chosen since: not an edit, and the choice survives.
@@ -456,12 +458,18 @@ def test_the_desktop_app_takes_kutums_layout_unless_the_operator_edited_it():
                # and kept beneath Kutum's values.
                rec('cockpit', {'configById': {'Plot!a': {'paths': [1]}}},
                    working={'data': {'configById': {'Plot!a': {'paths': [1], 'showXAxisLabels': True}}}}),
+               # The 3D panel writes its camera back as it renders (an angle
+               # of 200 comes back as -160, a distance creeps): a view, not an
+               # edit. Counted as one, it kept the console off Kutum's layout
+               # for good (seen on the desktop app, 2026-11-22).
+               rec('hull', cam3d(2.2, 200), working={'data': cam3d(2.316, -160)}),
                # A value the file set, changed: an edit, kept.
                rec('thrust', {'configById': {'Plot!a': {'paths': [1]}}},
                    working={'data': {'configById': {'Plot!a': {'paths': [2]}}}})]
     served = {'map': {'v': 2}, 'flow': {'v': 2}, 'vision': {'v': 2}, 'mine': {'v': 2},
               'batighor': console(2, 0), 'cockpit': {'configById': {'Plot!a': {'paths': [9]}}},
-              'thrust': {'configById': {'Plot!a': {'paths': [9]}}}}
+              'thrust': {'configById': {'Plot!a': {'paths': [9]}}},
+              'hull': cam3d(1.3, 200)}
     js = (src + '\nprocess.stdout.write(JSON.stringify(module.exports.layoutUpdates('
           + _json.dumps(records) + ',' + _json.dumps(served) + ',"now")));')
     pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
@@ -470,7 +478,9 @@ def test_the_desktop_app_takes_kutums_layout_unless_the_operator_edited_it():
                   capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     got = _json.loads(out.stdout)
-    assert [r['layout']['name'] for r in got['update']] == ['map', 'batighor', 'cockpit']
+    assert [r['layout']['name'] for r in got['update']] == ['map', 'batighor', 'cockpit', 'hull']
+    # Kutum's camera, not the one the panel drifted to: the file changed it.
+    assert got['update'][3]['layout']['baseline']['data'] == cam3d(1.3, 200)
     assert got['update'][2]['layout']['baseline']['data'] == {
         'configById': {'Plot!a': {'paths': [9], 'showXAxisLabels': True}}}
     assert got['update'][0]['layout']['baseline'] == {'data': {'v': 2}, 'savedAt': 'now'}
