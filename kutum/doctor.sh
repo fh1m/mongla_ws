@@ -230,9 +230,12 @@ done
 # Two interfaces with an address each and no rule from each address: a reply
 # to the Wi-Fi address leaves by Ethernet and is lost, and the laptop's ssh
 # times out while the Pi is up (2026-11-12). The rules come from
-# 50-kutum-source-routes, run by networkd-dispatcher.
-for a in $(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1); do
-  if [ "$(ip -4 -o addr show scope global | wc -l)" -gt 1 ] && ! ip rule | grep -q "from $a lookup"; then
+# 50-kutum-source-routes, run by networkd-dispatcher. Only eth0 and wlan0:
+# tailscale0 routes its own replies (policy table 52) and networkd never
+# sees it, so counting it made a healthy Pi FAIL once Tailscale was up.
+phys="$(ip -4 -o addr show scope global | awk '$2 == "eth0" || $2 == "wlan0" {print $4}' | cut -d/ -f1)"
+for a in $phys; do
+  if [ "$(printf '%s\n' "$phys" | wc -l)" -gt 1 ] && ! ip rule | grep -q "from $a lookup"; then
     fail "no reply route from $a -- with two interfaces up, traffic to it is answered by the wrong one (kutum/setup.sh --system)"
   fi
 done
