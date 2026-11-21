@@ -939,7 +939,8 @@ jumps (60 s on Kutum, one sample a second: 41 changes, sitting at 13-14 V like a
 pack, dropping to 1.39-5.86 V and back), so its median step was 0 V and the
 median passed it. The guard also counts jumps past the 2 V bar in its window:
 three condemn it (`BATTERY_MAX_JUMPS`); a pack never makes one and a single
-glitch makes two.
+glitch makes two. Condemned, a line stays condemned until a whole window passes with no
+jump: the pin's quiet spells (1.39 V for 14 s) had let it back in.
 
 **Guards.** `test_battery_plausibility.py::test_the_battery_on_the_state_topic_is_guarded_too`
 and `::test_a_pin_that_holds_a_value_between_jumps_is_not_trusted` (today's

@@ -165,3 +165,17 @@ def test_a_pin_that_holds_a_value_between_jumps_is_not_trusted(fc):
     /mongla/state. A real pack never jumps 2 V; one glitch jumps twice."""
     _feed(fc, FLOATING_PIN_HELD_V)
     assert fc.battery_trusted(0) is False
+
+
+def test_a_condemned_pin_stays_condemned_through_its_quiet_spells(fc):
+    """Kutum, 2026-11-22: condemned, the pin then held 1.39 V long enough that
+    fewer than three jumps were left in the window, and /mongla/state read
+    1.4 V again. A line is released only by a whole window with no jump."""
+    flips = []
+    for v in FLOATING_PIN_HELD_V + [1.39] * 14 + [13.0] + FLOATING_PIN_HELD_V:
+        fc.note_battery(_Msg(0, v))
+        flips.append(fc.battery_trusted(0))
+    first = flips.index(False)
+    assert not any(flips[first:]), f'trusted again at sample {flips.index(True, first)}'
+    _feed(fc, REAL_PACK_V * 2)
+    assert fc.battery_trusted(0) is True
