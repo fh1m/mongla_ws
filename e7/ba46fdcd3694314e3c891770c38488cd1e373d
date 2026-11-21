@@ -1,0 +1,33 @@
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_65dd352d56713a 928-949
+src/mongla_manager/mongla_manager/node_setup.py
+  s_4af8d6f83b24e8::t_92dd4ed64f309f 28,43
+src/mongla_runtime/mongla_runtime/tether.py
+  s_4af8d6f83b24e8::t_0c3c5a9ec5544f 50-64
+src/mongla_runtime/test/test_declaring_is_not_changing.py
+  s_4af8d6f83b24e8::t_9dc65d9e07809c 1-72
+src/mongla_vision/mongla_vision/detector_setup.py
+  s_4af8d6f83b24e8::t_100a3a9e84d6bb 9,385
+src/mongla_vision/mongla_vision/live_params.py
+  s_4af8d6f83b24e8::t_b1f1c7d140beab 10,20
+src/mongla_vision/mongla_vision/lock_setup.py
+  s_4af8d6f83b24e8::t_592070e3615283 7,284
+src/mongla_vision/mongla_vision/tracker_node.py
+  s_4af8d6f83b24e8::t_0ceb49960e2f4a 53,329
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "e7ba46fdcd3694314e3c891770c38488cd1e373d",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
