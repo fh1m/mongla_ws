@@ -1,0 +1,75 @@
+kutum/deploy.sh
+  s_4af8d6f83b24e8::t_a0a666992354e9 177-190
+src/mongla_batighor/mongla_batighor/serve.py
+  s_4af8d6f83b24e8::t_30987d012fd763 44-46,214-218
+src/mongla_batighor/test/test_serve_and_fetch.py
+  s_4af8d6f83b24e8::t_5859b044ec4215 334-344
+src/mongla_batighor/test/test_views.py
+  s_4af8d6f83b24e8::t_1dd7248eef3e1c 11,18,154-168
+tools/pool/batighor_desktop.py
+  s_3ac26b36abcd8a::t_bc3811778ceb74 138-140
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_f3000e3083b0f7 169,9174-9194
+.claude/context/packages/mongla_batighor/README.md
+  s_4af8d6f83b24e8::t_5c4609ac446d86 132-144,154-166
+README.md
+  s_4af8d6f83b24e8::t_e91c1570397d5f 64,865,868
+docs/index.html
+  s_4af8d6f83b24e8::t_b079d40bace78a 1873-1875,1877
+src/mongla_batighor/launch/batighor.launch.py
+  s_4af8d6f83b24e8::t_573686b4f9fe3d 56-58
+src/mongla_batighor/layouts/batighor.json
+  s_4af8d6f83b24e8::t_c0d5f28f06dc19 1-1254
+src/mongla_batighor/layouts/bins_downward.json
+  s_4af8d6f83b24e8::t_cb74dadb9bc0ca 12-13,16-17
+src/mongla_batighor/layouts/calibrate.json
+  s_4af8d6f83b24e8::t_4ab417f89a7452 11-12,17-18
+src/mongla_batighor/layouts/chain.json
+  s_4af8d6f83b24e8::t_d39fdaa93d92ce 11-12,22-23
+src/mongla_batighor/layouts/flow.json
+  s_4af8d6f83b24e8::t_2d2a475dc4aee0 3,14-15,136
+src/mongla_batighor/layouts/localization.json
+  s_4af8d6f83b24e8::t_783cbc0d79ee5a 56-57
+src/mongla_batighor/layouts/map.json
+  s_4af8d6f83b24e8::t_5fd84a36992f63 56-57
+src/mongla_batighor/layouts/mongla_layout.json
+  s_4af8d6f83b24e8::t_0fc5229b5b9c7a 11-12,28-29,84-85
+src/mongla_batighor/layouts/vision.json
+  s_4af8d6f83b24e8::t_d1b5d8fd7e826b 12-13,24-25
+src/mongla_batighor/layouts/weak_link.json
+  s_4af8d6f83b24e8::t_df1395ec54c3dc 11-12,22-23
+src/mongla_batighor/mongla_batighor/overlay.py
+  s_4af8d6f83b24e8::t_9d86f96ac668c9 617-622
+src/mongla_batighor/mongla_batighor/views.py
+  s_4af8d6f83b24e8::t_9b758a5cc9c9cc 51-55,145,147-150,152,156,158-161,242,409-417,420-432,455
+src/mongla_batighor/panels/instruments/extension.js
+  s_4af8d6f83b24e8::t_6c3a36d241929e 131-134,162-164,166,270,367-410,412-443,732,763-860,863,870-871
+src/mongla_batighor/test/test_panels.py
+  s_4af8d6f83b24e8::t_e9af31a6e4831a 430-497
+src/mongla_batighor/theme/batighor.css
+  s_4af8d6f83b24e8::t_e6d799f17f9a62 37-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "a5ec584c4865e1f69caadb853d3e194fafeda918",
+  "prompts": {},
+  "sessions": {
+    "s_3ac26b36abcd8a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a1c707a7e22660242",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    },
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
