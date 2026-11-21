@@ -95,3 +95,34 @@ def test_a_go_to_is_circled_at_its_tolerance():
     rings = [n for n in d if n['tag'] == 'circle' and n['attrs'].get('stroke') == 'var(--mb-red)'
              and n['attrs'].get('cx') == '-2' and n['attrs'].get('cy') == '-12']
     assert rings and rings[0]['attrs']['r'] == '0.5'
+
+
+ROWS = r"""
+function node(tag) { return { tag, attrs: {}, kids: [], setAttribute(k, v) { this.attrs[k] = String(v); },
+  append(...k) { this.kids.push(...k); }, addEventListener() {} }; }
+global.document = { createElementNS: (_, t) => node(t), createElement: (t) => node(t), querySelector: () => null,
+  head: { append() {} } };
+const module = { exports: {} };
+const CAMERAS = ["forward", "downward"], VERBS = {}, TUNABLE = {}, THEME_CSS = "";
+%(src)s
+const course = JSON.parse(process.argv[process.argv.length - 1]);
+const text = (n) => typeof n === "string" ? n : (n.kids || []).map(text).join(" ");
+process.stdout.write(module.exports.drawMap({ course }, false).map(text).join("\n"));
+"""
+
+
+def _rows(course):
+    src = (PANELS / 'common.js').read_text() + (PANELS / 'instruments' / 'extension.js').read_text()
+    out = subprocess.run(['node', '-e', ROWS % {'src': src}, json.dumps(course)],
+                         capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return out.stdout
+
+
+def test_a_blank_venue_says_how_to_fill_it_and_a_filled_one_does_not():
+    """Kutum on the real board, 2026-11-22: the deck's pool was the blank
+    venue and the Map showed only dashes, while flow refused every interval."""
+    blank = {'course': 'pool', 'pool': {'depth_m': None, 'floor': []}, 'props': []}
+    assert 'blank venue no floor, so flow refuses every interval' in _rows(blank)
+    filled = {'course': 'pool', 'pool': {'depth_m': 2.0, 'floor': []}, 'props': []}
+    assert 'blank venue' not in _rows(filled)

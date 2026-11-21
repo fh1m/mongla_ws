@@ -297,7 +297,7 @@ function drawMap(s, forLocalization) {
   out.push(map || el("div", { class: "note" }, "nothing placed yet: survey the pool (course_survey --corner, --prop, --floor)"));
   const un = c.unplaced || [];
   const where = pose ? `${num(pose.x, 2)}, ${num(pose.y, 2)} m  heading ${num(fin(pose.yaw) ? (pose.yaw * 180) / Math.PI : NaN, 0)} deg` : "--";
-  const lastFix = (s.fixes || [])[s.fixes.length - 1];
+  const lastFix = (s.fixes || []).at(-1);
   const rows = [
     ["position", anchored ? where : pose ? `${where} (by its start)` : "--", anchored ? "live" : "warn"],
     ["filter frame", loc ? `${loc.frame || "--"}  ${num(loc.x_m, 2)}, ${num(loc.y_m, 2)} m` : "--"],
@@ -315,6 +315,9 @@ function drawMap(s, forLocalization) {
     rows.push(["placed", `${(c.props || []).length} props, ${(c.props || []).filter((p) => !p.measured).length} of them nominal`],
       ["unplaced", un.length ? un.map((p) => p.name).join(", ") : "none", un.length ? "warn" : ""],
       ["pool", `depth ${num(c.pool && c.pool.depth_m, 2, " m")}  tile ${num(c.pool && c.pool.tile_m, 3, " m")}  floor stop ${num(c.pool && c.pool.shield_max_depth_m, 2, " m")}`],
+      // A blank venue holds every mission back (flow has no floor): say how to fill it.
+      ...(c.pool && c.pool.depth_m == null && !(c.pool.floor || []).length
+        ? [["blank venue", "no floor, so flow refuses every interval: at the pool, `ros2 run mongla_localization course_survey`", "warn"]] : []),
       ["file", c.source || "--"]);
   }
   out.push(kv(...rows));
@@ -939,6 +942,7 @@ module.exports = {
   },
   rungOf,
   poolMap,
+  drawMap,
   statusOf,
   layoutUpdates,
   placeByStart,
