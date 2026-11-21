@@ -220,7 +220,7 @@ What has to happen before a run counts, in the order it bites:
    pair per flow interval: on a known 30 ms offset, intervals of 0.15 s gave 0.7 ms,
    0.3 s gave 4.5 ms, 0.5 s about 12 ms, against a 6 ms tolerance. A full-rate gyro helps
    at 0.3 s (1.3 ms) and not at 0.5 s, where the image side's sampling limits it. The
-   offset starts from the measured -11.3 ms and is bounded at 0.15 s. The half-exposure
+   offset starts from the measured -13.4 ms (flight mode, measured-bars 108) and is bounded at 0.15 s. The half-exposure
    term is 0 on the vehicle, because nothing sets flow's `exposure_us`. It is microseconds
    now, as at the camera; it was 100 us units under the same name, and the webcam source
    took microseconds as 100 us units too (a 4 ms ask gave a 400 ms shutter). Fixed.

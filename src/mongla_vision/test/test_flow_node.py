@@ -963,11 +963,14 @@ def test_a_sloping_floor_is_inside_the_published_sigma():
 
 
 def test_the_time_offset_starts_from_the_measured_value():
-    """It started at 0.0 -- 11 ms wrong on this vehicle until a fit arrived,
-    and a level transit may never supply one (2026-10-03 measurement)."""
+    """It started at 0.0 -- 13 ms wrong on this vehicle until a fit arrived,
+    and a level transit may never supply one (measured-bars 108). The value
+    itself is pinned to the ledger in test_shipped_constants_match_the_ledger."""
+    from mongla_vision.flow.flow_constants import FLOW_TD_MEASURED_S
+    assert FLOW_TD_MEASURED_S < -0.005, 'the measured offset is negative and not near zero'
     n = _make(pool_depth_m=4.0)
     try:
-        assert n._td == pytest.approx(-0.0113)
+        assert n._td == pytest.approx(FLOW_TD_MEASURED_S)
     finally:
         n.destroy_node()
 

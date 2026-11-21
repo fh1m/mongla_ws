@@ -267,7 +267,16 @@ def main():
                     help='project onto the lateral axis. NOT cosmetic: axial '
                          'takes vx, lateral takes vy, and a slide on the '
                          'wrong one reads ~0 by construction.')
+    ap.add_argument('--arm', action='append', default=[], metavar='NAME=GX,GY',
+                    help='replace the default arms: gains fitted on THIS mount '
+                         '(tools/bench/flow_derot_calibrate.py), one per arm')
     a = ap.parse_args()
+    if a.arm:
+        ARMS[:] = []
+        for spec in a.arm:
+            name, gains = spec.split('=', 1)
+            gx, gy = (float(v) for v in gains.split(','))
+            ARMS.append((name, {'gyro_gain_x': gx, 'gyro_gain_y': gy}))
 
     cal = running_param(a.node, 'calibration')
     if cal:

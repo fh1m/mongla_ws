@@ -170,6 +170,8 @@ is how `recommend()` happened.
 - [104. THE XFEAT ANCHOR costs each composed detector a third of its rate (2026-11-21)](#104-the-xfeat-anchor-costs-each-composed-detector-a-third-of-its-rate-2026-11-21)
 - [105. A TAB SWITCH IN THE DESKTOP APP blocked the page for seconds; Vulkan ends it (2026-11-21)](#105-a-tab-switch-in-the-desktop-app-blocked-the-page-for-seconds-vulkan-ends-it-2026-11-21)
 - [106. THE BOARD'S YAW AT REST drifts 0.001 deg/min over ten minutes (2026-11-22)](#106-the-boards-yaw-at-rest-drifts-0001-degmin-over-ten-minutes-2026-11-22)
+- [107. DE-ROTATION, FITTED ON A RIGID RIG: 98.5 % of a taped slide, against 63 % off (2026-11-22)](#107-de-rotation-fitted-on-a-rigid-rig-985--of-a-taped-slide-against-63--off-2026-11-22)
+- [108. THE CAMERA-TO-GYRO OFFSET IN THE FLIGHT MODE: td = -13.4 ms (2026-11-22)](#108-the-camera-to-gyro-offset-in-the-flight-mode-td---134-ms-2026-11-22)
 <!-- contents:end -->
 
 ---
@@ -9277,3 +9279,60 @@ minutes. That is not the heading error that remains in the AQUALOC replay (bead 
 75-177 deg), which comes from motion; the hand-yawed half against a heading truth
 decides it. Not checked here: drift under rotation, with thrusters' magnetic fields, or in
 water.
+
+## 107. DE-ROTATION, FITTED ON A RIGID RIG: 98.5 % of a taped slide, against 63 % off (2026-11-22)
+
+The SROT board (rev 14) on Kutum's USB with the Sonix downward camera taped rigidly to its
+back (image top away from the USB connector), held by hand 0.445 m (tape) over a floor in
+air. The board's gyro (`/mongla/imu_rates`, 50 Hz) against the camera at 640x360.
+
+**Method.** `tools/bench/flow_derot_calibrate.py` on a tilt about the lens, 30 s per axis,
+k-fold held-out slope. Then `tools/bench/flow_derot_ab.py --lateral` on three 30 cm slides
+along a ruler: every arm is a flow node on the same frames, so arms differ only by gain.
+Height is a stand-in (`pool_depth_m` 0.445 with depth 0: no barometer is fitted).
+
+**Bar, from the tool, before the slides:** a gain that fits better ships only if it reads
+nearer the tape than the shipped value on every slide.
+
+| fit | coupling S | gain | R2 | held-out rms | predicting zero |
+|---|---|---|---|---|---|
+| roll | +1.102 | -1.102 | 0.952 | 6.44 px | 29.43 px |
+| pitch | +1.024 | -1.024 | 0.823 | 14.83 px | 36.42 px |
+
+| arm, 30 cm truth | slide 1 | slide 2 | slide 3 | median | intervals used |
+|---|---|---|---|---|---|
+| shipped, gains 0 | 61.7 % | 75.6 % | 63.0 % | 63.0 % | 10-22 of 70-136 |
+| fitted, -1.102 / -1.024 | 96.4 % | 98.5 % | 99.6 % | 98.5 % | 44-47 of 113-168 |
+| old lens rig, +1.058 / +0.830 | 109.6 % | 108.2 % | 108.7 % | 108.7 % | 46-50 of 112-167 |
+
+**Result.** PASS on this rig: the fitted gains read nearest the tape on all three slides,
+with a spread (28.9-29.9 cm) far inside the arms' separation. Off, flow refuses most
+intervals as rotation-dominated and loses a third of the travel; the old rig's gains,
+opposite in sign, read 9 % long. The sign flip is the mount: S is a property of how the
+camera sits on the IMU (section 12 said so), so these numbers do not carry to the hull.
+The shipped default stays 0 until the hull's own fit passes this same A/B (bead po7.13).
+Not covered: water, the hull's pivot, slides along the other axis.
+
+## 108. THE CAMERA-TO-GYRO OFFSET IN THE FLIGHT MODE: td = -13.4 ms (2026-11-22)
+
+The rig of section 107 (Sonix downward camera taped to the SROT board, rev 14, on Kutum),
+twisted by hand about the optical axis at changing speed, 45 s per run, 0.445 m over the
+floor. `tools/bench/td_measure.py` correlates the image's planar-fit yaw against all three
+gyro axes; its `--self-test` recovered +23.0 / -11.0 / +4.0 ms injected offsets to within
+0.3 ms and refused a steady turn before the run.
+
+**Bar, from the tool, before the run:** every 15 s window at or above quality 0.5, and the
+windows within 2.0 ms of each other.
+
+| camera mode | td, whole run | quality | 15 s windows | spread | verdict |
+|---|---|---|---|---|---|
+| 1280x720 @ 60 (the tool's old fixed mode) | -11.43 ms | 0.77 | -11.90 / -10.87 | 1.03 ms | MEASURED |
+| **640x360 @ about 200 fps (the flight mode)** | **-13.38 ms** | 0.90 | -13.36 / -13.34 | 0.02 ms | **MEASURED** |
+
+**Result.** td = **-13.4 ms** in the flight mode, image yaw on gyro z with sign -, as on
+2026-10-03. The two modes differ by 2 ms, so the offset belongs to the camera mode and a
+value from another mode is not a substitute: the October entry (-11.3 ms, 1280x720,
+which did not clear its own bar) is replaced as the flow node's starting value
+(`FLOW_TD_MEASURED_S`). `td_measure.py` now records in the flight mode by default
+(`--mode`). 13.4 ms is nearly three frames at 210 fps, so it is fed, never ignored.
+Not covered: water, the hull's own mount, a change of the camera's exposure mode.
