@@ -1,0 +1,21 @@
+src/mongla_batighor/mongla_batighor/helm.py
+  s_4af8d6f83b24e8::t_4dbf6f6e5a273d 308-313
+src/mongla_batighor/test/test_helm_node.py
+  s_4af8d6f83b24e8::t_2459bc10637cb5 8,66-68,81-83,87,89,290-317
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "e21c194e0879b80d71197e2f37320bdd53afda8d",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
