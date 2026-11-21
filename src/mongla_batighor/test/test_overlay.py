@@ -389,8 +389,24 @@ def test_a_silent_detector_still_lets_the_picture_show_and_says_why():
     assert silence([], 10.0, 13.0) == pytest.approx(3.0)        # never answered
     assert silence([5.0, 20.0], 0.0, 20.0 + SILENT_S / 2) is None  # answering
     assert silence([5.0, 20.0], 0.0, 24.5) == pytest.approx(4.5)
-    lines = hud('forward', 'gate_sharks', (640, 480), [], None, silent_s=4.6)
+    lines = hud('forward', 'gate_sharks', (640, 480), [], None, silent_s=4.6, paused=True)
     assert len(lines) == 2                    # the flow line sits above two
-    assert lines[1] == 'detector silent 5 s: paused until a mission asks, or stopped'
+    assert lines[1] == 'detector paused 5 s: it runs when a mission asks'
     out = annotate(STAMP, size=(640, 480), hud=lines)
     assert [t.text for t in out.texts] == lines and not out.points
+
+
+def test_a_detector_silent_while_not_paused_is_an_alarm_not_a_pause():
+    """Marking a silent frame kept the picture, but it also made a detector
+    that died mid-mission look like a paused one, where the blank picture had
+    been the warning. The overlay knows the detector's `paused`; silent and
+    not paused (or no detector at all) is said in capitals, in red."""
+    from mongla_batighor.overlay import RED, hud, _color
+    stopped = hud('forward', 'm', (640, 480), [], None, silent_s=3.2, paused=False)
+    assert stopped[1] == 'DETECTOR SILENT 3 s, NOT paused: stopped or stalled'
+    unknown = hud('forward', 'm', (640, 480), [], None, silent_s=3.2, paused=None)
+    assert unknown[1] == 'NO DETECTOR publishes forward detections (3 s)'
+    out = annotate(STAMP, size=(640, 480), hud=stopped, alarm=True)
+    assert out.texts[1].text_color == _color(RED) and out.texts[0].text_color != _color(RED)
+    calm = annotate(STAMP, size=(640, 480), hud=stopped)
+    assert calm.texts[1].text_color != _color(RED)

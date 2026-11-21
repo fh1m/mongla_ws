@@ -219,18 +219,27 @@ def silence(arrivals, since, now):
     return gap if gap >= SILENT_S else None
 
 
-def hud(cam, model, size, arrivals, latency_s, silent_s=None):
+UNREAD = 'unread'
+
+
+def hud(cam, model, size, arrivals, latency_s, silent_s=None, paused=UNREAD):
     """What the camera and detector are doing, in two lines over the picture.
 
     `arrivals`: monotonic times the detector's last answers came (its rate);
     `latency_s`: from the frame's capture to its boxes reaching this node;
     `silent_s`: how long the detector has said nothing (`silence`), which
-    replaces the rate: a detector paused until a mission asks is silent, and
-    the picture must not look like a dead camera."""
+    replaces the rate, said by `paused`, the detector's own parameter: True
+    (paused until a mission asks: the picture must not look like a dead
+    camera), False (silent and not paused: stopped or stalled, an alarm),
+    None (no node publishes this camera's detections), or UNREAD."""
     shape = f'{size[0]}x{size[1]}' if size else '--'
     first = '  '.join(filter(None, (cam, model or 'no model named', shape)))
     if silent_s is not None:
-        return [first, f'detector silent {silent_s:.0f} s: paused until a mission asks, or stopped']
+        s = f'{silent_s:.0f} s'
+        return [first, {True: f'detector paused {s}: it runs when a mission asks',
+                        False: f'DETECTOR SILENT {s}, NOT paused: stopped or stalled',
+                        None: f'NO DETECTOR publishes {cam} detections ({s})'}.get(
+                            paused, f'DETECTOR SILENT {s}, its pause not yet read')]
     if len(arrivals) >= 2 and arrivals[-1] > arrivals[0]:
         rate = f'{(len(arrivals) - 1) / (arrivals[-1] - arrivals[0]):.0f} Hz'
     else:
@@ -245,7 +254,7 @@ def _corners(b):
 
 
 def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
-             contours=None, features=None, size=None, hud=()) -> ImageAnnotations:
+             contours=None, features=None, size=None, hud=(), alarm=False) -> ImageAnnotations:
     """One frame's annotations: everything the vision stack holds, each as itself.
 
     Nothing is left off; each thing says what it is. A detection is drawn in
@@ -254,7 +263,8 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     it this frame is grey and says `coasting` (the tracker predicting). A
     candidate below the floor is thin, with its class and score. The lock is
     drawn over all of them in its rung's colour. `hud`: lines of what the
-    camera and detector are doing, top left.
+    camera and detector are doing, bottom left; `alarm` draws the second (the
+    detector's) in red.
 
     Any layer may be None (its node is not running). Boxes are in the image's
     own pixels, which is what the detector publishes, so they land on the
@@ -266,7 +276,8 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     # Bottom left, under the labels a box near the top carries; top left
     # until the camera has said its size. Placed first so no label covers it.
     base = (size[1] - 8 - (len(hud) - 1) * (LABEL_PX + 6)) if size else LABEL_PX + 6
-    hud_texts = [labels.place([(8.0, base + k * (LABEL_PX + 6))], line, GLASS)
+    hud_texts = [labels.place([(8.0, base + k * (LABEL_PX + 6))], line,
+                              RED if alarm and k == 1 else GLASS)
                  for k, line in enumerate(hud)]
     dets = [_box(d) for d in (detections.detections if detections else [])]
     # `candidates` carries the detections too (detector_node); drawn again
@@ -602,7 +613,9 @@ WATCH_PERIOD_S = 0.5
 def main(args=None):
     import rclpy
     from rclpy.node import Node
-    from rclpy.qos import DurabilityPolicy, QoSProfile
+    from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_parameter_events
+    from rcl_interfaces.msg import ParameterEvent
+    from rcl_interfaces.srv import GetParameters
     from sensor_msgs.msg import CameraInfo
     from std_msgs.msg import String
     from vision_msgs.msg import Detection2DArray, VisionInfo
@@ -620,6 +633,12 @@ def main(args=None):
             cams = list(self.declare_parameter(
                 'cameras', ['forward', 'downward']).value or [])
             self.watched = []
+            # Each detector's own `paused`, by node: a silent detector that is
+            # paused waits for a mission, one that is not is an alarm. Learnt
+            # from its parameter events, and asked once when first needed.
+            self.paused, self.asked, self.whose, self.askers = {}, set(), {}, {}
+            self.create_subscription(ParameterEvent, '/parameter_events', self._on_params,
+                                     qos_profile_parameter_events)
             for cam in cams:
                 ns = f'/mongla/vision/{cam}'
                 latest = dict.fromkeys(LAYERS)
@@ -677,8 +696,10 @@ def main(args=None):
                         latest['since'] = now
                     quiet = silence(latest['arrivals'], latest['since'], now)
                     if quiet is not None:
+                        paused = self._paused(f'/mongla/vision/{cam}/detections')
                         pub.publish(annotate(msg.header.stamp, size=latest['size'], hud=hud(
-                            cam, latest['model'], latest['size'], (), None, silent_s=quiet)))
+                            cam, latest['model'], latest['size'], (), None, silent_s=quiet,
+                            paused=paused), alarm=paused is not True))
 
                 def keep(key, latest=latest):
                     return lambda msg: latest.__setitem__(key, msg)
@@ -745,6 +766,40 @@ def main(args=None):
             self.cams = cams
             self.stages_pub = self.create_publisher(String, '/mongla/batighor/stages', LATCHED)
             self.create_timer(STAGES_PERIOD_S, self._stages)
+
+        def _on_params(self, ev):
+            for p in (*ev.new_parameters, *ev.changed_parameters):
+                if p.name == 'paused':
+                    self.paused[ev.node] = p.value.bool_value
+
+        def _paused(self, topic):
+            """The `paused` of the node publishing `topic`: True, False, None
+            (nobody publishes it) or UNREAD while its answer is on its way."""
+            now = time.monotonic()
+            at, node = self.whose.get(topic, (0.0, None))
+            if now - at > 1.0:                # the graph, once a second at most
+                infos = self.get_publishers_info_by_topic(topic)
+                node = None if not infos else \
+                    f"{infos[0].node_namespace.rstrip('/')}/{infos[0].node_name}"
+                self.whose[topic] = (now, node)
+            if node is None:
+                return None
+            if node in self.paused:
+                return self.paused[node]
+            if node not in self.asked:
+                cli = self.askers.get(node) or self.askers.setdefault(
+                    node, self.create_client(GetParameters, f'{node}/get_parameters'))
+                if cli.service_is_ready():
+                    self.asked.add(node)
+
+                    def answered(fut, node=node):
+                        res = fut.result()
+                        if res is not None and res.values:
+                            self.paused.setdefault(node, res.values[0].bool_value)
+                        else:
+                            self.asked.discard(node)      # ask again next frame
+                    cli.call_async(GetParameters.Request(names=['paused'])).add_done_callback(answered)
+            return UNREAD
 
         def _stages(self):
             names = [n for n, _ in self.get_topic_names_and_types()]

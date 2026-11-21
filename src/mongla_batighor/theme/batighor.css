@@ -114,7 +114,7 @@ body{background:var(--mb-d0)!important}
 [data-testid="toolbar-tab"][title="Health"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M1%208.5h3l2-5%203%209%202-4h4%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Link"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%221.5%22%20y%3D%225.5%22%20width%3D%227%22%20height%3D%225%22%20rx%3D%222.5%22%2F%3E%3Crect%20x%3D%227.5%22%20y%3D%225.5%22%20width%3D%227%22%20height%3D%225%22%20rx%3D%222.5%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Chain"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%222.5%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%2213.5%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Cpath%20d%3D%22M4%208h2.5%20M9.5%208H12%22%2F%3E%3C%2Fsvg%3E")}
-[data-testid="toolbar-tab"][title="Bins"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M1.5%205h13%20M3%205v8.5h10V5%20M6%208h4%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Downward"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2.5%203.5h11%20M6%203.5v2h4v-2%20M8%205.5v5.5%20M5.5%209l2.5%202.5%202.5-2.5%20M1.5%2014h13%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Calibrate"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2212%22%20height%3D%2212%22%2F%3E%3Cpath%20d%3D%22M2%208h12M8%202v12%22%2F%3E%3Cpath%20d%3D%22M2%202h6v6H2z%20M8%208h6v6H8z%22%20fill%3D%22%23000%22%2F%3E%3C%2Fsvg%3E")}
 
 /* -- every panel ---------------------------------------------------------- */
@@ -125,7 +125,7 @@ body{background:var(--mb-d0)!important}
 /* What an instrument redraws, under any control built once above it. */
 .mb > .body{display:flex;flex-direction:column;gap:10px;flex:1 1 auto;min-height:0}
 /* A small window shrinks the panel, not the words an operator reads. */
-@container (max-width:280px){.mb .big{font-size:18px}.mb section{padding:8px}.mb .keys{grid-template-columns:repeat(auto-fit,minmax(72px,1fr))}}
+@container (max-width:280px){.mb .big{font-size:18px}.mb section{padding:8px}}
 .mb section{background:var(--mb-d2);border:1px solid var(--mb-rule);border-radius:4px;
   padding:10px 12px;display:flex;flex-direction:column;gap:8px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
@@ -183,7 +183,17 @@ body{background:var(--mb-d0)!important}
 .mb button.danger{background:var(--mb-red);border-color:var(--mb-red);color:var(--mb-d0);
   font-weight:700;font-size:13px;letter-spacing:.14em;padding:12px 10px}
 .mb button.danger:hover:not(:disabled){background:#ff4a38}
-.mb .keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px}
+/* The emergency keys: always one row of three, sized by the panel's width.
+   With auto-fit a narrow panel wrapped one key alone onto a second row and a
+   wide one stretched each into a 300 x 40 px bar (Cockpit, 2026-11-22). */
+.mb .keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(4px,1.2cqi,10px)}
+.mb .keys button.danger{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;min-height:clamp(34px,7cqi,52px);padding:clamp(4px,1cqi,8px) 4px}
+.mb .keys button.danger b{font-size:clamp(11px,2.2cqi,15px);letter-spacing:.14em}
+.mb .keys button.danger small{font-size:clamp(9px,1.4cqi,11px);font-weight:400;letter-spacing:.06em;
+  text-transform:none;opacity:.8}
+/* The log takes whatever height the panel has left. */
+.mb section.fill{flex:1 1 auto;min-height:96px}
 .mb input, .mb select{font-size:12px;color:var(--mb-ink);background:var(--mb-sunk);
   border:1px solid var(--mb-rule-lit);border-radius:3px;padding:5px 7px;min-width:0}
 .mb input[type=checkbox]{accent-color:var(--mb-red);width:14px;height:14px;padding:0}

@@ -2,6 +2,7 @@
 is one row there, and no hand-made layout drifts from it."""
 import json
 import re
+from pathlib import Path
 
 from mongla_batighor import views
 from mongla_batighor.seat import CAMERAS
@@ -107,7 +108,7 @@ def test_a_view_for_judging_boxes_shows_each_frame_with_its_own():
     """Boxes come ~2 frames after the picture; unsynced, a box trails a moving
     target. Synced, the picture stops with the detector, so never in the
     cockpit, where a live picture comes first."""
-    for name in ('vision', 'bins_downward'):
+    for name in ('vision', 'downward'):
         cams = [m for m in _images(name).values() if m['imageTopic'].endswith('stream/compressed')]
         assert cams and all(m.get('synchronize') for m in cams), name
     assert not any(m.get('synchronize') for m in _images('cockpit').values())
@@ -218,10 +219,10 @@ def test_everything_drawn_over_a_picture_or_in_the_scene_is_visible():
 
 def test_only_the_detection_views_make_a_picture_wait_for_its_boxes():
     """Synchronised, a picture is shown only with its boxes, so it froze
-    whenever the detector stopped. Vision and Bins are where a box must sit
+    whenever the detector stopped. Vision and Downward are where a box must sit
     on its own frame; everywhere else (the cockpit, the floor read, a
     calibration) a live picture comes first (views.camera)."""
-    synced = {'vision', 'bins_downward'}
+    synced = {'vision', 'downward'}
     seen = set()
     for name in views.VIEWS:
         for k, c in views.build(name)['configById'].items():
@@ -248,3 +249,63 @@ def test_the_3d_scene_draws_the_hull_not_frame_names():
         assert c['scene']['transforms']['showLabel'] is False, (name, k)
         assert c['layers']['hull']['visible'] is True, (name, k)
         assert c['followTf'] == 'mongla', (name, k)
+
+
+TAB_BODY_W_PX = 1884                  # the desktop app's window at scale 2, measured
+CAMERA_ASPECT = 4 / 3                 # every vehicle camera streams 640x480
+MOST_EMPTY = 0.30
+CONTROL_PX = 600                      # keys, helm, command, mission and a few log lines
+
+
+def _boxes(node, w, h, out):
+    if isinstance(node, str):
+        out[node] = (w, h)
+        return out
+    f = node['splitPercentage'] / 100
+    if node['direction'] == 'row':
+        _boxes(node['first'], w * f, h, out)
+        _boxes(node['second'], w * (1 - f), h, out)
+    else:
+        _boxes(node['first'], w, h * f, out)
+        _boxes(node['second'], w, h * (1 - f), out)
+    return out
+
+
+def test_a_camera_picture_fills_its_panel():
+    """The Cockpit's cameras sat in 1540 px wide panels showing a 4:3 picture
+    890 px wide: four tenths of the screen was black (2026-11-22). A camera
+    panel is sized to its picture; the calibration's cameras vary and are left
+    out."""
+    data = views.build(views.CONSOLE)
+    for tab in data['configById']['Tab!console']['tabs']:
+        if tab['title'] == 'Calibrate':
+            continue
+        for pid, (w, h) in _boxes(tab['layout'], TAB_BODY_W_PX, TAB_BODY_PX, {}).items():
+            if pid.startswith('Image!'):
+                h -= TITLE_PX
+                fit = min(w, h * CAMERA_ASPECT) * min(h, w / CAMERA_ASPECT)
+                empty = 1 - fit / (w * h)
+                assert empty <= MOST_EMPTY, (tab['title'], pid, round(w), round(h), round(empty, 2))
+
+
+def test_the_control_center_shows_every_key_without_scrolling():
+    """ARM and SEND were below the fold of a 320 px Control Center; a key that
+    needs a scroll first is not there when it is wanted."""
+    data = views.build(views.CONSOLE)
+    seen = 0
+    for tab in data['configById']['Tab!console']['tabs']:
+        for pid, (_, h) in _boxes(tab['layout'], TAB_BODY_W_PX, TAB_BODY_PX, {}).items():
+            if pid.startswith(views.PANEL + 'ControlCenter!'):
+                seen += 1
+                assert h - TITLE_PX >= CONTROL_PX, (tab['title'], pid, round(h))
+    assert seen
+
+
+def test_every_tab_carries_its_glyph():
+    """The theme keys each tab's glyph on its title: renamed from Bins to
+    Downward, the tab showed a blank square (desktop app, 2026-11-22)."""
+    css = (Path(views.__file__).resolve().parents[1] / 'theme' / 'batighor.css').read_text()
+    keyed = set(re.findall(r'\[data-testid="toolbar-tab"\]\[title="([^"]+)"\]\{--mb-glyph', css))
+    titles = {t for _, t in views.TABS}
+    assert titles <= keyed, titles - keyed
+    assert keyed <= titles, f'a glyph for no tab: {keyed - titles}'

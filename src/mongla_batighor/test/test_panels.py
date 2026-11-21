@@ -137,8 +137,8 @@ def test_the_main_layout_carries_the_control_center():
     layout = json.loads((PANELS.parent / 'layouts' / 'mongla_layout.json').read_text())
     assert 'mongla.batighor.ControlCenter!control' in layout['configById']
     assert 'mongla.batighor.ControlCenter!control' in json.dumps(layout['layout'])
-    assert 'registerPanel({ name: "ControlCenter"' in HELM_JS
-    assert 'setDefaultPanelTitle("Control Center")' in HELM_JS
+    assert re.search(r'^  ControlCenter: \[', HELM_JS, re.M) and 'registerPanel({ name, initPanel' in HELM_JS
+    assert 'ControlCenter: "Control Center"' in HELM_JS and 'setDefaultPanelTitle(TITLE[kind])' in HELM_JS
 
 
 def test_stop_surface_and_disarm_are_first_and_never_scroll_away():
@@ -237,7 +237,7 @@ def test_every_instrument_the_views_place_exists():
     """views.py names an instrument by its registered name; a typo there is a
     panel Lichtblick cannot find, drawn as an empty box."""
     from mongla_batighor import views
-    ours = set(_instruments()) | {'ControlCenter', 'Calibrate'}
+    ours = set(_instruments()) | {'ControlCenter', 'Detectors', 'Calibrate'}
     for name in views.VIEWS:
         for pid in views.build(name)['configById']:
             if pid.startswith(views.PANEL):

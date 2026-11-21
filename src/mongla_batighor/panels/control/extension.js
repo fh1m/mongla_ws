@@ -17,6 +17,9 @@ const STATE = "/mongla/batighor/helm_state";
 const LOG = "/mongla/batighor/log";
 const VEHICLE = "/mongla/state";
 const ANYONE = ["stop", "surface", "disarm"];
+// Under each key, what it does to the vehicle: three red keys alike in a
+// hurry are a guess. Words from mongla_control/commands.py, said shortly.
+const DOES = { stop: "hold here", surface: "go up, stay up", disarm: "motors off" };
 
 // The heartbeat belongs to this browser, not to one panel. Opening another
 // view unmounts the Control Center; a beat kept in the panel stopped with it,
@@ -34,8 +37,20 @@ function beat() {
 }
 setInterval(beat, 1000);
 
-function initPanel(context) {
-  if (typeof context.setDefaultPanelTitle === "function") context.setDefaultPanelTitle("Control Center");
+// Two panels from one: the Control Center drives the vehicle (the keys, the
+// helm, a verb, a mission, the log), and Detectors chooses the live camera
+// and tunes the detectors. As one panel it needed 1042 px and showed a
+// third of it, ARM and SEND below the fold (Cockpit, 2026-11-22).
+const PARTS = {
+  ControlCenter: ["safe", "helm", "command", "mission", "log"],
+  Detectors: ["detectors"],
+};
+
+const TITLE = { ControlCenter: "Control Center", Detectors: "Detectors" };
+
+function initPanel(context, kind = "ControlCenter") {
+  const parts = PARTS[kind];
+  if (typeof context.setDefaultPanelTitle === "function") context.setDefaultPanelTitle(TITLE[kind]);
   const box = mount(context);
 
   let helm = {};
@@ -85,7 +100,8 @@ function initPanel(context) {
 
   // -- one press for anyone -------------------------------------------
   const safe = ANYONE.map((v) =>
-    el("button", { class: "danger", onclick: () => call("command", { cmd: v }) }, v));
+    el("button", { class: "danger", onclick: () => call("command", { cmd: v }) },
+      el("b", {}, v), el("small", {}, DOES[v])));
 
   // -- arm, behind two ticks ------------------------------------------
   const tProps = el("input", { type: "checkbox" });
@@ -203,20 +219,39 @@ function initPanel(context) {
 
   // First and pinned: in a small window the helm above it pushed STOP below
   // the fold, and a key that needs a scroll is not one press.
-  const cSafe = card(box, "anyone, one press", null, "pinned");
-  cSafe.append(el("div", { class: "keys" }, ...safe), vehLine, msg);
-  const cHelm = card(box, "helm");
-  cHelm.append(el("div", { class: "row" }, name, pilotLine),
-    el("div", { class: "row" }, bRequest, bGive, bRelease));
-  const cVerb = card(box, "command", "pilot only");
-  cVerb.append(el("div", { class: "row" }, bArm, pick, bSend), help, fields);
-  const cMission = card(box, "mission");
-  cMission.append(el("div", { class: "row" }, mPick, bStart, bAbort));
-  const cDet = card(box, "detectors", tuneNote);
-  cDet.append(el("div", { class: "row" }, el("span", { class: "note" }, "live camera"), ...camButtons), tuneGrid);
-  const cLog = card(box, "log");
-  cLog.style.flex = "1";
-  cLog.append(log);
+  const has = (p) => parts.includes(p);
+  if (has("safe")) {
+    const cSafe = card(box, "anyone, one press", null, "pinned");
+    cSafe.append(el("div", { class: "keys" }, ...safe), vehLine);
+  }
+  if (has("helm")) {
+    const cHelm = card(box, "helm");
+    cHelm.append(el("div", { class: "row" }, name, pilotLine),
+      el("div", { class: "row" }, bRequest, bGive, bRelease));
+  } else {
+    // Settings take a name too: the same one, kept in this browser.
+    const cWho = card(box, "who");
+    cWho.append(el("div", { class: "row" }, name, pilotLine));
+  }
+  if (has("command")) {
+    const cVerb = card(box, "command", "pilot only");
+    cVerb.append(el("div", { class: "row" }, bArm, pick, bSend), help, fields);
+  }
+  if (has("mission")) {
+    const cMission = card(box, "mission");
+    cMission.append(el("div", { class: "row" }, mPick, bStart, bAbort));
+  }
+  if (has("detectors")) {
+    const cDet = card(box, "detectors", tuneNote);
+    cDet.append(el("div", { class: "row" }, el("span", { class: "note" }, "live camera"), ...camButtons), tuneGrid);
+  }
+  // Every answer the helm gives, wherever the press was made.
+  box.append(msg);
+  if (has("log")) {
+    const cLog = card(box, "log");
+    cLog.className += " fill";
+    cLog.append(log);
+  }
   box.append(armDlg);
   drawFields();
 
@@ -316,6 +351,8 @@ function initPanel(context) {
 
 module.exports = {
   activate(extensionContext) {
-    extensionContext.registerPanel({ name: "ControlCenter", initPanel });
+    for (const name of Object.keys(PARTS)) {
+      extensionContext.registerPanel({ name, initPanel: (context) => initPanel(context, name) });
+    }
   },
 };
