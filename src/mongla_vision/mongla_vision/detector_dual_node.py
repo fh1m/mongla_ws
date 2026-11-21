@@ -220,15 +220,12 @@ class _Launcher(Node):
         return out
 
     def overrides(self, cam: str, camera: str):
-        # `direct_feed`: frames arrive by reference from the camera in this
-        # process, so the detector must NOT also subscribe -- it would decode
-        # and infer the same picture twice, and the topic copy is the SLOWER
-        # of the two, so it would be the one acted on half the time.
-        # Under replay there IS no in-process camera, so the detector has to
-        # take the topic path it normally refuses -- `direct_feed` is exactly
-        # the switch between the two, and it must be False or the node will
-        # sit waiting for a frame_sink that nothing will ever call.
-        direct = not bool(self.get_parameter('replay').value)
+        # `direct_feed`: frames arrive by reference, from the camera in this
+        # process or, under replay, from `_ReplayFeed`, so the detector must
+        # NOT also subscribe -- it would decode and infer the same picture
+        # twice, and a second reader of the image costs every reader its
+        # rate (B-147).
+        direct = True
         out = [Parameter('camera', value=camera),
                Parameter('direct_feed', value=direct)]
         for key in _PER_CAMERA:
@@ -299,13 +296,54 @@ class _Tee:
                 o.submit_info(info)
 
 
+class _ReplayFeed:
+    """Under replay, the camera's place: one subscription per camera, decoded
+    once and handed to the same sink a live camera feeds.
+
+    Each consumer subscribing for itself put three readers of a 921 kB image
+    on this process's executor, and each one cut the rate the others saw:
+    measured on Kutum, three nodes in one process subscribed to the downward
+    image on a multi-threaded executor received 8.7 Hz each where one
+    received 21.7, and with the lock composed the replay detectors ran at
+    2.7 Hz forward and 0.4 Hz downward against 22.9 and 16.2 without it
+    (BUGS B-147). One reader per camera is also the live graph: the detector,
+    the lock and the flow see frames exactly as the camera hands them over.
+    """
+
+    def __init__(self, launcher, camera: str, sink):
+        from sensor_msgs.msg import CameraInfo, Image
+        from . import qos
+        self._sink = sink
+        self._bad = 0
+        self._log = launcher.get_logger()
+        ns = f'/mongla/vision/{camera}'
+        launcher.create_subscription(Image, f'{ns}/image_raw', self._on_image, qos.IMAGE)
+        if hasattr(sink, 'submit_info'):
+            # Volatile, as the lock subscribed before: a bag replays
+            # camera_info volatile, which a transient-local reader refuses.
+            launcher.create_subscription(CameraInfo, f'{ns}/camera_info',
+                                         sink.submit_info, 10)
+
+    def _on_image(self, msg) -> None:
+        from . import image_msg
+        try:
+            frame = image_msg.to_array(msg, 'bgr8')
+        except Exception as exc:                          # noqa: BLE001
+            self._bad += 1
+            if self._bad in (1, 10, 100) or self._bad % 1000 == 0:
+                self._log.error(f'[COMP ] replay frame {self._bad} undecodable '
+                                f'({msg.encoding!r}: {exc}): nothing downstream sees it')
+            return
+        self._sink.submit_frame(frame, msg.header)
+
+
 def _compose_lock(launcher, nodes: list, cam: str, camera: str,
                   direct: bool):
     """Build this camera's lock ladder in-process, when `lock` is set.
 
-    `direct`: frames and intrinsics arrive by reference from the camera in
-    this process (see `_Tee`), so the ladder subscribes to neither topic.
-    Under replay there is no camera here and it subscribes as usual.
+    `direct`: frames and intrinsics arrive by reference, from the camera in
+    this process or, under replay, from `_ReplayFeed` (see `_Tee`), so the
+    ladder subscribes to neither topic.
     """
     if not bool(launcher.get_parameter('lock').value):
         return None
@@ -325,8 +363,7 @@ def _compose_lock(launcher, nodes: list, cam: str, camera: str,
 def _compose_flow(launcher, nodes: list, camera: str, direct: bool):
     """Build optical flow in-process on the downward camera, when `flow` is set.
 
-    `direct` as for the lock: by reference from the camera here, or off the
-    topic under replay.
+    `direct` as for the lock.
     """
     if camera != 'downward' or not bool(launcher.get_parameter('flow').value):
         return None
@@ -394,13 +431,18 @@ def main():
                 # `ros2 bag play`, so this is a LIVE graph on RECORDED input:
                 # the detector, tracker, lock ladder and checkpoint bank all
                 # run exactly as they do on the vehicle.
+                lock = _compose_lock(launcher, nodes, cam, camera, direct=True)
+                flow = _compose_flow(launcher, nodes, camera, direct=True)
+                extra = [n for n in (lock, flow) if n is not None]
+                _ReplayFeed(launcher, camera, _Tee(det, *extra) if extra else det)
+                det.attach_camera()
                 nodes.append(det)
                 live.append(camera)
                 launcher.get_logger().info(
-                    f'[COMP ] {camera}: REPLAY -- no camera; consuming '
-                    f'/mongla/vision/{camera}/image_raw from a bag.')
-                _compose_lock(launcher, nodes, cam, camera, direct=False)
-                _compose_flow(launcher, nodes, camera, direct=False)
+                    f'[COMP ] {camera}: REPLAY -- no camera; one reader of '
+                    f'/mongla/vision/{camera}/image_raw feeds the detector'
+                    + (', lock' if lock else '') + (' and flow' if flow else '')
+                    + ' by reference.')
                 continue
             # The lock BEFORE the camera, so the camera's first frame already
             # has both consumers to go to.
