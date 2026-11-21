@@ -267,6 +267,7 @@ class SrotTelemetry:
         ring = self._battery_steps.setdefault(
             bid, collections.deque(maxlen=sp.BATTERY_STEP_WINDOW))
         ring.append(abs(voltage - prev))
+        self.battery_trusted(bid)       # judge every sample, so the latch sees each jump
 
     def battery_trusted(self, bid: int) -> bool:
         """Is this instance reporting a battery, or an unwired pin?
@@ -309,7 +310,17 @@ class SrotTelemetry:
         # jumping to 1.39 V and back). A pack never jumps the bar; one glitch
         # jumps it twice (out and back), so a third jump in the window is a pin.
         jumps = sum(1 for s in ring if s > sp.BATTERY_MAX_STEP_V)
-        return mid <= sp.BATTERY_MAX_STEP_V and jumps < sp.BATTERY_MAX_JUMPS
+        # Latched: the pin's quiet spells (1.39 V held for seconds) leave too
+        # few jumps in the window and it read as a battery again. A condemned
+        # line is released only by a whole window with no jump at all.
+        condemned = getattr(self, '_battery_condemned', None)
+        if condemned is None:
+            condemned = self._battery_condemned = set()
+        if mid > sp.BATTERY_MAX_STEP_V or jumps >= sp.BATTERY_MAX_JUMPS:
+            condemned.add(bid)
+        elif jumps == 0 and len(ring) == ring.maxlen:
+            condemned.discard(bid)
+        return bid not in condemned
 
     def _baro_healthy(self):
         """True / False / None (never reported) from SYS_STATUS's health bitfield.
