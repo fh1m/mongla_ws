@@ -10,5 +10,4 @@ bool   armed
 string mode              # flight mode name -- STABILIZE/ACRO/DEPTH_HOLD/SURFACE/MANUAL/AUTO (+ tuning modes), or '' if unknown
 float32 yaw_deg          # NaN when no AHRS sample
 float32 depth_m          # negative below surface; NaN when no AHRS sample
-float32 battery_voltage  # PM1, the electronics rail; NaN when absent or a floating pin
-float32 thruster_voltage # PM2, the thruster pack (over ESP-NOW from the 2nd board); NaN when absent
+float32 battery_voltage  # NaN when no BATTERY_STATUS sample

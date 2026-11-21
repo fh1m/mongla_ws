@@ -72,7 +72,6 @@ class TelemetryMixin:
         msg.yaw_deg         = float(yaw_deg) if yaw_deg is not None else math.nan
         msg.depth_m         = float(attitude['depth'])
         msg.battery_voltage = self._fast_batt_v
-        msg.thruster_voltage = self._fast_thr_v
         self.state_publisher.publish(msg)
 
     def _publish_demand(self):
@@ -333,7 +332,6 @@ class TelemetryMixin:
         self._fast_armed  = bool(armed)
         self._fast_mode   = mode or ''
         self._fast_batt_v = float(battery['voltage']) if battery else math.nan
-        self._fast_thr_v  = _thruster_v(self.fc)
 
         # A claim that was never confirmed by execute_callback is a leak, and a
         # leaked gate rejects every later verb in silence. Clear it and say so.
@@ -634,5 +632,12 @@ class TelemetryMixin:
         msg.yaw_deg         = float(yaw_deg) if yaw_deg is not None else math.nan
         msg.depth_m         = float(attitude['depth'])  if attitude else math.nan
         msg.battery_voltage = float(battery['voltage']) if battery  else math.nan
-        msg.thruster_voltage = _thruster_v(self.fc)
         self.state_publisher.publish(msg)
+        from sensor_msgs.msg import BatteryState
+        pack = BatteryState()
+        pack.header = msg.header
+        pack.voltage = _thruster_v(self.fc)
+        pack.current = pack.charge = pack.capacity = pack.design_capacity = math.nan
+        pack.percentage = pack.temperature = math.nan
+        pack.present = math.isfinite(pack.voltage)
+        self.thruster_pack_publisher.publish(pack)

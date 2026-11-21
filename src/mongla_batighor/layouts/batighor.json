@@ -699,7 +699,7 @@
     "Plot!thrust.power": {
       "paths": [
         {
-          "value": "/mongla/state.thruster_voltage",
+          "value": "/mongla/thruster_pack.voltage",
           "label": "thrusters V",
           "enabled": true
         }
@@ -757,7 +757,7 @@
     "Plot!board_health.battery": {
       "paths": [
         {
-          "value": "/mongla/state.thruster_voltage",
+          "value": "/mongla/thruster_pack.voltage",
           "label": "thrusters V",
           "enabled": true
         },
