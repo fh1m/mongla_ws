@@ -114,7 +114,9 @@ def raw(topic: str) -> tuple:
 def scene() -> tuple:
     """Lichtblick's 3D panel, following the vehicle in the odometry frame."""
     return '3D', {'followTf': 'mongla', 'followMode': 'follow-position',
-                  'topics': {'/mongla/odom': {'visible': True}},
+                  # The odometry, and the demand as an arrow on the hull (overlay.py).
+                  'topics': {'/mongla/odom': {'visible': True},
+                             '/mongla/batighor/scene': {'visible': True}},
                   # The hull says where the body is; seven frame names drawn
                   # on one point say nothing. Preloading acts on a recording
                   # only, and the panel alerts without it once /tf exists.

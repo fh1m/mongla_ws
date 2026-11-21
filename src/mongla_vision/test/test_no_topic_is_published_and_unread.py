@@ -88,6 +88,18 @@ PUBLISHED_UNREAD = {
         'for a human: each chain stage\'s rate and age, from '
         'mongla_batighor/chain.py twice a second; the Chain instrument '
         '(panels/instruments/extension.js) draws it.',
+    '/mongla/mission/source':
+        'for a human: the running mission\'s file, latched by the runner '
+        '(mongla_planner/mission.py, MissionText); the MissionText instrument '
+        '(panels/instruments/extension.js) shows it in Batighor\'s mission view.',
+    '/mongla/mission/line':
+        'for a human: the line of the mission\'s file that sent each verb, '
+        'latched by the runner (mission.py, MissionText); the MissionText '
+        'instrument marks it.',
+    '/mongla/batighor/scene':
+        'for a human: the demand as an arrow on the hull, from '
+        'mongla_batighor/overlay.py (demand_scene), built only while someone '
+        'watches; Lichtblick\'s 3D panel draws it (views.py, scene()).',
     '/mongla/localization/aiding':
         'a DIAGNOSTIC of which aiding sources the filter accepted. Read in a '
         'bag after a run, never in the loop.',
