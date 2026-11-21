@@ -18,6 +18,10 @@ metres a second at full demand, along the board's heading from `/mongla/state`.
 That is kinematics, not a vehicle: no drag, no inertia, no drift. Every state
 it publishes says `aided (emulated)`, so no screen can take it for the filter.
 
+Beside a running filter it refuses, at start and whenever one appears: two
+publishers on the filter's topics drew the vehicle anchored at the origin and
+13 m away by turns, five seconds apart (2026-11-21).
+
     python3 tools/bench/emulate_localization.py --self-test
 """
 from __future__ import annotations
@@ -28,6 +32,15 @@ import sys
 import time
 
 AIDING = 'aided (emulated)'
+TOPICS = ('/mongla/localization/state', '/mongla/odom')
+
+
+def rivals(node) -> list:
+    """`node on topic` for every other node publishing the filter's topics."""
+    me = node.get_name()
+    return [f'{i.node_name} on {t}'
+            for t in TOPICS for i in node.get_publishers_info_by_topic(t)
+            if i.node_name != me]
 
 
 def step(x, y, yaw_deg, surge, sway, speed, dt):
@@ -76,6 +89,14 @@ def run(a) -> int:
 
     rclpy.init()
     node = Node('emulated_localization')
+    end = time.monotonic() + 2.0              # let discovery see a filter already up
+    while time.monotonic() < end and not rivals(node):
+        rclpy.spin_once(node, timeout_sec=0.1)
+    if rivals(node):
+        print('ERROR: the filter is publishing (' + ', '.join(rivals(node)) + '); start '
+              'bringup with localization:=false, or stop it, then run this again',
+              file=sys.stderr)
+        return 1
     pub_state = node.create_publisher(LocalizationState, '/mongla/localization/state', 10)
     pub_odom = node.create_publisher(Odometry, '/mongla/odom', 10)
     tf = TransformBroadcaster(node)
@@ -94,6 +115,11 @@ def run(a) -> int:
     node.create_subscription(MonglaState, '/mongla/state', on_state, 10)
 
     def tick():
+        if st.get('n', 0) % int(a.rate) == 0 and rivals(node):
+            print('ERROR: a filter started publishing (' + ', '.join(rivals(node))
+                  + '); stopping', file=sys.stderr, flush=True)
+            raise SystemExit(1)
+        st['n'] = st.get('n', 0) + 1
         now = time.monotonic()
         st['x'], st['y'] = step(st['x'], st['y'], st['yaw'], st['surge'], st['sway'],
                                 a.speed, now - st['t'])
@@ -130,6 +156,8 @@ def run(a) -> int:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except SystemExit as exc:
+        return int(exc.code or 1)
     return 0
 
 
