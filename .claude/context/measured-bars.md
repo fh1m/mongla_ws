@@ -166,6 +166,7 @@ is how `recommend()` happened.
 - [100. HEIGHT FROM A DEPTH CHANGE: passes a flat synthetic floor, fails real water (2026-11-21)](#100-height-from-a-depth-change-passes-a-flat-synthetic-floor-fails-real-water-2026-11-21)
 - [101. THE TILE GRATING WITH A LANE LINE IN VIEW: fixed on rendered truth, unproven on real footage (2026-11-21)](#101-the-tile-grating-with-a-lane-line-in-view-fixed-on-rendered-truth-unproven-on-real-footage-2026-11-21)
 - [102. ONE TEAM HELD OUT: yolov8n stays, the held-out drop is inconclusive (2026-11-21)](#102-one-team-held-out-yolov8n-stays-the-held-out-drop-is-inconclusive-2026-11-21)
+- [103. BRIDGE COMPRESSION: off buys no latency, so it stays on (2026-11-21)](#103-bridge-compression-off-buys-no-latency-so-it-stays-on-2026-11-21)
 <!-- contents:end -->
 
 ---
@@ -9169,4 +9170,25 @@ if within 0.01, inconclusive between; yolo11n replaces yolov8n only at +0.02 hel
 **Result.** Family: FAIL for yolo11n (-0.010 against +0.02); yolov8n stays. Premise: yolov8n
 0.040 inconclusive, yolo11n 0.053 confirmed, so inconclusive as a whole. One seed; a 0.01
 difference is inside what a second seed could move.
+
+## 103. BRIDGE COMPRESSION: off buys no latency, so it stays on (2026-11-21)
+
+Kutum's bench (replay, the forward clip at 30 fps), the dev box over Tailscale. Two
+foxglove_bridge instances on Kutum side by side, one with `use_compression` on (8765, the
+shipped one), one with it off (8766); a websocket client on the dev box subscribed to
+`/mongla/vision/forward/stream/compressed` on both at once, for 15 s, and took receive time
+minus the frame's header stamp. Both share the clock offset, so their difference is real.
+
+**Bar, written before the run:** turn compression off only if that lowers the median by 5 ms
+or the p95 by 10 ms, with no loss of rate.
+
+| run | compressed median | other bridge median | p95, both |
+|---|---|---|---|
+| A/A (both compressed) | 17.5 ms | 21.9 ms | -- |
+| A/B 1 (8766 uncompressed) | 19.3 ms | 16.9 ms | about 22 ms |
+| A/B 2 | 19.2 ms | 17.8 ms | about 22 ms |
+
+**Result.** FAIL for turning it off: the gain is 1.4 to 2.4 ms against a 4.4 ms difference
+between two identical bridges, and the p95 does not move. Compression stays on
+(`batighor.launch.py`); it is the tether's bandwidth it saves, which a slower link needs.
 

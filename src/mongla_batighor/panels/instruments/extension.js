@@ -128,6 +128,10 @@ function placeByStart(p, start) {
 // ({x, y}, a fix with {fx, fy} also: where the filter was when it took it).
 // `opts.vel`: [{vx, vy, ink}] pool-frame m/s, drawn as two-second arrows.
 // Exported for the test.
+// A label's dark halo, so a wall, a grid line or another mark crossing it
+// does not cut the words.
+const HALO = (u) => ({ stroke: "var(--mb-d0)", "stroke-width": 2.5 * u, "paint-order": "stroke", "stroke-linejoin": "round" });
+
 function poolMap(course, pose, track, fixes, target, opts) {
   const C = course || {}, P = C.pool || {}, O = opts || {};
   const props = C.props || [];
@@ -155,9 +159,11 @@ function poolMap(course, pose, track, fixes, target, opts) {
   }
   for (const [x, y, d] of P.floor || []) {
     kids.push(svg("circle", { cx: y, cy: -x, r: 2 * u, fill: "var(--mb-teal)" }));
-    kids.push(svg("text", { x: y + 4 * u, y: -x + 3 * u, "font-size": 8 * u, fill: "var(--mb-teal)" }, `${num(d, 2)} m`));
+    // Left of the dot: prop names are written to the right of theirs, and a
+    // sounding beside a prop read as one label (bench course, 2026-11-21).
+    kids.push(svg("text", { x: y - 4 * u, y: -x + 3 * u, "font-size": 8 * u, fill: "var(--mb-teal)", "text-anchor": "end", ...HALO(u) }, `${num(d, 2)} m`));
   }
-  const text = (x, y, s, fill, anchor) => svg("text", { x, y, "font-size": 9 * u, fill, "text-anchor": anchor || "start" }, s);
+  const text = (x, y, s, fill, anchor) => svg("text", { x, y, "font-size": 9 * u, fill, "text-anchor": anchor || "start", ...HALO(u) }, s);
   for (const p of props) {
     const ink = p.measured ? "var(--mb-ink)" : "var(--mb-amber)";
     const dash = p.measured ? "" : `${3 * u},${2 * u}`;
@@ -261,7 +267,7 @@ function mapPose(s) {
 
 function drawMap(s, forLocalization) {
   const c = s.course, loc = s.loc;
-  if (!c) return [el("div", { class: "note" }, "no /mongla/batighor/course: is Batighor's course node running (batighor:=true)?")];
+  if (!c) return [el("div", { class: "note" }, "waiting for /mongla/batighor/course (latched; it comes a few seconds after connecting). Still empty: is Batighor's course node running (batighor:=true)?")];
   const now = s.doing && s.doing.now;
   const f = now && now.verb === "go_to" ? now.fields || {} : null;
   const target = f && fin(f.x_m) && fin(f.y_m) ? { x: f.x_m, y: f.y_m, tol: f.tolerance_m } : null;
@@ -358,7 +364,83 @@ function foldDiagnostics(s, m) {
 
 // -- the table -----------------------------------------------------------
 
+// The status strip's cells and the console's tab marks, from one fold. Pure:
+// exported for the test. A level is "" (nothing to say), "ok", "live" (it is
+// happening: armed, a mission running, a lock held), "warn" or "err".
+function statusOf(s, now) {
+  const age = (t) => (t ? (now - t) / 1000 : Infinity);
+  const v = s.v, cells = [], tabs = {};
+  const fresh = v && age(s.vAt) < 2;
+  cells.push(["vehicle", !v ? "--" : v.armed ? "ARMED" : "disarmed", !fresh ? "stale" : v.armed ? "armed" : "ok"]);
+  cells.push(["mode", v ? v.mode || "--" : "--", ""]);
+  cells.push(["depth", v && fin(v.depth_m) ? `${num(-v.depth_m, 2)} m` : "--", ""]);
+  cells.push(["heading", v ? `${num(v.yaw_deg, 0)} deg` : "--", ""]);
+  cells.push(["battery", v ? `${num(v.battery_voltage, 1)} V` : "--", ""]);
+  const running = age(s.aliveAt) < MISSION_ALIVE_S;
+  const task = s.task && running ? ` / ${s.task.task || s.task.name || ""}` : "";
+  cells.push(["mission", running ? `${s.missionName || "running"}${task}` : "none", running ? "live" : ""]);
+  const doing = s.doing && s.doing.now;
+  cells.push(["verb", doing ? doing.verb : "idle", doing ? "live" : ""]);
+  const rungs = CAMERAS.map((c) => [c, s.locks && age(s.locks[c] && s.locks[c].at) < 2 ? rungOf(s.locks[c].m).rung : null]);
+  const held = rungs.filter(([, r]) => r && r !== "lost");
+  cells.push(["lock", held.length ? held.map(([c, r]) => `${c} ${r}`).join("  ") : rungs.every(([, r]) => r) ? "lost" : "--", held.length ? "live" : ""]);
+  const loc = s.loc && age(s.locAt) < 2 ? s.loc : null;
+  const anchored = loc && loc.anchored && loc.frame === "pool";
+  cells.push(["navigation", !loc ? "--" : anchored ? `anchored  ${num(loc.sigma_xy_m, 2)} m` : loc.usable ? `${loc.aiding || "aided"}` : `unusable`, !loc ? "stale" : anchored ? "ok" : loc.usable ? "" : "warn"]);
+  // ROS levels: 0 ok, 1 warn, 2 error, 3 stale. A row with no data is
+  // unknown, never a fault: the bench has no barometer, not a broken one.
+  const rows = s.health || [];
+  const count = (lvl) => rows.filter((r) => r.level === lvl).length;
+  const [errs, warns, unknown] = [count(2), count(1), count(3)];
+  const said = [errs && `${errs} error${errs > 1 ? "s" : ""}`, warns && `${warns} warning${warns > 1 ? "s" : ""}`,
+    unknown && `${unknown} unknown`].filter(Boolean).join("  ");
+  const worst = !rows.length ? -1 : errs ? 2 : warns ? 1 : unknown ? 3 : 0;
+  cells.push(["health", worst < 0 ? "--" : said || "all ok", worst < 0 ? "stale" : LEVEL[worst]]);
+  const l = s.link && age(s.linkAt) < 3 ? s.link : null;
+  cells.push(["link", l ? `${num(100 * l.bytes_per_s / (l.capacity_bytes_per_s || NaN), 0)} %  drops ${num(l.board_drop_pct, 1)} %` : "--", !l ? "stale" : l.board_drop_pct > 1 ? "warn" : "ok"]);
+  tabs.Cockpit = v && v.armed ? "live" : "";
+  tabs.Thrust = v && v.armed ? "live" : "";
+  tabs.Mission = running ? "live" : "";
+  tabs.Vision = held.length ? "live" : "";
+  tabs.Map = tabs.Localization = !loc ? "" : anchored ? "ok" : loc.usable ? "" : "warn";
+  tabs.Health = worst < 0 ? "" : LEVEL[Math.min(worst, 3)] === "ok" ? "ok" : LEVEL[Math.min(worst, 3)];
+  tabs.Link = !l ? "" : l.board_drop_pct > 1 ? "warn" : "";
+  return { cells, tabs };
+}
+
 const INSTRUMENTS = {
+  // The strip above the console's tabs: what an operator must never have to
+  // look for, on every tab, and a mark on each tab whose subject needs an eye.
+  Status: {
+    title: "Status",
+    kind: "status",
+    topics: ["/mongla/state", "/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics",
+      "/mongla/localization/state", "/mongla/board_link", ...CAMERAS.map(lockTopic)],
+    fold(s, topic, m) {
+      if (topic === "/mongla/state") { s.v = m; s.vAt = Date.now(); }
+      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = Date.now(); }
+      else if (topic === "/mongla/mission/task") { try { s.task = JSON.parse(m.data); } catch { /* keep */ } }
+      else if (topic === "/mongla/doing") { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
+      else if (topic === "/diagnostics") foldDiagnostics(s, m);
+      else if (topic === "/mongla/localization/state") { s.loc = m; s.locAt = Date.now(); }
+      else if (topic === "/mongla/board_link") { s.link = m; s.linkAt = Date.now(); }
+      else {
+        const c = CAMERAS.find((x) => topic === lockTopic(x));
+        if (c) { s.locks = s.locks || {}; s.locks[c] = { m, at: Date.now() }; }
+      }
+    },
+    draw(s) {
+      const { cells, tabs } = statusOf(s, Date.now());
+      if (typeof document !== "undefined" && document.querySelectorAll) {
+        for (const tab of document.querySelectorAll('[data-testid="toolbar-tab"]')) {
+          const lvl = tabs[tab.getAttribute("title")] || "";
+          if (tab.dataset.mb !== lvl) tab.dataset.mb = lvl;
+        }
+      }
+      return cells.map(([k, val, lvl]) => el("div", { class: `cell ${lvl}` }, el("small", {}, k), el("b", {}, val)));
+    },
+  },
+
   Vehicle: {
     title: "Vehicle",
     topics: ["/mongla/state", "/mongla/batighor/helm_state", "/mongla/flare_order", "/mongla/mission_alive"],
@@ -647,7 +729,7 @@ const INSTRUMENTS = {
 function makePanel(spec) {
   return (context) => {
     if (typeof context.setDefaultPanelTitle === "function") context.setDefaultPanelTitle(spec.title);
-    const root = mount(context);
+    const root = mount(context, spec.kind);
     const s = {};
     let dirty = true;
     // A control built once (spec.head): a redrawn button can lose its click.
@@ -678,14 +760,115 @@ function makePanel(spec) {
   };
 }
 
+// -- the desktop app's layouts, kept in step with Kutum's --------------------
+// The desktop app imports a layout file once and keeps its own copy in
+// IndexedDB (`lichtblick-layouts`, keyed by the file it came from), so a view
+// changed on Kutum never reached it. This runs once per app start, in the
+// app's own page: each copy that came from one of Kutum's files and that the
+// operator has not edited (`working` empty) takes Kutum's version; an edited
+// one is left as the operator made it. The browser reads Kutum's copy anyway.
+
+// Pure: which stored records to replace with which served data, and which are
+// held back because the operator edited them. `served` is {name: data}.
+// Exported for the test.
+// Did the operator change anything the layout file says? Every value the
+// baseline holds must still be in the working copy. Keys the working copy
+// adds are not edits: the app writes its defaults (cameraState, publish,
+// showXAxisLabels...) into a panel's config when the panel first mounts,
+// and choosing a tab writes the Tab panel's activeTabIdx. Counting either as
+// an edit kept the console from ever taking Kutum's layout again.
+function said(base, work) {
+  if (Array.isArray(base) || base === null || typeof base !== "object") return JSON.stringify(base) === JSON.stringify(work);
+  if (work === null || typeof work !== "object" || Array.isArray(work)) return false;
+  return Object.keys(base).every((k) => said(base[k], work[k]));
+}
+
+function unedited(base, work) {
+  const cfg = (d) => (d && d.configById) || {};
+  const { configById: bc, ...bRest } = base || {}, { configById: wc, ...wRest } = work || {};
+  if (!said(bRest, wRest)) return false;
+  return Object.entries(cfg(base)).every(([id, c]) => {
+    if (!(id in cfg(work))) return false;
+    if (id.startsWith("Tab!") && c) { const { activeTabIdx, ...rest } = c; return said(rest, cfg(work)[id]); }
+    return said(c, cfg(work)[id]);
+  });
+}
+
+function layoutUpdates(records, served, now) {
+  const update = [], edited = [];
+  for (const r of records) {
+    const L = r && r.layout;
+    const name = L && typeof L.from === "string" ? L.from.replace(/\.json$/, "") : null;
+    if (!name || !(name in served)) continue;
+    if (JSON.stringify(L.baseline && L.baseline.data) === JSON.stringify(served[name])) continue;
+    let data = served[name];
+    if (L.working) {
+      const old = L.baseline && L.baseline.data;
+      if (!unedited(old, L.working.data)) { edited.push(name); continue; }
+      // Kutum's layout, with what the app added kept beneath it: its
+      // defaults, any setting made in a key the file never wrote, and the
+      // tab that was open.
+      const was = (L.working.data && L.working.data.configById) || {};
+      const oldCfg = (old && old.configById) || {};
+      const cfg = { ...(data.configById || {}) };
+      for (const id of Object.keys(cfg)) {
+        const w = was[id];
+        if (!w || typeof w !== "object") continue;
+        const added = Object.fromEntries(Object.entries(w).filter(([k]) => !(k in (oldCfg[id] || {}))));
+        cfg[id] = { ...added, ...cfg[id] };
+        if (id.startsWith("Tab!") && Number.isInteger(w.activeTabIdx) && w.activeTabIdx < (cfg[id].tabs || []).length) cfg[id].activeTabIdx = w.activeTabIdx;
+      }
+      data = { ...data, configById: cfg };
+    }
+    update.push({ ...r, layout: { ...L, baseline: { data, savedAt: now }, working: undefined } });
+  }
+  return { update, edited };
+}
+
+const idb = (req) => new Promise((ok, no) => { req.onsuccess = () => ok(req.result); req.onerror = () => no(req.error); });
+
+async function syncLayouts() {
+  if (typeof location === "undefined" || location.protocol !== "file:" || typeof indexedDB === "undefined") return;
+  const KEY = "mongla.batighor.layoutSync";
+  // Kutum is whoever the app last connected to; Batighor serves on 8000 there.
+  const recents = await idb(indexedDB.open("lichtblick-recents"));
+  const list = (await idb(recents.transaction("recents").objectStore("recents").getAll())).flat();
+  recents.close();
+  const url = list.map((x) => x && x.extra && x.extra.url).find((u) => typeof u === "string" && u.startsWith("ws"));
+  if (!url) return;
+  const base = `http://${new URL(url).hostname}:8000/layouts/`;
+  const names = await (await fetch(base + "index.json", { cache: "no-store" })).json();
+  const served = {};
+  for (const n of names) served[n] = await (await fetch(`${base}${encodeURIComponent(n)}.json`, { cache: "no-store" })).json();
+  const db = await idb(indexedDB.open("lichtblick-layouts"));
+  const store = () => db.transaction("layouts", "readwrite").objectStore("layouts");
+  const { update, edited } = layoutUpdates(await idb(store().getAll()), served, new Date().toISOString());
+  for (const r of update) await idb(store().put(r));
+  db.close();
+  if (edited.length) console.warn(`[batighor] kept your edits to ${edited.join(", ")}; Revert in the layout's menu takes Kutum's`);
+  if (!update.length) { try { sessionStorage.removeItem(KEY); } catch { /* none */ } return; }
+  console.info(`[batighor] ${update.length} layout(s) taken from Kutum: ${update.map((r) => r.layout.name).join(", ")}`);
+  // The app read the old copies before this ran: one reload shows the new ones.
+  // Guarded, so a copy the app rewrites cannot reload it forever.
+  const mark = update.map((r) => r.layout.name).join(",");
+  try {
+    if (sessionStorage.getItem(KEY) === mark) return;
+    sessionStorage.setItem(KEY, mark);
+  } catch { return; }
+  location.reload();
+}
+
 module.exports = {
   activate(extensionContext) {
+    syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {
       extensionContext.registerPanel({ name, initPanel: makePanel(spec) });
     }
   },
   rungOf,
   poolMap,
+  statusOf,
+  layoutUpdates,
   placeByStart,
   INSTRUMENTS,
 };

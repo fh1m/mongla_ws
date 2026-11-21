@@ -48,8 +48,11 @@ LABEL_CHARS = 13
 TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'anchor (XFeat)',
           'align': 'pixel error', 'ladder': 'lock ladder', 'calibration': 'velocity scale',
           'quality': 'flow quality and heights', 'vel': 'velocity',
-          'floor': 'heights (depth negative down)', 'power': 'battery', 'rates': 'body rates',
-          'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops'}
+          'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates',
+          'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops',
+          'forward': 'forward camera', 'downward': 'downward camera', 'hull': 'attitude',
+          'nav': 'odometry, 3D', 'down': 'downward camera', 'dets': 'downward detections',
+          'camera': 'calibration camera', 'locmap': 'localization map'}
 # The last minute, following the newest sample. Unset, the axis spans the whole
 # connection, and a panel opened later drew its data in the right-hand sliver
 # (desktop app, 2026-11-12).
@@ -139,20 +142,23 @@ def instrument(name: str) -> tuple:
 # -- where it goes ----------------------------------------------------------
 
 class View:
-    """A layout under construction: panels by id, and the tree that places them."""
+    """A layout under construction: panels by id, and the tree that places them.
 
-    def __init__(self):
+    `prefix` keeps ids apart when several views share one layout (the console's
+    tabs): Lichtblick keys every panel's settings by id, layout-wide."""
+
+    def __init__(self, prefix: str = ''):
         self.config: dict = {}
+        self.prefix = prefix
 
     def __call__(self, name: str, panel: tuple) -> str:
         kind, cfg = panel
-        pid = f'{kind}!{name}'
+        pid = f'{kind}!{self.prefix}{name}'
         assert pid not in self.config, pid
-        if kind in ('Plot', 'StateTransitions'):
-            # Untitled, every one read "Plot", and the legend had to say what
-            # the plot was: "forward authority" cut to "forward author". The
-            # key is Lichtblick's own: Foxglove's `foxglovePanelTitle` is
-            # ignored by this build (read off its bundle, 2026-11-18).
+        if not kind.startswith(PANEL):
+            # Untitled, every plot read "Plot" and every camera its topic path.
+            # Ours title themselves. The key is Lichtblick's own: Foxglove's
+            # `foxglovePanelTitle` is ignored by this build (its bundle, 2026-11-18).
             cfg = {**cfg, 'lichtblickPanelTitle': TITLES.get(name, name.replace('_', ' '))}
         self.config[pid] = cfg
         return pid
@@ -233,7 +239,7 @@ def flow(v: View):
     """The downward camera as a speed sensor: the floor tracked, and what it measured."""
     d = f'{V}/downward'
     return row(
-        (58, v('floor', image(f'{d}/stream/compressed', f'{d}/flow_annotations',
+        (58, v('floorcam', image(f'{d}/stream/compressed', f'{d}/flow_annotations',
                               f'{d}/floor_annotations'))),
         (42, col(
             v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s', True),
@@ -400,10 +406,30 @@ VIEWS = {f.__name__.rstrip('_'): f for f in (cockpit, mission, map_, vision, flo
                                              bins_downward, calibrate, weak_link)}
 FILE = {'cockpit': 'mongla_layout'}            # the default keeps the name links use
 
+# The console: every view as a tab of one layout, in the order a run is read.
+# Each view stays its own layout too (links and the layout menu name them);
+# here they are one place, and only the open tab's panels subscribe.
+CONSOLE = 'batighor'
+TABS = [('cockpit', 'Cockpit'), ('map', 'Map'), ('mission', 'Mission'), ('vision', 'Vision'),
+        ('flow', 'Flow'), ('localization', 'Localization'), ('thrust', 'Thrust'),
+        ('board_health', 'Health'), ('board_link', 'Link'), ('chain', 'Chain'),
+        ('bins_downward', 'Bins'), ('calibrate', 'Calibrate')]
+
 
 def build(name: str) -> dict:
-    v = View()
-    tree = VIEWS[name](v)
+    if name == CONSOLE:
+        v, tabs = View(), []
+        for view, title in TABS:
+            v.prefix = f'{view}.'
+            tabs.append({'title': title, 'layout': VIEWS[view](v)})
+        v.config['Tab!console'] = {'activeTabIdx': 0, 'tabs': tabs}
+        # The status strip on every tab: a split is a percentage of the window,
+        # and 5 % is one line of cells on a laptop's 1000 px of height.
+        v.prefix = ''
+        tree = col((5, v('status', instrument('Status'))), (95, 'Tab!console'))
+    else:
+        v = View()
+        tree = VIEWS[name](v)
     return {'configById': v.config, 'globalVariables': {}, 'userNodes': {},
             'playbackConfig': {'speed': 1}, 'layout': tree}
 
@@ -426,7 +452,7 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 2
     stale = []
-    for name in VIEWS:
+    for name in [CONSOLE, *VIEWS]:
         path = out / f'{FILE.get(name, name)}.json'
         text = render(name)
         if a.write:

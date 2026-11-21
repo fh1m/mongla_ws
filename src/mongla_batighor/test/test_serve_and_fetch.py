@@ -331,3 +331,14 @@ def test_the_tab_and_the_menu_carry_mongla_not_lichtblick():
     svg = (theme / 'mongla.svg').read_text().strip()
     css = (theme / 'batighor.css').read_text()
     assert 'data:image/svg+xml,' + urllib.parse.quote(svg, safe='') in css
+
+
+def test_the_desktop_app_can_list_and_read_the_layouts(site):
+    """The instruments extension syncs the desktop app's copies from a page that
+    is a file: the index names every layout and both answer with CORS."""
+    base, _ = site
+    status, headers, body = _get(base + '/layouts/index.json')
+    assert status == 200 and json.loads(body) == ['mongla_layout']
+    assert headers.get('Access-Control-Allow-Origin') == '*'
+    status, headers, _ = _get(base + '/layouts/mongla_layout.json')
+    assert status == 200 and headers.get('Access-Control-Allow-Origin') == '*'

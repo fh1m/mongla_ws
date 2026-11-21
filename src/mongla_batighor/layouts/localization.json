@@ -53,7 +53,8 @@
           "url": "/model/mongla.urdf",
           "order": 1
         }
-      }
+      },
+      "lichtblickPanelTitle": "odometry, 3D"
     },
     "StateTransitions!aiding": {
       "paths": [

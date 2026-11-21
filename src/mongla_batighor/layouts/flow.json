@@ -1,6 +1,6 @@
 {
   "configById": {
-    "Image!floor": {
+    "Image!floorcam": {
       "imageMode": {
         "imageTopic": "/mongla/vision/downward/stream/compressed",
         "annotations": {
@@ -11,7 +11,8 @@
             "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "downward camera, the floor read"
     },
     "Plot!velocity": {
       "paths": [
@@ -132,7 +133,7 @@
   },
   "layout": {
     "direction": "row",
-    "first": "Image!floor",
+    "first": "Image!floorcam",
     "second": {
       "direction": "column",
       "first": "Plot!velocity",

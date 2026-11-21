@@ -53,9 +53,9 @@ def generate_launch_description():
     # `nodes:` reach the nodes below -- only when this file is the one typed.
     args, settings = launch_defaults.for_launch_file(args, __file__)
     # The bridge exposes every topic over a WebSocket that Lichtblick, in the
-    # browser or on the desktop, renders. use_compression cuts tether
-    # bandwidth; still confirm detection FPS is unperturbed with it up and
-    # images being viewed (Mongla is FPS-coupled). See foxglove-and-bags.md.
+    # browser or on the desktop, renders. use_compression stays on: turned off,
+    # a frame's latency to the dev box did not move beyond the A/A noise
+    # (measured-bars 103), and it is the tether's bandwidth that it saves.
     bridge = partial(
         Node, package='foxglove_bridge', executable='foxglove_bridge',
         name='foxglove_bridge', output='screen',

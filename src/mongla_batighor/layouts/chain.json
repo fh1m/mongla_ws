@@ -8,7 +8,8 @@
             "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "forward camera"
     },
     "Image!downward": {
       "imageMode": {
@@ -18,7 +19,8 @@
             "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "downward camera"
     },
     "mongla.batighor.Chain!chain": {}
   },

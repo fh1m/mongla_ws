@@ -427,3 +427,71 @@ def test_what_an_unset_setting_means_is_the_detectors_own_default():
         (declared,) = _re.findall(rf"declare_parameter\('{name}',\s*([^)]+)\)", setup)
         assert float(declared) == float(unset) if TUNABLE[name] is float \
             else declared.strip().strip("'") == unset.strip('"'), (name, declared, unset)
+
+
+def test_the_desktop_app_takes_kutums_layout_unless_the_operator_edited_it():
+    """layoutUpdates: a stale copy from one of Kutum's files is replaced, an
+    edited one (`working`) is kept, a current one and one of the operator's
+    own (no `from`) are untouched."""
+    import json as _json
+    import subprocess as _sp
+    src = (PANELS / 'common.js').read_text() + INSTRUMENTS_JS
+    rec = lambda name, data, working=None, frm=True: {  # noqa: E731
+        'namespace': 'local', 'layout': {'id': name, 'name': name,
+                                         **({'from': f'{name}.json'} if frm else {}),
+                                         'baseline': {'data': data, 'savedAt': 'old'},
+                                         'working': working}}
+    console = lambda v, tab: {'v': v, 'configById': {  # noqa: E731
+        'Tab!console': {'activeTabIdx': tab, 'tabs': [{}, {}, {}]}}}
+    records = [rec('map', {'v': 1}), rec('flow', {'v': 1}, working={'data': {}}),
+               rec('vision', {'v': 2}), rec('mine', {'v': 1}, frm=False),
+               # Only a tab chosen since: not an edit, and the choice survives.
+               rec('batighor', console(1, 0), working={'data': console(1, 2)}),
+               # The app's own defaults written in on mount: not an edit either,
+               # and kept beneath Kutum's values.
+               rec('cockpit', {'configById': {'Plot!a': {'paths': [1]}}},
+                   working={'data': {'configById': {'Plot!a': {'paths': [1], 'showXAxisLabels': True}}}}),
+               # A value the file set, changed: an edit, kept.
+               rec('thrust', {'configById': {'Plot!a': {'paths': [1]}}},
+                   working={'data': {'configById': {'Plot!a': {'paths': [2]}}}})]
+    served = {'map': {'v': 2}, 'flow': {'v': 2}, 'vision': {'v': 2}, 'mine': {'v': 2},
+              'batighor': console(2, 0), 'cockpit': {'configById': {'Plot!a': {'paths': [9]}}},
+              'thrust': {'configById': {'Plot!a': {'paths': [9]}}}}
+    js = (src + '\nprocess.stdout.write(JSON.stringify(module.exports.layoutUpdates('
+          + _json.dumps(records) + ',' + _json.dumps(served) + ',"now")));')
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    out = _sp.run(['node', '-e', pre + js],
+                  capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = _json.loads(out.stdout)
+    assert [r['layout']['name'] for r in got['update']] == ['map', 'batighor', 'cockpit']
+    assert got['update'][2]['layout']['baseline']['data'] == {
+        'configById': {'Plot!a': {'paths': [9], 'showXAxisLabels': True}}}
+    assert got['update'][0]['layout']['baseline'] == {'data': {'v': 2}, 'savedAt': 'now'}
+    console_now = got['update'][1]['layout']
+    assert console_now['baseline']['data'] == console(2, 2) and 'working' not in console_now
+    assert got['edited'] == ['flow', 'thrust']
+
+
+def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
+    """statusOf: a held lock names its rung, an unknown health row is not a
+    fault, and an armed vehicle marks the cockpit live."""
+    import json as _json
+    import subprocess as _sp
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    lock = {'detections': [{'id': 'gate', 'results': [{'hypothesis': {'class_id': 'held', 'score': 0.8}}]}]}
+    s = {'v': {'armed': True, 'mode': 'AUTO', 'depth_m': -1.2, 'yaw_deg': 90, 'battery_voltage': 14.8},
+         'vAt': 1000, 'locks': {'forward': {'m': lock, 'at': 1000}, 'downward': {'m': {}, 'at': 1000}},
+         'health': [{'name': 'baro', 'level': 3}, {'name': 'imu', 'level': 0}]}
+    js = (pre + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS
+          + f'\nprocess.stdout.write(JSON.stringify(module.exports.statusOf({_json.dumps(s)}, 1500)));')
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = _json.loads(out.stdout)
+    cells = {k: (v, lvl) for k, v, lvl in got['cells']}
+    assert cells['lock'] == ('forward held', 'live')
+    assert cells['health'] == ('1 unknown', 'stale')
+    assert cells['vehicle'] == ('ARMED', 'armed') and cells['depth'][0] == '1.20 m'
+    assert got['tabs']['Cockpit'] == 'live' and got['tabs']['Vision'] == 'live'

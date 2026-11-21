@@ -9,7 +9,8 @@
           }
         },
         "synchronize": true
-      }
+      },
+      "lichtblickPanelTitle": "forward camera"
     },
     "Image!downward": {
       "imageMode": {
@@ -20,7 +21,8 @@
           }
         },
         "synchronize": true
-      }
+      },
+      "lichtblickPanelTitle": "downward camera"
     },
     "mongla.batighor.Vision!vision": {},
     "StateTransitions!ladder": {

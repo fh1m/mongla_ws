@@ -41,8 +41,9 @@ _NAME = re.compile(r'^[A-Za-z0-9_-]+$')
 _HOST = re.compile(r'^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])'
                    r'(?::[0-9]{1,5})?$')
 # Read only, and fetched by the desktop app from a page that is a file, which
-# a browser allows only with CORS: the hull and the theme's fonts.
-_SHARED = ('/model/', '/theme/')
+# a browser allows only with CORS: the hull, the theme's fonts, and the layouts
+# (the instruments extension keeps the app's copies in step: layout_sync).
+_SHARED = ('/model/', '/theme/', '/layouts/')
 _HASHED = re.compile(r'\.[0-9a-f]{16,}\.')
 _THEME_FILE = re.compile(r'^(?:fonts/)?[a-z0-9-]+\.(?:css|woff2|svg)$')
 
@@ -210,6 +211,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Location', app_link(host, self.bridge_port, layout))
             self.end_headers()
             return
+        if url.path == '/layouts/index.json':
+            # The names, for the desktop app's layout sync; never a layout called index.
+            names = sorted(k.removesuffix('.json') for k in index(self.layouts)
+                           if k.endswith('.json'))
+            return self._bytes(json.dumps(names).encode(), 'application/json', cache=False)
         if url.path.startswith('/layouts/'):
             name = url.path[len('/layouts/'):].removesuffix('.json')
             if not _NAME.match(name):

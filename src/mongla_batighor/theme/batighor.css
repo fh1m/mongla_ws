@@ -34,6 +34,90 @@
 :where(body, body *:not(.monaco-editor, .monaco-editor *)){font-family:var(--mb-sans)!important}
 :where(code, pre, kbd, samp, [class*="monospace" i]){font-family:var(--mb-mono)!important}
 
+/* Lichtblick's chrome in the site's dark: black ground, hairline rules, red
+   for what is live and selected. Its colours come from a JS theme, so these
+   name its stable class names (Mui*, mosaic*, LichtblickPanelRoot), never a
+   generated hash. */
+body{background:var(--mb-d0)!important}
+.MuiAppBar-root{background:var(--mb-d0)!important;box-shadow:none!important;
+  border-bottom:1px solid var(--mb-rule)}
+.MuiPaper-root:not(.MuiAppBar-root){background-color:var(--mb-d2)!important;background-image:none!important}
+.MuiTabs-indicator{background-color:var(--mb-red)!important}
+.MuiTab-root.Mui-selected{color:var(--mb-ink)!important}
+.MuiBadge-colorError, .MuiBadge-dot{background-color:var(--mb-red)!important}
+.MuiInputBase-root{background-color:var(--mb-sunk)!important}
+.mosaic-root{background:var(--mb-d0)!important}
+.mosaic-split{background:var(--mb-d0)!important}
+.mosaic-split:hover .mosaic-split-line{box-shadow:0 0 0 1px var(--mb-red)!important}
+.LichtblickPanelRoot-root{background:var(--mb-d1)!important;border:1px solid var(--mb-rule)}
+/* A panel's title bar reads like the site's labels: small, spaced capitals. */
+.LichtblickPanelRoot-root > div > header{background:var(--mb-d1)!important;
+  border-bottom:1px solid var(--mb-rule)}
+.LichtblickPanelRoot-root > div > header .MuiTypography-root{font-family:var(--mb-mono)!important;
+  font-size:10.5px!important;letter-spacing:.14em;text-transform:uppercase;color:var(--mb-ink-2)!important}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--mb-rule-lit);border-radius:4px}
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner{background:transparent}
+
+/* -- the console: a status strip on top, then a tab per view ---------------- */
+/* The strip has no title bar: it is the console's own header. */
+.LichtblickPanelRoot-root:has(.mb.status) > div > header{display:none!important}
+.mb.status{flex-direction:row;flex-wrap:wrap;align-items:stretch;gap:0;padding:0;overflow:hidden;
+  background:var(--mb-d0)}
+.mb.status > .body{flex-direction:row;flex-wrap:nowrap;gap:0;width:100%;overflow-x:auto}
+.mb.status .cell{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:6px 16px;
+  border-right:1px solid var(--mb-rule);min-width:0;flex:1 1 auto;white-space:nowrap}
+.mb.status .cell small{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--mb-ink-3)}
+.mb.status .cell b{font-size:13px;font-weight:400;color:var(--mb-ink);overflow:hidden;text-overflow:ellipsis}
+.mb.status .cell.armed{background:var(--mb-red)}
+.mb.status .cell.armed small, .mb.status .cell.armed b{color:#fff;font-weight:700}
+/* Live is a working thing seen now: sea, as everywhere else. Red stays for
+   an error and for armed, so it still means look now. */
+.mb.status .cell.live b{color:var(--mb-sea)}
+.mb.status .cell.ok b{color:var(--mb-teal)}
+.mb.status .cell.warn b{color:var(--mb-amber)}
+.mb.status .cell.err b{color:var(--mb-red);font-weight:700}
+.mb.status .cell.stale b{color:var(--mb-ink-3)}
+
+/* The tabs: room to read them, a glyph each, red under the open one, and a
+   dot when the strip says its subject needs an eye. No close button: a tab
+   lost in a run is a view lost. */
+[data-testid="mosaic-drag-handle"]:has([data-testid="toolbar-tab"]){min-height:40px;background:var(--mb-d0)!important;
+  border-bottom:1px solid var(--mb-rule)}
+[data-testid="toolbar-tab"]{position:relative;display:flex!important;align-items:center;gap:8px;
+  height:40px;width:auto!important;min-width:0;max-width:none!important;padding:0 18px 0 14px!important;
+  margin:0!important;border-right:1px solid var(--mb-rule);background:transparent!important;color:var(--mb-ink-3)}
+[data-testid="toolbar-tab"]:hover{color:var(--mb-ink-2);background:var(--mb-d1)!important}
+[data-testid="toolbar-tab"]::before{content:"";flex:none;width:15px;height:15px;background:currentColor;
+  -webkit-mask:var(--mb-glyph) center/contain no-repeat;mask:var(--mb-glyph) center/contain no-repeat}
+[data-testid="toolbar-tab"] .MuiInputBase-root{background:transparent!important;width:auto!important}
+[data-testid="toolbar-tab"] input{font-family:var(--mb-mono)!important;font-size:11px!important;letter-spacing:.12em;
+  text-transform:uppercase;color:inherit!important;cursor:pointer;padding:0!important;field-sizing:content;
+  width:auto!important;min-width:3ch}
+[data-testid="toolbar-tab"]:has(button){color:var(--mb-ink);background:var(--mb-d1)!important;
+  box-shadow:inset 0 -2px 0 var(--mb-red)}
+[data-testid="toolbar-tab"] button{display:none!important}
+[data-testid="toolbar-tab"]{user-select:none}
+[data-testid="toolbar-tab"][data-mb]:not([data-mb=""])::after{content:"";position:absolute;top:9px;right:7px;
+  width:6px;height:6px;border-radius:50%;background:var(--mb-ink-3)}
+[data-testid="toolbar-tab"][data-mb="ok"]::after{background:var(--mb-teal)}
+[data-testid="toolbar-tab"][data-mb="warn"]::after{background:var(--mb-amber)}
+[data-testid="toolbar-tab"][data-mb="live"]::after{background:var(--mb-sea)}
+[data-testid="toolbar-tab"][data-mb="err"]::after{background:var(--mb-red);
+  box-shadow:0 0 0 3px rgba(255,42,20,.22)}
+[data-testid="toolbar-tab"][title="Cockpit"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%225%22%2F%3E%3Cpath%20d%3D%22M8%201v4M8%2011v4M1%208h4M11%208h4%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Map"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M1.5%203.5%205.5%202l5%201.5%204-1.5v10.5l-4%201.5-5-1.5-4%201.5z%20M5.5%202v10.5%20M10.5%203.5V14%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Mission"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%2015V1.5h9.5l-2%203%202%203H3%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Vision"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M1%208s2.6-5%207-5%207%205%207%205-2.6%205-7%205-7-5-7-5z%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%222.2%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Flow"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2%2014%2013%203%20M7.5%203H13v5.5%20M2%209l4-4%20M7%2014l4-4%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Localization"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M8%2015s-5-4.6-5-8.5a5%205%200%200%201%2010%200C13%2010.4%208%2015%208%2015z%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%226.5%22%20r%3D%221.8%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Thrust"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%221.6%22%2F%3E%3Cpath%20d%3D%22M8%206.4C7%203.5%208%201.5%209.5%201.5S10%205%208%206.4%20M9.4%208.8c2.9.9%204.3%202.6%203.5%203.9s-3.6-.8-3.5-3.9%20M6.6%208.8c-2.3%202-4.5%202.4-5.2%201.1s2.4-2.8%205.2-1.1%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Health"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M1%208.5h3l2-5%203%209%202-4h4%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Link"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%221.5%22%20y%3D%225.5%22%20width%3D%227%22%20height%3D%225%22%20rx%3D%222.5%22%2F%3E%3Crect%20x%3D%227.5%22%20y%3D%225.5%22%20width%3D%227%22%20height%3D%225%22%20rx%3D%222.5%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Chain"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%222.5%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%2213.5%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Cpath%20d%3D%22M4%208h2.5%20M9.5%208H12%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Bins"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M1.5%205h13%20M3%205v8.5h10V5%20M6%208h4%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Calibrate"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2212%22%20height%3D%2212%22%2F%3E%3Cpath%20d%3D%22M2%208h12M8%202v12%22%2F%3E%3Cpath%20d%3D%22M2%202h6v6H2z%20M8%208h6v6H8z%22%20fill%3D%22%23000%22%2F%3E%3C%2Fsvg%3E")}
+
 /* -- every panel ---------------------------------------------------------- */
 .mb, .mb *{font-family:var(--mb-mono)!important;box-sizing:border-box}
 .mb{font-size:12px;line-height:1.45;color:var(--mb-ink);background:var(--mb-d1);height:100%;

@@ -174,6 +174,20 @@ scp -q -o BatchMode=yes "$TARGET:~/$REL/release.json" "$MANIFEST_COPY" 2>/dev/nu
   || warn "the release step failed; the deploy stands"
 rm -f "$MANIFEST_COPY"
 
+# This machine's desktop app, in step with what was just deployed: the panels
+# and views Kutum now serves, once Batighor answers (the stack must be up).
+# The app keeps its copies in step itself at its next start (the instruments
+# extension's layout sync), so nothing here needs it closed.
+if command -v lichtblick >/dev/null 2>&1; then
+  HOST_ONLY="${TARGET#*@}"
+  if curl -sf -m 3 "http://$HOST_ONLY:8000/layouts/index.json" >/dev/null; then
+    python3 "$REPO_ROOT/tools/pool/batighor_desktop.py" "$HOST_ONLY" --no-launch \
+      || warn "the desktop app's panels were not updated"
+  else
+    warn "Batighor is not answering on $HOST_ONLY:8000 (the stack is down): after bringup, run tools/pool/batighor_desktop.py $HOST_ONLY --no-launch"
+  fi
+fi
+
 # Explain only the FAIL lines this run printed. A fixed list explained faults
 # the vehicle did not have and missed the one it did.
 saw() { grep -q -- "$1" "$GATE_LOG"; }
