@@ -145,6 +145,8 @@ class ActionMixin:
         self._doing_msg = String
         self._doing_pub = self.create_publisher(
             String, _doing.TOPIC, QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        # Idle, said at start: silence would read as no manager at all.
+        self._say_doing('text')
 
     def _say_doing(self, method: str, *args, **kw) -> None:
         """Update and publish the record. Never fatal: it reports, it never steers."""

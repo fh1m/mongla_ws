@@ -248,3 +248,23 @@ def test_what_the_vehicle_is_doing_is_published_as_it_happens(armed):
         assert ends['stop'] == 'done' and ends['move_forward'] != 'done', ends
     finally:
         sub_node.destroy_node()
+
+
+def test_an_idle_manager_says_so_from_the_start(rig):
+    """A browser opening before any verb sees the manager idle, not silence
+    (which the Mission instrument reads as no manager)."""
+    import json
+    from rclpy.executors import SingleThreadedExecutor
+    from rclpy.qos import DurabilityPolicy, QoSProfile
+    from std_msgs.msg import String
+    got = []
+    sub_node = rclpy.create_node('e2e_doing_idle')
+    sub_node.create_subscription(String, '/mongla/doing', lambda m: got.append(json.loads(m.data)),
+                                 QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    ex = SingleThreadedExecutor()
+    ex.add_node(sub_node)
+    t = time.monotonic()
+    while not got and time.monotonic() - t < 3.0:
+        ex.spin_once(timeout_sec=0.05)
+    sub_node.destroy_node()
+    assert got and 'recent' in got[-1], 'nothing latched on /mongla/doing'

@@ -47,6 +47,7 @@
 | `ros2 run mongla_batighor deck` | `mongla_batighor.deck:main` |
 | `ros2 run mongla_batighor views` | `mongla_batighor.views:main` |
 | `ros2 run mongla_batighor chain` | `mongla_batighor.chain:main` |
+| `ros2 run mongla_batighor course` | `mongla_batighor.course:main` |
 | `ros2 run mongla_localization localization_node` | `mongla_localization.localization_node:main` |
 | `ros2 run mongla_localization course_survey` | `mongla_localization.course_survey:main` |
 | `ros2 run mongla_manager start` | `mongla_manager.auv_manager_node:main` |
@@ -83,6 +84,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 |---|---|---|
 | `batighor_port` | `8000` | Batighor web port |
 | `foxglove_port` | `8765` | foxglove_bridge WebSocket port |
+| `course` | `` | the course the map draws (file stem in ~/mongla/deck/courses), until a mission names its own; bringup passes its own |
 
 ### `mongla_batighor/calibrate.launch.py`
 
@@ -344,6 +346,12 @@ key, or one a launch argument already sets, stops that node at launch.
 Listed by source file, literal `declare_parameter` calls only. The
 manager's `vision.*` gains are declared from a table and are listed in
 `bringup.example.yaml` instead, with their defaults.
+
+**`mongla_batighor/course.py`** — 1 parameters
+
+| parameter | default |
+|---|---|
+| `course` | `''` |
 
 **`mongla_batighor/overlay.py`** — 1 parameters
 

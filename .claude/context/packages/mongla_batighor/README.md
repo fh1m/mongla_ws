@@ -175,6 +175,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | module | what it is |
 |---|---|
 | `chain.py` | The chain, photons to thrust: every stage's rate and age, measured where it is seen. |
+| `course.py` | The course on Batighor's map: the deck's file, as the vehicle would read it. |
 | `deck.py` | The deck: Batighor in a terminal, for the person standing at the pool. |
 | `fetch.py` | Put the pinned Lichtblick web build on this machine. |
 | `helm.py` | The helm: the one way a browser drives the vehicle, and the log of who did. |
