@@ -115,7 +115,8 @@ def mdns_a(name: str, timeout: float = 1.0) -> list[str]:
     s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
     out: list[str] = []
     try:
-        s.bind(('', 0))
+        # No explicit bind: sendto takes an ephemeral port, which is where a
+        # unicast (QU) reply arrives.
         s.sendto(pkt, MDNS)
         end = time.monotonic() + timeout
         while not out and time.monotonic() < end:
