@@ -310,7 +310,7 @@ with no reason.
 | `retrodict` | `false` | apply flow/depth/fixes at their own stamp, replaying later events | localization | measured on Kutum (measured-bars 90): +3.9 to +6.1 % of a core while moving, over the 5 % bar, for an accuracy gain not yet measured. Reversal: a moving-truth run that shows on-arrival flow costs position |
 | `caustics` | `true` | sun-caustic erosion + bare-floor refusal | flow `caustic_suppression` | measured on the real archive: flow tracks the waves without it |
 | `lane_lines` | `false` | lane-line heading (mod 180) yaw bound | flow | a path marker is also a dark band, and the reader cannot tell them apart yet (`_read_the_lane`) |
-| `tile_m` | `0.0` | tile grating height + yaw bound (0 = off; the venue's tile size = on) | flow | the tile size is the venue's; a wrong one is a wrong height, so it is set on the day in `~/.mongla/bringup.yaml` |
+| `tile_m` | `0.0` | tile grating height + yaw bound (0 = off; the venue's tile size = on) | flow | the tile size is the venue's; a wrong one is a wrong height, so it is set on the day in `~/mongla/deck/bringup.yaml` |
 | `baro_calibration` | `true` | re-zero the Bar30 in `mission_reset` | manager | depth is read relative to the surface on the day |
 | `batighor` | `false` | the operator center: foxglove_bridge and Lichtblick on :8000 | include | the deck's viewer, not part of a run; on when a laptop is connected |
 | `viewer` | `false` | on-vehicle HUD | vision | the vehicle has no display |

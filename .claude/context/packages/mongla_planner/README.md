@@ -138,6 +138,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `mission.py` | argparse runner that dispatches into missions/<name>.run. |
 | `model_context.py` | typed model/class handles for the mission DSL. |
 | `mongla_dsl.py` | the mission DSL. |
+| `preflight.py` | Before a mission moves: does the velocity sensor have a floor, and is there a depth floor? |
 | `resilience.py` | Make a task survive its own failures. The idiom, without the tree library. |
 | `run_budget.py` | What is still worth attempting, given the clock. Effort is not points. |
 | `vision_dsl.py` | mongla.vision.* closed-loop sub-namespace (two verbs). |

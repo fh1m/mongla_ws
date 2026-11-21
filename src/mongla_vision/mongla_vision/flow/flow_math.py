@@ -53,6 +53,59 @@ def height_above_floor(pool_depth_m: float, depth_m: float,
     return h if h > 1e-3 else None
 
 
+def floor_depth_at(points: Sequence[Sequence[float]], x: float, y: float
+                   ) -> Optional[Tuple[float, float, float]]:
+    """Floor depth under (x, y) from surveyed floor points, or None.
+
+    `points` are (x_m, y_m, floor_depth_m) in the course's pool frame, depth
+    POSITIVE (the floor is 1.28 m down). Returns (depth, fit_sigma_m,
+    gradient_m_per_m).
+
+    Why: a venue floor slopes (one pool runs 1.28 m at the wall to 2 m by
+    17.5 m), and flow's scale is the height above THAT floor. One typed depth
+    is right at one end and up to 0.72 m wrong at the other, a 50 % scale error
+    at 0.5 m depth (bead 15i). With the floor surveyed at a few points, the
+    depth under the hull is known to the survey's precision plus the slope
+    times the position error, which the caller adds.
+
+    One point: a flat floor. Two, or points on one line: linear along that
+    line. Three or more: a least-squares plane, whose residual RMS is the fit
+    sigma (0 when the points fit exactly). Never extrapolated past the
+    surveyed depths: the answer is clamped to [min, max] of them, so a
+    position off the surveyed area reads the nearest surveyed depth, not a
+    floor the plane invents.
+    """
+    pts = np.asarray([p for p in points if len(p) == 3], dtype=float)
+    if pts.size == 0 or not np.all(np.isfinite(pts)):
+        return None
+    lo, hi = float(pts[:, 2].min()), float(pts[:, 2].max())
+    if len(pts) == 1:
+        return float(pts[0, 2]), 0.0, 0.0
+    xy = pts[:, :2] - pts[:, :2].mean(axis=0)
+    _, s, vt = np.linalg.svd(xy, full_matrices=False)
+    if len(pts) == 2 or s[-1] < 1e-6 * max(s[0], 1e-9):
+        # On one line: fit depth along the line's direction only.
+        u = vt[0]
+        t = xy @ u
+        if float(np.ptp(t)) < 1e-9:
+            d = float(pts[:, 2].mean())
+            return d, float(pts[:, 2].std()), 0.0
+        A = np.column_stack([t, np.ones_like(t)])
+        (g, c), *_ = np.linalg.lstsq(A, pts[:, 2], rcond=None)
+        q = (np.array([x, y]) - pts[:, :2].mean(axis=0)) @ u
+        res = pts[:, 2] - A @ np.array([g, c])
+        dof = max(len(pts) - 2, 1)
+        sig = float(math.sqrt(float(res @ res) / dof)) if len(pts) > 2 else 0.0
+        return float(min(hi, max(lo, g * q + c))), sig, abs(float(g))
+    A = np.column_stack([pts[:, 0], pts[:, 1], np.ones(len(pts))])
+    (a, b, c), *_ = np.linalg.lstsq(A, pts[:, 2], rcond=None)
+    res = pts[:, 2] - A @ np.array([a, b, c])
+    sig = (float(math.sqrt(float(res @ res) / (len(pts) - 3)))
+           if len(pts) > 3 else 0.0)
+    return (float(min(hi, max(lo, a * x + b * y + c))), sig,
+            float(math.hypot(a, b)))
+
+
 def robust_flow(prev_pts: np.ndarray, next_pts: np.ndarray,
                 status: np.ndarray, *, min_tracks: int = 6,
                 inlier_sigma: float = 2.0) -> Optional[Tuple[float, float]]:

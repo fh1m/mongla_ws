@@ -157,6 +157,35 @@ def read(path: Path, declared: set[str], section: str | None = None) -> dict[str
     return {str(k): _as_launch_string(v) for k, v in values.items()}
 
 
+def deck_value(key: str) -> str:
+    """One top-level value from the deck file as a string, '' when unset or no file."""
+    path = config_path()
+    if path is None:
+        return ''
+    import yaml
+    try:
+        body = yaml.safe_load(path.read_text()) or {}
+    except Exception:                                   # noqa: BLE001
+        return ''
+    v = body.get(key) if isinstance(body, dict) else None
+    return '' if v is None else str(v).strip()
+
+
+def redefault(args: list, values: dict[str, str]) -> list:
+    """Re-declare the named arguments with new defaults; typed name:=value still wins."""
+    from launch.actions import DeclareLaunchArgument
+    out = []
+    for a in args:
+        if isinstance(a, DeclareLaunchArgument) and a.name in values:
+            out.append(DeclareLaunchArgument(
+                a.name, default_value=values[a.name],
+                description=a.description.split(' Valid choices are:')[0],
+                choices=a.choices))
+        else:
+            out.append(a)
+    return out
+
+
 def apply(args: list, section: str | None = None) -> tuple[list, dict[str, str], Path | None]:
     """Re-default `DeclareLaunchArgument`s from the file (its top level, or a section).
 

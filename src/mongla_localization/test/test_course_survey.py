@@ -47,3 +47,18 @@ def test_a_positive_depth_is_refused_by_the_cli(tmp_path, monkeypatch, capsys):
     assert main(['--course', 'sauvc26', '--prop', 'flare_red', '--x', '9', '--y', '2',
                  '--depth', '0.8']) == 2
     assert not (tmp_path / 'sauvc26.yaml').exists()
+
+
+def test_the_survey_writes_the_venue_numbers(tmp_path, monkeypatch):
+    """Floor soundings, tile, depth floor and a prop width: all in the one course file."""
+    from mongla_localization import course_survey as cs
+    from mongla_localization.course_map import load_course
+    monkeypatch.setenv('MONGLA_COURSE_DIR', str(tmp_path))
+    assert cs.main(['--course', 'sauvc26', '--floor', '0', '0', '1.28',
+                    '--floor', '17.5', '0', '2.0', '--shield', '1.5', '--tile', '0.25']) == 0
+    assert cs.main(['--course', 'sauvc26', '--prop', 'final_gate', '--width', '1.5']) == 0
+    c = load_course('sauvc26')
+    assert c.pool_floor() == [(0.0, 0.0, 1.28), (17.5, 0.0, 2.0)]
+    assert c.shield_max_depth_m() == 1.5 and c.pool['tile_m'] == 0.25
+    assert c.widths_by_class()['final_gate'] == 1.5
+    assert cs.main(['--course', 'sauvc26', '--floor', '1', '1', '-1.2']) == 2

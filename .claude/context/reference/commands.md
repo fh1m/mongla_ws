@@ -75,7 +75,7 @@
 
 ## 3. Launch arguments — `DeclareLaunchArgument`
 
-WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not declare. Check the name against the table for THAT file, or put it in `~/.mongla/bringup.yaml`, which refuses unknown names (example: `src/mongla_manager/config/bringup.example.yaml`).
+WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not declare. Check the name against the table for THAT file, or put it in `~/mongla/deck/bringup.yaml`, which refuses unknown names (example: `src/mongla_manager/config/bringup.example.yaml`).
 
 ### `mongla_batighor/batighor.launch.py`
 
@@ -114,6 +114,7 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `flow` | `true` | vision_stack:=pi -- start flow_node (downward-camera velocity). Pairs with the manager's position_source:=flow. |
 | `pool_depth_min_m` | `nan` | flow:=true -- the venue's shallowest floor, metres (#35). |
 | `pool_depth_max_m` | `nan` | flow:=true -- the venue's deepest floor, metres (#35). |
+| `course` | `` | the venue's course (file stem in ~/mongla/deck/courses): its pool: floor scales flow before every mission. |
 | `pool_depth_m` | `nan` | flow:=true -- metres from the DOWNWARD camera to the floor, until a mission's use_course() sets the venue's own. With neither, flow publishes quality 0 and refuses, by design. |
 | `velocity_uplink` | `false` | manager: RIEKF body velocity -> board (VISION_SPEED_ESTIMATE). Needs fw PR #23 to act. |
 | `position_uplink` | `false` | manager: RIEKF pose -> board (VISION_POSITION_ESTIMATE). |
@@ -335,7 +336,7 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked *not shipped* 
 
 ## 4. Node parameters — `declare_parameter`
 
-Set any of these on the vehicle under `nodes:` in `~/.mongla/bringup.yaml`,
+Set any of these on the vehicle under `nodes:` in `~/mongla/deck/bringup.yaml`,
 keyed by the RUNNING node name -- `ros2 node list` prints them, e.g.
 `mongla_manager`, `mongla_tracker_forward`, `mongla_lock_downward`. A misspelt
 key, or one a launch argument already sets, stops that node at launch.
@@ -454,7 +455,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `direct_feed` | `True` |
 | `range_crop` | `False` |
 
-**`mongla_vision/flow/flow_node.py`** — 41 parameters
+**`mongla_vision/flow/flow_node.py`** — 42 parameters
 
 | parameter | default |
 |---|---|
@@ -463,6 +464,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `pool_depth_m` | `nan` |
 | `pool_depth_min_m` | `nan` |
 | `pool_depth_max_m` | `nan` |
+| `pool_floor_xyz` | `[0.0]` |
 | `medium` | `'water'` |
 | `focal_air_px` | `_F_AIR_PX` |
 | `focal_water_px` | `_F_WATER_PX` |

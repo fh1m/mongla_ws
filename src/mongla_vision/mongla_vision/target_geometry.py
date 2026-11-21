@@ -98,6 +98,9 @@ def _load():
             break
     for p in _override_paths():
         _merge(table, _read(p), p)
+    src, widths = _course_widths()
+    if widths:
+        _merge(table, widths, src)
     _CACHE.update(table)
     return _CACHE
 
@@ -116,7 +119,7 @@ def _overrides_changed() -> bool:
     per frame.
     """
     now = {}
-    for path in _override_paths():
+    for path in _override_paths() + [p for p in [_course_widths()[0]] if p]:
         try:
             st = os.stat(path)
             now[path] = (st.st_mtime_ns, st.st_size)
@@ -156,6 +159,27 @@ def load_errors():
     """Files that failed to parse, so a node can say so instead of reading 0.0."""
     _load()
     return list(_ERRORS)
+
+
+def _course_widths():
+    """(course file, {class: {width_m, source}}) from the deck's course, or (None, {}).
+
+    The venue's course is its one file (`~/mongla/deck/courses/<name>.yaml`),
+    so a prop measured there sets the width the pose path ranges on, on top
+    of the shipped table and the older override file.
+    """
+    try:
+        from mongla_runtime.launch_defaults import deck_value
+        name = deck_value('course')
+        if not name:
+            return None, {}
+        from mongla_localization.course_map import load_course
+        c = load_course(name)
+    except Exception as exc:                            # noqa: BLE001
+        _ERRORS.append(('course', str(exc).splitlines()[0] if str(exc) else repr(exc)))
+        return None, {}
+    return c.source, {cls: {'width_m': w, 'source': f'measured in course {c.name}'}
+                      for cls, w in c.widths_by_class().items()}
 
 
 def _override_paths():

@@ -1,32 +1,33 @@
 {
-  "collected": 5405,
-  "passed": 5391,
-  "failed": 4,
-  "skipped": 9,
+  "collected": 5452,
+  "passed": 5440,
+  "failed": 0,
+  "skipped": 11,
   "xfailed": 1,
   "xpassed": 0,
   "suites": {
     "mongla_control": {
-      "passed": 1272,
+      "passed": 1271,
       "xfailed": 1,
+      "skipped": 1,
       "failed": 0
     },
     "mongla_vision": {
-      "passed": 1645,
+      "passed": 1654,
       "skipped": 3,
       "failed": 0
     },
     "mongla_manager": {
-      "passed": 895,
+      "passed": 904,
       "skipped": 6,
       "failed": 0
     },
     "mongla_planner": {
-      "passed": 490,
+      "passed": 498,
       "failed": 0
     },
     "mongla_localization": {
-      "passed": 402,
+      "passed": 403,
       "failed": 0
     },
     "mongla_runtime": {
@@ -34,39 +35,40 @@
       "failed": 0
     },
     "mongla_batighor": {
-      "passed": 162,
+      "passed": 164,
       "failed": 0
     },
     "test/": {
-      "passed": 492,
-      "failed": 4
+      "passed": 513,
+      "skipped": 1,
+      "failed": 0
     }
   },
   "code": {
     "packages": {
       "mongla_vision": {
-        "loc": 26727,
-        "test_files": 152
+        "loc": 26941,
+        "test_files": 154
       },
       "mongla_control": {
         "loc": 11038,
         "test_files": 68
       },
       "mongla_planner": {
-        "loc": 8260,
-        "test_files": 49
+        "loc": 8422,
+        "test_files": 51
       },
       "mongla_manager": {
-        "loc": 8729,
-        "test_files": 72
+        "loc": 8765,
+        "test_files": 73
       },
       "mongla_localization": {
-        "loc": 3921,
+        "loc": 4059,
         "test_files": 32
       }
     },
-    "test_files": 373,
-    "chapters": 69,
+    "test_files": 378,
+    "chapters": 71,
     "parts": 9
   }
 }

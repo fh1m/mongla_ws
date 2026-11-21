@@ -114,7 +114,7 @@ value**.
 
 **Warning: An UNKNOWN kill switch refuses arming.** The kill state comes from the second
 board over ESP-NOW; with no link it is UNKNOWN, and `arm` is refused unless
-`allow_unknown_kill_switch` is set (bench only, under `nodes:` in `~/.mongla/bringup.yaml`). A
+`allow_unknown_kill_switch` is set (bench only, under `nodes:` in `~/mongla/deck/bringup.yaml`). A
 kill while armed, or a mission that dies armed, latches: the manager keeps disarming or
 surfacing until the board confirms it, and refuses every verb but `disarm`, `stop` and
 `surface` meanwhile. Unconfirmed after three tries, it also withholds the heartbeat so the
@@ -228,7 +228,7 @@ automatically.
 - Params: `mav_device` (empty = find the board), `payload_channels`, `velocity_uplink`,
   `position_uplink`, `allow_fw_behaviour_mismatch`, plus the `vision.*` tunables in
   `vision_tunables.py`. There is one board, one heading (the board's AHRS) and one link, so
-  there is no backend selector. Launch defaults can come from `~/.mongla/bringup.yaml`
+  there is no backend selector. Launch defaults can come from `~/mongla/deck/bringup.yaml`
   (`$MONGLA_BRINGUP`); anything typed as `name:=value` still wins. **Node parameters
   go in the same file, under `nodes:`** -- one file for the deck, and every node
   refuses a misspelt key or one a launch argument already sets. The vision launch
@@ -269,7 +269,7 @@ No GPS, no DVL. A right-invariant EKF predicts on the board's IMU and corrects w
 optical-flow velocity, headings and prop fixes. With `retrodict:=true`, late measurements
 are **replayed at the instant they describe**; by default (`false`) they are applied on
 arrival. Course priors are per venue and
-overridable on the deck (`~/.mongla/courses`) with a survey tool to measure the real thing.
+overridable on the deck (`~/mongla/deck/courses`) with a survey tool to measure the real thing.
 
 Verified: the downward camera as a velocity sensor — three 30 cm slides, worst error
 **1.09 cm**, implied height 0.72 / 0.69 / 0.70 m against a 0.72 m tape.

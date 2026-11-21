@@ -91,7 +91,7 @@ Notes that cost runs when forgotten:
 ### The same switches from a file
 
 Typing twelve arguments at the pool is twelve chances to mistype one. Put them
-in `~/.mongla/bringup.yaml` instead. When the same argument is in more than one place, the highest layer
+in `~/mongla/deck/bringup.yaml` instead. When the same argument is in more than one place, the highest layer
 that sets it wins:
 
 ![For each argument the highest layer that sets it wins: typed, then the file, then the default](../../../docs/assets/diagrams/precedence.svg)
@@ -328,7 +328,7 @@ fly are trained on the day.
 
 Copy `my_stem.hef` **and** `my_stem.yaml` to `~/models` on the Pi — a missing
 sidecar is an empty allowlist and a silent `[]` every frame — then select it
-with `fwd_model:=my_stem` or a line in `~/.mongla/bringup.yaml`. The whole
+with `fwd_model:=my_stem` or a line in `~/mongla/deck/bringup.yaml`. The whole
 procedure: the `train-model` skill and [`hailo-vision.md`](../perception/hailo-vision.md).
 
 ---

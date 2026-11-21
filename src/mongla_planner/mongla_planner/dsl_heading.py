@@ -22,7 +22,7 @@ class HeadingMixin:
         prop should be and let perception take the last few metres. A mission
         that searches for every prop from scratch spends its run turning.
 
-        Deck-first search (`MONGLA_COURSE_DIR`, then `~/.mongla/courses`, then
+        Deck-first search (`MONGLA_COURSE_DIR`, then `~/mongla/deck/courses`, then
         the package), so a course re-measured at the venue beats one committed
         months earlier without a rebuild. Unmeasured props are named in the log
         rather than left to be discovered by driving to them::
@@ -115,14 +115,22 @@ class HeadingMixin:
 
     def _course_floor_to_flow(self, course) -> None:
         pool = course.pool_depth()
-        if pool is None:
+        floor = course.pool_floor()
+        if pool is None and not floor:
             self.log.warning(
-                f'[CRSE ] {course.name} gives no pool depth: flow keeps the '
-                f'pool_depth_m it was launched with. Set pool: depth_m in '
-                f'~/.mongla/courses/{course.name}.yaml.')
+                f'[CRSE ] {course.name} gives no pool depth and no floor survey: '
+                f'flow keeps the height it was launched with. Set pool: depth_m '
+                f'(and floor: points where it slopes) in '
+                f'~/mongla/deck/courses/{course.name}.yaml.')
             return
-        depth, lo, hi = pool
-        params = {'pool_depth_m': depth}
+        params = {}
+        if floor:
+            params['pool_floor_xyz'] = [float(v) for p in floor for v in p]
+        if pool is None:
+            depth, lo, hi = float('nan'), float('nan'), float('nan')
+        else:
+            depth, lo, hi = pool
+            params['pool_depth_m'] = depth
         if lo == lo:
             params['pool_depth_min_m'] = lo
         if hi == hi:
@@ -132,11 +140,12 @@ class HeadingMixin:
         except Exception as exc:                         # noqa: BLE001
             # Flow off or not up yet: the mission still has its course, and
             # the operator must know the floor never reached the velocity.
-            self.log.warning(f'[CRSE ] pool depth {depth:.2f} m NOT given to '
+            self.log.warning(f'[CRSE ] the course floor was NOT given to '
                              f'flow: {exc}')
             return
-        self.log.info(f'[CRSE ] pool depth {depth:.2f} m from {course.name} '
-                      f'is flow\'s floor now')
+        self.log.info(f'[CRSE ] flow\'s floor now from {course.name}: '
+                      + (f'pool depth {depth:.2f} m' if depth == depth else 'no single depth')
+                      + (f', {len(floor)} surveyed floor points' if floor else ''))
 
     def anchor_on(self, prop: str, *, camera: str | None = None,
                   timeout: float = 6.0):

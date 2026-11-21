@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 from mongla_vision.flow.flow_math import (
+    floor_depth_at,
     flow_dispersion,
     height_above_floor,
     integrate_rate,
@@ -27,6 +28,8 @@ from mongla_vision.flow.flow_features import (
 )
 from mongla_vision.flow.flow_velocity import flow_velocity
 from .flow_constants import _FEATURE_PARAMS, _LK_PARAMS, _MIN_TRACKS, HEIGHT_STALE_S
+# One bound for "is this position current": the localiser's own (B-126).
+from mongla_localization.localization_publish import ODOM_MAX_AGE_S
 
 
 class FlowFrameMixin:
@@ -335,8 +338,38 @@ class FlowFrameMixin:
             return None
         if now - self._depth_t > HEIGHT_STALE_S:
             return None
-        return height_above_floor(self._pool_depth, self._depth_m,
+        return height_above_floor(self._floor_depth_now(now), self._depth_m,
                                   self._lens_below_baro)
+
+    def _floor_depth_now(self, now: float) -> float:
+        """The floor depth to scale this interval on, and its sigma.
+
+        The surveyed floor under the hull when localization gives a fresh
+        pool position (anchored, with a position fix; ODOM_MAX_AGE_S); its
+        sigma is the survey's fit
+        plus the slope times the position's sigma. Otherwise the typed pool
+        depth with the range's sigma (`_set_pool`); with only a survey and no
+        position, the middle of the surveyed depths with the survey's spread.
+        Sets `_floor_sigma_m`, which the velocity covariance reads.
+        """
+        pts = getattr(self, '_floor_pts', [])
+        odom = getattr(self, '_odom_xy', None)
+        if pts and odom is not None and now - odom[3] <= ODOM_MAX_AGE_S:
+            got = floor_depth_at(pts, odom[0], odom[1])
+            if got is not None:
+                d, fit, grad = got
+                self._floor_sigma_m = math.hypot(fit, grad * odom[2])
+                self._floor_source = 'survey'
+                return d
+        if math.isfinite(self._pool_depth) and self._pool_depth > 0.0:
+            self._floor_sigma_m = getattr(self, '_range_sigma_m', 0.0)
+            self._floor_source = 'pool_depth'
+            return self._pool_depth
+        ds = [p[2] for p in pts]
+        lo, hi = min(ds), max(ds)
+        self._floor_sigma_m = (hi - lo) / math.sqrt(12.0)
+        self._floor_source = 'survey, no position'
+        return 0.5 * (lo + hi)
 
     def _evaluate(self, flow, disp, dt, t, n_used) -> None:
         ok, why = self._scale_ready()

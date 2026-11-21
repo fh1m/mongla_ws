@@ -41,7 +41,10 @@ def _flow_stub(depth_m, rx):
         _lens_below_baro = 0.0
         _depth_m = depth_m
         _depth_t = rx
+        _floor_pts = []
+        _odom_xy = None
         _fresh_height = FlowVelocityNode._fresh_height
+        _floor_depth_now = FlowVelocityNode._floor_depth_now
     return _Stub()
 
 
