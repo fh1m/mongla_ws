@@ -1,0 +1,143 @@
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_142d64a7eb3961 872-901
+.claude/context/README.md
+  s_4af8d6f83b24e8::t_9afdea37e76d5c 70-71,75-84,88-90,94-97,101-107,111-114,118-120
+.claude/context/ROADMAP.md
+  s_4af8d6f83b24e8::t_e045fea092f513 313
+.claude/context/missions/client-and-dsl-api.md
+  s_4af8d6f83b24e8::t_a366a3b608ad9b 134,150
+.claude/context/missions/course-file.md
+  s_4af8d6f83b24e8::t_3ce02ad916ceaf 1-140
+.claude/context/missions/mission-cookbook.md
+  s_4af8d6f83b24e8::t_79a7f612f610cf 1584
+.claude/context/packages/mongla_localization/README.md
+  s_4af8d6f83b24e8::t_1eb4304a4fa6d9 142-148,151-152
+.claude/context/packages/mongla_localization/audit.md
+  s_4af8d6f83b24e8::t_0aac5e197ccc25 173
+.claude/context/packages/mongla_manager/README.md
+  s_4af8d6f83b24e8::t_8ee3ea846b9b09 130
+.claude/context/packages/mongla_planner/README.md
+  s_4af8d6f83b24e8::t_9b72cdf4949ebc 141
+.claude/context/packages/mongla_runtime/README.md
+  s_4af8d6f83b24e8::t_b89d8f58e1c518 7
+.claude/context/packages/mongla_vision/README.md
+  s_4af8d6f83b24e8::t_3e93e6a9d95cf6 70,73-74
+.claude/context/platform/first-pool-verification.md
+  s_4af8d6f83b24e8::t_539ec53568736e 127
+.claude/context/platform/launch-combinations.md
+  s_4af8d6f83b24e8::t_6df14dd324aef0 94,331
+.claude/context/platform/ros2-conventions.md
+  s_4af8d6f83b24e8::t_0737ded0b37ea7 75
+.claude/context/reference/commands.md
+  s_4af8d6f83b24e8::t_cc90fa2432253d 78,117,339,458,467
+.claude/context/wiki/Home.md
+  s_4af8d6f83b24e8::t_d1a42637fc9e83 113
+.claude/skills/train-model/SKILL.md
+  s_4af8d6f83b24e8::t_9f93f6b511d0ba 88
+CLAUDE.md
+  s_4af8d6f83b24e8::t_f730e922ae88f4 117,231,272
+kutum/README.md
+  s_4af8d6f83b24e8::t_225ea46ae1418f 21-23,80-108
+kutum/backup.sh
+  s_4af8d6f83b24e8::t_654ae4eed10cfb 14-15,35
+kutum/deck-README.txt
+  s_4af8d6f83b24e8::t_dc97c5faceb865 1-17
+kutum/doctor.sh
+  s_4af8d6f83b24e8::t_660d68703b0cb2 63-68
+kutum/find.py
+  s_4af8d6f83b24e8::t_961e92b185127d 1-284
+kutum/setup.sh
+  s_4af8d6f83b24e8::t_17d083c20d8228 283,290,299,311,323,331-353
+kutum/ssh_config
+  s_4af8d6f83b24e8::t_ddd0f06156e004 1-32
+src/mongla_batighor/layouts/flow.json
+  s_4af8d6f83b24e8::t_b9a370476ca83b 69-73
+src/mongla_batighor/mongla_batighor/views.py
+  s_4af8d6f83b24e8::t_23aa36ec27b924 244-248
+src/mongla_localization/mongla_localization/course_map.py
+  s_4af8d6f83b24e8::t_b54b22df0d5e30 48-58,70,106-128,208-209,212-220,227-251
+src/mongla_localization/mongla_localization/course_survey.py
+  s_4af8d6f83b24e8::t_e89a17021d5e32 6,12-19,35-36,90-123,133-141,150-151,157-165,167-171,176,178
+src/mongla_localization/mongla_localization/courses/robosub26.yaml
+  s_4af8d6f83b24e8::t_11f94ea187e77b 13,28-42,47-49
+src/mongla_localization/mongla_localization/courses/sauvc26.yaml
+  s_4af8d6f83b24e8::t_6dbc3f2a4a180c 15,29-51
+src/mongla_localization/mongla_localization/courses/sauvc_olympic.yaml
+  s_4af8d6f83b24e8::t_8c7cdb20a26ce8 19,42-64
+src/mongla_localization/test/test_course_survey.py
+  s_4af8d6f83b24e8::t_411e433411a3f7 50-64
+src/mongla_manager/config/bringup.example.yaml
+  s_4af8d6f83b24e8::t_a7dd3d2cd4c851 3,5,63-66
+src/mongla_manager/launch/bringup.launch.py
+  s_4af8d6f83b24e8::t_f8bc0df609f9a6 127-161,227-233,370-371,402
+src/mongla_manager/mongla_manager/bringup_host.py
+  s_4af8d6f83b24e8::t_438c8c5c0b13b2 310-312,314-322,328-332,355-378,395-399,428
+src/mongla_manager/test/test_feature_switches.py
+  s_4af8d6f83b24e8::t_669622a37c9512 88
+src/mongla_manager/test/test_mission_keepalive.py
+  s_4af8d6f83b24e8::t_09c664691e5b03 439-466
+src/mongla_manager/test/test_the_course_is_the_venues_one_file.py
+  s_4af8d6f83b24e8::t_61c3b8539c5c6a 1-80
+src/mongla_planner/mongla_planner/dsl_heading.py
+  s_4af8d6f83b24e8::t_01f2aac5240410 25,118-119,121-124,126-133,143,146-148
+src/mongla_planner/mongla_planner/dsl_support.py
+  s_4af8d6f83b24e8::t_29df22df94770a 169-174
+src/mongla_planner/mongla_planner/mission.py
+  s_4af8d6f83b24e8::t_11ee4050f36db2 119-122,199-203
+src/mongla_planner/mongla_planner/missions/localization_check.py
+  s_4af8d6f83b24e8::t_23a0f8db97fa8c 26
+src/mongla_planner/mongla_planner/missions/survey_course.py
+  s_4af8d6f83b24e8::t_fa1ab64038c2b5 23
+src/mongla_planner/mongla_planner/preflight.py
+  s_4af8d6f83b24e8::t_0e80cc73c6a14a 1-141
+src/mongla_planner/package.xml
+  s_4af8d6f83b24e8::t_d5b6e1f7f0098e 28
+src/mongla_planner/test/test_a_run_without_a_floor_does_not_start.py
+  s_4af8d6f83b24e8::t_812e8a13b63efc 1-56
+src/mongla_planner/test/test_course_floor_reaches_flow.py
+  s_4af8d6f83b24e8::t_fb48de4f5c7c08 1-31
+src/mongla_runtime/mongla_runtime/launch_defaults.py
+  s_4af8d6f83b24e8::t_cf749162037a2c 160-188
+src/mongla_vision/config/target_geometry.yaml
+  s_4af8d6f83b24e8::t_22e811ee049385 36,290
+src/mongla_vision/mongla_vision/flow/flow_frame.py
+  s_4af8d6f83b24e8::t_405341ad4b986e 16,31-32,341,344-373
+src/mongla_vision/mongla_vision/flow/flow_math.py
+  s_4af8d6f83b24e8::t_90397fa15c381a 56-108
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  s_4af8d6f83b24e8::t_eb2ea33fe0ca4a 92-93,200-210,346,349-371,390
+src/mongla_vision/mongla_vision/flow/flow_setup.py
+  s_4af8d6f83b24e8::t_29db436d5cb766 50-55,164-167,356-398
+src/mongla_vision/mongla_vision/target_geometry.py
+  s_4af8d6f83b24e8::t_0b31a4f8ba7813 101-103,122,164-184
+src/mongla_vision/test/test_distance_height_gate.py
+  s_4af8d6f83b24e8::t_405734f1bcf529 44-45,47
+src/mongla_vision/test/test_floor_depth_follows_the_slope.py
+  s_4af8d6f83b24e8::t_c00a5139da3039 1-107
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  s_4af8d6f83b24e8::t_942da74597fc81 81-83
+tools/ci/gen_reference.py
+  s_4af8d6f83b24e8::t_5c446da66c22d6 138,142,144,293,310
+README.md
+  s_4af8d6f83b24e8::t_99ef03db551d90 13,122,131,136,667,669-671,676,883-887,889-890,892,912,998
+docs/index.html
+  s_4af8d6f83b24e8::t_8b787b0a8603bd 113,1949
+docs/stats.json
+  s_4af8d6f83b24e8::t_45cb8b510d2a08 2-5,10,12,16,21,26,30,38,42-44,50-51,58-59,62-63,66,70-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "68a16c1d910a251c980fc1c73fe0719f8155c00f",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
