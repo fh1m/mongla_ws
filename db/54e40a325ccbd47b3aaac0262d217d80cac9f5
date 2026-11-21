@@ -1,0 +1,35 @@
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_e3cfbffa516c94 902-927
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_782765e721df6e 167,9109-9140
+.claude/context/missions/course-file.md
+  s_4af8d6f83b24e8::t_3ad2240a60b15d 107-113
+README.md
+  s_4af8d6f83b24e8::t_c010d21a10f248 64,865,868
+docs/index.html
+  s_4af8d6f83b24e8::t_c11d508dc6180a 1873-1875,1877
+src/mongla_vision/mongla_vision/flow/tile_grating.py
+  s_4af8d6f83b24e8::t_4077470ca4d571 195-246,260,288,381-382,384-391,393-400
+src/mongla_vision/test/test_tile_grating.py
+  s_4af8d6f83b24e8::t_1d9033ea1a9730 25,262-311
+tools/README.md
+  s_4af8d6f83b24e8::t_f698c88d5364ce 207
+tools/studies/tile_grating_real.py
+  s_4af8d6f83b24e8::t_544d71c64cc2a2 1-251
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "db54e40a325ccbd47b3aaac0262d217d80cac9f5",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
