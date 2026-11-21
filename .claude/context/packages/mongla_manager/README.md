@@ -64,7 +64,7 @@ sequenceDiagram
 |---|---|---|
 | `/mongla/state` | armed, mode, heading, depth, battery | on change plus a heartbeat; a missing number is `NaN`, never `0.0` |
 | `/mongla/imu` · `/mongla/imu_rates` | the board's inertial data | stamped with the board's own clock where available |
-| `/mongla/demand` | the forward and lateral demand in force on the board, `NaN` when unknown | the estimator uses it to predict motion; see *where the demand comes from* below |
+| `/mongla/demand` | the forward (`x`) and lateral (`y`) demand in force on the board, `NaN` when unknown; `z` is always `NaN`, since the board reports no heave demand here | the estimator uses it to predict motion; see *where the demand comes from* below |
 | `/mongla/esc_rpm` | per-thruster RPM | from the board's ESC telemetry; a message count never proves a thruster is alive |
 | `/mongla/board_link` | what the link carries now: bytes/s against the 11520 the line can carry, frames/s per message type, the board's own drop rate and error count, and every `NAMED_VALUE_FLOAT` channel with its age | once a second, over a 4 s window (`link_meter.py`). A channel silent for 3 s is `NaN` with its age, never its last value; drop and errors are `NaN` until `SYS_STATUS` arrives. Batighor's `board_link` layout draws it |
 | `/diagnostics` | the health board, every subsystem every second, as `diagnostic_msgs/DiagnosticArray` | a subsystem that is not reporting is STALE (level 3), never OK; Foxglove's Diagnostics panel draws it and `pool_record.sh` keeps it |

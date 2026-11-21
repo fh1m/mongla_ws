@@ -11,6 +11,8 @@ Real `SrotFC` on a fake master, real `BoardYaw`, the node's real
 methods run unbound on a stub; only the age of the cached ATTITUDE is varied.
 """
 import math
+
+import pytest
 import pathlib
 import sys
 import time
@@ -107,3 +109,24 @@ def test_a_stale_heartbeat_is_an_unknown_mode():
     fc.master.messages['HEARTBEAT'] = SimpleNamespace(
         base_mode=0, autopilot=0, custom_mode=0, _timestamp=time.time() - 60.0)
     assert fc.get_mode() == 'UNKNOWN'
+
+
+def test_the_demand_says_heave_is_unknown_not_zero():
+    """The board reports surge and sway demand only. The message's z was left
+    at its default 0.0, and Batighor plotted it as a heave demand of exactly
+    zero: a confident number nothing measured."""
+    from geometry_msgs.msg import Vector3Stamped
+    from mongla_manager.node_telemetry import TelemetryMixin
+    for d in ((0.4, -0.2), None):
+        pub = _Pub()
+        stub = SimpleNamespace(
+            fc=SimpleNamespace(demand=lambda d=d: d), demand_publisher=pub,
+            _Vector3Stamped=Vector3Stamped,
+            get_clock=lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=Time)))
+        TelemetryMixin._publish_demand(stub)
+        v = pub.msgs[-1].vector
+        if d is None:
+            assert math.isnan(v.x) and math.isnan(v.y)
+        else:
+            assert (v.x, v.y) == pytest.approx(d)
+        assert math.isnan(v.z)

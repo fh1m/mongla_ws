@@ -364,8 +364,7 @@ def mission(v: View):
                (34, v('text', instrument('MissionText'))),
                (30, col((3, v('mission', instrument('Mission'))),
                         (2, v('demand', plot(series('/mongla/demand.vector.x', 'surge'),
-                                             series('/mongla/demand.vector.y', 'sway'),
-                                             series('/mongla/demand.vector.z', 'heave')))))))
+                                             series('/mongla/demand.vector.y', 'sway')))))))
 
 
 def bins_downward(v: View):
