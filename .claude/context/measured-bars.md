@@ -163,6 +163,7 @@ is how `recommend()` happened.
 - [97. MONOCULAR DEPTH ON THE HAILO-8 — no network in the Model Zoo carries the floor's scale, so none can give flow its height (2026-11-20)](#97-monocular-depth-on-the-hailo-8--no-network-in-the-model-zoo-carries-the-floors-scale-so-none-can-give-flow-its-height-2026-11-20)
 - [98. THE DETECTOR FAMILY — yolov8n matches yolo11n after INT8 and runs 3.3x faster on the Hailo-8 (2026-11-20)](#98-the-detector-family--yolov8n-matches-yolo11n-after-int8-and-runs-33x-faster-on-the-hailo-8-2026-11-20)
 - [99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20)](#99-localization-on-a-real-bench-recording--state-verdict-and-verbs-replayed-7-cm-at-rest-zupt-rate-is-not-the-limit-2026-11-20)
+- [100. HEIGHT FROM A DEPTH CHANGE: passes a flat synthetic floor, fails real water (2026-11-21)](#100-height-from-a-depth-change-passes-a-flat-synthetic-floor-fails-real-water-2026-11-21)
 <!-- contents:end -->
 
 ---
@@ -9070,4 +9071,37 @@ of 10^6 m. Every number above is from a run with 0 gaps and no player left after
   with the gyro quiet, applied 3 ZUPTs in 3 s under the magnitude veto and none per axis
   (`test_a_hull_shaking_without_turning_is_not_still`). `STILL_ACCEL_SPREAD` 0.25 m/s^2 is
   unchanged; it now bounds each axis.
+
+---
+
+## 100. HEIGHT FROM A DEPTH CHANGE: passes a flat synthetic floor, fails real water (2026-11-21)
+
+`tools/studies/heave_height.py`, bead dg7. The question: before the first prop fix, a
+sloping untiled floor leaves flow on the middle of the soundings, up to 0.36 m off at a
+0.72 m spread. Sink by dd and the floor's image magnifies by s = h_before / h_after, so
+height = dd / (s - 1): the barometer and the tracked points alone, with focal length and
+refraction cancelling. Each bar below was written before its run.
+
+| run | estimator | result | bar |
+|---|---|---|---|
+| synthetic, 60 heaves of 0.15 m, 5 mm baro | two-point dd / (s - 1) | RMS 4.8 cm, worst 15.3 cm | **missed** (3 cm, 8 cm) |
+| same, ECC-refined scale | | RMS 4.80 cm: no change | the error is the barometer |
+| synthetic, 0.5 m descent, **16.4 mm** baro at 22 Hz (§ "Bar30 noise") | line of depth against 1 - 1/s over every sample | RMS 1.47 cm, worst 4.56 cm, \|err\|/sigma p99 2.28 | **pass** |
+| synthetic slope 1.28 to 2.00 m | same | worst 0.048 m against the middle's 0.360 m | **pass** (0.08 m) |
+| **AQUALOC harbour, real water** | same, fisheye undistorted | **58 of 74 heaves answered, median 36 %, p90 84 %, bias -17 %; 67 % within 3 sigma** | **falsified** (median 15 %) |
+
+Two simulator corrections came before the passing runs, each logged in dg7 before its rerun:
+the first bar assumed 5 mm barometer noise where the ledger says 16.4 mm, and the first
+texture (256 px/m) was a blur below 0.7 m, so the study measured its renderer.
+
+Real water does not improve with a larger change (|dd| >= 0.3 m: 53 %; >= 0.45 m: 37 %), and
+no time shift between pressure and frames removes it (a sweep of -1 to +1 s on sequence 1:
+best median 21 % at 0 s, dives and rises both low). The model assumes a flat floor and a
+magnification-only image change; a hull that translates and pitches over a seabed with
+relief breaks both. A tiled pool floor is flatter than a harbour, so this is not proof it
+fails in a pool, but nothing ships on a synthetic pass: the estimator lives in the study,
+not in flow.
+
+**What closes the gap instead:** `tile_m` (the grating is a direct height and comes first),
+an early first prop fix, and the real ask, a downward range sensor (hardware team).
 
