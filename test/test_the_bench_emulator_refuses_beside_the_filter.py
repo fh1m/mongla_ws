@@ -48,3 +48,23 @@ def test_the_emulator_refuses_while_a_filter_publishes(monkeypatch):
         filt.destroy_node()
     finally:
         rclpy.shutdown()
+
+
+def test_the_emulator_says_everything_the_filter_says():
+    """A stand-in that leaves out a topic the filter publishes leaves the
+    panels reading it blank on the bench: Navigation said `aided by --`
+    beside a map saying `aided (emulated)` (desktop app, 2026-11-22). The
+    filter's own list is `SAYS` in its construction test, read here so there
+    is one list. `/tf_static` is left out: the emulator draws no fixed frames,
+    the bringup's frame publisher does."""
+    import ast
+    real = Path(__file__).resolve().parents[1] / 'src' / 'mongla_localization' / 'test' / \
+        'test_the_real_node_constructs.py'
+    tree = ast.parse(real.read_text())
+    says = next(ast.literal_eval(n.value) for n in tree.body
+                if isinstance(n, ast.Assign) and getattr(n.targets[0], 'id', '') == 'SAYS')
+    src = TOOL.read_text()
+    published = set(re.findall(r"create_publisher\(\s*\w+\s*,\s*'([^']+)'", src))
+    if 'TransformBroadcaster(' in src:
+        published.add('/tf')
+    assert says - {'/tf_static'} <= published, says - {'/tf_static'} - published

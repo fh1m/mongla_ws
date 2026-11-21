@@ -12,7 +12,8 @@ so the map, the Mission view and a real `go_to` can be watched end to end:
     ros2 run mongla_planner mongla go_to --x_m 8 --y_m 2 --tolerance_m 0.5
 
 It publishes what the filter publishes (`/mongla/localization/state`,
-`/mongla/odom`, the `odom_ned -> mongla` transform), and moves by integrating
+`/mongla/odom`, the `odom_ned -> mongla` transform, and the latched
+`/mongla/localization/aiding` and `/motion` the Navigation panel reads), and moves by integrating
 the manager's own `/mongla/demand` (surge and sway, -1 to 1) at `--speed`
 metres a second at full demand, along the board's heading from `/mongla/state`.
 That is kinematics, not a vehicle: no drag, no inertia, no drift. Every state
@@ -90,6 +91,8 @@ def run(a) -> int:
     from mongla_interfaces.msg import LocalizationState, MonglaState
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
+    from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
+    from std_msgs.msg import String
     from tf2_ros import TransformBroadcaster
 
     rclpy.init()
@@ -108,6 +111,13 @@ def run(a) -> int:
         return 1
     pub_state = node.create_publisher(LocalizationState, '/mongla/localization/state', 10)
     pub_odom = node.create_publisher(Odometry, '/mongla/odom', 10)
+    # Latched, as the filter latches them: they change only with the regime.
+    latched = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                         durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+    pub_aiding = node.create_publisher(String, '/mongla/localization/aiding', latched)
+    pub_motion = node.create_publisher(String, '/mongla/localization/motion', latched)
+    pub_aiding.publish(String(data=AIDING))
+    pub_motion.publish(String(data='ok'))
     tf = TransformBroadcaster(node)
     st = {'x': a.x, 'y': a.y, 'yaw': a.yaw, 'surge': 0.0, 'sway': 0.0, 'depth': math.nan,
           't': time.monotonic()}
