@@ -73,9 +73,14 @@ def plot(*lines: dict) -> tuple:
 def states(*lines: dict) -> tuple:
     # Not synced: a synced state panel spans the whole connection and pulled
     # every plot in its view out of the last minute (`Reset view`, desktop
-    # app 2026-11-12). The plots line up by each following the last minute.
+    # app 2026-11-12). The plots line up by each following the last minute,
+    # and so does this, by `xAxisRange`: without it an unsynced panel also
+    # spans the whole connection, and two hours in, the last minute was a
+    # sliver at its right edge and the panel read as empty (desktop app,
+    # 2026-11-21).
     return 'StateTransitions', {'paths': [{k: v for k, v in s.items() if k != 'enabled'}
-                                          for s in lines], 'isSynced': False}
+                                          for s in lines], 'isSynced': False,
+                                'xAxisRange': PLOT_WINDOW_S}
 
 
 def image(topic: str, *layers: str, synced: bool = False) -> tuple:

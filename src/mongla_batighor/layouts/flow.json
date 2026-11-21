@@ -78,6 +78,7 @@
         }
       ],
       "isSynced": false,
+      "xAxisRange": 60,
       "lichtblickPanelTitle": "velocity scale"
     },
     "Plot!quality": {

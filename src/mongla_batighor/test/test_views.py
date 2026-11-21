@@ -126,6 +126,9 @@ def test_every_plot_follows_the_last_minute_with_a_narrow_legend():
         for k, c in views.build(name)['configById'].items():
             if k.startswith('StateTransitions!'):
                 assert c['isSynced'] is False, (name, k)
+                # Unsynced with no range it spans the whole connection: two
+                # hours in, the last minute was a sliver and read as empty.
+                assert c['xAxisRange'] == views.PLOT_WINDOW_S, (name, k)
 
 
 def test_no_plot_mixes_units():

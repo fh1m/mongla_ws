@@ -87,6 +87,7 @@
         }
       ],
       "isSynced": false,
+      "xAxisRange": 60,
       "lichtblickPanelTitle": "aiding"
     },
     "Plot!pos": {
