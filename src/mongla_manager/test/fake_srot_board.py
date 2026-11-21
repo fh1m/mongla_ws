@@ -45,6 +45,10 @@ MOVE_TURN = 4
 MOVE_DIVE = 5
 MODE_STABILIZE = 0
 MODE_AUTO = 23
+MODE_SURFACE = 9
+# A bench board rises in SURFACE at roughly the speed a hull does; the figure
+# only has to let `surface()` see the surface, as the real board would.
+BENCH_ASCENT_MPS = 0.25
 ACK_ACCEPTED = 0
 ACK_TEMPORARILY_REJECTED = 1
 ACK_IN_PROGRESS = 5
@@ -156,7 +160,17 @@ class FakeSrotBoard:
             self._link.mav.battery_status_send(bid, 0, 0, 2500, cells,
                                                150 if bid else 80, -1, -1, -1)
 
+    def _ascend(self):
+        """On a bench (`bench_motion`), SURFACE brings the hull up. Without it
+        every bench run ended with `surface` failing at -0.5 m, a red line an
+        operator learns to ignore."""
+        now = time.monotonic()
+        dt, self._t_depth = now - getattr(self, '_t_depth', now), now
+        if self.bench_motion and self.mode == MODE_SURFACE and self.depth_m < 0.0:
+            self.depth_m = min(0.0, self.depth_m + BENCH_ASCENT_MPS * dt)
+
     def _telemetry(self):
+        self._ascend()
         roll, pitch, droll, dpitch = self._rock()
         self._link.mav.attitude_send(self._boot_ms(), roll, pitch, self.yaw,
                                      droll, dpitch, 0.0)
