@@ -19,6 +19,7 @@ function initPanel(context) {
   const name = el("input", { placeholder: "your name", size: "12" });
   name.value = readName();
   name.addEventListener("input", () => draw());
+  name.addEventListener("change", () => keepName(me()));
   const me = () => name.value.trim();
 
   const msg = el("div", { class: "msg" });
@@ -86,6 +87,7 @@ function initPanel(context) {
       // The cameras and the saved calibrations come from the node too: say so
       // rather than leave two empty boxes that read as "none on this vehicle".
       cameras.textContent = library.textContent = "listed once a calibration runs";
+      library.dataset.key = "";
       return;
     }
     step.textContent = st.done
@@ -126,19 +128,26 @@ function initPanel(context) {
           el("td", {}, c.calibration ? c.calibration.file : "none"),
           el("td", { class: match[c.match] ?? "" }, c.match || "uncalibrated"))))
       : "no USB camera found (or still looking)");
-    const rows = (st.library || []).map((c) => {
-      const b = el("button", { onclick: () => call("apply", { file: c.file }) }, "apply");
-      b.disabled = me() === "";
-      return [el("tr", {},
-        el("td", {}, c.file), el("td", {}, c.medium || ""), el("td", {}, `${c.width}x${c.height}`),
-        el("td", {}, num(c.fx, 1)), el("td", {}, num(c.max_ere_px, 2)), el("td", {}, b)), b];
-    });
-    applyButtons.length = 0;
-    applyButtons.push(...rows.map((r) => r[1]));
-    library.replaceChildren(rows.length
-      ? el("table", {}, el("tr", {}, ...["calibration", "medium", "size", "fx", "Max ERE", ""].map((h) => el("th", {}, h))),
-        ...rows.map((r) => r[0]))
-      : "no calibrations on this vehicle yet");
+    // Rebuilt only when the library changes. The state comes up to 4 times a
+    // second while a board is in view, and a button replaced between press
+    // and release loses the click.
+    const libKey = JSON.stringify(st.library || []);
+    if (library.dataset.key !== libKey) {
+      library.dataset.key = libKey;
+      const rows = (st.library || []).map((c) => {
+        const b = el("button", { onclick: () => call("apply", { file: c.file }) }, "apply");
+        return [el("tr", {},
+          el("td", {}, c.file), el("td", {}, c.medium || ""), el("td", {}, `${c.width}x${c.height}`),
+          el("td", {}, num(c.fx, 1)), el("td", {}, num(c.max_ere_px, 2)), el("td", {}, b)), b];
+      });
+      applyButtons.length = 0;
+      applyButtons.push(...rows.map((r) => r[1]));
+      library.replaceChildren(rows.length
+        ? el("table", {}, el("tr", {}, ...["calibration", "medium", "size", "fx", "Max ERE", ""].map((h) => el("th", {}, h))),
+          ...rows.map((r) => r[0]))
+        : "no calibrations on this vehicle yet");
+    }
+    for (const b of applyButtons) b.disabled = !named;
   }
 
   context.subscribe([{ topic: STATE }]);

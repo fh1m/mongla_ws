@@ -625,3 +625,39 @@ def test_the_pilot_keeps_the_helm_while_another_view_is_open():
     assert set(who) == {'status'}, 'through a panel that is still mounted'
     assert total == 3, 'and stops on the first answer that is not "pilot"'
 
+
+@NEEDS_NODE
+def test_a_calibration_button_outlives_the_states_that_follow_it():
+    """The calibration state comes up to 4 times a second while a board is in
+    view. Its library's apply buttons were built again on every one, and a
+    button replaced between press and release loses the click."""
+    import json as _json
+    import subprocess as _sp
+    shim = ('function E(t){return{t,className:"",style:{},dataset:{},kids:[],value:"",'
+            'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
+            'setAttribute(){},addEventListener(){}}}'
+            'globalThis.Node=function(){};'
+            'const document={createElement:E,querySelector:()=>true,head:{append(){}}};'
+            'const localStorage={getItem:()=>"ana",setItem(){}};')
+    pre = 'const module={exports:{}};const THEME_CSS="";'
+    probe = ('\nconst ctx={panelElement:{append(){}},subscribe(){},watch(){},callService(){}};'
+             'const lib=[{file:"pi_downward_water.yaml",medium:"water",width:640,height:480,'
+             ' fx:500,max_ere_px:0.4}];'
+             'const st=(hold)=>({topic:"x",message:{data:JSON.stringify({i:0,n:20,applies_to:"pi_downward",'
+             ' medium:"water",grid:"8x6",square:0.025,cell:"centre",band:"near",hold,library:lib})}});'
+             'const find=(e)=>e.t==="button"&&e.kids[0]==="apply"?e:(e.kids||[]).map(find).find(Boolean);'
+             'module.exports.activate({registerPanel:({initPanel})=>{initPanel(ctx);'
+             ' ctx.onRender({currentFrame:[st(0.1)]},()=>{}); const lb=ctx._lib;'
+             ' const a=find(globalThis.ROOT); ctx.onRender({currentFrame:[st(0.6)]},()=>{});'
+             ' const b=find(globalThis.ROOT); lib.push({file:"second.yaml"});'
+             ' ctx.onRender({currentFrame:[st(0.7)]},()=>{}); const c=find(globalThis.ROOT);'
+             ' process.stdout.write(JSON.stringify([Boolean(a), a===b, b===c, a.disabled]));}});')
+    common = (PANELS / 'common.js').read_text().replace(
+        'context.panelElement.append(box);', 'context.panelElement.append(box); globalThis.ROOT = box;')
+    js = pre + shim + common + (PANELS / 'calibrate' / 'extension.js').read_text() + probe
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    found, kept, rebuilt_same, disabled = _json.loads(out.stdout)
+    assert found and not disabled, 'a named operator sees an apply button'
+    assert kept, 'a new hold value does not replace the button'
+    assert not rebuilt_same, 'a changed library does'
