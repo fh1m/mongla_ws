@@ -104,6 +104,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `xfeat_export_hailo.py` | Export XFeat to an ONNX the Hailo compiler can parse -- and prove it is the same network. |
 | `xfeat_finetune.py` | Fine-tune XFeat on OUR water. |
 | `yaw_drift_check.py` | Yaw drift with an OBJECTIVE stillness gate. |
+| `yaw_returns.py` | Heading error under hand motion, against a physical reference edge. |
 
 ## tools/ci/
 
@@ -175,6 +176,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `bank_shortlist_accuracy.py` | Does a cheap signature retrieve the RIGHT reference out of a large bank? `bank_scaling_bench.py` measured that a shortlist makes bank size free: 100 references cost what 10 do, because only the top-k ... |
 | `camera_auto_loops.py` | What do the camera's OWN automatic loops do to our pixels? The question nobody asks. |
 | `chromatic_prior_check.py` | Does the RULEBOOK's colour find the prop, with no model at all? The observation nobody acted on. |
+| `colour_ab.py` | Colour in the detector, or read after it? Scores both arms one way. |
 | `colour_loss.py` | What the water leaves of each colour, measured on our own footage. |
 | `composed_lock_harness.py` | The composed lock ladder on REAL footage: does XFeat run on the Hailo-8 in-graph? Builds the exact composition `detector_dual_node` builds for one camera -- `CameraNode` -> `_Tee` -> `DetectorNode` + ... |
 | `conf_bar.py` | THE conf question, on labelled held-out sessions. |
