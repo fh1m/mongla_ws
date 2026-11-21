@@ -9252,3 +9252,27 @@ GPU driver has its Vulkan ICD installed (`vulkan_flag`); `--no-vulkan` turns it 
 browser on Kutum's page chooses its own backend: Chrome on another desk (GTX 1660 SUPER,
 ANGLE on OpenGL ES) blocked 89-187 ms per switch over seven views, one round. That is a
 different machine and backend, not an A/B against the desktop app.
+
+## 106. THE BOARD'S YAW AT REST drifts 0.001 deg/min over ten minutes (2026-11-22)
+
+The SROT board (rev 14, BNO085 AHRS) on Kutum's USB, on a desk, untouched, no Bar30, the
+stack up (`bringup.launch.py vision:=true batighor:=true`). YAW_REF read `refused: noise`
+throughout: the magnetic reference was not locked, so this is the fused heading without an
+accepted magnetic fix.
+
+**Method.** `/mongla/state` yaw for 600 s, unwrapped; the drift is the least-squares slope,
+the span max minus min. The scorer was run for 5 s first and read a still board as still
+(+0.009 deg/min, span 0.001 deg). An earlier run was discarded: the board was turned
+during it (heading 22 to 342 deg).
+
+**Bar (bead 5ag.9, still half):** record the drift in deg/min; no pass/fail at rest.
+
+| run | samples | drift | span |
+|---|---|---|---|
+| 10 min still | 13 134 over 600 s | +0.001 deg/min | 0.064 deg |
+
+**Result.** At rest the board's heading does not drift measurably: 0.06 deg in ten
+minutes. That is not the heading error that remains in the AQUALOC replay (bead 5ag.8,
+75-177 deg), which comes from motion; the hand-yawed half against a heading truth
+decides it. Not checked here: drift under rotation, with thrusters' magnetic fields, or in
+water.
