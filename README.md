@@ -47,6 +47,7 @@ success while doing nothing.
 
 | state | what it means | how much of this repo |
 |---|---|---|
+| **RIG** | rig tested: the vehicle's own electronics (SROT board, Kutum, cameras) fixed together and moved by hand against a truth | the newest claims, [on the capability map](docs/capability-map.md) |
 | **BENCH** | verified on hardware, on recorded footage, or against the live board | most of it |
 | **BUILT** | implemented, covered by tests, never flown | a lot of it |
 | **BLOCKED** | waiting on water, a firmware merge, or hardware | seven things, [listed](#what-stands-in-the-way) |
@@ -61,7 +62,7 @@ success while doing nothing.
 > automatic mode every move uses. If you are here to judge whether the software works underwater, the honest answer is
 > that nobody knows yet, and this page will not pretend otherwise.
 
-That is also why there is a [ledger of retractions](#the-ledger): 148 measurement entries, of
+That is also why there is a [ledger of retractions](#the-ledger): 150 measurement entries, of
 which 18 say in their own title that they took an earlier result back, and 10 more measured an idea
 and concluded it should stay switched off.
 
@@ -862,10 +863,10 @@ the kind of thing that goes stale — `test_doc_drift.py` fails any doc that sta
 > it's wrong."* — Richard Feynman
 
 [`measured-bars.md`](.claude/context/measured-bars.md) is the file this project is really built
-on: **148 entries, 1,190 rows of numbers**, each with the method, the conditions and the bar it had
+on: **150 entries, 1,200 rows of numbers**, each with the method, the conditions and the bar it had
 to clear. Tests read it. A constant that drifts from it fails CI.
 
-**18 of those 148 entries say in their own title that they took an earlier result back.** 10
+**18 of those 150 entries say in their own title that they took an earlier result back.** 10
 more measured an idea and concluded it should stay switched off. The retractions live in the
 same file as the results that stand, in the middle rather than in an appendix:
 

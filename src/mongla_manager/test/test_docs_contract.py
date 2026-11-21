@@ -175,7 +175,7 @@ def test_the_shift_credits_the_firmware_lead_and_names_all_four_repositories():
 def test_the_capability_map_states_a_verification_state_on_every_row():
     """A capability map that quietly drops the honest states is marketing."""
     text = (DOCS / 'capability-map.md').read_text()
-    for state in ('WATER', 'BENCH', 'BUILT', 'BLOCKED'):
+    for state in ('WATER', 'RIG', 'BENCH', 'BUILT', 'BLOCKED'):
         assert state in text, f'the {state} state is not used'
     assert 'has not been in water' in text, (
         'the map no longer says this platform has never flown -- if that changed, '

@@ -65,6 +65,7 @@
   --caution:var(--cad-amber);
 
   --state-water:#22d3c5;         /* proven in water   */
+  --state-rig:var(--sea-lit);    /* proven on the vehicle's electronics, by hand */
   --state-bench:var(--cad-amber);/* proven on a bench */
   --state-soft:#9a7bff;          /* software only     */
   --state-blocked:var(--cad-red);/* blocked           */
@@ -396,7 +397,8 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
   grid-template-areas:
     "lead lead b    c"
     "lead lead d    c"
-    "e    e    f    g";}
+    "e    e    f    g"
+    "s    s    s    s";}
 .bento > *{grid-area:var(--a);position:relative;padding:18px 18px 20px;
   border-radius:12px;background:var(--s-raised);border:0;
   box-shadow:var(--e1);overflow:hidden;
@@ -432,7 +434,9 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
   color:var(--ink-3);margin:0 0 12px;max-width:none}
 .bento span.silk.silk--lit{color:var(--signal-text)}
 .bento .b{--a:b} .bento .c{--a:c} .bento .d{--a:d}
-.bento .e{--a:e} .bento .f{--a:f} .bento .g{--a:g}
+.bento .e{--a:e} .bento .f{--a:f} .bento .g{--a:g} .bento .s{--a:s}
+.bento .s{border-left:2px solid var(--state-rig)} .bento .s b{color:var(--state-rig)}
+.bento .s > span:not(.silk){max-width:72ch}
 /* the error, shown: a 30 cm tape, one tick per cm, and the worst error as a
    sliver at its true width -- 1.09 / 30 = 3.63 % of the tape */
 .bento .tape{position:relative;height:30px;margin:4px 0 16px;border-radius:4px;
@@ -485,12 +489,12 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
 }
 @media (max-width:1000px){
   .bento:not(.bento--ledger){grid-template-columns:repeat(2,1fr);
-    grid-template-areas:"lead lead" "b c" "d c" "e e" "f g"}
+    grid-template-areas:"lead lead" "b c" "d c" "e e" "f g" "s s"}
 }
 @media (max-width:560px){
   .bento--ledger > *{grid-column:1 / -1}
   .bento:not(.bento--ledger){grid-template-columns:1fr;
-    grid-template-areas:"lead" "b" "c" "d" "e" "f" "g"}
+    grid-template-areas:"lead" "b" "c" "d" "e" "f" "g" "s"}
   .bento .c{justify-content:flex-start}
 }
 
@@ -513,7 +517,7 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
   color:currentColor;white-space:nowrap;display:inline-block;padding:0}
 .st::before{content:"[ ";opacity:.55}
 .st::after{content:" ]";opacity:.55}
-.st.water{color:var(--state-water)} .st.bench{color:var(--state-bench)}
+.st.water{color:var(--state-water)} .st.rig{color:var(--state-rig)} .st.bench{color:var(--state-bench)}
 .st.soft{color:var(--state-soft)}   .st.blocked{color:var(--state-blocked)}
 
 /* ── the explode stage: the canvas is PINNED and the scroll drives it ──
@@ -1439,7 +1443,7 @@ body > footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 /* colours follow the page's OWN emoji legend (bench, built), not the
    front page's state tokens -- a bar that disagrees with the key printed
    three lines above it is worse than no bar */
-.t--water{--c:var(--state-water)} .t--bench{--c:var(--state-soft)}
+.t--water{--c:var(--state-water)} .t--rig{--c:var(--state-rig)} .t--bench{--c:var(--state-soft)}
 .t--built{--c:var(--cad-amber)} .t--blocked{--c:var(--state-blocked)}
 .tally__bar i{background:var(--c)}
 .tally__key span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;
@@ -1756,7 +1760,7 @@ body > footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
   width:calc((100% - 2px) * var(--w) / 100%);background:var(--c,var(--ink-3))}
 .pages__tally em{grid-column:2/-1;font-style:normal;font-family:var(--data);font-size:10.5px;
   color:var(--ink-3);margin-top:-3px}
-.pages__tally .t--water{--c:#2fbf6a} .pages__tally .t--bench{--c:#8b7cff}
+.pages__tally .t--water{--c:#2fbf6a} .pages__tally .t--rig{--c:var(--state-rig)} .pages__tally .t--bench{--c:#8b7cff}
 .pages__tally .t--built{--c:#e0b341} .pages__tally .t--blocked{--c:var(--signal)}
 /* a count of zero is the most important row on the card: it stays visible */
 .pages__tally li:has(b:empty),.pages__tally .t--water b{color:var(--ink-3)}
