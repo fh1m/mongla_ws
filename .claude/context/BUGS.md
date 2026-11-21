@@ -934,9 +934,16 @@ minute. `battery_trusted` already condemns a pin whose median step exceeds
 `get_battery()`, which read the raw cache.
 
 **Fix.** `get_battery()` asks the same guard, so the unwired pin is NaN (`--`).
+That was not enough on the day: the pin now holds a value for seconds between
+jumps (60 s on Kutum, one sample a second: 41 changes, sitting at 13-14 V like a
+pack, dropping to 1.39-5.86 V and back), so its median step was 0 V and the
+median passed it. The guard also counts jumps past the 2 V bar in its window:
+three condemn it (`BATTERY_MAX_JUMPS`); a pack never makes one and a single
+glitch makes two.
 
-**Guards.** `test_battery_plausibility.py::test_the_battery_on_the_state_topic_is_guarded_too`,
-which fails without the guard.
+**Guards.** `test_battery_plausibility.py::test_the_battery_on_the_state_topic_is_guarded_too`
+and `::test_a_pin_that_holds_a_value_between_jumps_is_not_trusted` (today's
+sequence), each failing without its half of the fix.
 
 ### B-147: under replay the composed lock starved both detectors `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
 

@@ -304,7 +304,12 @@ class SrotTelemetry:
         if not ring or len(ring) < sp.BATTERY_STEP_MIN_SAMPLES:
             return True                 # not enough evidence to accuse it
         mid = sorted(ring)[len(ring) // 2]
-        return mid <= sp.BATTERY_MAX_STEP_V
+        # The median alone passed a pin that HOLDS a value between jumps
+        # (Kutum 2026-11-22: median step 0 V, sitting at 13-14 V like a pack,
+        # jumping to 1.39 V and back). A pack never jumps the bar; one glitch
+        # jumps it twice (out and back), so a third jump in the window is a pin.
+        jumps = sum(1 for s in ring if s > sp.BATTERY_MAX_STEP_V)
+        return mid <= sp.BATTERY_MAX_STEP_V and jumps < sp.BATTERY_MAX_JUMPS
 
     def _baro_healthy(self):
         """True / False / None (never reported) from SYS_STATUS's health bitfield.
