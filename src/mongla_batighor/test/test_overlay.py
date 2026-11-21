@@ -351,3 +351,20 @@ def test_an_unknown_demand_is_said_and_never_drawn_as_none():
     none = demand_scene(0.0, 0.0, Time(), 'mongla').entities[0]
     assert not unknown.arrows and unknown.texts[0].text == 'demand unknown'
     assert not none.arrows and none.texts[0].text == 'demand none'
+
+
+def test_two_boxes_on_one_thing_each_name_the_track_that_follows_it():
+    """Two overlapping boxes on one bin, each overlapping both tracks, each
+    said "#783 #785" (seen on the bench, Bins view): neither named the track
+    following it. The pairing is one to one, best overlap first."""
+    out = annotate(STAMP, _arr(_det(100, 100, 40, 40, label='fire', score=0.51),
+                               _det(104, 104, 40, 40, label='fire', score=0.50)),
+                   tracks=_arr(_det(105, 105, 40, 40, label='fire', track='785'),
+                               _det(100, 100, 40, 40, label='fire', track='783')))
+    texts = sorted(t.text for t in out.texts)
+    assert texts == ['fire 0.50 #785', 'fire 0.51 #783'], texts
+    # A third track with no box of its own still shows, as coasting.
+    out = annotate(STAMP, _arr(_det(100, 100, 40, 40, label='fire')),
+                   tracks=_arr(_det(100, 100, 40, 40, label='fire', track='1'),
+                               _det(103, 103, 40, 40, label='fire', track='2')))
+    assert sorted(t.text for t in out.texts) == ['#2 fire coasting', 'fire 0.80 #1']

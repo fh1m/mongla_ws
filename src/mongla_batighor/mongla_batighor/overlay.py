@@ -256,9 +256,23 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     weak = [_box(d) for d in (candidates.detections if candidates else [])
             if _key(_box(d)) not in shown]
     trks = [(d.id, _box(d)) for d in (tracks.detections if tracks else [])]
+    # Each track is named on one box, its best overlap, and each box carries
+    # one track. Matched by any overlap, two boxes on one bin each said
+    # "#783 #785" and neither said which track was following it.
+    boxes = dets + weak
+    pairs = sorted(((iou(b, t), i, j) for i, b in enumerate(boxes)
+                    for j, (tid, t) in enumerate(trks) if tid), reverse=True)
+    owner, held = {}, set()
+    for ov, i, j in pairs:
+        if ov < SAME_THING_IOU:
+            break
+        if i not in owner and j not in held:
+            owner[i] = trks[j][0]
+            held.add(j)
 
     def carried(b):
-        return [tid for tid, t in trks if tid and iou(b, t) >= SAME_THING_IOU]
+        i = next(k for k, x in enumerate(boxes) if x is b)
+        return [owner[i]] if i in owner else []
 
     if contours is not None:
         rgba, th = CONTOUR
@@ -307,8 +321,8 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
         texts.append(labels.place(_slots(b, small)[3:] + _slots(b, small)[:3], words, rgba, small))
     for b in dets:
         out.points.append(_loop(stamp, _corners(b), class_colour(b[4]), 2.5))
-    for tid, t in trks:
-        if any(iou(t, b) >= SAME_THING_IOU for b in dets + weak):
+    for j, (tid, t) in enumerate(trks):
+        if j in held or (not tid and any(iou(t, b) >= SAME_THING_IOU for b in boxes)):
             continue                          # named on the box it carries
         rgba, th = COASTING
         out.points.append(_loop(stamp, _corners(t), rgba, th))
