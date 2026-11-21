@@ -269,7 +269,7 @@ def _depth_loop_verdict(depth_cmd: float | None,
             f'{depth_m:+.2f} m (DEPTH_CMD={depth_cmd:+.2f})')
 
 
-def _yaw_ref_verdict(raw: float | None) -> tuple[str, str, str]:
+def _yaw_ref_verdict(raw: float | None, rev: int | None = None) -> tuple[str, str, str]:
     """Is ATTITUDE.yaw a magnetic heading, or relative to wherever the BNO booted?
 
     Only LOCKED means absolute. Anything else and an absolute `turn` aims at a number
@@ -277,6 +277,10 @@ def _yaw_ref_verdict(raw: float | None) -> tuple[str, str, str]:
     wrong bearing. MAGACC is NOT a proxy (see SrotFC.check_yaw_reference).
     """
     import mongla_control.fc.srot_protocol as sp      # noqa: F811
+    if raw is None and (rev or 0) >= 9:
+        return (WARN, 'yaw reference unknown',
+                f'YAW_REF not heard in the window (the board is rev {rev} and sends it). '
+                'Prefer relative turns')
     if raw is None:
         return (WARN, 'yaw reference unknown',
                 'no YAW_REF -- firmware older than rev 9. Prefer relative turns')
@@ -557,7 +561,7 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
         out.append(_baro_noise_verdict(press))
         out.append(_depth_loop_verdict(named.get('DEPTH_CMD'),
                                        _read_param(conn, 'DEPTH_P')))
-        out.append(_yaw_ref_verdict(named.get('YAW_REF')))
+        out.append(_yaw_ref_verdict(named.get('YAW_REF'), rev))
         out.append(_stack_headroom_verdict(named))
         out.append(_heap_verdict(named))
 

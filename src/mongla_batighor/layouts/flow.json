@@ -1,14 +1,52 @@
 {
   "configById": {
-    "Image!floor": {
+    "Image!floorcam": {
       "imageMode": {
         "imageTopic": "/mongla/vision/downward/stream/compressed",
         "annotations": {
           "/mongla/vision/downward/flow_annotations": {
             "visible": true
+          },
+          "/mongla/vision/downward/floor_annotations": {
+            "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "downward camera, the floor read"
+    },
+    "Plot!distance": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/distance_traveled.data",
+          "label": "distance m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "distance"
+    },
+    "Plot!tracks": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/distance_debug.data[2]",
+          "label": "tracks",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "tracks"
     },
     "Plot!velocity": {
       "paths": [
@@ -43,23 +81,6 @@
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "velocity"
     },
-    "Plot!distance": {
-      "paths": [
-        {
-          "value": "/mongla/vision/downward/distance_traveled.data",
-          "label": "distance m",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
-        }
-      ],
-      "showLegend": true,
-      "legendDisplay": "left",
-      "sidebarDimension": 190,
-      "followingViewWidth": 60,
-      "isSynced": true,
-      "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "distance"
-    },
     "StateTransitions!calibration": {
       "paths": [
         {
@@ -74,6 +95,7 @@
         }
       ],
       "isSynced": false,
+      "xAxisRange": 60,
       "lichtblickPanelTitle": "velocity scale"
     },
     "Plot!quality": {
@@ -103,23 +125,6 @@
       "isSynced": true,
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "flow quality and heights"
-    },
-    "Plot!tracks": {
-      "paths": [
-        {
-          "value": "/mongla/vision/downward/distance_debug.data[2]",
-          "label": "tracks",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
-        }
-      ],
-      "showLegend": true,
-      "legendDisplay": "left",
-      "sidebarDimension": 190,
-      "followingViewWidth": 60,
-      "isSynced": true,
-      "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "tracks"
     }
   },
   "globalVariables": {},
@@ -129,28 +134,28 @@
   },
   "layout": {
     "direction": "row",
-    "first": "Image!floor",
+    "first": {
+      "direction": "column",
+      "first": "Image!floorcam",
+      "second": {
+        "direction": "row",
+        "first": "Plot!distance",
+        "second": "Plot!tracks",
+        "splitPercentage": 50.0
+      },
+      "splitPercentage": 80.0
+    },
     "second": {
       "direction": "column",
       "first": "Plot!velocity",
       "second": {
         "direction": "column",
-        "first": "Plot!distance",
-        "second": {
-          "direction": "column",
-          "first": "StateTransitions!calibration",
-          "second": {
-            "direction": "column",
-            "first": "Plot!quality",
-            "second": "Plot!tracks",
-            "splitPercentage": 50.0
-          },
-          "splitPercentage": 33.3
-        },
-        "splitPercentage": 25.0
+        "first": "StateTransitions!calibration",
+        "second": "Plot!quality",
+        "splitPercentage": 50.0
       },
-      "splitPercentage": 20.0
+      "splitPercentage": 33.3
     },
-    "splitPercentage": 58.0
+    "splitPercentage": 62.0
   }
 }

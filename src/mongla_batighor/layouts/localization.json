@@ -1,10 +1,15 @@
 {
   "configById": {
+    "mongla.batighor.LocalizationMap!locmap": {},
+    "mongla.batighor.Navigation!navigation": {},
     "3D!nav": {
       "followTf": "mongla",
       "followMode": "follow-position",
       "topics": {
         "/mongla/odom": {
+          "visible": true
+        },
+        "/mongla/batighor/scene": {
           "visible": true
         }
       },
@@ -17,7 +22,7 @@
         }
       },
       "cameraState": {
-        "distance": 2.2,
+        "distance": 1.3,
         "perspective": true,
         "phi": 55,
         "thetaOffset": 200,
@@ -51,9 +56,9 @@
           "url": "/model/mongla.urdf",
           "order": 1
         }
-      }
+      },
+      "lichtblickPanelTitle": "odometry, 3D"
     },
-    "mongla.batighor.Navigation!navigation": {},
     "StateTransitions!aiding": {
       "paths": [
         {
@@ -68,20 +73,12 @@
         },
         {
           "value": "/mongla/localization/aiding.data",
-          "label": "aided by",
+          "label": "aiding",
           "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mongla/localization/motion.data",
-          "label": "motion",
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mongla/state.mode",
-          "label": "mode"
         }
       ],
       "isSynced": false,
+      "xAxisRange": 60,
       "lichtblickPanelTitle": "aiding"
     },
     "Plot!pos": {
@@ -119,6 +116,23 @@
       "isSynced": true,
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "pos"
+    },
+    "Plot!sigma": {
+      "paths": [
+        {
+          "value": "/mongla/localization/state.sigma_xy_m",
+          "label": "sigma xy m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "sigma"
     },
     "Plot!vel": {
       "paths": [
@@ -214,8 +228,13 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "3D!nav",
-      "second": "mongla.batighor.Navigation!navigation",
+      "first": "mongla.batighor.LocalizationMap!locmap",
+      "second": {
+        "direction": "row",
+        "first": "mongla.batighor.Navigation!navigation",
+        "second": "3D!nav",
+        "splitPercentage": 50.0
+      },
       "splitPercentage": 60.0
     },
     "second": {
@@ -226,18 +245,23 @@
         "first": "Plot!pos",
         "second": {
           "direction": "column",
-          "first": "Plot!vel",
+          "first": "Plot!sigma",
           "second": {
             "direction": "column",
-            "first": "Plot!heading",
-            "second": "Plot!floor",
-            "splitPercentage": 50.0
+            "first": "Plot!vel",
+            "second": {
+              "direction": "column",
+              "first": "Plot!heading",
+              "second": "Plot!floor",
+              "splitPercentage": 50.0
+            },
+            "splitPercentage": 33.3
           },
-          "splitPercentage": 33.3
+          "splitPercentage": 18.2
         },
-        "splitPercentage": 25.0
+        "splitPercentage": 21.4
       },
-      "splitPercentage": 14.3
+      "splitPercentage": 30.0
     },
     "splitPercentage": 50.0
   }

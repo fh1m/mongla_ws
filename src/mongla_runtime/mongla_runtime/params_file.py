@@ -104,5 +104,6 @@ def refuse_unknown(node) -> None:
     lost = overridden(wanted, live)
     if lost:
         raise RuntimeError(f'bringup.yaml nodes: {node.get_name()}: {", ".join(lost)} '
-                           f'-- a launch argument sets this; set the argument at '
-                           f'the top level of bringup.yaml instead')
+                           f'-- the launch sets this: when it is a launch argument, '
+                           f'set it at the top level of bringup.yaml; otherwise the '
+                           f'launch file fixes it and the deck cannot change it')

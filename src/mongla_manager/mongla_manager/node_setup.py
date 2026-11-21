@@ -25,6 +25,7 @@ from .connection_config import resolve_srot_profile
 from .vision_tunables import declare_vision_params
 from .yaw_source import BoardYaw
 from .node_support import HEARTBEAT_WAIT_S, SEPARATOR, SROT_MESSAGE_RATES, _HeartbeatThread, _parse_payload_channels
+from mongla_runtime.tether import changes
 
 
 class SetupMixin:
@@ -39,6 +40,9 @@ class SetupMixin:
 
     def _on_set_parameters(self, params):
         from rcl_interfaces.msg import SetParametersResult
+        params = changes(self, params)     # a declaration is not a change (B-145)
+        if not params:
+            return SetParametersResult(successful=True)
         fixed = [p.name for p in params
                  if not p.name.startswith('vision.') and p.name not in self.LIVE_PARAMS]
         if fixed:
@@ -456,6 +460,12 @@ class SetupMixin:
         """Every topic the node publishes about the vehicle, and the IMU clock map."""
         self.state_publisher = self.create_publisher(
             MonglaState, '/mongla/state', 10)
+        # PM2, the thruster pack (over ESP-NOW from the second board), on its
+        # own standard topic: a field added to MonglaState left every bag
+        # recorded before it undecodable (0 of 39534, 2026-11-22).
+        from sensor_msgs.msg import BatteryState
+        self.thruster_pack_publisher = self.create_publisher(
+            BatteryState, '/mongla/thruster_pack', 10)
 
         # Body-frame angular rates for the downward optical-flow distance
         # estimator (rotation compensation). Vector3Stamped: x=pitch_rate,

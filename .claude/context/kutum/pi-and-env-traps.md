@@ -107,3 +107,24 @@ node, so `find_srot_serial()` finds nothing:
 
 ---
 
+
+### E6. The Hailo-8 drops off the PCIe bus — `Failed to open device file /dev/hailo0 with error 6`
+
+**Symptom.** Every detector start dies with `HAILO_DRIVER_OPERATION_FAILED(36)`,
+the launch restarts it three times and gives up, and `hailortcli fw-control
+identify` fails too. `sudo dmesg | grep hailo` shows `Channel N hw state out of
+sync. num available is 65535` (reads of an absent device), then `Device
+disconnected while opening device` on every open. Nothing holds `/dev/hailo0`.
+A `grep hailo` over `/proc/*/fd` is misleading here: it also matches HailoRT's
+own `hailort.log`, which every process that imports `hailo_platform` keeps open.
+
+**Recovery, no reboot.** With the stack stopped:
+
+```bash
+echo 1 | sudo tee /sys/bus/pci/devices/0000:01:00.0/remove
+echo 1 | sudo tee /sys/bus/pci/rescan
+hailortcli fw-control identify     # firmware 4.24.0 again
+```
+
+Seen once, on 2026-11-21, a minute into a blocking `py-spy record` over the
+whole launch; a `--nonblocking` run afterwards kept the chip (BUGS B-147).

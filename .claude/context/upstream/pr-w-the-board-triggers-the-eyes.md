@@ -96,8 +96,8 @@ A forward camera that can be triggered:
 ## What mongla_ws does now
 
 - `fwd_profile:=pi_forward_global_shutter` runs the Sonix global-shutter unit
-  (measured MJPG 640×360 @ 210 fps) on the forward port, and udev names it
-  `/dev/mongla_cam_forward` there. That gives 14× the frames and no skew, but
+  (measured MJPG 640×360 @ 210 fps) looking forward, with
+  `fwd_device_path:=/dev/mongla_cam_downward` (udev names it by model, in any port). That gives 14× the frames and no skew, but
   it is still free-running and stamped on arrival.
 - When section 2 lands, the host side is: `SrotFC` decodes `CAMERA_TRIGGER`
   (`time_usec`, `seq`) in the reader thread, and `camera_node` takes each

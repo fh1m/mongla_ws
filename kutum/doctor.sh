@@ -205,6 +205,22 @@ same() {   # declared file, installed path, what it is
   else warn "$3 differs from kutum/system ($2) -- run kutum/setup.sh --system"; fi
 }
 same "$KUTUM/system/udev/99-mongla-cameras.rules" /etc/udev/rules.d/99-mongla-cameras.rules "camera names"
+# Two cameras on one name: udev gives the link to whichever came last and
+# the other camera has no name at all, so a vision node opens the wrong one
+# and the launch looks right (2026-11-22: the Sonix in the forward port and
+# the Fantech both claimed mongla_cam_forward, and nothing was downward).
+for name in mongla_cam_forward mongla_cam_downward; do
+  who=""
+  for v in /dev/video*; do
+    links="$(udevadm info -q property -n "$v" 2>/dev/null | sed -n 's/^DEVLINKS=//p')"
+    case " $links " in *" /dev/$name "*) who="$who $(udevadm info -q property -n "$v" | sed -n 's/^ID_MODEL=//p')@${v#/dev/}" ;; esac
+  done
+  # shellcheck disable=SC2086 # split on purpose: one word per camera
+  set -- $who
+  if [ "$#" -gt 1 ]; then warn "$name is claimed by $# cameras ($who ) -- one wins at random; move a camera to its port or edit 99-mongla-cameras.rules"
+  elif [ "$#" -eq 0 ]; then warn "no camera is $name"
+  else ok "$name is$who"; fi
+done
 same "$KUTUM/system/udev/51-hailo-udev.rules"     /etc/udev/rules.d/51-hailo-udev.rules     "Hailo device permissions"
 same "$KUTUM/system/systemd/set-cpu-performance"  /usr/local/sbin/set-cpu-performance      "governor script"
 same "$KUTUM/system/systemd/cpu-performance.service" /etc/systemd/system/cpu-performance.service "cpu-performance.service"

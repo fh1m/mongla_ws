@@ -8,7 +8,8 @@
             "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "forward camera"
     },
     "Image!downward": {
       "imageMode": {
@@ -18,7 +19,8 @@
             "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "downward camera"
     },
     "mongla.batighor.Chain!chain": {}
   },
@@ -36,6 +38,6 @@
       "splitPercentage": 50.0
     },
     "second": "mongla.batighor.Chain!chain",
-    "splitPercentage": 40.0
+    "splitPercentage": 37.0
   }
 }

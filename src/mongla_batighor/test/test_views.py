@@ -2,20 +2,21 @@
 is one row there, and no hand-made layout drifts from it."""
 import json
 import re
+from pathlib import Path
 
 from mongla_batighor import views
 from mongla_batighor.seat import CAMERAS
 
 
 def test_every_committed_layout_is_what_the_table_generates():
-    for name in views.VIEWS:
+    for name in [views.CONSOLE, *views.VIEWS]:
         path = views.LAYOUTS / f'{views.FILE.get(name, name)}.json'
         assert path.read_text() == views.render(name), \
             f'{path.name} is stale: ros2 run mongla_batighor views --write'
 
 
 def test_no_layout_is_made_by_hand():
-    made = {views.FILE.get(n, n) for n in views.VIEWS}
+    made = {views.CONSOLE} | {views.FILE.get(n, n) for n in views.VIEWS}
     assert {p.stem for p in views.LAYOUTS.glob('*.json')} == made
 
 
@@ -107,7 +108,7 @@ def test_a_view_for_judging_boxes_shows_each_frame_with_its_own():
     """Boxes come ~2 frames after the picture; unsynced, a box trails a moving
     target. Synced, the picture stops with the detector, so never in the
     cockpit, where a live picture comes first."""
-    for name in ('vision', 'bins_downward'):
+    for name in ('vision', 'downward'):
         cams = [m for m in _images(name).values() if m['imageTopic'].endswith('stream/compressed')]
         assert cams and all(m.get('synchronize') for m in cams), name
     assert not any(m.get('synchronize') for m in _images('cockpit').values())
@@ -126,6 +127,9 @@ def test_every_plot_follows_the_last_minute_with_a_narrow_legend():
         for k, c in views.build(name)['configById'].items():
             if k.startswith('StateTransitions!'):
                 assert c['isSynced'] is False, (name, k)
+                # Unsynced with no range it spans the whole connection: two
+                # hours in, the last minute was a sliver and read as empty.
+                assert c['xAxisRange'] == views.PLOT_WINDOW_S, (name, k)
 
 
 def test_no_plot_mixes_units():
@@ -151,3 +155,172 @@ def test_every_plot_says_what_it_is_and_its_legend_fits():
             if k.startswith('Plot!'):
                 for p in c['paths']:
                     assert len(p.get('label', '')) <= views.LABEL_CHARS, (name, k, p['label'])
+
+
+def test_the_console_holds_every_view_as_a_tab_with_its_own_panels():
+    """One layout, a tab per view, built by the same functions: every panel a
+    view places is in its tab, under an id no other tab uses."""
+    data = views.build(views.CONSOLE)
+    tabs = data['configById']['Tab!console']['tabs']
+    assert [t['title'] for t in tabs] == [title for _, title in views.TABS]
+    assert set(v for v, _ in views.TABS) <= set(views.VIEWS)
+    for (view, _), tab in zip(views.TABS, tabs):
+        alone = views.build(view)
+        placed = set(re.findall(r'"([^"!]+![^"]+)"', json.dumps(tab['layout'])))
+        assert placed == {pid.replace('!', f'!{view}.', 1) for pid in alone['configById']}
+        for pid in placed:
+            assert data['configById'][pid] == alone['configById'][pid.replace(f'!{view}.', '!', 1)]
+
+
+# Lichtblick draws each state row 64 px tall, plus 30 for the axis, and
+# scrolls what does not fit (its StateTransitions bundle, 2026-11-21). A tab's
+# body is ~860 px in the desktop app on a 1080 p screen, and a panel's title
+# bar takes ~28 of its own.
+STATE_ROW_PX, STATE_AXIS_PX, TAB_BODY_PX, TITLE_PX = 64, 30, 860, 28
+
+
+def _heights(node, h, out):
+    if isinstance(node, str):
+        out[node] = h
+        return out
+    f = node['splitPercentage'] / 100 if node['direction'] == 'column' else 1.0
+    _heights(node['first'], h * f, out)
+    _heights(node['second'], h * (1 - f) if node['direction'] == 'column' else h, out)
+    return out
+
+
+def test_every_state_row_is_visible_without_scrolling():
+    """The Vision tab's lock ladder had seven rows in ~150 px: the forward
+    camera's two showed and the downward camera's were below the fold. The
+    Localization tab's aiding strip showed one row of five."""
+    data = views.build(views.CONSOLE)
+    for tab in data['configById']['Tab!console']['tabs']:
+        for pid, h in _heights(tab['layout'], TAB_BODY_PX, {}).items():
+            if pid.startswith('StateTransitions!'):
+                rows = len(data['configById'][pid]['paths'])
+                need = rows * STATE_ROW_PX + STATE_AXIS_PX
+                assert h - TITLE_PX >= need, (tab['title'], pid, round(h), need)
+
+
+def _all_configs():
+    for name in [views.CONSOLE, *views.VIEWS]:
+        yield from ((name, k, c) for k, c in views.build(name)['configById'].items())
+
+
+def test_everything_drawn_over_a_picture_or_in_the_scene_is_visible():
+    """An overlay the layout names but hides is an operator seeing no boxes
+    while the overlay node works; a hidden scene topic hides the demand arrow."""
+    for name, k, c in _all_configs():
+        for topic, a in c.get('imageMode', {}).get('annotations', {}).items():
+            assert a.get('visible') is True, (name, k, topic)
+        for topic, s in c.get('topics', {}).items():
+            assert s.get('visible') is True, (name, k, topic)
+
+
+def test_only_the_detection_views_make_a_picture_wait_for_its_boxes():
+    """Synchronised, a picture is shown only with its boxes, so it froze
+    whenever the detector stopped. Vision and Downward are where a box must sit
+    on its own frame; everywhere else (the cockpit, the floor read, a
+    calibration) a live picture comes first (views.camera)."""
+    synced = {'vision', 'downward'}
+    seen = set()
+    for name in views.VIEWS:
+        for k, c in views.build(name)['configById'].items():
+            if k.startswith('Image!'):
+                seen.add(name)
+                assert bool(c['imageMode'].get('synchronize')) == (name in synced), (name, k)
+    assert synced <= seen and 'cockpit' in seen
+
+
+def test_plots_line_up_and_name_their_lines():
+    """Synced, the plots in one view share their time axis; each shows its
+    legend, the only place a line is named."""
+    for name, k, c in _all_configs():
+        if k.startswith('Plot!'):
+            assert c['isSynced'] is True and c['showLegend'] is True, (name, k)
+            assert c['xAxisVal'] == 'timestamp', (name, k)
+
+
+def test_the_3d_scene_draws_the_hull_not_frame_names():
+    """Seven frame names drawn on one point said nothing (views.scene)."""
+    scenes = [(name, k, c) for name, k, c in _all_configs() if k.startswith('3D!')]
+    assert scenes
+    for name, k, c in scenes:
+        assert c['scene']['transforms']['showLabel'] is False, (name, k)
+        assert c['layers']['hull']['visible'] is True, (name, k)
+        assert c['followTf'] == 'mongla', (name, k)
+
+
+TAB_BODY_W_PX = 1884                  # the desktop app's window at scale 2, measured
+MOST_EMPTY = 0.15
+
+
+def _vehicle_aspect():
+    """Width over height of the vehicle's camera profiles, from cameras.yaml:
+    one truth. The test once assumed 640x480 (the replay footage); the
+    vehicle streams 640x360, and its pictures sat in panels 4:3 wide."""
+    import yaml
+    cams = yaml.safe_load((Path(views.__file__).resolve().parents[2] / 'mongla_vision'
+                           / 'config' / 'cameras.yaml').read_text())
+    cams = next(v for v in cams.values() if isinstance(v, dict) and 'cameras' in v)['cameras']
+    shapes = {cams[p]['width'] / cams[p]['height'] for p in ('pi_forward', 'pi_downward')}
+    assert len(shapes) == 1, shapes
+    return shapes.pop()
+
+
+CAMERA_ASPECT = _vehicle_aspect()
+CONTROL_PX = 600                      # keys, helm, command, mission and a few log lines
+
+
+def _boxes(node, w, h, out):
+    if isinstance(node, str):
+        out[node] = (w, h)
+        return out
+    f = node['splitPercentage'] / 100
+    if node['direction'] == 'row':
+        _boxes(node['first'], w * f, h, out)
+        _boxes(node['second'], w * (1 - f), h, out)
+    else:
+        _boxes(node['first'], w, h * f, out)
+        _boxes(node['second'], w, h * (1 - f), out)
+    return out
+
+
+def test_a_camera_picture_fills_its_panel():
+    """The Cockpit's cameras sat in 1540 px wide panels showing a 4:3 picture
+    890 px wide: four tenths of the screen was black (2026-11-22). A camera
+    panel is sized to its picture; the calibration's cameras vary and are left
+    out."""
+    data = views.build(views.CONSOLE)
+    for tab in data['configById']['Tab!console']['tabs']:
+        if tab['title'] == 'Calibrate':
+            continue
+        for pid, (w, h) in _boxes(tab['layout'], TAB_BODY_W_PX, TAB_BODY_PX, {}).items():
+            if pid.startswith('Image!'):
+                h -= TITLE_PX
+                fit = min(w, h * CAMERA_ASPECT) * min(h, w / CAMERA_ASPECT)
+                empty = 1 - fit / (w * h)
+                assert empty <= MOST_EMPTY, (tab['title'], pid, round(w), round(h), round(empty, 2))
+
+
+def test_the_control_center_shows_every_key_without_scrolling():
+    """ARM and SEND were below the fold of a 320 px Control Center; a key that
+    needs a scroll first is not there when it is wanted."""
+    data = views.build(views.CONSOLE)
+    seen = 0
+    for tab in data['configById']['Tab!console']['tabs']:
+        for pid, (_, h) in _boxes(tab['layout'], TAB_BODY_W_PX, TAB_BODY_PX, {}).items():
+            if pid.startswith(views.PANEL + 'ControlCenter!'):
+                seen += 1
+                assert h - TITLE_PX >= CONTROL_PX, (tab['title'], pid, round(h))
+    assert seen
+
+
+def test_every_tab_carries_its_glyph():
+    """The theme keys each tab's glyph on its title: renamed from Bins to
+    Downward, the tab showed a blank square (desktop app, 2026-11-22)."""
+    css = (Path(views.__file__).resolve().parents[1] / 'theme' / 'batighor.css').read_text()
+    keyed = set(re.findall(r'\[data-testid="toolbar-tab"\]\[title="([^"]+)"\]\{--mb-glyph', css))
+    titles = {t for _, t in views.TABS}
+    assert titles <= keyed, titles - keyed
+    assert keyed <= titles, f'a glyph for no tab: {keyed - titles}'

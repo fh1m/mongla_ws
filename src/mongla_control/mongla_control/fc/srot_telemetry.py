@@ -267,6 +267,7 @@ class SrotTelemetry:
         ring = self._battery_steps.setdefault(
             bid, collections.deque(maxlen=sp.BATTERY_STEP_WINDOW))
         ring.append(abs(voltage - prev))
+        self.battery_trusted(bid)       # judge every sample, so the latch sees each jump
 
     def battery_trusted(self, bid: int) -> bool:
         """Is this instance reporting a battery, or an unwired pin?
@@ -304,7 +305,22 @@ class SrotTelemetry:
         if not ring or len(ring) < sp.BATTERY_STEP_MIN_SAMPLES:
             return True                 # not enough evidence to accuse it
         mid = sorted(ring)[len(ring) // 2]
-        return mid <= sp.BATTERY_MAX_STEP_V
+        # The median alone passed a pin that HOLDS a value between jumps
+        # (Kutum 2026-11-22: median step 0 V, sitting at 13-14 V like a pack,
+        # jumping to 1.39 V and back). A pack never jumps the bar; one glitch
+        # jumps it twice (out and back), so a third jump in the window is a pin.
+        jumps = sum(1 for s in ring if s > sp.BATTERY_MAX_STEP_V)
+        # Latched: the pin's quiet spells (1.39 V held for seconds) leave too
+        # few jumps in the window and it read as a battery again. A condemned
+        # line is released only by a whole window with no jump at all.
+        condemned = getattr(self, '_battery_condemned', None)
+        if condemned is None:
+            condemned = self._battery_condemned = set()
+        if mid > sp.BATTERY_MAX_STEP_V or jumps >= sp.BATTERY_MAX_JUMPS:
+            condemned.add(bid)
+        elif jumps == 0 and len(ring) == ring.maxlen:
+            condemned.discard(bid)
+        return bid not in condemned
 
     def _baro_healthy(self):
         """True / False / None (never reported) from SYS_STATUS's health bitfield.
@@ -397,6 +413,8 @@ class SrotTelemetry:
         if hit is None:
             return None
         voltage, current, _ = hit
+        if not self.battery_trusted(sp.BATTERY_ID_MAIN):
+            voltage = math.nan            # a floating pin is absence (battery_trusted)
         return {'voltage': voltage, 'current': current}
 
     def get_statustext(self):

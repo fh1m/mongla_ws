@@ -165,6 +165,11 @@ is how `recommend()` happened.
 - [99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20)](#99-localization-on-a-real-bench-recording--state-verdict-and-verbs-replayed-7-cm-at-rest-zupt-rate-is-not-the-limit-2026-11-20)
 - [100. HEIGHT FROM A DEPTH CHANGE: passes a flat synthetic floor, fails real water (2026-11-21)](#100-height-from-a-depth-change-passes-a-flat-synthetic-floor-fails-real-water-2026-11-21)
 - [101. THE TILE GRATING WITH A LANE LINE IN VIEW: fixed on rendered truth, unproven on real footage (2026-11-21)](#101-the-tile-grating-with-a-lane-line-in-view-fixed-on-rendered-truth-unproven-on-real-footage-2026-11-21)
+- [102. ONE TEAM HELD OUT: yolov8n stays, the held-out drop is inconclusive (2026-11-21)](#102-one-team-held-out-yolov8n-stays-the-held-out-drop-is-inconclusive-2026-11-21)
+- [103. BRIDGE COMPRESSION: off buys no latency, so it stays on (2026-11-21)](#103-bridge-compression-off-buys-no-latency-so-it-stays-on-2026-11-21)
+- [104. THE XFEAT ANCHOR costs each composed detector a third of its rate (2026-11-21)](#104-the-xfeat-anchor-costs-each-composed-detector-a-third-of-its-rate-2026-11-21)
+- [105. A TAB SWITCH IN THE DESKTOP APP blocked the page for seconds; Vulkan ends it (2026-11-21)](#105-a-tab-switch-in-the-desktop-app-blocked-the-page-for-seconds-vulkan-ends-it-2026-11-21)
+- [106. THE BOARD'S YAW AT REST drifts 0.001 deg/min over ten minutes (2026-11-22)](#106-the-boards-yaw-at-rest-drifts-0001-degmin-over-ten-minutes-2026-11-22)
 <!-- contents:end -->
 
 ---
@@ -2267,8 +2272,8 @@ evidence of stillness.
 >
 > What survives is the request: `fps 60` costs nothing when ignored and takes
 > what a better unit offers, so the test pins the request, not a delivery.
-> A forward camera that delivers more is the Sonix on the forward port
-> (`fwd_profile:=pi_forward_global_shutter`, MJPG 640×360 @ 210 measured on
+> A forward camera that delivers more is the Sonix looking forward
+> (`fwd_profile:=pi_forward_global_shutter fwd_device_path:=/dev/mongla_cam_downward`, MJPG 640×360 @ 210 measured on
 > the same unit downward), and in the end a board-triggered global-shutter
 > sensor (`upstream/pr-w`).
 
@@ -9138,3 +9143,137 @@ alike: a wrong `tile_m`, or the focal length in air (the water one is 1.333x). O
 does: `tile_grating_real.py VIDEO --tape-m H --tile-m T [--water]`, bar median < 3 %, p95
 < 6 %. On a synthetic clip with known truth it reads 0.2 %, and fails a 7 % wrong `tile_m`.
 
+## 102. ONE TEAM HELD OUT: yolov8n stays, the held-out drop is inconclusive (2026-11-21)
+
+`tools/studies/pool_holdout.py --holdout sauvc-finals`, after the `pole` class-map fix
+(perception/model-pipeline.md). Train: ten other sources' own train splits (50 371 images);
+test: the held-out team's own test split (237 images, 445 boxes); in-pool: each other source's
+own test split, scored alone. COCO start, 20 epochs, imgsz 640, batch 16, seed 0, `yolo val`
+at its defaults.
+
+**Bar, written before training** (`mongla_data/holdout/sauvc-finals/BAR.md`):
+premise confirmed if held-out mAP50 is more than 0.05 under the model's in-pool mean, rejected
+if within 0.01, inconclusive between; yolo11n replaces yolov8n only at +0.02 held-out or more.
+
+| in-pool source (own test split) | yolov8n mAP50 | yolo11n mAP50 |
+|---|---|---|
+| firizki sauvc-2025 | 0.980 | 0.978 |
+| mahindra drum | 0.994 | 0.994 |
+| mahindra gate-flare-combined | 0.973 | 0.972 |
+| malocclusion sauvc | 0.837 | 0.811 |
+| mdp sauvc-2025 | 0.995 | 0.995 |
+| mecatron-2024 sauvc | 0.952 | 0.946 |
+| muhammad-firzha-farhan sauvc | 0.849 | 0.857 |
+| ntu sauvc-v3 (10 images) | 0.751 | 0.792 |
+| sauvc flare | 0.971 | 0.980 |
+| **mean** | **0.922** | **0.925** |
+| **held-out team** | **0.882** | **0.872** |
+| held-out gate / flare / drum | 0.992 / 0.680 / 0.975 | 0.992 / 0.687 / 0.937 |
+
+**Result.** Family: FAIL for yolo11n (-0.010 against +0.02); yolov8n stays. Premise: yolov8n
+0.040 inconclusive, yolo11n 0.053 confirmed, so inconclusive as a whole. One seed; a 0.01
+difference is inside what a second seed could move.
+
+## 103. BRIDGE COMPRESSION: off buys no latency, so it stays on (2026-11-21)
+
+Kutum's bench (replay, the forward clip at 30 fps), the dev box over Tailscale. Two
+foxglove_bridge instances on Kutum side by side, one with `use_compression` on (8765, the
+shipped one), one with it off (8766); a websocket client on the dev box subscribed to
+`/mongla/vision/forward/stream/compressed` on both at once, for 15 s, and took receive time
+minus the frame's header stamp. Both share the clock offset, so their difference is real.
+
+**Bar, written before the run:** turn compression off only if that lowers the median by 5 ms
+or the p95 by 10 ms, with no loss of rate.
+
+| run | compressed median | other bridge median | p95, both |
+|---|---|---|---|
+| A/A (both compressed) | 17.5 ms | 21.9 ms | -- |
+| A/B 1 (8766 uncompressed) | 19.3 ms | 16.9 ms | about 22 ms |
+| A/B 2 | 19.2 ms | 17.8 ms | about 22 ms |
+
+**Result.** FAIL for turning it off: the gain is 1.4 to 2.4 ms against a 4.4 ms difference
+between two identical bridges, and the p95 does not move. Compression stays on
+(`batighor.launch.py`); it is the tether's bandwidth it saves, which a slower link needs.
+
+## 104. THE XFEAT ANCHOR costs each composed detector a third of its rate (2026-11-21)
+
+Kutum's bench: fake board, `replay:=true batighor:=true`, the forward and downward clips
+at 30 fps, both detectors unpaused, the B-147 fix in. A websocket client on the dev box
+subscribed to both `detections` topics at once for 20 s, twice per condition. Only
+`lock_anchor` changed (in the installed `vision_pi.launch.py`, restored after), checked
+in the log (`follow=True anchor=False`).
+
+**Bar, written before the run:** the anchor is the cause of the forward shortfall if,
+with it off, forward detections reach 18.3 Hz (B-147's bar). Forward under 17 Hz with it
+off falsifies that.
+
+| condition | forward Hz | downward Hz | forward median / p95 age |
+|---|---|---|---|
+| anchor on (A) | 14.7, 13.2 | 14.7, 15.5 | 40.6 / 62.7 ms |
+| anchor off (B) | 22.0, 21.8 | 20.9, 22.7 | 36.7 / 46.8 ms |
+| anchor on (A) | 14.6, 14.2 | 12.5, 13.7 | 47.6 / 69.7 ms |
+
+**Result.** PASS: the anchor is the cause. Off, both cameras run at the lock-off rate
+(22.9 Hz, B-147), so the replay path costs nothing more. A GIL profile
+(`py-spy --nonblocking --gil`, 20 s, anchor on) placed 21 % of held-GIL samples in
+`_enrol_or_locate`: XFeat's host post (`keypoints_and_descriptors`, `sample_bicubic`)
+and the bank match, in NumPy. Section 95 measured only XFeat's share of the chip, at
+3 Hz, and that still holds; this is host time in the detectors' process, at the shipped
+4.5 Hz per camera. The same cost applies with live cameras. Bead `mongla_ws-7ue`.
+
+
+## 105. A TAB SWITCH IN THE DESKTOP APP blocked the page for seconds; Vulkan ends it (2026-11-21)
+
+The dev box (RTX 2060 Mobile beside an Intel UHD 630, NVIDIA driver), Lichtblick 1.27
+desktop at scale 2, on Kutum's bench (fake board, replay, both detectors unpaused). Found
+when a pilot lost the helm on opening the Vision view: the Control Center's heartbeat is
+a 1 s timer and the helm lets go after 3 s of silence.
+
+**Method.** A 50 ms `setTimeout` chain in the page records the longest gap between its
+runs; reset, click a tab (no screenshot, which blocks on its own), read it 4 s later.
+Ten views, two rounds per condition, the app restarted between conditions with only the
+ANGLE backend changed. A CPU profile of one switch (Map, 8 s) put 6.2 s in
+`getShaderInfoLog`/`getProgramInfoLog` and 0.9 s in `getContext`: Lichtblick builds its
+WebGL panels again on every switch, and three.js reads each shader's log, which waits for
+the compile.
+
+**Bar, written after the OpenGL rounds and before the Vulkan ones:** a switch must block
+the page for less than the heartbeat's 1 s period on every view.
+
+| backend | longest block per switch, ten views, two rounds |
+|---|---|
+| ANGLE on OpenGL (the default) | 1.5 - 4.9 s |
+| ANGLE on Vulkan (`--use-angle=vulkan`) | 70 - 392 ms |
+
+**Result.** PASS. Vulkan drew every view as OpenGL did (cameras with their overlays, the
+hull in 3D, plots), and a pilot held the helm through 15 switches, the longest gap between
+beats 1.1 s. With no Vulkan driver (`VK_ICD_FILENAMES` pointed at nothing) the flag left
+the app with no WebGL at all, so `batighor_desktop.py` gives it only where the kernel's
+GPU driver has its Vulkan ICD installed (`vulkan_flag`); `--no-vulkan` turns it off. A
+browser on Kutum's page chooses its own backend: Chrome on another desk (GTX 1660 SUPER,
+ANGLE on OpenGL ES) blocked 89-187 ms per switch over seven views, one round. That is a
+different machine and backend, not an A/B against the desktop app.
+
+## 106. THE BOARD'S YAW AT REST drifts 0.001 deg/min over ten minutes (2026-11-22)
+
+The SROT board (rev 14, BNO085 AHRS) on Kutum's USB, on a desk, untouched, no Bar30, the
+stack up (`bringup.launch.py vision:=true batighor:=true`). YAW_REF read `refused: noise`
+throughout: the magnetic reference was not locked, so this is the fused heading without an
+accepted magnetic fix.
+
+**Method.** `/mongla/state` yaw for 600 s, unwrapped; the drift is the least-squares slope,
+the span max minus min. The scorer was run for 5 s first and read a still board as still
+(+0.009 deg/min, span 0.001 deg). An earlier run was discarded: the board was turned
+during it (heading 22 to 342 deg).
+
+**Bar (bead 5ag.9, still half):** record the drift in deg/min; no pass/fail at rest.
+
+| run | samples | drift | span |
+|---|---|---|---|
+| 10 min still | 13 134 over 600 s | +0.001 deg/min | 0.064 deg |
+
+**Result.** At rest the board's heading does not drift measurably: 0.06 deg in ten
+minutes. That is not the heading error that remains in the AQUALOC replay (bead 5ag.8,
+75-177 deg), which comes from motion; the hand-yawed half against a heading truth
+decides it. Not checked here: drift under rotation, with thrusters' magnetic fields, or in
+water.
