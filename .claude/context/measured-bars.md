@@ -167,6 +167,7 @@ is how `recommend()` happened.
 - [101. THE TILE GRATING WITH A LANE LINE IN VIEW: fixed on rendered truth, unproven on real footage (2026-11-21)](#101-the-tile-grating-with-a-lane-line-in-view-fixed-on-rendered-truth-unproven-on-real-footage-2026-11-21)
 - [102. ONE TEAM HELD OUT: yolov8n stays, the held-out drop is inconclusive (2026-11-21)](#102-one-team-held-out-yolov8n-stays-the-held-out-drop-is-inconclusive-2026-11-21)
 - [103. BRIDGE COMPRESSION: off buys no latency, so it stays on (2026-11-21)](#103-bridge-compression-off-buys-no-latency-so-it-stays-on-2026-11-21)
+- [104. THE XFEAT ANCHOR costs each composed detector a third of its rate (2026-11-21)](#104-the-xfeat-anchor-costs-each-composed-detector-a-third-of-its-rate-2026-11-21)
 <!-- contents:end -->
 
 ---
@@ -9191,4 +9192,30 @@ or the p95 by 10 ms, with no loss of rate.
 **Result.** FAIL for turning it off: the gain is 1.4 to 2.4 ms against a 4.4 ms difference
 between two identical bridges, and the p95 does not move. Compression stays on
 (`batighor.launch.py`); it is the tether's bandwidth it saves, which a slower link needs.
+
+## 104. THE XFEAT ANCHOR costs each composed detector a third of its rate (2026-11-21)
+
+Kutum's bench: fake board, `replay:=true batighor:=true`, the forward and downward clips
+at 30 fps, both detectors unpaused, the B-147 fix in. A websocket client on the dev box
+subscribed to both `detections` topics at once for 20 s, twice per condition. Only
+`lock_anchor` changed (in the installed `vision_pi.launch.py`, restored after), checked
+in the log (`follow=True anchor=False`).
+
+**Bar, written before the run:** the anchor is the cause of the forward shortfall if,
+with it off, forward detections reach 18.3 Hz (B-147's bar). Forward under 17 Hz with it
+off falsifies that.
+
+| condition | forward Hz | downward Hz | forward median / p95 age |
+|---|---|---|---|
+| anchor on (A) | 14.7, 13.2 | 14.7, 15.5 | 40.6 / 62.7 ms |
+| anchor off (B) | 22.0, 21.8 | 20.9, 22.7 | 36.7 / 46.8 ms |
+| anchor on (A) | 14.6, 14.2 | 12.5, 13.7 | 47.6 / 69.7 ms |
+
+**Result.** PASS: the anchor is the cause. Off, both cameras run at the lock-off rate
+(22.9 Hz, B-147), so the replay path costs nothing more. A GIL profile
+(`py-spy --nonblocking --gil`, 20 s, anchor on) placed 21 % of held-GIL samples in
+`_enrol_or_locate`: XFeat's host post (`keypoints_and_descriptors`, `sample_bicubic`)
+and the bank match, in NumPy. Section 95 measured only XFeat's share of the chip, at
+3 Hz, and that still holds; this is host time in the detectors' process, at the shipped
+4.5 Hz per camera. The same cost applies with live cameras. Bead `mongla_ws-7ue`.
 
