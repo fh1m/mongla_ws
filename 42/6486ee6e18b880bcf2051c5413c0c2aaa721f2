@@ -1,0 +1,27 @@
+src/mongla_batighor/layouts/batighor.json
+  s_4af8d6f83b24e8::t_8b8e66327732b0 53,113,495
+src/mongla_batighor/layouts/localization.json
+  s_4af8d6f83b24e8::t_9e5f76f852da73 25
+src/mongla_batighor/layouts/map.json
+  s_4af8d6f83b24e8::t_593a13124bb86a 25
+src/mongla_batighor/layouts/mongla_layout.json
+  s_4af8d6f83b24e8::t_e0117cb1b9cc42 53
+src/mongla_batighor/mongla_batighor/views.py
+  s_4af8d6f83b24e8::t_aeae7bb638a0a0 125-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "426486ee6e18b880bcf2051c5413c0c2aaa721f2",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
