@@ -24,6 +24,11 @@ const seeingTopic = (c) => `/mongla/vision/${c}/seeing`;
 const modelTopic = (c) => `/mongla/vision/${c}/vision_info`;
 const STAGES_TOPIC = "/mongla/batighor/stages";     // overlay.py, once a second
 const ageS = (t) => (t ? (Date.now() - t) / 1000 : Infinity);
+// When the message being folded arrived. A fold stamps what it keeps with
+// this, never with the clock, so a message replayed to a panel that mounted
+// late keeps its own age (see LAST in makePanel).
+let HEARD = 0;
+const heard = () => HEARD || Date.now();
 
 function svg(tag, attrs, ...kids) {
   const e = document.createElementNS(SVG, tag);
@@ -237,7 +242,7 @@ function foldMap(s, topic, m) {
       s.track = []; s.fixes = [];
       s.start = m.frame === "pool" ? null : { x: 0, y: 0, yaw: rad(m.yaw_deg) || 0, by: "the filter's origin, heading when first seen" };
     }
-    s.loc = m; s.lAt = Date.now();
+    s.loc = m; s.lAt = heard();
     const p = mapPose(s);
     if (p) {
       const last = s.track[s.track.length - 1];
@@ -248,7 +253,7 @@ function foldMap(s, topic, m) {
     const p = m.point;
     if (p) {
       const was = mapPose(s);
-      s.fixes.push({ x: p.x, y: p.y, fx: was ? was.x : NaN, fy: was ? was.y : NaN, t: Date.now() });
+      s.fixes.push({ x: p.x, y: p.y, fx: was ? was.x : NaN, fy: was ? was.y : NaN, t: heard() });
       if (s.fixes.length > 40) s.fixes.shift();
     }
   } else if (topic === "/mongla/odom") s.odom = m;
@@ -337,6 +342,34 @@ const clock = (s) => (fin(s) ? `${s < 0 ? "-" : ""}${Math.floor(Math.abs(s) / 60
 const STATE_CLASS = { running: "live", done: "ok", refused: "warn", canceled: "warn", failed: "err", abandoned: "warn" };
 const fieldsText = (f) => Object.entries(f || {}).map(([k, v]) => `${k}=${v === null ? "--" : typeof v === "number" ? +v.toFixed(3) : v}`).join("  ");
 
+// The mission's lines, numbered, the running one marked and scrolled to once
+// each time it moves. Pure but for that one scroll; exported for the test.
+function missionText(s) {
+  if (!s.src) return [el("div", { class: "note" }, "no /mongla/mission/source: the runner publishes the mission's text when one starts")];
+  const live = ageS(s.aliveAt) < MISSION_ALIVE_S && s.missionName === s.src.name;
+  const at = s.at && s.at.line;
+  const file = String(s.src.file || "").split("/").pop();
+  const head = el("div", { class: "row pin" }, el("b", { class: live ? "live" : "" }, s.src.name),
+    el("span", { class: "note" }, `${file}${live ? "" : ", ended"}`),
+    at ? el("span", { class: live ? "live" : "" }, `line ${at} sent ${s.at.cmd}, ${num(ageS(s.at.t), 0)} s ago`)
+      : el("span", { class: "note" }, "no verb sent yet"));
+  let mark = null;
+  const rows = s.lines.map((tx, i) => {
+    const n = i + 1;
+    const r = el("div", { class: `ln${n === at ? " now" : ""}${n === s.src.first_line ? " entry" : ""}` },
+      el("span", { class: "no" }, String(n)), el("span", { class: "tx" }, tx || " "));
+    if (n === at) mark = r;
+    return r;
+  });
+  const key = at ? `${at}@${s.at.t}` : `entry@${s.src.first_line}`;
+  if (s.scrolled !== key && typeof requestAnimationFrame === "function") {
+    s.scrolled = key;
+    const target = mark || rows[Math.max(0, (s.src.first_line || 1) - 1)];
+    requestAnimationFrame(() => target && target.scrollIntoView && target.scrollIntoView({ block: "center" }));
+  }
+  return [head, el("div", { class: "code" }, ...rows)];
+}
+
 function kv(...pairs) {
   return el("div", { class: "kv" }, ...pairs.flatMap(([k, v, cls]) => [el("span", {}, k), el("span", cls ? { class: cls } : {}, v)]));
 }
@@ -417,16 +450,16 @@ const INSTRUMENTS = {
     topics: ["/mongla/state", "/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics",
       "/mongla/localization/state", "/mongla/board_link", ...CAMERAS.map(lockTopic)],
     fold(s, topic, m) {
-      if (topic === "/mongla/state") { s.v = m; s.vAt = Date.now(); }
-      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = Date.now(); }
+      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); }
+      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
       else if (topic === "/mongla/mission/task") { try { s.task = JSON.parse(m.data); } catch { /* keep */ } }
       else if (topic === "/mongla/doing") { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
       else if (topic === "/diagnostics") foldDiagnostics(s, m);
-      else if (topic === "/mongla/localization/state") { s.loc = m; s.locAt = Date.now(); }
-      else if (topic === "/mongla/board_link") { s.link = m; s.linkAt = Date.now(); }
+      else if (topic === "/mongla/localization/state") { s.loc = m; s.locAt = heard(); }
+      else if (topic === "/mongla/board_link") { s.link = m; s.linkAt = heard(); }
       else {
         const c = CAMERAS.find((x) => topic === lockTopic(x));
-        if (c) { s.locks = s.locks || {}; s.locks[c] = { m, at: Date.now() }; }
+        if (c) { s.locks = s.locks || {}; s.locks[c] = { m, at: heard() }; }
       }
     },
     draw(s) {
@@ -445,9 +478,9 @@ const INSTRUMENTS = {
     title: "Vehicle",
     topics: ["/mongla/state", "/mongla/batighor/helm_state", "/mongla/flare_order", "/mongla/mission_alive"],
     fold(s, topic, m) {
-      if (topic === "/mongla/state") { s.v = m; s.at = Date.now(); }
+      if (topic === "/mongla/state") { s.v = m; s.at = heard(); }
       // The runner's 2 Hz beat, carrying its name.
-      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = Date.now(); }
+      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
       else if (topic === "/mongla/flare_order") { try { s.flare = JSON.parse(m.data); } catch { /* keep */ } }
       else { try { s.helm = JSON.parse(m.data); } catch { /* keep */ } }
     },
@@ -482,7 +515,7 @@ const INSTRUMENTS = {
       if (topic === "/mongla/vision/active_camera") { s.active = m.data; return; }
       if (topic === STAGES_TOPIC) { try { s.stages = JSON.parse(m.data); } catch { /* keep */ } return; }
       for (const c of CAMERAS) {
-        if (topic === lockTopic(c)) { s.lock[c] = m; s.lockAt[c] = Date.now(); }
+        if (topic === lockTopic(c)) { s.lock[c] = m; s.lockAt[c] = heard(); }
         if (topic === seeingTopic(c)) s.seeing[c] = m.data;
         // The detector's own word for which model runs (latched), with its epoch:
         // a mission's model switch shows as the epoch moving.
@@ -530,7 +563,7 @@ const INSTRUMENTS = {
     fold(s, topic, m) {
       s.track = s.track || []; s.fixes = s.fixes || [];
       if (topic === "/mongla/odom") {
-        s.odom = m; s.at = Date.now();
+        s.odom = m; s.at = heard();
         const p = m.pose && m.pose.pose && m.pose.pose.position;
         if (p) {
           s.track.push({ x: p.x, y: p.y, t: s.at });
@@ -584,13 +617,13 @@ const INSTRUMENTS = {
     title: "Mission",
     topics: ["/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing"],
     fold(s, topic, m) {
-      if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = Date.now(); }
+      if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
       else if (topic === "/mongla/mission/task") {
         try {
-          const t = JSON.parse(m.data); t.at = Date.now();
+          const t = JSON.parse(m.data); t.at = heard();
           s.tasks = [t, ...(s.tasks || []).filter((x) => !(x.task === t.task && x.state === "running"))].slice(0, 8);
         } catch { /* keep */ }
-      } else { try { s.doing = JSON.parse(m.data); s.dAt = Date.now(); } catch { /* keep */ } }
+      } else { try { s.doing = JSON.parse(m.data); s.dAt = heard(); } catch { /* keep */ } }
     },
     draw(s) {
       const live = ageS(s.aliveAt) < MISSION_ALIVE_S && s.missionName;
@@ -623,13 +656,29 @@ const INSTRUMENTS = {
     },
   },
 
+  // The plan beside the map: the mission's file as the runner published it,
+  // and the line of it that sent the verb running now (mission.MissionText).
+  MissionText: {
+    title: "Mission text",
+    topics: ["/mongla/mission/source", "/mongla/mission/line", "/mongla/mission_alive"],
+    fold(s, topic, m) {
+      if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); return; }
+      try {
+        const d = JSON.parse(m.data);
+        if (topic === "/mongla/mission/source") { s.src = d; s.lines = String(d.text || "").split("\n"); s.at = null; }
+        else { s.at = { ...d, t: heard() }; }
+      } catch { /* keep */ }
+    },
+    draw: (s) => missionText(s),
+  },
+
   Thrust: {
     title: "Thrust",
     topics: ["/mongla/demand", "/mongla/esc_rpm", "/mongla/state"],
     fold(s, topic, m) {
-      if (topic === "/mongla/demand") { s.demand = m.vector; s.dAt = Date.now(); }
+      if (topic === "/mongla/demand") { s.demand = m.vector; s.dAt = heard(); }
       else if (topic === "/mongla/esc_rpm") {
-        s.rpm = Array.from(m.data || []); s.rAt = Date.now();
+        s.rpm = Array.from(m.data || []); s.rAt = heard();
         s.peak = Math.max(s.peak || 1000, ...s.rpm.map((r) => Math.abs(r)));
       } else s.state = m;
     },
@@ -655,7 +704,7 @@ const INSTRUMENTS = {
   Link: {
     title: "Link",
     topics: ["/mongla/board_link"],
-    fold(s, topic, m) { s.l = m; s.at = Date.now(); },
+    fold(s, topic, m) { s.l = m; s.at = heard(); },
     draw(s) {
       const l = s.l;
       if (!l) return [el("div", { class: "note" }, "no /mongla/board_link")];
@@ -684,7 +733,7 @@ const INSTRUMENTS = {
     title: "Chain",
     // chain.py publishes it twice a second.
     topics: ["/mongla/batighor/chain"],
-    fold(s, topic, m) { try { s.c = JSON.parse(m.data); s.at = Date.now(); } catch { /* keep */ } },
+    fold(s, topic, m) { try { s.c = JSON.parse(m.data); s.at = heard(); } catch { /* keep */ } },
     draw(s) {
       const c = s.c;
       if (!c) return [el("div", { class: "note" }, "no /mongla/batighor/chain: is the chain meter running?")];
@@ -726,6 +775,19 @@ const INSTRUMENTS = {
   },
 };
 
+// The last message of every topic an instrument read, and when it came, for
+// this app session. Lichtblick hands a panel only what arrives after it
+// mounts: a latched topic (the course, the mission's text, /mongla/doing)
+// arrives once, so a panel opened on a second tab, or re-laid-out, waited for
+// a change that might never come. A panel that mounts is handed these first,
+// at their own arrival times, so an old one reads as old.
+const LAST = new Map();
+
+function foldAt(spec, s, topic, m, at) {
+  HEARD = at;
+  try { spec.fold(s, topic, m); } finally { HEARD = 0; }
+}
+
 function makePanel(spec) {
   return (context) => {
     if (typeof context.setDefaultPanelTitle === "function") context.setDefaultPanelTitle(spec.title);
@@ -736,11 +798,17 @@ function makePanel(spec) {
     if (spec.head) root.append(spec.head(s, () => { dirty = true; }));
     const box = el("div", { class: "body" });
     root.append(box);
+    for (const topic of spec.topics) {
+      const last = LAST.get(topic);
+      if (last) foldAt(spec, s, topic, last.m, last.at);
+    }
     context.subscribe(spec.topics.map((topic) => ({ topic })));
     context.watch("currentFrame");
     context.onRender = (renderState, done) => {
       for (const ev of renderState.currentFrame || []) {
-        spec.fold(s, ev.topic, ev.message);
+        const at = Date.now();
+        LAST.set(ev.topic, { m: ev.message, at });
+        foldAt(spec, s, ev.topic, ev.message, at);
         dirty = true;
       }
       done();
@@ -870,5 +938,7 @@ module.exports = {
   statusOf,
   layoutUpdates,
   placeByStart,
+  makePanel,
+  LAST,
   INSTRUMENTS,
 };

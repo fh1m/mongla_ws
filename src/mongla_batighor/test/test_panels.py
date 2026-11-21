@@ -407,7 +407,8 @@ def test_the_vehicle_panel_calls_a_mission_running_as_the_helm_does():
     (limit,) = re.findall(r'const MISSION_ALIVE_S = ([0-9.]+);', js)
     assert float(limit) == helm.MISSION_ALIVE_S
     # Every instrument that says a mission runs uses that one constant.
-    assert re.findall(r'ageS\(s\.aliveAt\) < (\w+)', js) == ['MISSION_ALIVE_S'] * 2
+    uses = re.findall(r'ageS\(s\.aliveAt\) < ([\w.]+)', js)
+    assert len(uses) >= 2 and set(uses) == {'MISSION_ALIVE_S'}, uses
 
 
 def test_what_an_unset_setting_means_is_the_detectors_own_default():
@@ -495,3 +496,79 @@ def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
     assert cells['health'] == ('1 unknown', 'stale')
     assert cells['vehicle'] == ('ARMED', 'armed') and cells['depth'][0] == '1.20 m'
     assert got['tabs']['Cockpit'] == 'live' and got['tabs']['Vision'] == 'live'
+
+
+def test_the_mission_text_marks_the_line_that_sent_the_verb():
+    """missionText: every line numbered, the running one marked, the mission
+    named live while its runner beats and 'ended' after; nothing published is
+    said as such, never as an empty page."""
+    import json as _json
+    import subprocess as _sp
+    shim = ('const document={createElement:(t)=>({t,className:"",kids:[],attrs:{},'
+            'append(...k){this.kids.push(...k)},setAttribute(k,v){this.attrs[k]=v},'
+            'addEventListener(){}})};'
+            'const text=(e)=>typeof e==="string"?e:(e.kids||[]).map(text).join("");'
+            'const flat=(e)=>typeof e==="string"?[]:[e,...(e.kids||[]).flatMap(flat)];')
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    src = {'name': 'gate_run', 'file': '/x/missions/gate_run.py', 'first_line': 3,
+           'text': 'import x\n\ndef run(m, log):\n    m.arm()\n    m.move_forward(duration=4)\n'}
+    probe = ('\nconst I=module.exports.INSTRUMENTS.MissionText, s={};'
+             'const out=[];'
+             'out.push(I.draw(s).map(text).join("|"));'
+             f'I.fold(s,"/mongla/mission/source",{{data:{_json.dumps(_json.dumps(src))}}});'
+             'I.fold(s,"/mongla/mission_alive",{data:"gate_run"});'
+             'I.fold(s,"/mongla/mission/line",{data:JSON.stringify({line:5,cmd:"move_forward"})});'
+             'let d=I.draw(s);'
+             'const rows=flat(d[1]).filter((e)=>/\\bln\\b/.test(e.className));'
+             'out.push(rows.length, rows.filter((e)=>/now/.test(e.className)).map(text).join(""),'
+             '  rows.filter((e)=>/entry/.test(e.className)).map(text).join(""), text(d[0]));'
+             's.aliveAt=Date.now()-60000; out.push(text(I.draw(s)[0]));'
+             'process.stdout.write(JSON.stringify(out));')
+    js = pre + shim + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS + probe
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    empty, n, now, entry, head, ended = _json.loads(out.stdout)
+    assert 'no /mongla/mission/source' in empty
+    assert n == 6                                        # five lines and the trailing newline
+    assert now == '5    m.move_forward(duration=4)'
+    assert entry == '3def run(m, log):'
+    assert 'gate_run' in head and 'line 5 sent move_forward' in head and 'ended' not in head
+    assert 'gate_run.py, ended' in ended
+
+
+def test_a_panel_that_mounts_late_is_handed_what_came_before_at_its_own_age():
+    """Lichtblick hands a panel only what arrives after it mounts, so the
+    latched course reached the first Map and never a second one (seen in the
+    desktop app: the Mission view's map waiting for a course the Map view
+    showed). A later panel is handed the last message, stamped with when it
+    came, so a beat a minute old does not read as a mission running."""
+    import json as _json
+    import subprocess as _sp
+    shim = ('const document={createElement:(t)=>({t,className:"",kids:[],attrs:{},'
+            'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
+            'setAttribute(k,v){this.attrs[k]=v},addEventListener(){}}),'
+            'querySelector:()=>true,head:{append(){}}};'
+            'const requestAnimationFrame=(f)=>0,cancelAnimationFrame=()=>{};'
+            'const intervals=[];globalThis.setInterval=(f)=>{intervals.push(f);return 0};'
+            'globalThis.clearInterval=()=>{};')
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    probe = ('\nconst X=module.exports, spec=X.INSTRUMENTS.Mission;'
+             'const ctx=()=>({panelElement:{append(){}},subscribe(){},watch(){}});'
+             'const a=ctx(); X.makePanel(spec)(a);'
+             'const doing={verb:"surface",fields:{},since:1};'
+             'a.onRender({currentFrame:[{topic:"/mongla/doing",message:{data:JSON.stringify({now:doing,recent:[],stamp:2})}},'
+             '{topic:"/mongla/mission_alive",message:{data:"gate_run"}}]},()=>{});'
+             'const at=X.LAST.get("/mongla/mission_alive").at;'
+             'X.LAST.get("/mongla/mission_alive").at=at-60000;'
+             'const spy={}; const s2=Object.assign({},spec,{fold(s,t,m){spy.s=s;spec.fold(s,t,m)}});'
+             'X.makePanel(s2)(ctx());'
+             'process.stdout.write(JSON.stringify([spy.s.doing&&spy.s.doing.now.verb,'
+             ' Math.round((Date.now()-spy.s.aliveAt)/1000)]));')
+    js = pre + shim + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS + probe
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    verb, alive_age = _json.loads(out.stdout)
+    assert verb == 'surface'                 # the second panel has /mongla/doing
+    assert alive_age >= 59                   # and the old beat reads as old

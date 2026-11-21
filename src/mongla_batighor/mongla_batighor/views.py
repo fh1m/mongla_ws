@@ -356,13 +356,16 @@ def map_(v: View):
 
 
 def mission(v: View):
-    """The decision layer: the mission, its task and clock, the verb running
-    and how each ended; the error the verb is closing and the demand it sends."""
-    return row((48, v('mission', instrument('Mission'))),
-               (52, col(v('align', align('align x px', 'align y px')),
-                        v('demand', plot(series('/mongla/demand.vector.x', 'surge'),
-                                         series('/mongla/demand.vector.y', 'sway'),
-                                         series('/mongla/demand.vector.z', 'heave'))))))
+    """The plan beside the pool: the map, the mission's text with the line that
+    sent the running verb marked, and the decision layer (task and clock, the
+    verb, how each ended) over the demand it sends. Read left to right: where,
+    what the plan says, what the vehicle is doing about it."""
+    return row((36, v('map', instrument('Map'))),
+               (34, v('text', instrument('MissionText'))),
+               (30, col((3, v('mission', instrument('Mission'))),
+                        (2, v('demand', plot(series('/mongla/demand.vector.x', 'surge'),
+                                             series('/mongla/demand.vector.y', 'sway'),
+                                             series('/mongla/demand.vector.z', 'heave')))))))
 
 
 def bins_downward(v: View):
