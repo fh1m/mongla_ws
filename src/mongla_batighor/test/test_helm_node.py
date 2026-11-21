@@ -5,6 +5,7 @@ real service, the way foxglove_bridge relays a browser's call, so each test
 reads the one thing that matters: which goals the vehicle was sent.
 """
 import json
+import os
 import threading
 import time
 
@@ -62,6 +63,9 @@ class FakeDetector(Node):
             self.declare_parameter(name, value)
 
 
+DISCOVERY_S = 20.0
+
+
 @pytest.fixture
 def rig(tmp_path, monkeypatch):
     monkeypatch.setattr(seat_rules, 'LOST_S', 0.6)
@@ -74,13 +78,15 @@ def rig(tmp_path, monkeypatch):
     spin = threading.Thread(target=ex.spin, daemon=True)
     spin.start()
     cli = me.create_client(Helm, '/mongla/batighor/helm')
-    assert cli.wait_for_service(timeout_sec=5.0)
+    # Discovery only: a wait costs time when it is slow, and a loaded CI
+    # runner took longer than 5 s to see the action server (#207, 2026-11-21).
+    assert cli.wait_for_service(timeout_sec=DISCOVERY_S)
     states = []
     me.create_subscription(String, '/mongla/batighor/helm_state',
                            lambda m: states.append(json.loads(m.data)), LATCHED)
-    assert helm.move.wait_for_server(timeout_sec=5.0)
+    assert helm.move.wait_for_server(timeout_sec=DISCOVERY_S)
     for c in dets:
-        assert helm._set[c].wait_for_service(timeout_sec=5.0)
+        assert helm._set[c].wait_for_service(timeout_sec=DISCOVERY_S)
 
     def call(who, op, **kw):
         req = Helm.Request(who=who, op=op, **kw)
@@ -281,3 +287,31 @@ def test_a_calibration_op_reaches_the_calibration_node_by_the_tuning_rule(rig):
     finally:
         ex.shutdown()
         cal.destroy_node()
+
+
+def test_a_mission_runs_in_its_own_group_and_abort_is_ctrl_c(rig, monkeypatch):
+    """`abort` must reach the runner the way Ctrl-C does, so its abort path
+    cancels, stops and disarms; and starting one must not leave the helm
+    holding the mission's log open (one file per run, for the helm's life)."""
+    import signal
+    import subprocess
+    import mongla_batighor.helm as helm_mod
+    call, _, _, _, _ = rig
+    started = {}
+    real = subprocess.Popen
+
+    def popen(cmd, **kw):
+        started['cmd'], started['out'] = cmd, kw['stdout']
+        started['proc'] = real(['sleep', '30'], **kw)    # stands in for the runner
+        return started['proc']
+
+    monkeypatch.setattr(helm_mod.subprocess, 'Popen', popen)
+    assert call('ann', 'request').ok
+    r = call('ann', 'mission', mission='demo_square')
+    assert r.ok, r.message
+    assert started['cmd'] == ['ros2', 'run', 'mongla_planner', 'mission', 'demo_square']
+    assert started['out'].closed                  # the child holds its own copy
+    proc = started['proc']
+    assert os.getpgid(proc.pid) == proc.pid       # its own group, so killpg reaches it
+    assert call('ann', 'abort').ok
+    assert proc.wait(timeout=5) == -signal.SIGINT
