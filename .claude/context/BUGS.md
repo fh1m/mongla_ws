@@ -925,7 +925,7 @@ section (its lane witness and its fisheye lens could not grade it).
 peak accuracy. Injection: the old module fails 15 of them, the new one
 without fading 20, fading any dark blob fails a negative control.
 
-### B-147: under replay the composed lock starved both detectors `REPRODUCED 2026-11-21` **PARTLY FIXED 2026-11-21**
+### B-147: under replay the composed lock starved both detectors `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
 
 **What.** On Kutum's bench (`replay:=true`, two looped clips at 30 fps,
 detectors unpaused), Batighor's boxes trailed the video and the lock flickered
@@ -949,10 +949,18 @@ downward 12.0, the lock 11.8 and 13.5 Hz. Guards:
 `test_the_detector_is_fed_by_reference_live_and_under_replay`, both
 injection-verified.
 
-**Open.** The bar was within 20 % of the lock-off rates (18.3 and 13 Hz), so
-forward still fails. The lock's lock-step work in this process still halves the
-frames that reach it. Bead `mongla_ws-cui` holds the next measurement. On the
-vehicle the cameras feed by reference and none of this applies.
+**What was left was not replay.** The bar was within 20 % of the lock-off
+rates (18.3 and 13 Hz), and forward still failed. A GIL profile of the composed
+process (`py-spy --nonblocking --gil`) put a fifth of its held-GIL samples in
+the anchor rung: XFeat's keypoint and descriptor extraction and the bank's
+matching, in NumPy, in the process both detectors run in. With only
+`lock_anchor` off, the same bench reached 21.8 to 22.0 Hz forward and 20.9 to
+22.7 Hz downward, at the lock-off rate, and 12.5 to 14.6 Hz with it on again
+(A-B-A, measured-bars 104). So replay no longer costs anything a live camera
+does not. The anchor's cost is the same on the vehicle, and is its own item
+(bead `mongla_ws-7ue`). The earlier "ruled out: the chip, `anchor_hz` 0.5
+changed nothing" was measured while the extra readers held the rate at 2.7 Hz,
+where nothing else could show.
 
 **Also seen.** A blocking `py-spy record` (it stops the process to sample)
 across the whole launch was followed within a minute by the Hailo-8 leaving
