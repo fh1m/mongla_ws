@@ -79,7 +79,10 @@ class TelemetryMixin:
         # arrival monotonic() and must never subtract these stamps.
         m.header.stamp = self.get_clock().now().to_msg()
         m.header.frame_id = _BODY_FRAME
-        m.vector.x, m.vector.y =(math.nan, math.nan) if d is None else d
+        m.vector.x, m.vector.y = (math.nan, math.nan) if d is None else d
+        # The board reports surge and sway demand only; z left at 0.0 read as
+        # a measured heave demand of zero.
+        m.vector.z = math.nan
         self.demand_publisher.publish(m)
 
     def _imu_rates_tick(self):

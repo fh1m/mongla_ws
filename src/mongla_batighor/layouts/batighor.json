@@ -155,11 +155,6 @@
           "value": "/mongla/demand.vector.y",
           "label": "sway",
           "enabled": true
-        },
-        {
-          "value": "/mongla/demand.vector.z",
-          "label": "heave",
-          "enabled": true
         }
       ],
       "showLegend": true,
