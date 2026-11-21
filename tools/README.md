@@ -190,6 +190,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `fresh_bounds_check.py` | Feed the REAL detection stream into the real thresholds and see what happens. |
 | `gap_distribution.py` | The detection-gap distribution, measured at NATIVE FRAME RATE. |
 | `gap_recovery_potential.py` | Is there anything to recover inside a gap? Measured, before building on it. |
+| `heave_height.py` | Height above the floor from a depth change: the image's magnification over the barometer's displacement. |
 | `held_rung_score.py` | Does the HELD rung put the lock where the target is, and only there? HELD lets a box under the acting bar keep a lock the bar acquired, when it lands near where the lock already is ... |
 | `localization_candidates.py` | Score the localization candidates against exact truth, before any water. |
 | `loop_closure_truth.py` | Does a loop closure fire at a REVISIT, and nowhere else? The gates in `anchor/loop_closure.py` are unit-tested against synthetic poses. |
