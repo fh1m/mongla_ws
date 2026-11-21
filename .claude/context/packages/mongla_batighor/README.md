@@ -142,6 +142,13 @@ errors, warnings and unknown rows apart, so a bench with no barometer reads "8 u
 (sea), a warning (amber) or an error (red) in it. Red means look now, and only errors and an armed
 vehicle use it.
 
+**The red alert in the top bar is not ours.** "Definition of schema 'sensor_msgs/msg/Range' has
+changed during the server's runtime" appears on every connection to Kutum. Lichtblick 1.27
+seeds its type table with its built-in Humble messages for any ROS 2 distro but foxy and
+galactic, and Humble's `Range` has no `variance` field, which Jazzy's has; the first advertise
+of `floor_height` then reads as a change. Every message is still decoded with the schema the
+bridge sent, so the floor height is right; only the message-path completion lacks `variance`.
+
 ## Video, by link
 
 ### The desktop app
