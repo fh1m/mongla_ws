@@ -14,7 +14,9 @@ For each camera this turns into `foxglove_msgs/ImageAnnotations` on
   * the anchor's matched features (its learned points), while it runs.
 
 The flow node's tracked pairs go to `<cam>/flow_annotations` (a segment from
-where each point was on the anchor frame to where it is now), and a running
+where each point was on the anchor frame to where it is now), what it read off
+the floor to `<cam>/floor_annotations` (every grout line the tile grating puts
+on the picture, and the lane line's centreline), and a running
 calibration's state to `/mongla/vision/calibration/annotations` (the corners,
 the cell the next pose belongs in, the point the fit is least sure of).
 Lichtblick's image panel draws them over `<cam>/stream/compressed`, the JPEG
@@ -355,6 +357,51 @@ def flow_annotate(tracks, size=None) -> ImageAnnotations:
     return out
 
 
+# The floor as the flow node read it: the grout in pale glass, so the tiles
+# stay visible beneath it, the lane's centreline in amber.
+GROUT = (_hex('#c4e2f3', 0.55), 1.5)
+LANE = (AMBER, 3.0)
+
+
+def floor_annotate(read) -> ImageAnnotations:
+    """One floor read (`FloorRead`) over its frame: every grout line the
+    grating's period, angle and offsets put on the picture, the lane line's
+    centreline, and what each one says in words, top left."""
+    from mongla_vision.flow.floor_read import grid_segments, lane_segment
+    stamp = read.header.stamp
+    out = ImageAnnotations(timestamp=stamp)
+    size = (read.width, read.height)
+    words = []
+    if read.tiles and read.period_px > 0 and len(read.grout_normal_deg) == len(read.grout_offset_px):
+        segs = grid_segments(list(zip(read.grout_normal_deg, read.grout_offset_px)),
+                             read.period_px, size)
+        rgba, th = GROUT
+        out.points.append(PointsAnnotation(
+            timestamp=stamp, type=PointsAnnotation.LINE_LIST, outline_color=_color(rgba),
+            thickness=th, points=[Point2(x=float(x), y=float(y)) for s in segs for x, y in s]))
+        h = read.tile_height_m
+        words.append(f'tiles {read.period_px:.0f} px'
+                     + (f'  {h:.2f} m above' if h == h else '  no tile size')
+                     + f'  grid {read.grout_normal_deg[0] % 90:.0f} deg')
+    else:
+        words.append('tiles: none read')
+    if read.lane:
+        seg = lane_segment(read.lane_direction_deg, read.lane_offset_px, size)
+        if seg:
+            rgba, th = LANE
+            out.points.append(PointsAnnotation(
+                timestamp=stamp, type=PointsAnnotation.LINE_STRIP, outline_color=_color(rgba),
+                thickness=th, points=[Point2(x=float(x), y=float(y)) for x, y in seg]))
+        words.append(f'lane {read.lane_direction_deg:.0f} deg  {read.lane_offset_px:+.0f} px off centre')
+    for k, line in enumerate(words):
+        out.texts.append(TextAnnotation(
+            timestamp=stamp, position=Point2(x=8.0, y=LABEL_PX + 6 + k * (LABEL_PX + 6)),
+            text=line, font_size=LABEL_PX * 0.9,
+            text_color=_color(GROUT[0] if k == 0 and read.tiles else AMBER if read.lane else INK_2),
+            background_color=_TEXT_BG))
+    return out
+
+
 def calibrate_annotate(state: dict, stamp) -> ImageAnnotations:
     """A calibration's state (`calibrate_node.state_dict`) over its camera:
     the board corners found, the cell the next pose belongs in, the point
@@ -473,7 +520,7 @@ def main(args=None):
     from std_msgs.msg import String
     from vision_msgs.msg import Detection2DArray, VisionInfo
 
-    from mongla_interfaces.msg import FlowTracks, TargetContours, TargetCorrespondences
+    from mongla_interfaces.msg import FloorRead, FlowTracks, TargetContours, TargetCorrespondences
     from mongla_vision import qos
 
     LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -555,6 +602,12 @@ def main(args=None):
                     (VisionInfo, f'{ns}/vision_info', on_model, qos.LATCHED),
                 ], on_drop=lambda latest=latest: (latest.update(dict.fromkeys(LAYERS)),
                                                   latest.update(arrivals=deque(maxlen=RATE_WINDOW)))))
+
+                floor_pub = self.create_publisher(
+                    ImageAnnotations, f'{ns}/floor_annotations', 5)
+                self.watched.append(Watched(self, floor_pub, [
+                    (FloorRead, f'{ns}/floor_read',
+                     lambda msg, p=floor_pub: p.publish(floor_annotate(msg)), 5)]))
 
                 flow_pub = self.create_publisher(
                     ImageAnnotations, f'{ns}/flow_annotations', 5)
