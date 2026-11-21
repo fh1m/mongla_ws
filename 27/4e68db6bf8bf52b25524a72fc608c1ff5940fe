@@ -1,0 +1,35 @@
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_e889cfb3550372 171,9223-9252
+.claude/context/packages/mongla_batighor/README.md
+  s_4af8d6f83b24e8::t_9cb9f834421f0b 119-124,186-191
+README.md
+  s_4af8d6f83b24e8::t_171d4cadee99f9 64,865,868
+docs/index.html
+  s_4af8d6f83b24e8::t_0bd359eaaa51a7 1873-1875,1877
+src/mongla_batighor/panels/common.js
+  s_4af8d6f83b24e8::t_de34eec802c9af 41-58,62
+src/mongla_batighor/panels/control/extension.js
+  s_4af8d6f83b24e8::t_65ff5fac37451e 21-36,227-228
+src/mongla_batighor/test/test_panels.py
+  s_4af8d6f83b24e8::t_826b5b7d21b6d5 582-627
+test/test_batighor_desktop_holds_each_view_once.py
+  s_4af8d6f83b24e8::t_6e480b7aafc00e 39,125-166
+tools/pool/batighor_desktop.py
+  s_4af8d6f83b24e8::t_ed9532d4d8dbee 171-202,224-225,263-264,266-267
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "274e68db6bf8bf52b25524a72fc608c1ff5940fe",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
