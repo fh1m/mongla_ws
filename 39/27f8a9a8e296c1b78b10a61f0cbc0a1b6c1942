@@ -1,0 +1,21 @@
+test/test_batighor_desktop_holds_each_view_once.py
+  s_4af8d6f83b24e8::t_788458a018fd05 69-73
+tools/pool/batighor_desktop.py
+  s_4af8d6f83b24e8::t_f74ff287640004 250-254
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "3927f8a9a8e296c1b78b10a61f0cbc0a1b6c1942",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
