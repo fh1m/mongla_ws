@@ -1,0 +1,21 @@
+test/test_the_bench_emulator_refuses_beside_the_filter.py
+  s_4af8d6f83b24e8::t_ee998ee88e8dda 9,42-46
+tools/bench/emulate_localization.py
+  s_4af8d6f83b24e8::t_dc8500b25f9a8d 41,46-50,100-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "8e4df7494b709639ca1dc33cd600f6487a2c767e",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
