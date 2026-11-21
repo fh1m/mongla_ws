@@ -199,3 +199,52 @@ def test_every_state_row_is_visible_without_scrolling():
                 rows = len(data['configById'][pid]['paths'])
                 need = rows * STATE_ROW_PX + STATE_AXIS_PX
                 assert h - TITLE_PX >= need, (tab['title'], pid, round(h), need)
+
+
+def _all_configs():
+    for name in [views.CONSOLE, *views.VIEWS]:
+        yield from ((name, k, c) for k, c in views.build(name)['configById'].items())
+
+
+def test_everything_drawn_over_a_picture_or_in_the_scene_is_visible():
+    """An overlay the layout names but hides is an operator seeing no boxes
+    while the overlay node works; a hidden scene topic hides the demand arrow."""
+    for name, k, c in _all_configs():
+        for topic, a in c.get('imageMode', {}).get('annotations', {}).items():
+            assert a.get('visible') is True, (name, k, topic)
+        for topic, s in c.get('topics', {}).items():
+            assert s.get('visible') is True, (name, k, topic)
+
+
+def test_only_the_detection_views_make_a_picture_wait_for_its_boxes():
+    """Synchronised, a picture is shown only with its boxes, so it froze
+    whenever the detector stopped. Vision and Bins are where a box must sit
+    on its own frame; everywhere else (the cockpit, the floor read, a
+    calibration) a live picture comes first (views.camera)."""
+    synced = {'vision', 'bins_downward'}
+    seen = set()
+    for name in views.VIEWS:
+        for k, c in views.build(name)['configById'].items():
+            if k.startswith('Image!'):
+                seen.add(name)
+                assert bool(c['imageMode'].get('synchronize')) == (name in synced), (name, k)
+    assert synced <= seen and 'cockpit' in seen
+
+
+def test_plots_line_up_and_name_their_lines():
+    """Synced, the plots in one view share their time axis; each shows its
+    legend, the only place a line is named."""
+    for name, k, c in _all_configs():
+        if k.startswith('Plot!'):
+            assert c['isSynced'] is True and c['showLegend'] is True, (name, k)
+            assert c['xAxisVal'] == 'timestamp', (name, k)
+
+
+def test_the_3d_scene_draws_the_hull_not_frame_names():
+    """Seven frame names drawn on one point said nothing (views.scene)."""
+    scenes = [(name, k, c) for name, k, c in _all_configs() if k.startswith('3D!')]
+    assert scenes
+    for name, k, c in scenes:
+        assert c['scene']['transforms']['showLabel'] is False, (name, k)
+        assert c['layers']['hull']['visible'] is True, (name, k)
+        assert c['followTf'] == 'mongla', (name, k)
