@@ -925,6 +925,22 @@ section (its lane witness and its fisheye lens could not grade it).
 peak accuracy. Injection: the old module fails 15 of them, the new one
 without fading 20, fading any dark blob fails a negative control.
 
+### B-146: a typed course drew its map but set none of its venue `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
+
+**What.** `bringup.launch.py` read the venue (pool depth, tile size, the depth
+floor `shield_max_depth_m`) only from the deck's `course:`. Typed as
+`course:=bench_demo` with no deck entry, the argument reached Batighor's
+course node, so the map drew that pool, while the manager started with
+`shield_max_depth_m` 0: no depth floor, under a map that showed one. Seen on
+Kutum's bench: the course node logged the course, the manager logged
+`[SHLD ] no depth floor`.
+
+**Fix.** `launch_defaults.typed_value('course')` wins over the deck's
+`course:`, as every typed argument does, and the venue comes from the course
+it names. `test_a_typed_course_brings_its_venue_too` (injection-verified:
+fails with the deck-only read). On the bench afterwards: `venue from course
+bench_demo ... shield_max_depth_m=1.8`, `[SHLD ] depth floor 1.80 m`.
+
 ### B-145: a declaration was refused as a live change, and five kinds of node died at start `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
 
 **What.** rclpy runs a node's on-set-parameters callbacks when a parameter is
