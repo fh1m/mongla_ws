@@ -104,6 +104,13 @@ An anchor alone turns the axes but leaves the origin where the filter started; r
 survey there would be a confident wrong floor. Before that, flow scales on the middle of the
 soundings with their spread as its uncertainty (`survey, no position`).
 
+**Measure `tile_m` carefully: every height scales with it.** Grout centre to grout centre,
+across ten tiles with a tape and divided by ten, on both axes. If the two differ the tiles
+are not square, and the grating may read either axis (measured-bars section 101), so say
+so in the notes and do not trust tile heights there yet. Before trusting it in water, hold
+the downward camera at a taped height over the tiles for ten seconds and grade the clip:
+`tools/studies/tile_grating_real.py CLIP --tape-m H --tile-m T --water` (median < 3 %).
+
 **On a slope, set `tile_m` if the floor is tiled.** The tile grating measures the height
 directly and comes first (`tiles` above), so neither the survey nor its middle is used while
 the grating is read. Without tiles, the gap before the first fix is real: at a 0.72 m spread
