@@ -165,6 +165,7 @@ is how `recommend()` happened.
 - [99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20)](#99-localization-on-a-real-bench-recording--state-verdict-and-verbs-replayed-7-cm-at-rest-zupt-rate-is-not-the-limit-2026-11-20)
 - [100. HEIGHT FROM A DEPTH CHANGE: passes a flat synthetic floor, fails real water (2026-11-21)](#100-height-from-a-depth-change-passes-a-flat-synthetic-floor-fails-real-water-2026-11-21)
 - [101. THE TILE GRATING WITH A LANE LINE IN VIEW: fixed on rendered truth, unproven on real footage (2026-11-21)](#101-the-tile-grating-with-a-lane-line-in-view-fixed-on-rendered-truth-unproven-on-real-footage-2026-11-21)
+- [102. ONE TEAM HELD OUT: yolov8n stays, the held-out drop is inconclusive (2026-11-21)](#102-one-team-held-out-yolov8n-stays-the-held-out-drop-is-inconclusive-2026-11-21)
 <!-- contents:end -->
 
 ---
@@ -9137,4 +9138,35 @@ jumps (a harmonic, a lane, glare). They cannot catch an error that scales every 
 alike: a wrong `tile_m`, or the focal length in air (the water one is 1.333x). Only a tape
 does: `tile_grating_real.py VIDEO --tape-m H --tile-m T [--water]`, bar median < 3 %, p95
 < 6 %. On a synthetic clip with known truth it reads 0.2 %, and fails a 7 % wrong `tile_m`.
+
+## 102. ONE TEAM HELD OUT: yolov8n stays, the held-out drop is inconclusive (2026-11-21)
+
+`tools/studies/pool_holdout.py --holdout sauvc-finals`, after the `pole` class-map fix
+(perception/model-pipeline.md). Train: ten other sources' own train splits (50 371 images);
+test: the held-out team's own test split (237 images, 445 boxes); in-pool: each other source's
+own test split, scored alone. COCO start, 20 epochs, imgsz 640, batch 16, seed 0, `yolo val`
+at its defaults.
+
+**Bar, written before training** (`mongla_data/holdout/sauvc-finals/BAR.md`):
+premise confirmed if held-out mAP50 is more than 0.05 under the model's in-pool mean, rejected
+if within 0.01, inconclusive between; yolo11n replaces yolov8n only at +0.02 held-out or more.
+
+| in-pool source (own test split) | yolov8n mAP50 | yolo11n mAP50 |
+|---|---|---|
+| firizki sauvc-2025 | 0.980 | 0.978 |
+| mahindra drum | 0.994 | 0.994 |
+| mahindra gate-flare-combined | 0.973 | 0.972 |
+| malocclusion sauvc | 0.837 | 0.811 |
+| mdp sauvc-2025 | 0.995 | 0.995 |
+| mecatron-2024 sauvc | 0.952 | 0.946 |
+| muhammad-firzha-farhan sauvc | 0.849 | 0.857 |
+| ntu sauvc-v3 (10 images) | 0.751 | 0.792 |
+| sauvc flare | 0.971 | 0.980 |
+| **mean** | **0.922** | **0.925** |
+| **held-out team** | **0.882** | **0.872** |
+| held-out gate / flare / drum | 0.992 / 0.680 / 0.975 | 0.992 / 0.687 / 0.937 |
+
+**Result.** Family: FAIL for yolo11n (-0.010 against +0.02); yolov8n stays. Premise: yolov8n
+0.040 inconclusive, yolo11n 0.053 confirmed, so inconclusive as a whole. One seed; a 0.01
+difference is inside what a second seed could move.
 
