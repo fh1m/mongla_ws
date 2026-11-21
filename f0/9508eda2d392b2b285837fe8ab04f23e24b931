@@ -1,0 +1,37 @@
+.claude/context/packages/mongla_vision/README.md
+  s_4af8d6f83b24e8::t_ba5cbfd6789d42 74,220
+src/mongla_batighor/mongla_batighor/overlay.py
+  s_4af8d6f83b24e8::t_0b0fc540d9f6bc 17-19,360-404,523,606-611
+src/mongla_batighor/test/test_overlay.py
+  s_4af8d6f83b24e8::t_ebf140bf79788f 304-328
+src/mongla_interfaces/CMakeLists.txt
+  s_4af8d6f83b24e8::t_b37b295e3c77b1 21
+src/mongla_interfaces/msg/FloorRead.msg
+  s_4af8d6f83b24e8::t_df85fed9f45428 1-23
+src/mongla_vision/mongla_vision/flow/floor_read.py
+  s_4af8d6f83b24e8::t_4733fd77506aa4 1-119
+src/mongla_vision/mongla_vision/flow/flow_floor.py
+  s_4af8d6f83b24e8::t_1aec65733e435f 30-32,36,44-45,52,57,75,127-128,135-159
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  s_4af8d6f83b24e8::t_1a87e9f081d703 68,239-242
+src/mongla_vision/test/test_floor_read.py
+  s_4af8d6f83b24e8::t_857dd2608b59c7 1-82
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  s_4af8d6f83b24e8::t_9c625bf2a0954e 61-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "f09508eda2d392b2b285837fe8ab04f23e24b931",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
