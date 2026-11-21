@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 
 from mongla_vision.flow.tile_grating import (
-    Grating, detect, shift_from_phase,
+    Grating, detect, measure, shift_from_phase,
 )
 
 RNG = np.random.default_rng(0)
@@ -259,3 +259,53 @@ def test_measure_handles_no_frame():
     from mongla_vision.flow.tile_grating import measure
 
     assert measure(None) is None
+
+
+# --------------------------------------------------------------------------- #
+# A lane line in view (B-144, measured-bars section 101). One dark stripe
+# carries more spectral energy than the whole tile grid; the grating read
+# ~100 px whatever the truth, up to 146 % wrong, on a floor every pool has.
+
+def tiled_floor_with_lane(period, angle_deg, lane_px, W=640, H=480, seed=0):
+    rng = np.random.default_rng(seed)
+    yy, xx = np.mgrid[0:H, 0:W].astype(float)
+    t = math.radians(angle_deg)
+    u = (xx - W / 2) * math.cos(t) + (yy - H / 2) * math.sin(t)
+    v = -(xx - W / 2) * math.sin(t) + (yy - H / 2) * math.cos(t)
+    gw = max(1.5, period * 0.06)
+    grout = (np.mod(u, period) < gw) | (np.mod(v, period) < gw)
+    g = np.where(grout, 120.0, 200.0)
+    if lane_px > 0:
+        g[np.abs(v - period * 0.5) < lane_px / 2] = 25.0
+    g += rng.normal(0, 6, g.shape)
+    return np.clip(g, 0, 255).astype(np.uint8)
+
+
+LANE_CASES = [(p, a, w) for p in (42.0, 65.0, 88.0) for a in (3.0, 8.9, 31.0, 62.0)
+              for w in (0.3, 0.5, 0.8)]
+
+
+@pytest.mark.parametrize('period,angle,lane', LANE_CASES)
+def test_a_lane_line_in_view_does_not_move_the_period(period, angle, lane):
+    g = measure(tiled_floor_with_lane(period, angle, period * lane))
+    # A refusal is allowed (it says "no instrument"); a wrong number is not.
+    if g is not None:
+        assert abs(g.period_px / period - 1.0) < 0.02, g
+
+
+def test_a_lane_line_in_view_still_leaves_an_answer_most_of_the_time():
+    answered = sum(measure(tiled_floor_with_lane(p, a, p * w)) is not None
+                   for p, a, w in LANE_CASES)
+    assert answered >= 0.85 * len(LANE_CASES), answered
+
+
+def test_the_peak_is_located_to_a_fraction_of_a_percent():
+    # The power centroid it now uses read a lane-free sweep at 0.02 % median,
+    # 0.1 % worst; the three-point parabola before it, 0.34 % and 0.9 %.
+    errs = []
+    for p in np.linspace(40, 90, 11):
+        for a in np.linspace(0, 85, 9):
+            g = measure(tiled_floor_with_lane(p, a, 0.0))
+            assert g is not None
+            errs.append(abs(g.period_px / p - 1.0))
+    assert max(errs) < 0.004, max(errs)

@@ -204,6 +204,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `rung_independence.py` | Do the ladder's two carried rungs fail TOGETHER? Redundancy of two, or of one? The question nobody asked. |
 | `stark_rung.py` | Would STARK-Lightning on the Hailo-8 carry a box through a detection gap longer than the follower does? The follower (`tracking/follower.py`) carries the last box on sparse LK and refuses when its ... |
 | `tau_from_scale.py` | Rank the four scale sources against a KNOWN-CONSTANT-SPEED approach. |
+| `tile_grating_real.py` | Does the tile grating read a REAL pool floor? Bead v8j; the bar there was written first. |
 | `tracker_ab.py` | Which tracker closes more gaps on REAL competition footage? The question this settles, with numbers rather than an argument: the coast layer exists to bridge detection gaps, and nobody has ever ... |
 | `truth/` | Hand-labelled truth for the studies: when a target is really in view, labelled by eye from the frames and independently of any model, so a tracker or detector can be scored rather than compared with ... |
 | `vo_downward.py` | Should XFeat feed the downward camera's motion fit, or does LK already do it? The flow node already fits ONE similarity transform per interval (`flow_math.solve_planar_motion`): translation of the ... |

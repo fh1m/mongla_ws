@@ -192,6 +192,58 @@ def usable_height_m(focal_px: float, tile_m: float, frame_px: int) -> tuple:
     return (h_min, h_max)
 
 
+# A pixel darker than this share of the floor's median is not grout: grout is
+# mid-grey (about 0.6 of the tile), a lane line or a shadow near black.
+DARK_FRAC = 0.45
+STRIPE_ASPECT = 4.0
+
+
+def _blank_thick_dark(a: np.ndarray) -> np.ndarray:
+    """Fade lanes, shadows and props to the floor's median before the FFT.
+
+    One dark stripe across a tiled floor carries more spectral energy than the
+    whole tile grid, and the grating locked onto it: rendered tiles with a lane
+    read a period near 100 px whatever the truth (worst 146 % error), and the
+    real final-run footage read the lane, not the tiles (BUGS B-144,
+    measured-bars section 101). Width does not separate a lane from grout --
+    diagonal grout at a large period is as wide as a thin lane, and a width
+    test blanked whole tile-only floors -- but darkness does.
+
+    Faded, not cut: a flat fill leaves a straight step where it meets the
+    tiles, which is a spectral streak along the grid's own axis.
+    """
+    try:
+        import cv2
+    except Exception:                          # noqa: BLE001 -- cv2 optional
+        return a
+    med = float(np.median(a))
+    if med <= 0.0:
+        return a
+    dark = (a < DARK_FRAC * med).astype(np.uint8)
+    dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    # Only stripes: a dark component at least STRIPE_ASPECT times longer than
+    # it is wide. A dark tile cell, a vignette corner or a round shadow is
+    # left alone; fading those made a smooth gradient pass as a grating.
+    n, lab, st, _ = cv2.connectedComponentsWithStats(dark, connectivity=8)
+    stripes = np.zeros_like(dark)
+    for k in range(1, n):
+        if st[k, cv2.CC_STAT_AREA] < 0.01 * dark.size:
+            continue
+        pts = np.column_stack(np.nonzero(lab == k)).astype(np.float32)
+        (_, _), (w, h), _ = cv2.minAreaRect(pts)
+        if min(w, h) > 0 and max(w, h) / min(w, h) >= STRIPE_ASPECT:
+            stripes[lab == k] = 1
+    if not stripes.any():
+        return a
+    dark = cv2.dilate(stripes, np.ones((3, 3), np.uint8)).astype(bool)
+    if dark.mean() > 0.5:
+        return a                               # mostly dark: no floor to protect
+    keep = 1.0 - cv2.GaussianBlur(dark.astype(np.float32), (0, 0), 3.0)
+    keep = np.clip(keep, 0.0, 1.0) * (~dark)
+    floor = float(np.median(a[~dark]))
+    return floor + (a - floor) * keep
+
+
 def detect(gray: np.ndarray, *, min_strength: float = MIN_PEAK_FRACTION
            ) -> Optional[Grating]:
     """Find the floor's carrier, or return None if there isn't one.
@@ -205,6 +257,7 @@ def detect(gray: np.ndarray, *, min_strength: float = MIN_PEAK_FRACTION
     a = np.asarray(gray, dtype=np.float32)
     if not np.isfinite(a).all():
         return None
+    a = _blank_thick_dark(a)
     a = a - a.mean()
     if a.std() < 1e-6:
         return None                     # a flat wall of one colour
@@ -232,8 +285,7 @@ def detect(gray: np.ndarray, *, min_strength: float = MIN_PEAK_FRACTION
     # through the peak and its two neighbours recovers the true frequency
     # between bins. Standard, three lines, and it turns the worst case above
     # into a fraction of a percent.
-    fy = float(iy - cy) + _parabolic(mag[:, ix], iy)
-    fx = float(ix - cx) + _parabolic(mag[iy, :], ix)
+    fy, fx = _centroid(mag, iy, ix, cy, cx)
     radius = math.hypot(fy, fx)
     if radius <= 0.0:
         return None
@@ -283,7 +335,6 @@ def detect(gray: np.ndarray, *, min_strength: float = MIN_PEAK_FRACTION
     #                 and the noise and sim-texture tests fail.
     if radius < MIN_PEAK_RADIUS_BINS:
         return None
-
     angle = math.degrees(math.atan2(fy_cpp, fx_cpp)) % 90.0
     ph = float(np.angle(spec[iy, ix]))
     return Grating(period_px=period, angle_deg=angle, phase=ph,
@@ -327,22 +378,26 @@ def _fundamental(mag, iy: int, ix: int, cy: int, cx: int) -> Tuple[int, int]:
             return iy, ix
 
 
-def _parabolic(line: np.ndarray, i: int) -> float:
-    """Sub-bin offset of a peak from a 3-point parabolic fit.
+def _centroid(mag, iy: int, ix: int, cy: int, cx: int) -> Tuple[float, float]:
+    """Frequency of a peak as the power centroid of its main lobe (+-2 bins).
 
-    The classic interpolator: with `a`, `b`, `c` the magnitudes either side of
-    and at the peak, the vertex sits at `0.5*(a-c)/(a-2b+c)`. Guarded against
-    the flat case, where the denominator vanishes and the offset is undefined
-    rather than infinite.
+    The three-point parabola it replaced (one row and one column through the
+    peak) turned a 48 px grid read as 51.2 px into a fraction of a percent, and
+    assumed one clean lobe. A lane blanked
+    out of the frame multiplies the grid by a band, which dents the lobe's
+    centre symmetrically; the parabola then fit the dent and the search beside
+    it landed on a shoulder, and a tiled floor read 1.21x its period
+    (measured-bars section 101). A symmetric dent leaves the centroid where it
+    was. Under the Hanning window the main lobe is +-2 bins wide.
     """
-    if i <= 0 or i >= len(line) - 1:
-        return 0.0
-    a, b, c = float(line[i - 1]), float(line[i]), float(line[i + 1])
-    denom = a - 2.0 * b + c
-    if abs(denom) < 1e-12:
-        return 0.0
-    off = 0.5 * (a - c) / denom
-    return float(off) if abs(off) <= 1.0 else 0.0
+    y0, y1 = max(0, iy - 2), min(mag.shape[0], iy + 3)
+    x0, x1 = max(0, ix - 2), min(mag.shape[1], ix + 3)
+    w = mag[y0:y1, x0:x1].astype(np.float64) ** 2
+    s = float(w.sum())
+    if s <= 0.0:
+        return float(iy - cy), float(ix - cx)
+    yy, xx = np.mgrid[y0:y1, x0:x1]
+    return float((w * yy).sum() / s - cy), float((w * xx).sum() / s - cx)
 
 
 def shift_from_phase(before: Grating, after: Grating) -> Optional[float]:
