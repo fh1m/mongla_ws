@@ -1,0 +1,21 @@
+src/mongla_batighor/test/test_panels.py
+  s_4af8d6f83b24e8::t_615dc8d36a8790 25-27,181,436,482,506,546
+test/test_batighor_desktop_holds_each_view_once.py
+  s_4af8d6f83b24e8::t_96c83915f258fa 71-72,75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "3b29ef8b7aa0dc7838c8d41abae0c717b31b66e7",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
