@@ -12,6 +12,8 @@ all: the name then fails while Kutum is right there on the LAN. So this asks
 the network itself, in order, and stops at the first answer that takes a TCP
 connection on port 22:
 
+  0. the bare name `kutum`, which Tailscale's MagicDNS answers wherever both
+     machines are online (the same host key as the LAN: one alias serves both);
   1. a multicast DNS query for `<name>.local`, sent directly (no daemon);
   2. the system resolver, with a short timeout;
   3. an IPv6 link-local address the resolver or the neighbour table knows,
@@ -190,6 +192,15 @@ def _answers_ssh(addr: str, port: int = 22, timeout: float = 1.5) -> bool:
         return False
 
 
+def tailnet(name: str = NAME) -> list[str]:
+    """The bare name through the resolver: Tailscale's MagicDNS answers it
+    on any network both machines are on, and the tailnet's search domain
+    makes `kutum` enough. Empty where there is no tailnet."""
+    if '.' in name:
+        return []
+    return [a for a in _resolver(name, timeout=1.5) if ':' not in a]
+
+
 def _cached() -> list[str]:
     try:
         with open(CACHE) as f:
@@ -218,7 +229,8 @@ def find(name: str = NAME, port: int = 22) -> str | None:
     # The cache first: on a working network it answers in one connect. Each
     # later source is tried only when everything before it failed.
     tried = set()
-    for source in (_cached, lambda: candidates(name), lambda: sweep(_macs(), port)):
+    for source in (lambda: tailnet(name), _cached, lambda: candidates(name),
+                   lambda: sweep(_macs(), port)):
         for a in source():
             if a in tried:
                 continue
@@ -266,7 +278,7 @@ def main(argv=None) -> int:
     ap.add_argument('--all', action='store_true', help='list every candidate address')
     a = ap.parse_args(argv)
     if a.all:
-        for c in _cached() + candidates(a.name) + sweep(_macs()):
+        for c in tailnet(a.name) + _cached() + candidates(a.name) + sweep(_macs()):
             print(c, 'ssh' if _answers_ssh(c) else 'no answer')
         return 0
     addr = find(a.name, a.proxy or 22)

@@ -349,6 +349,17 @@ elif [ ! -e "$HOME/.mongla" ]; then
 fi
 mkdir -p "$deck/courses"
 [ -f "$deck/README.txt" ] || cp "$KUTUM/deck-README.txt" "$deck/README.txt"
+# A starter deck, only where there is none: it names the blank pool course, so
+# bringup_check and every mission start say exactly what is still unmeasured.
+# An existing file is never touched.
+if [ ! -f "$deck/bringup.yaml" ]; then
+  cp "$KUTUM/deck-bringup.yaml" "$deck/bringup.yaml"
+  echo "  wrote $deck/bringup.yaml (course: pool)"
+fi
+if [ ! -f "$deck/courses/pool.yaml" ]; then
+  cp "$KUTUM/../src/mongla_localization/mongla_localization/courses/pool.yaml" "$deck/courses/pool.yaml"
+  echo "  wrote $deck/courses/pool.yaml (blank: survey it at the pool)"
+fi
 echo "  deck: $deck ($(ls "$deck/courses" | wc -l) course files)"
 
 echo

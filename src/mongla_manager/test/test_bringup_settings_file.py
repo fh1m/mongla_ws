@@ -94,7 +94,13 @@ def test_every_key_in_the_shipped_example_is_a_real_bringup_argument():
     example = yaml.safe_load('\n'.join(
         line[2:] for line in text.splitlines() if re.match(r'# [a-z_0-9]+: ', line)))
     declared = {a.name for a in _launch_ast().declarations(pkg / 'launch' / 'bringup.launch.py')}
-    assert set(example) == declared
+    # The venue's arguments are set in the course file; the example names
+    # them only to say so, and offers no line that the launch would refuse.
+    from mongla_localization.course_map import VENUE_LAUNCH
+    venue = set(VENUE_LAUNCH.values())
+    assert set(example) == declared - venue
+    for arg in venue:
+        assert f'#   {arg}: set in the course file' in text, arg
 
 
 def _launch_ast():

@@ -148,8 +148,18 @@ def render_example() -> str:
          '# A key that is not listed here stops the launch (a typo cannot vanish).',
          '# How it works: src/mongla_runtime/mongla_runtime/launch_defaults.py',
          '#',
+         '#',
+         '# The venue is NOT set here. `course: <venue>` names its file,',
+         '# ~/mongla/deck/courses/<venue>.yaml, and pool depth, floor, tiles, lane',
+         '# lines and the depth floor are read from it; one set here is refused.',
+         '#',
          '# Each line shows the repository default.', '']
+    from mongla_localization.course_map import VENUE_LAUNCH
+    in_course = {arg: key for key, arg in VENUE_LAUNCH.items()}
     for _, name, default, desc in launch_args(BRINGUP):
+        if name in in_course:
+            L += [f'#   {name}: set in the course file (pool: {in_course[name]}), not here', '']
+            continue
         # Descriptions are indented so that only setting lines read `# key:`.
         for line in textwrap.wrap(desc, 74) or ['(no description)']:
             L.append(f'#   {line}')

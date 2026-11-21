@@ -9,6 +9,11 @@
 # A key that is not listed here stops the launch (a typo cannot vanish).
 # How it works: src/mongla_runtime/mongla_runtime/launch_defaults.py
 #
+#
+# The venue is NOT set here. `course: <venue>` names its file,
+# ~/mongla/deck/courses/<venue>.yaml, and pool depth, floor, tiles, lane
+# lines and the depth floor are read from it; one set here is refused.
+#
 # Each line shows the repository default.
 
 #   SROT serial device, '' = autodetect. A path (/dev/serial/by-id/...) or any
@@ -54,20 +59,15 @@
 #   the manager's position_source:=flow.
 # flow: true
 
-#   flow:=true -- the venue's shallowest floor, metres (#35).
-# pool_depth_min_m: nan
+#   pool_depth_min_m: set in the course file (pool: depth_min_m), not here
 
-#   flow:=true -- the venue's deepest floor, metres (#35).
-# pool_depth_max_m: nan
+#   pool_depth_max_m: set in the course file (pool: depth_max_m), not here
 
 #   the venue's course (file stem in ~/mongla/deck/courses): its pool: floor
 #   scales flow before every mission.
 # course: ''
 
-#   flow:=true -- metres from the DOWNWARD camera to the floor, until a
-#   mission's use_course() sets the venue's own. With neither, flow publishes
-#   quality 0 and refuses, by design.
-# pool_depth_m: nan
+#   pool_depth_m: set in the course file (pool: depth_m), not here
 
 #   manager: RIEKF body velocity -> board (VISION_SPEED_ESTIMATE). Needs fw PR
 #   #23 to act.
@@ -96,11 +96,9 @@
 #   flow: sun-caustic erosion + bare-floor refusal.
 # caustics: true
 
-#   flow: lane-line heading (mod 180) yaw bound.
-# lane_lines: false
+#   lane_lines: set in the course file (pool: lane_lines), not here
 
-#   flow: pool tile size in metres; 0 = tile grating (height + yaw bound) OFF.
-# tile_m: 0.0
+#   tile_m: set in the course file (pool: tile_m), not here
 
 #   The medium the VEHICLE is in. Read by flow_node, lock_node AND pnp_node --
 #   one value, one argument. `air` for a bench run, or the scale is off by

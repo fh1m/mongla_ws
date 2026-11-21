@@ -100,11 +100,13 @@ kutum/deploy.sh kutum              # every script takes the alias
 python3 kutum/find.py --all        # where it is, and how it was found
 ```
 
-No password, ever: `ssh-copy-id kutum` once from each machine. For an
-address that never moves, reserve one in the router's DHCP table for both
-MACs. For a name that works off this LAN too, join Kutum to the same
-Tailscale network as the dev box (`sudo tailscale up` on Kutum, signed in by
-the owner).
+**Tailscale is the first path.** Kutum is on the owner's tailnet with
+Tailscale SSH on (2026-11-21), so `kutum` resolves through MagicDNS on any
+network both machines reach: a venue's Wi-Fi, a phone hotspot, a cable.
+Measured from the dev container: a login in 85 ms with no password, and the
+same host key as the LAN path, so one alias serves both. `find.py` tries the
+tailnet first and the LAN probes only when it is down. No password on the LAN
+path either: `ssh-copy-id kutum` once from each machine.
 
 If the ssh hangs rather than refuses, rerun the reply-route hook from there:
 `sudo env IFACE=wlan0 /etc/networkd-dispatcher/routable.d/50-kutum-source-routes`.
