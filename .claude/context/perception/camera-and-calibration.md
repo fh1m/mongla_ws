@@ -177,8 +177,9 @@ in `measured-bars.md`, which checked the serial) do not reproduce. Neither
 is explained, and neither is what the camera does now.
 
 **What replaces it.** Until a forward camera that can be commanded arrives,
-the Sonix global-shutter unit can move to the forward port: udev names it
-`/dev/mongla_cam_forward` there, and `fwd_profile:=pi_forward_global_shutter`
+the Sonix global-shutter unit can look forward. udev names it
+`/dev/mongla_cam_downward` in any port, so the launch names it:
+`fwd_profile:=pi_forward_global_shutter fwd_device_path:=/dev/mongla_cam_downward`
 runs it at its measured MJPG 640×360 @ 210 with its own calibration (the
 camera node refuses a calibration that names a different profile). The end
 state is a global-shutter sensor that the board triggers:
