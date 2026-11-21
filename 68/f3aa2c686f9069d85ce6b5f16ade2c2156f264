@@ -1,0 +1,37 @@
+.claude/context/packages/mongla_batighor/README.md
+  s_4af8d6f83b24e8::t_cc871d0fb718a7 178
+.claude/context/reference/commands.md
+  s_4af8d6f83b24e8::t_69ef4aaf406f20 50,87,350-355
+src/mongla_manager/config/bringup.example.yaml
+  s_4af8d6f83b24e8::t_ae3a0cee91593f 266
+src/mongla_manager/launch/bringup.launch.py
+  s_4af8d6f83b24e8::t_0c1797f0ce14b3 128,137-140
+src/mongla_manager/mongla_manager/node_action.py
+  s_4af8d6f83b24e8::t_d7a75dd78467c5 148-149
+src/mongla_manager/test/test_manager_end_to_end.py
+  s_4af8d6f83b24e8::t_a61396f98653ec 251-270
+src/mongla_manager/test/test_the_course_is_the_venues_one_file.py
+  s_4af8d6f83b24e8::t_237443d1c94373 81-99
+src/mongla_runtime/mongla_runtime/launch_defaults.py
+  s_4af8d6f83b24e8::t_ecfaf9845dceaf 279-291
+tools/README.md
+  s_4af8d6f83b24e8::t_c30e0473b44534 54
+tools/bench/emulate_localization.py
+  s_4af8d6f83b24e8::t_754369d6d9f163 1-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "68f3aa2c686f9069d85ce6b5f16ade2c2156f264",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
