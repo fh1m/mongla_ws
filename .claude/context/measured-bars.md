@@ -164,6 +164,7 @@ is how `recommend()` happened.
 - [98. THE DETECTOR FAMILY — yolov8n matches yolo11n after INT8 and runs 3.3x faster on the Hailo-8 (2026-11-20)](#98-the-detector-family--yolov8n-matches-yolo11n-after-int8-and-runs-33x-faster-on-the-hailo-8-2026-11-20)
 - [99. LOCALIZATION ON A REAL BENCH RECORDING — state, verdict and verbs replayed; 7 cm at rest, ZUPT rate is not the limit (2026-11-20)](#99-localization-on-a-real-bench-recording--state-verdict-and-verbs-replayed-7-cm-at-rest-zupt-rate-is-not-the-limit-2026-11-20)
 - [100. HEIGHT FROM A DEPTH CHANGE: passes a flat synthetic floor, fails real water (2026-11-21)](#100-height-from-a-depth-change-passes-a-flat-synthetic-floor-fails-real-water-2026-11-21)
+- [101. THE TILE GRATING WITH A LANE LINE IN VIEW: fixed on rendered truth, unproven on real footage (2026-11-21)](#101-the-tile-grating-with-a-lane-line-in-view-fixed-on-rendered-truth-unproven-on-real-footage-2026-11-21)
 <!-- contents:end -->
 
 ---
@@ -9104,4 +9105,36 @@ not in flow.
 
 **What closes the gap instead:** `tile_m` (the grating is a direct height and comes first),
 an early first prop fix, and the real ask, a downward range sensor (hardware team).
+
+---
+
+## 101. THE TILE GRATING WITH A LANE LINE IN VIEW: fixed on rendered truth, unproven on real footage (2026-11-21)
+
+`flow/tile_grating.py`, `tools/studies/tile_grating_real.py`, bead v8j, BUGS B-144. Flow
+takes its height from the grating first, and it had only ever seen tiles with nothing else
+on the floor. Each bar was written before its run.
+
+| case (rendered, 60 floors each; `measure()` at /3 as flow calls it) | before | after |
+|---|---|---|
+| tiles only | median 0.34 %, worst 0.9 % | median 0.02 %, worst 0.14 % |
+| lane 0.3x period | 16/30 answered, median 56 %, worst 113 % | 60/60, median 0.12 %, worst 0.84 % |
+| lane 0.8x period | 9/30 answered, median 65 %, worst 146 % | 57/60, median 0.23 %, worst 1.59 % |
+| lane-free sweep, 780 floors (period 40-90 px, angle 0-89 deg) | -- | 0 wrong, 0 refused, median 0.023 % |
+
+Bar: >= 90 % answered, median < 2 %, worst < 5 % with a lane; no worse without. Met.
+
+**Real footage** (archive `final_run/octagon_Bottom.mkv`, RoboSub, real tiled pool): there
+is no tape in it, so the witness was the lane line, whose width over the tile period is the
+same at every height. The run did not grade the grating: the lane detector also took basket
+shadows (lane/period MAD 20 %), and the clip's fisheye and tilt make the two tile axes read
+1.00 to 1.33 apart (median 1.11). That exposed a real limit, not a fix: on a view where the
+tiles look non-square the grating takes the long axis in 45 % of frames and the short one
+otherwise, so its height flips by that aspect. Our downward camera is a 64 deg lens with
+mild distortion, so on the vehicle the aspect comes mainly from tilt.
+
+**What a pass here does not prove.** The lane ratio and the axis ratio catch a reading that
+jumps (a harmonic, a lane, glare). They cannot catch an error that scales every reading
+alike: a wrong `tile_m`, or the focal length in air (the water one is 1.333x). Only a tape
+does: `tile_grating_real.py VIDEO --tape-m H --tile-m T [--water]`, bar median < 3 %, p95
+< 6 %. On a synthetic clip with known truth it reads 0.2 %, and fails a 7 % wrong `tile_m`.
 

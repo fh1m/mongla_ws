@@ -899,6 +899,32 @@ under 0.10 m, missed at 0.107 m; the test says why.
 `test_course_floor_reaches_flow.py`, and the course cases in
 `test_mission_keepalive.py`. Each was injection-verified.
 
+### B-144: a lane line in view gave the tile grating a confident wrong height `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
+
+**What.** Flow takes its height from the tile grating before every other
+source. One dark lane line across the tiles carries more spectral energy than
+the whole grid, and the grating read it instead: rendered tiles with a lane
+read a period near 100 px whatever the truth, up to 146 % wrong, and refused
+most of the rest. Every tiled pool has lane lines. Its tests drew tiles only,
+so nothing failed. A second, smaller fault sat under it: the three-point
+parabola that placed the peak read a lane-free floor at 0.34 % median, 0.9 %
+worst, and a lane's band dented the peak so the parabola fit the dent.
+
+**Fix.** `tile_grating._blank_thick_dark` fades dark stripes (darker than
+0.45 of the floor's median and at least four times longer than wide) to the
+floor's median before the FFT; a dark cell, a vignette corner or a round
+shadow is left alone, because fading those made a gradient pass as a grating.
+The peak is placed by the power centroid of its main lobe (`_centroid`).
+
+**Measured** (measured-bars section 101). Lanes 0.3x to 0.8x the tile period:
+95-100 % answered, median 0.12-0.27 %, worst 1.59 %. Lane-free, 780 floors:
+0 wrong, 0 refused, median 0.023 %. Real final-run footage: unproven, see the
+section (its lane witness and its fisheye lens could not grade it).
+
+**Guards.** `test_tile_grating.py`: the lane cases, the answer rate and the
+peak accuracy. Injection: the old module fails 15 of them, the new one
+without fading 20, fading any dark blob fails a negative control.
+
 ### B-118: the anchor rung's box was in the backend's 320x240 grid on a 640x360 frame `READ 2026-11-18` **FIXED 2026-11-18**
 
 **What.** The anchor resizes every frame to its backend grid (XFeat, 320x240)
