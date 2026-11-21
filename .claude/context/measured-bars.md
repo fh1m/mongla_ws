@@ -169,6 +169,7 @@ is how `recommend()` happened.
 - [103. BRIDGE COMPRESSION: off buys no latency, so it stays on (2026-11-21)](#103-bridge-compression-off-buys-no-latency-so-it-stays-on-2026-11-21)
 - [104. THE XFEAT ANCHOR costs each composed detector a third of its rate (2026-11-21)](#104-the-xfeat-anchor-costs-each-composed-detector-a-third-of-its-rate-2026-11-21)
 - [105. A TAB SWITCH IN THE DESKTOP APP blocked the page for seconds; Vulkan ends it (2026-11-21)](#105-a-tab-switch-in-the-desktop-app-blocked-the-page-for-seconds-vulkan-ends-it-2026-11-21)
+- [106. THE BOARD'S YAW AT REST drifts 0.001 deg/min over ten minutes (2026-11-22)](#106-the-boards-yaw-at-rest-drifts-0001-degmin-over-ten-minutes-2026-11-22)
 <!-- contents:end -->
 
 ---
