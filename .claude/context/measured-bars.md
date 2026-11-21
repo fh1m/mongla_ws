@@ -9249,4 +9249,6 @@ hull in 3D, plots), and a pilot held the helm through 15 switches, the longest g
 beats 1.1 s. With no Vulkan driver (`VK_ICD_FILENAMES` pointed at nothing) the flag left
 the app with no WebGL at all, so `batighor_desktop.py` gives it only where the kernel's
 GPU driver has its Vulkan ICD installed (`vulkan_flag`); `--no-vulkan` turns it off. A
-browser on Kutum's page chooses its own backend and was not measured.
+browser on Kutum's page chooses its own backend: Chrome on another desk (GTX 1660 SUPER,
+ANGLE on OpenGL ES) blocked 89-187 ms per switch over seven views, one round. That is a
+different machine and backend, not an A/B against the desktop app.
