@@ -68,10 +68,11 @@ def test_a_changed_view_is_named_with_how_to_refresh_it(desk, capsys):
 
 
 def test_a_dense_screen_starts_the_app_at_a_scale_it_can_be_read_at(desk):
-    """A 4K 15-inch panel at device scale 1 drew 12 px type 1 mm tall."""
+    """A 4K 15-inch panel at device scale 1 drew 12 px type 1 mm tall; at 2
+    the console reads comfortably on it (the desktop app's working scale)."""
     laptop = ('HDMI-A-1 connected 1920x1080+7680+0 (normal) 480mm x 260mm\n'
               'eDP-1 connected primary 3840x2160+0+0 (normal) 340mm x 190mm\n')
-    assert desk.screen_scale(laptop) == 2.5
+    assert desk.screen_scale(laptop) == 2.0         # 287 dpi against READ_DPI 140
     assert desk.screen_scale('DP-1 connected 1920x1080+0+0 (normal) 527mm x 296mm') == 1.0
     assert desk.screen_scale('eDP-1 connected 1920x1080+0+0 (normal) 0mm x 0mm') is None
     assert desk.main(['h']) == 0

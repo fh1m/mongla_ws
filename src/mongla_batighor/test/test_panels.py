@@ -22,6 +22,9 @@ from mongla_batighor import panels, seat, serve
 PANELS = Path(__file__).resolve().parents[1] / 'panels'
 HELM_JS = (PANELS / 'control' / 'extension.js').read_text()   # the Control Center
 SWITCH = b'const r={apiUrl:void 0,version:"1.30.0",devWorkspace:""};'
+# The panels' tests run their JavaScript in node; CI's Humble image has node 12,
+# older than the syntax the panels use, so they run on the dev box.
+NEEDS_NODE = pytest.mark.skipif(not shutil.which('node'), reason='node not installed (the Pi, CI)')
 
 
 def _web(tmp, main=b'x;' + SWITCH + b'y;'):
@@ -175,7 +178,7 @@ def test_the_calibrate_layout_draws_the_overlay_on_the_calibration_camera():
     assert 'mongla.batighor.Calibrate!calibrate' in json.dumps(layout['layout'])
 
 
-@pytest.mark.skipif(not shutil.which('node'), reason='node not installed (the Pi, CI)')
+@NEEDS_NODE
 @pytest.mark.parametrize('name', sorted(p.name for p in PANELS.iterdir()
                                         if (p / 'extension.js').is_file()))
 def test_every_served_panel_parses(tmp_path, name):
@@ -430,6 +433,7 @@ def test_what_an_unset_setting_means_is_the_detectors_own_default():
             else declared.strip().strip("'") == unset.strip('"'), (name, declared, unset)
 
 
+@NEEDS_NODE
 def test_the_desktop_app_takes_kutums_layout_unless_the_operator_edited_it():
     """layoutUpdates: a stale copy from one of Kutum's files is replaced, an
     edited one (`working`) is kept, a current one and one of the operator's
@@ -475,6 +479,7 @@ def test_the_desktop_app_takes_kutums_layout_unless_the_operator_edited_it():
     assert got['edited'] == ['flow', 'thrust']
 
 
+@NEEDS_NODE
 def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
     """statusOf: a held lock names its rung, an unknown health row is not a
     fault, and an armed vehicle marks the cockpit live."""
@@ -498,6 +503,7 @@ def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
     assert got['tabs']['Cockpit'] == 'live' and got['tabs']['Vision'] == 'live'
 
 
+@NEEDS_NODE
 def test_the_mission_text_marks_the_line_that_sent_the_verb():
     """missionText: every line numbered, the running one marked, the mission
     named live while its runner beats and 'ended' after; nothing published is
@@ -537,6 +543,7 @@ def test_the_mission_text_marks_the_line_that_sent_the_verb():
     assert 'gate_run.py, ended' in ended
 
 
+@NEEDS_NODE
 def test_a_panel_that_mounts_late_is_handed_what_came_before_at_its_own_age():
     """Lichtblick hands a panel only what arrives after it mounts, so the
     latched course reached the first Map and never a second one (seen in the
