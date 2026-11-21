@@ -168,6 +168,7 @@ is how `recommend()` happened.
 - [102. ONE TEAM HELD OUT: yolov8n stays, the held-out drop is inconclusive (2026-11-21)](#102-one-team-held-out-yolov8n-stays-the-held-out-drop-is-inconclusive-2026-11-21)
 - [103. BRIDGE COMPRESSION: off buys no latency, so it stays on (2026-11-21)](#103-bridge-compression-off-buys-no-latency-so-it-stays-on-2026-11-21)
 - [104. THE XFEAT ANCHOR costs each composed detector a third of its rate (2026-11-21)](#104-the-xfeat-anchor-costs-each-composed-detector-a-third-of-its-rate-2026-11-21)
+- [105. A TAB SWITCH IN THE DESKTOP APP blocked the page for seconds; Vulkan ends it (2026-11-21)](#105-a-tab-switch-in-the-desktop-app-blocked-the-page-for-seconds-vulkan-ends-it-2026-11-21)
 <!-- contents:end -->
 
 ---
@@ -9219,3 +9220,33 @@ and the bank match, in NumPy. Section 95 measured only XFeat's share of the chip
 3 Hz, and that still holds; this is host time in the detectors' process, at the shipped
 4.5 Hz per camera. The same cost applies with live cameras. Bead `mongla_ws-7ue`.
 
+
+## 105. A TAB SWITCH IN THE DESKTOP APP blocked the page for seconds; Vulkan ends it (2026-11-21)
+
+The dev box (RTX 2060 Mobile beside an Intel UHD 630, NVIDIA driver), Lichtblick 1.27
+desktop at scale 2, on Kutum's bench (fake board, replay, both detectors unpaused). Found
+when a pilot lost the helm on opening the Vision view: the Control Center's heartbeat is
+a 1 s timer and the helm lets go after 3 s of silence.
+
+**Method.** A 50 ms `setTimeout` chain in the page records the longest gap between its
+runs; reset, click a tab (no screenshot, which blocks on its own), read it 4 s later.
+Ten views, two rounds per condition, the app restarted between conditions with only the
+ANGLE backend changed. A CPU profile of one switch (Map, 8 s) put 6.2 s in
+`getShaderInfoLog`/`getProgramInfoLog` and 0.9 s in `getContext`: Lichtblick builds its
+WebGL panels again on every switch, and three.js reads each shader's log, which waits for
+the compile.
+
+**Bar, written after the OpenGL rounds and before the Vulkan ones:** a switch must block
+the page for less than the heartbeat's 1 s period on every view.
+
+| backend | longest block per switch, ten views, two rounds |
+|---|---|
+| ANGLE on OpenGL (the default) | 1.5 - 4.9 s |
+| ANGLE on Vulkan (`--use-angle=vulkan`) | 70 - 392 ms |
+
+**Result.** PASS. Vulkan drew every view as OpenGL did (cameras with their overlays, the
+hull in 3D, plots), and a pilot held the helm through 15 switches, the longest gap between
+beats 1.1 s. With no Vulkan driver (`VK_ICD_FILENAMES` pointed at nothing) the flag left
+the app with no WebGL at all, so `batighor_desktop.py` gives it only where the kernel's
+GPU driver has its Vulkan ICD installed (`vulkan_flag`); `--no-vulkan` turns it off. A
+browser on Kutum's page chooses its own backend and was not measured.

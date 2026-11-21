@@ -36,6 +36,7 @@ def desk(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, 'install', lambda base: [])
     monkeypatch.setattr(mod.shutil, 'which', lambda _: '/bin/true')
     monkeypatch.setattr(mod, 'running', lambda: False)
+    monkeypatch.setattr(mod, 'vulkan_flag', lambda: [])  # this machine's GPU is not the test's
     monkeypatch.setenv('GDK_SCALE', '1')        # the desktop scales: no flag of ours
     mod.launches = []
     monkeypatch.setattr(mod.subprocess, 'Popen', lambda argv, **_: mod.launches.append(argv))
@@ -121,3 +122,45 @@ def test_a_panel_is_whole_or_absent_and_a_half_one_is_repaired(tmp_path, monkeyp
     assert mod.install('http://k', into) == ['mongla.batighor-calibrate-1.0.1']
     assert (half / 'dist' / 'extension.js').is_file()
     assert mod.install('http://k', into) == [], 'a whole panel is left alone'
+
+
+def _gpu(tmp_path, drivers, icds):
+    """A /sys/class/drm with one card per kernel driver, and an ICD folder."""
+    drm, icd = tmp_path / 'drm', tmp_path / 'icd.d'
+    icd.mkdir(parents=True)
+    for i, d in enumerate(drivers):
+        (tmp_path / 'drivers' / d).mkdir(parents=True, exist_ok=True)
+        (drm / f'card{i}' / 'device').mkdir(parents=True)
+        (drm / f'card{i}' / 'device' / 'driver').symlink_to(tmp_path / 'drivers' / d)
+    for name in icds:
+        (icd / name).write_text('{}')
+    return drm, (str(icd),)
+
+
+@pytest.mark.parametrize('drivers, icds, vulkan', [
+    (['nvidia', 'i915'], ['nvidia_icd.json', 'intel_icd.x86_64.json'], True),  # this dev box
+    (['i915'], ['intel_icd.x86_64.json'], True),
+    # Mesa ships ICDs for GPUs the machine lacks; lavapipe is a CPU.
+    (['i915'], ['radeon_icd.x86_64.json', 'lvp_icd.x86_64.json'], False),
+    ([], ['lvp_icd.x86_64.json', 'nvidia_icd.json'], False),
+    (['nvidia'], [], False),
+])
+def test_vulkan_only_where_a_gpu_in_use_has_its_driver(tmp_path, monkeypatch,
+                                                       drivers, icds, vulkan):
+    """Without a Vulkan driver `--use-angle=vulkan` leaves the app no WebGL at
+    all (seen: every 3D and camera panel blank), so the flag needs both the
+    kernel's GPU driver and its ICD."""
+    spec = importlib.util.spec_from_file_location(
+        '_desk_gpu', ROOT / 'tools' / 'pool' / 'batighor_desktop.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    monkeypatch.setattr(mod.sys, 'platform', 'linux')
+    drm, dirs = _gpu(tmp_path, drivers, icds)
+    assert mod.vulkan_flag(drm, dirs) == (['--use-angle=vulkan'] if vulkan else [])
+
+
+def test_vulkan_reaches_the_launch_unless_the_operator_says_no(desk, monkeypatch):
+    monkeypatch.setattr(desk, 'vulkan_flag', lambda: ['--use-angle=vulkan'])
+    assert desk.main(['h']) == 0 and desk.main(['h', '--no-vulkan']) == 0
+    assert '--use-angle=vulkan' in desk.launches[0]
+    assert '--use-angle=vulkan' not in desk.launches[1]

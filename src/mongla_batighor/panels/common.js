@@ -38,9 +38,28 @@ function theme() {
   document.head.append(s);
 }
 
+// Service calls for the page, lent by whichever Batighor panel is mounted.
+// Lichtblick refuses a call from a panel that has unmounted, so a job that
+// must outlive one panel (the helm's heartbeat) borrows another's. The Status
+// strip sits above the tabs in every view, so one is always there. The set
+// is on globalThis because each extension is its own module.
+const CALLERS = (globalThis.monglaCallers = globalThis.monglaCallers || new Set());
+async function callAny(service, req) {
+  for (const c of [...CALLERS]) {
+    try {
+      return await c(service, req);
+    } catch (err) {
+      if (!/unmounted/.test(String(err && err.message))) throw err;
+      CALLERS.delete(c);
+    }
+  }
+  throw new Error("no mounted panel can call services");
+}
+
 // The panel's root, themed. `kind` adds a layout class.
 function mount(context, kind) {
   theme();
+  if (typeof context.callService === "function") CALLERS.add((s, r) => context.callService(s, r));
   const box = el("div", { class: kind ? `mb ${kind}` : "mb" });
   context.panelElement.append(box);
   return box;

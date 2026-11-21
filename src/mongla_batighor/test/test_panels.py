@@ -579,3 +579,49 @@ def test_a_panel_that_mounts_late_is_handed_what_came_before_at_its_own_age():
     verb, alive_age = _json.loads(out.stdout)
     assert verb == 'surface'                 # the second panel has /mongla/doing
     assert alive_age >= 59                   # and the old beat reads as old
+
+
+@NEEDS_NODE
+def test_the_pilot_keeps_the_helm_while_another_view_is_open():
+    """Opening another view unmounts the Control Center. A beat kept in the
+    panel stopped with it, the pilot lost the helm 3 s later and the helm
+    stopped the verb they had sent (seen in the desktop app). The beat
+    belongs to the page: it goes on after the panel is gone, and stops when
+    the helm answers that this browser is no longer the pilot."""
+    import json as _json
+    import subprocess as _sp
+    shim = ('function E(t){return{t,className:"",style:{},dataset:{},kids:[],value:t==="select"?"go":"",checked:false,'
+            'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
+            'setAttribute(){},addEventListener(){},querySelectorAll(){return[]},'
+            'classList:{toggle(){}},options:[]}}'
+            'const document={createElement:E,querySelector:()=>true,head:{append(){}}};'
+            'const localStorage={getItem:()=>"ana",setItem(){}};'
+            'const timers=[];globalThis.setInterval=(f)=>{timers.push(f);return timers.length};'
+            'globalThis.clearInterval=(i)=>{timers[i-1]=()=>{}};')
+    pre = ('const module={exports:{}};const CAMERAS=["forward"],'
+           'VERBS={go:{help:"",fields:{},defaults:{}}},TUNABLE={},THEME_CSS="";')
+    # Lichtblick's own words for a call from an unmounted panel (its
+    # PanelExtensionAdapter); the Status strip stands for the panel that stays.
+    probe = ('\nconst calls=[]; let answer="pilot", gone=false;'
+             'const reply=(who)=>(s,r)=>{calls.push(who);return Promise.resolve({ok:true,message:answer})};'
+             'const ctx={panelElement:{append(){}},subscribe(){},watch(){},'
+             ' callService:(s,r)=>gone?Promise.reject(new Error("Service call after panel was unmounted"))'
+             '  :reply("control")(s,r)};'
+             'module.exports.activate({registerPanel:({initPanel})=>{'
+             ' const off=initPanel(ctx); if(off) off();'
+             ' ctx.onRender({currentFrame:[{topic:"/mongla/batighor/helm_state",'
+             '  message:{data:JSON.stringify({pilot:"ana"})}}]},()=>{});'
+             ' gone=true;}});'                              # another view opens
+             'mount({panelElement:{append(){}},callService:reply("status")});'
+             'const tick=async()=>{for(const f of timers)f(); await new Promise(r=>setTimeout(r,0));};'
+             '(async()=>{await tick();await tick();const while_pilot=calls.length;'
+             ' answer="watching"; await tick(); await tick(); await tick();'
+             ' process.stdout.write(JSON.stringify([while_pilot, calls.length, calls]));})();')
+    js = pre + shim + (PANELS / 'common.js').read_text() + HELM_JS + probe
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    while_pilot, total, who = _json.loads(out.stdout)
+    assert while_pilot == 2, 'the beat goes on after the panel is gone'
+    assert set(who) == {'status'}, 'through a panel that is still mounted'
+    assert total == 3, 'and stops on the first answer that is not "pilot"'
+
