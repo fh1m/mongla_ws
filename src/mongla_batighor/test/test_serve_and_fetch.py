@@ -313,3 +313,21 @@ def test_the_first_visit_fix_never_creates_the_apps_database():
     assert 'objectStoreNames.contains("layouts")' in js
     assert 'sessionStorage.setItem(flag' in js and 'sessionStorage.getItem(flag)' in js
     assert js.count('location.reload()') == 1
+
+
+def test_the_tab_and_the_menu_carry_mongla_not_lichtblick():
+    """The page names and marks itself Batighor: Lichtblick's icons are gone,
+    ours is linked, and the CSS's inline mark is the served file, byte for byte."""
+    import pathlib
+    import urllib.parse
+    page = serve.themed(b'<html><head><title>Lichtblick</title>'
+                        b'<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png"/>'
+                        b'<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png"/>'
+                        b'</head></html>')
+    assert b'favicon-32x32' not in page and b'apple-touch-icon' not in page
+    assert b'<title>Batighor</title>' in page and b'href="/theme/mongla.svg"' in page
+    assert serve._THEME_FILE.match('mongla.svg')
+    theme = pathlib.Path(__file__).resolve().parents[1] / 'theme'
+    svg = (theme / 'mongla.svg').read_text().strip()
+    css = (theme / 'batighor.css').read_text()
+    assert 'data:image/svg+xml,' + urllib.parse.quote(svg, safe='') in css

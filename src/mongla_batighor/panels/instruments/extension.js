@@ -106,18 +106,35 @@ function planView(track, fixes) {
     svg("text", { x: W - 4, y: H - 4, "text-anchor": "end", "font-size": 8, fill: "var(--mb-ink-3)" }, `grid ${step} m`));
 }
 
+// Where the filter's odometry puts Mongla in the pool frame, before any anchor,
+// if it started at `start` facing bearing 0: the course origin is the centre of
+// the starting zone and +x points at the gate (courses/*.yaml `frame:`). An
+// assumption the map draws as one, hollow and amber, never as a measurement.
+// Exported for the test.
+function placeByStart(p, start) {
+  if (!start || !fin(p.x) || !fin(p.y)) return null;
+  const c = Math.cos(-start.yaw), s = Math.sin(-start.yaw);
+  const dx = p.x - start.x, dy = p.y - start.y;
+  return { x: c * dx - s * dy, y: s * dx + c * dy, yaw: fin(p.yaw) ? p.yaw - start.yaw : null };
+}
+
 // The pool map: the course file's pool frame, north (bearing 0, +x) up and
-// +y right, in metres, with the vehicle on it only once it is anchored there.
-// A prop is drawn where the file puts it and as what the file claims: solid
-// when measured, dashed amber when a rulebook nominal; a prop with no position
-// is listed by the caller, never placed. Exported for the test.
-function poolMap(course, loc, track, fixes, target) {
-  const C = course || {}, P = C.pool || {};
+// +y right, in metres. A prop is drawn where the file puts it and as what the
+// file claims: solid when measured, dashed amber when a rulebook nominal; a
+// prop with no position is listed by the caller, never placed. Mongla is
+// always on it: solid red once the filter is anchored in the pool, hollow
+// amber where its start says it is before that (`pose.placed`).
+// `pose`: {x, y, yaw (rad), sigma, placed}; `track`, `fixes`: pool-frame points
+// ({x, y}, a fix with {fx, fy} also: where the filter was when it took it).
+// `opts.vel`: [{vx, vy, ink}] pool-frame m/s, drawn as two-second arrows.
+// Exported for the test.
+function poolMap(course, pose, track, fixes, target, opts) {
+  const C = course || {}, P = C.pool || {}, O = opts || {};
   const props = C.props || [];
-  const anchored = !!(loc && loc.anchored && loc.frame === "pool" && fin(loc.x_m) && fin(loc.y_m));
+  const here = pose && fin(pose.x) && fin(pose.y) ? pose : null;
   const pts = [...(P.outline || []).map(([x, y]) => ({ x, y })), ...(P.floor || []).map(([x, y]) => ({ x, y })),
-    ...props.map((p) => ({ x: p.x_m, y: p.y_m })), ...(anchored ? track : []), ...(anchored ? fixes : []),
-    ...(anchored ? [{ x: loc.x_m, y: loc.y_m }] : []), ...(target ? [target] : [])].filter((p) => fin(p.x) && fin(p.y));
+    ...props.map((p) => ({ x: p.x_m, y: p.y_m })), ...(here ? track : []), ...(here ? fixes : []),
+    ...(here ? [here] : []), ...(target ? [target] : [])].filter((p) => fin(p.x) && fin(p.y));
   if (!pts.length) return null;
   let n0 = Infinity, n1 = -Infinity, e0 = Infinity, e1 = -Infinity;
   for (const p of pts) { n0 = Math.min(n0, p.x); n1 = Math.max(n1, p.x); e0 = Math.min(e0, p.y); e1 = Math.max(e1, p.y); }
@@ -158,18 +175,32 @@ function poolMap(course, loc, track, fixes, target) {
     }
     kids.push(text(p.y_m + 6 * u, -p.x_m - 6 * u, p.measured ? p.name : `${p.name} (nominal)`, ink));
   }
-  if (anchored) {
+  if (here) {
+    const ink = here.placed ? "var(--mb-amber)" : "var(--mb-red)";
     const tr = track.filter((p) => fin(p.x) && fin(p.y));
-    if (tr.length > 1) kids.push(svg("polyline", { points: tr.map((p) => `${X(p)},${Y(p)}`).join(" "), fill: "none", stroke: "var(--mb-sea)", "stroke-width": 1.5 * u }));
-    for (const f of fixes) kids.push(svg("circle", { cx: f.y, cy: -f.x, r: 3 * u, fill: "none", stroke: "var(--mb-amber)", "stroke-width": u }));
-    if (fin(loc.sigma_xy_m) && loc.sigma_xy_m > 0) kids.push(svg("circle", { cx: loc.y_m, cy: -loc.x_m, r: loc.sigma_xy_m, fill: "rgba(255,42,20,0.08)", stroke: "var(--mb-red)", "stroke-width": u, "stroke-dasharray": `${2 * u},${2 * u}` }));
-    const yaw = fin(loc.yaw_deg) ? (loc.yaw_deg * Math.PI) / 180 : 0;
+    if (tr.length > 1) kids.push(svg("polyline", { points: tr.map((p) => `${X(p)},${Y(p)}`).join(" "), fill: "none", stroke: here.placed ? "var(--mb-amber)" : "var(--mb-sea)", "stroke-width": 1.5 * u, "stroke-dasharray": here.placed ? `${3 * u},${2 * u}` : "" }));
+    for (const f of fixes) {
+      // A fix and, on the localization map, the correction it asked for:
+      // from where the filter was to where the prop put it.
+      if (O.rays && fin(f.fx) && fin(f.fy)) kids.push(svg("line", { x1: f.fy, y1: -f.fx, x2: f.y, y2: -f.x, stroke: "var(--mb-amber)", "stroke-width": u }));
+      kids.push(svg("circle", { cx: f.y, cy: -f.x, r: 3 * u, fill: "none", stroke: "var(--mb-amber)", "stroke-width": u }));
+    }
+    if (fin(here.sigma) && here.sigma > 0) kids.push(svg("circle", { cx: here.y, cy: -here.x, r: here.sigma, fill: here.placed ? "none" : "rgba(255,42,20,0.08)", stroke: ink, "stroke-width": u, "stroke-dasharray": `${2 * u},${2 * u}` }));
+    for (const v of O.vel || []) {
+      if (!fin(v.vx) || !fin(v.vy)) continue;
+      kids.push(svg("line", { x1: here.y, y1: -here.x, x2: here.y + 2 * v.vy, y2: -(here.x + 2 * v.vx), stroke: v.ink, "stroke-width": 1.5 * u, "stroke-linecap": "round" }));
+      kids.push(svg("circle", { cx: here.y + 2 * v.vy, cy: -(here.x + 2 * v.vx), r: 1.5 * u, fill: v.ink }));
+    }
+    const yaw = fin(here.yaw) ? here.yaw : 0;
     const hull = [[10, 0], [-6, 5], [-3, 0], [-6, -5]].map(([f, r]) => {
-      const n = loc.x_m + u * (f * Math.cos(yaw) - r * Math.sin(yaw)), e = loc.y_m + u * (f * Math.sin(yaw) + r * Math.cos(yaw));
+      const n = here.x + u * (f * Math.cos(yaw) - r * Math.sin(yaw)), e = here.y + u * (f * Math.sin(yaw) + r * Math.cos(yaw));
       return `${e},${-n}`;
     });
-    kids.push(svg("polygon", { points: hull.join(" "), fill: "var(--mb-red)", stroke: "var(--mb-d0)", "stroke-width": u }));
-    if (target) kids.push(svg("line", { x1: loc.y_m, y1: -loc.x_m, x2: target.y, y2: -target.x, stroke: "var(--mb-red)", "stroke-width": u, "stroke-dasharray": `${4 * u},${3 * u}` }));
+    kids.push(svg("polygon", here.placed
+      ? { points: hull.join(" "), fill: "none", stroke: "var(--mb-amber)", "stroke-width": 1.5 * u }
+      : { points: hull.join(" "), fill: "var(--mb-red)", stroke: "var(--mb-d0)", "stroke-width": u }));
+    if (here.placed) kids.push(text(here.y + 8 * u, -here.x + 12 * u, "by its start", "var(--mb-amber)"));
+    if (target) kids.push(svg("line", { x1: here.y, y1: -here.x, x2: target.y, y2: -target.x, stroke: "var(--mb-red)", "stroke-width": u, "stroke-dasharray": `${4 * u},${3 * u}` }));
   }
   if (target) {
     const r = fin(target.tol) && target.tol > 0 ? target.tol : 6 * u;
@@ -183,6 +214,116 @@ function poolMap(course, loc, track, fixes, target) {
   kids.push(text(e1 - pad / 2, -n0 - pad / 3 - 4 * u, `${step} m`, "var(--mb-ink-2)", "end"));
   kids.push(text(e0 + pad / 2, -n1 + pad / 2 + 4 * u, "N  bearing 0", "var(--mb-ink-3)"));
   return svg("svg", { viewBox: `${e0} ${-n1} ${W} ${n1 - n0}`, preserveAspectRatio: "xMidYMid meet", class: "map" }, ...kids);
+}
+
+// The Map instruments' shared state: the course, the filter, where Mongla
+// started (for drawing it before the anchor), its track and its fixes.
+const MAP_TOPICS = ["/mongla/batighor/course", "/mongla/localization/state", "/mongla/localization/fix", "/mongla/doing"];
+const rad = (d) => (fin(d) ? (d * Math.PI) / 180 : null);
+
+function foldMap(s, topic, m) {
+  s.track = s.track || []; s.fixes = s.fixes || [];
+  if (topic === "/mongla/batighor/course") { try { s.course = JSON.parse(m.data); } catch { /* keep */ } }
+  else if (topic === "/mongla/localization/state") {
+    // A frame change (the anchor, or a filter restart) starts the track and
+    // the start again: a track across it would join two frames.
+    if (!s.loc || s.loc.frame !== m.frame) {
+      s.track = []; s.fixes = [];
+      s.start = m.frame === "pool" ? null : { x: 0, y: 0, yaw: rad(m.yaw_deg) || 0, by: "the filter's origin, heading when first seen" };
+    }
+    s.loc = m; s.lAt = Date.now();
+    const p = mapPose(s);
+    if (p) {
+      const last = s.track[s.track.length - 1];
+      if (!last || Math.hypot(last.x - p.x, last.y - p.y) > 0.02) s.track.push({ x: p.x, y: p.y, ox: m.x_m, oy: m.y_m, t: s.lAt });
+      while (s.track.length && s.lAt - s.track[0].t > 10 * TRACK_S * 1000) s.track.shift();
+    }
+  } else if (topic === "/mongla/localization/fix") {
+    const p = m.point;
+    if (p) {
+      const was = mapPose(s);
+      s.fixes.push({ x: p.x, y: p.y, fx: was ? was.x : NaN, fy: was ? was.y : NaN, t: Date.now() });
+      if (s.fixes.length > 40) s.fixes.shift();
+    }
+  } else if (topic === "/mongla/odom") s.odom = m;
+  else if (topic === "/mongla/vision/downward/velocity") s.flow = m;
+  else { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
+}
+
+// Mongla in the pool frame: the filter's, once anchored; else placed by its start.
+function mapPose(s) {
+  const loc = s.loc;
+  if (!loc || !fin(loc.x_m) || !fin(loc.y_m)) return null;
+  if (loc.anchored && loc.frame === "pool") return { x: loc.x_m, y: loc.y_m, yaw: rad(loc.yaw_deg), sigma: loc.sigma_xy_m, placed: false };
+  const p = placeByStart({ x: loc.x_m, y: loc.y_m, yaw: rad(loc.yaw_deg) }, s.start);
+  return p && { ...p, sigma: loc.sigma_xy_m, placed: true };
+}
+
+function drawMap(s, forLocalization) {
+  const c = s.course, loc = s.loc;
+  if (!c) return [el("div", { class: "note" }, "no /mongla/batighor/course: is Batighor's course node running (batighor:=true)?")];
+  const now = s.doing && s.doing.now;
+  const f = now && now.verb === "go_to" ? now.fields || {} : null;
+  const target = f && fin(f.x_m) && fin(f.y_m) ? { x: f.x_m, y: f.y_m, tol: f.tolerance_m } : null;
+  const pose = mapPose(s);
+  const anchored = pose && !pose.placed;
+  const out = [el("div", { class: "row" },
+    el("b", {}, c.course || "no course"), el("span", { class: "note" }, c.from === "mission" ? "from the mission" : "from the deck"),
+    !loc ? el("span", { class: "stale" }, "no localization")
+      : anchored ? el("span", { class: "live" }, "anchored in the pool")
+        : el("span", { class: "warn" }, `not anchored: drawn by its start (${s.start ? s.start.by : "--"})`))];
+  if (c.error) { out.push(el("div", { class: "err" }, c.error)); return out; }
+  const vel = [];
+  if (forLocalization && pose && fin(pose.yaw)) {
+    // Body-frame velocities (FRD), turned into the pool by the drawn heading.
+    const turn = (vx, vy) => ({ vx: Math.cos(pose.yaw) * vx - Math.sin(pose.yaw) * vy, vy: Math.sin(pose.yaw) * vx + Math.cos(pose.yaw) * vy });
+    const ot = s.odom && s.odom.twist && s.odom.twist.twist && s.odom.twist.twist.linear;
+    if (ot) vel.push({ ...turn(ot.x, ot.y), ink: "var(--mb-sea)" });
+    const ft = s.flow && s.flow.twist && s.flow.twist.twist && s.flow.twist.twist.linear;
+    if (ft) vel.push({ ...turn(ft.x, ft.y), ink: "var(--mb-teal)" });
+  }
+  const map = poolMap(c, pose, s.track || [], s.fixes || [], target, { rays: forLocalization, vel });
+  out.push(map || el("div", { class: "note" }, "nothing placed yet: survey the pool (course_survey --corner, --prop, --floor)"));
+  const un = c.unplaced || [];
+  const where = pose ? `${num(pose.x, 2)}, ${num(pose.y, 2)} m  heading ${num(fin(pose.yaw) ? (pose.yaw * 180) / Math.PI : NaN, 0)} deg` : "--";
+  const lastFix = (s.fixes || [])[s.fixes.length - 1];
+  const rows = [
+    ["position", anchored ? where : pose ? `${where} (by its start)` : "--", anchored ? "live" : "warn"],
+    ["filter frame", loc ? `${loc.frame || "--"}  ${num(loc.x_m, 2)}, ${num(loc.y_m, 2)} m` : "--"],
+    ["sigma", loc ? `${num(loc.sigma_xy_m, 2)} m  yaw ${num(loc.sigma_yaw_deg, 1)} deg` : "--"],
+    ["usable", loc ? (loc.usable ? "yes" : `no: ${loc.reason || "--"}`) : "--", loc && loc.usable ? "live" : "warn"],
+    ["aided by", loc ? loc.aiding || "--" : "--"],
+    ["going to", target ? `${num(target.x, 2)}, ${num(target.y, 2)} m within ${num(target.tol, 2, " m")}` : "--", target ? "live" : ""],
+  ];
+  if (forLocalization) {
+    rows.push(["arrows", "2 s ahead: filter (sea), flow (teal)"],
+      ["last fix", lastFix ? `moved the estimate ${num(Math.hypot(lastFix.x - lastFix.fx, lastFix.y - lastFix.fy), 2, " m")}, ${num(ageS(lastFix.t), 0)} s ago` : "none yet"],
+      ["motion", loc ? loc.motion || "--" : "--"],
+      ["input ages", loc ? `imu ${num(loc.imu_age_s, 2)}  depth ${num(loc.depth_age_s, 2)}  flow ${num(loc.flow_age_s, 2)} s` : "--"]);
+  } else {
+    rows.push(["placed", `${(c.props || []).length} props, ${(c.props || []).filter((p) => !p.measured).length} of them nominal`],
+      ["unplaced", un.length ? un.map((p) => p.name).join(", ") : "none", un.length ? "warn" : ""],
+      ["pool", `depth ${num(c.pool && c.pool.depth_m, 2, " m")}  tile ${num(c.pool && c.pool.tile_m, 3, " m")}  floor stop ${num(c.pool && c.pool.shield_max_depth_m, 2, " m")}`],
+      ["file", c.source || "--"]);
+  }
+  out.push(kv(...rows));
+  return out;
+}
+
+// Built once above the redrawn part, so a click is never lost to a redraw:
+// the operator says "Mongla is at the start now, facing the gate".
+function startControl(s, done) {
+  const b = el("button", {
+    title: "Mongla sits in the starting zone, facing bearing 0 (the gate): draw it from here until it anchors",
+    onclick: () => {
+      const loc = s.loc;
+      if (!loc || !fin(loc.x_m)) return;
+      s.start = { x: loc.x_m, y: loc.y_m, yaw: rad(loc.yaw_deg) || 0, by: `set by the operator ${new Date().toLocaleTimeString()}` };
+      s.track = [];
+      done();
+    },
+  }, "At the start now");
+  return el("div", { class: "row" }, b, el("span", { class: "note" }, "before the anchor, Mongla is drawn from where it started"));
 }
 
 // Seconds as "1:05", the way a run clock reads.
@@ -333,53 +474,25 @@ const INSTRUMENTS = {
     },
   },
 
-  // The pool, the props and Mongla on them: course.py's course file, the
-  // filter's state (frame, anchored, sigma), its fixes, and the go_to the
-  // manager is flying (/mongla/doing). For planning a run as much as watching one.
+  // The pool, the props and Mongla on them, for planning a run as much as
+  // watching one: course.py's course file, the filter (anchored, or drawn by
+  // its start), its fixes, and the go_to the manager is flying (/mongla/doing).
   Map: {
     title: "Map",
-    topics: ["/mongla/batighor/course", "/mongla/localization/state", "/mongla/localization/fix", "/mongla/doing"],
-    fold(s, topic, m) {
-      s.track = s.track || []; s.fixes = s.fixes || [];
-      if (topic === "/mongla/batighor/course") { try { s.course = JSON.parse(m.data); s.cAt = Date.now(); } catch { /* keep */ } }
-      else if (topic === "/mongla/localization/state") {
-        // The track is kept in the frame it was drawn in; the anchor changes the frame, and a track across it would be a lie.
-        if (s.loc && s.loc.frame !== m.frame) s.track = [];
-        s.loc = m; s.lAt = Date.now();
-        if (m.frame === "pool" && fin(m.x_m) && fin(m.y_m)) {
-          const last = s.track[s.track.length - 1];
-          if (!last || Math.hypot(last.x - m.x_m, last.y - m.y_m) > 0.02) s.track.push({ x: m.x_m, y: m.y_m, t: s.lAt });
-          while (s.track.length && s.lAt - s.track[0].t > 10 * TRACK_S * 1000) s.track.shift();
-        }
-      } else if (topic === "/mongla/localization/fix") { if (m.point) { s.fixes.push({ x: m.point.x, y: m.point.y }); if (s.fixes.length > 40) s.fixes.shift(); } }
-      else { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
-    },
-    draw(s) {
-      const c = s.course, loc = s.loc;
-      if (!c) return [el("div", { class: "note" }, "no /mongla/batighor/course: is Batighor's course node running (batighor:=true)?")];
-      const now = s.doing && s.doing.now;
-      const f = now && now.verb === "go_to" ? now.fields || {} : null;
-      const target = f && fin(f.x_m) && fin(f.y_m) ? { x: f.x_m, y: f.y_m, tol: f.tolerance_m } : null;
-      const anchored = !!(loc && loc.anchored && loc.frame === "pool");
-      const out = [el("div", { class: "row" },
-        el("b", {}, c.course || "no course"), el("span", { class: "note" }, c.from === "mission" ? "from the mission" : "from the deck"),
-        loc ? el("span", { class: anchored ? "live" : "warn" }, anchored ? "anchored in the pool" : `not anchored (${loc.frame || "no input"})`) : el("span", { class: "stale" }, "no localization"))];
-      if (c.error) { out.push(el("div", { class: "err" }, c.error)); return out; }
-      const map = poolMap(c, loc, s.track || [], s.fixes || [], target);
-      out.push(map || el("div", { class: "note" }, "nothing placed yet: survey the pool (course_survey --corner, --prop, --floor)"));
-      const un = c.unplaced || [];
-      out.push(kv(
-        ["position", anchored ? `${num(loc.x_m, 2)}, ${num(loc.y_m, 2)} m  yaw ${num(loc.yaw_deg, 0)} deg` : loc ? `odom ${num(loc.x_m, 2)}, ${num(loc.y_m, 2)} m: not on this map until anchored` : "--", anchored ? "" : "warn"],
-        ["sigma", loc ? `${num(loc.sigma_xy_m, 2)} m  yaw ${num(loc.sigma_yaw_deg, 1)} deg` : "--"],
-        ["usable", loc ? (loc.usable ? "yes" : `no: ${loc.reason || "--"}`) : "--", loc && loc.usable ? "live" : "warn"],
-        ["aided by", loc ? loc.aiding || "--" : "--"],
-        ["going to", target ? `${num(target.x, 2)}, ${num(target.y, 2)} m within ${num(target.tol, 2, " m")}` : "--", target ? "live" : ""],
-        ["placed", `${(c.props || []).length} props, ${(c.props || []).filter((p) => !p.measured).length} of them nominal`],
-        ["unplaced", un.length ? un.map((p) => p.name).join(", ") : "none", un.length ? "warn" : ""],
-        ["pool", `depth ${num(c.pool && c.pool.depth_m, 2, " m")}  tile ${num(c.pool && c.pool.tile_m, 3, " m")}  floor stop ${num(c.pool && c.pool.shield_max_depth_m, 2, " m")}`],
-        ["file", c.source || "--"]));
-      return out;
-    },
+    topics: MAP_TOPICS,
+    fold: foldMap,
+    head: startControl,
+    draw: (s) => drawMap(s, false),
+  },
+
+  // The same pool, read as the filter's: each fix with the correction it made,
+  // the filter's and the flow's velocity as arrows, sigma, and the input ages.
+  LocalizationMap: {
+    title: "Localization map",
+    topics: [...MAP_TOPICS, "/mongla/odom", "/mongla/vision/downward/velocity"],
+    fold: foldMap,
+    head: startControl,
+    draw: (s) => drawMap(s, true),
   },
 
   // The decision layer: the mission, the task it is in and its clock, the
@@ -534,9 +647,13 @@ const INSTRUMENTS = {
 function makePanel(spec) {
   return (context) => {
     if (typeof context.setDefaultPanelTitle === "function") context.setDefaultPanelTitle(spec.title);
-    const box = mount(context);
+    const root = mount(context);
     const s = {};
     let dirty = true;
+    // A control built once (spec.head): a redrawn button can lose its click.
+    if (spec.head) root.append(spec.head(s, () => { dirty = true; }));
+    const box = el("div", { class: "body" });
+    root.append(box);
     context.subscribe(spec.topics.map((topic) => ({ topic })));
     context.watch("currentFrame");
     context.onRender = (renderState, done) => {
@@ -569,5 +686,6 @@ module.exports = {
   },
   rungOf,
   poolMap,
+  placeByStart,
   INSTRUMENTS,
 };

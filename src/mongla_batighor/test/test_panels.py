@@ -198,7 +198,13 @@ def _instruments():
     from mongla_batighor.seat import CAMERAS
     out = {}
     for name, body in re.findall(r'^  (\w+): \{\n(.*?)^  \},$', INSTRUMENTS_JS, re.M | re.S):
-        topics = re.search(r'topics: \[(.*?)\],\n', body, re.S).group(1)
+        topics = re.search(r'topics: (\[.*?\]|[A-Z_]+),\n', body, re.S).group(1)
+        # A shared list (`topics: MAP_TOPICS`, or `...MAP_TOPICS` inside one)
+        # is read from its own declaration: one copy, parsed as written.
+        for const in re.findall(r'\b([A-Z][A-Z_]+)\b', topics):
+            decl = re.search(rf'^const {const} = \[(.*?)\];', INSTRUMENTS_JS, re.M | re.S)
+            if decl:
+                topics += decl.group(1)
         names = set(re.findall(r'"(/[\w/]+)"', topics))
         for tmpl in re.findall(r'(lockTopic|seeingTopic)\(c\)', topics):
             names |= {f'/mongla/vision/{c}/{tmpl[:-5]}' for c in CAMERAS}
@@ -402,3 +408,22 @@ def test_the_vehicle_panel_calls_a_mission_running_as_the_helm_does():
     assert float(limit) == helm.MISSION_ALIVE_S
     # Every instrument that says a mission runs uses that one constant.
     assert re.findall(r'ageS\(s\.aliveAt\) < (\w+)', js) == ['MISSION_ALIVE_S'] * 2
+
+
+def test_what_an_unset_setting_means_is_the_detectors_own_default():
+    """The Control Center says what a default does (`UNSET`), and each value it
+    calls the default is the one the detector declares."""
+    import pathlib
+    import re as _re
+    from mongla_batighor.seat import TUNABLE
+    root = pathlib.Path(__file__).resolve().parents[2]
+    js = (root / 'mongla_batighor' / 'panels' / 'control' / 'extension.js').read_text()
+    setup = (root / 'mongla_vision' / 'mongla_vision' / 'detector_setup.py').read_text()
+    block = _re.search(r'const UNSET = \{(.*?)\n  \};', js, _re.S).group(1)
+    rows = _re.findall(r'(\w+): \[("[^"]*"|[0-9.]+), "', block)
+    assert len(rows) >= 3
+    for name, unset in rows:
+        assert name in TUNABLE, name
+        (declared,) = _re.findall(rf"declare_parameter\('{name}',\s*([^)]+)\)", setup)
+        assert float(declared) == float(unset) if TUNABLE[name] is float \
+            else declared.strip().strip("'") == unset.strip('"'), (name, declared, unset)

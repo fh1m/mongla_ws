@@ -196,7 +196,7 @@ def cockpit(v: View):
     The cameras take the left column whole. The lock's history is in `vision`;
     here the Vision instrument says what holds the target now and which
     stages run, and it needs the room more than a strip of history does."""
-    extra = {'downward': ['flow_annotations']}
+    extra = {'downward': ['flow_annotations', 'floor_annotations']}
     cams = [(3 if i == 0 else 2, v(c, camera(c, *extra.get(c, []))))
             for i, c in enumerate(CAMERAS)]
     return row((60, col(*cams)),
@@ -233,7 +233,8 @@ def flow(v: View):
     """The downward camera as a speed sensor: the floor tracked, and what it measured."""
     d = f'{V}/downward'
     return row(
-        (58, v('floor', image(f'{d}/stream/compressed', f'{d}/flow_annotations'))),
+        (58, v('floor', image(f'{d}/stream/compressed', f'{d}/flow_annotations',
+                              f'{d}/floor_annotations'))),
         (42, col(
             v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s', True),
                                series(f'{d}/velocity.twist.twist.linear.y', 'flow vy m/s', True),
@@ -255,10 +256,14 @@ def flow(v: View):
 
 
 def localization(v: View):
-    """Navigation: where the filter puts the vehicle, in 3D and over time, and why."""
+    """Navigation: where the filter puts the vehicle on the pool, and why.
+
+    The localization map on the left (each fix with the correction it made,
+    the filter's and the flow's velocity); over time on the right."""
     d = f'{V}/downward'
     return row(
-        (50, col((3, v('nav', scene())), (2, v('navigation', instrument('Navigation'))))),
+        (50, col((3, v('locmap', instrument('LocalizationMap'))),
+                 (2, row(v('navigation', instrument('Navigation')), v('nav', scene()))))),
         (50, col(
             (2, v('aiding', states(series('/mongla/localization/state.usable', 'usable', True),
                                    series('/mongla/localization/state.reason', 'why not', True),
@@ -270,6 +275,7 @@ def localization(v: View):
                               series('/mongla/odom.pose.pose.position.z', 'z m (down)'),
                               series('/mongla/localization/fix.point.x', 'prop fix x'),
                               series('/mongla/localization/fix.point.y', 'prop fix y')))),
+            (2, v('sigma', plot(series('/mongla/localization/state.sigma_xy_m', 'sigma xy m', True)))),
             (3, v('vel', plot(series('/mongla/odom.twist.twist.linear.x', 'filter vx'),
                               series(f'{d}/velocity.twist.twist.linear.x', 'flow vx'),
                               series('/mongla/odom.twist.twist.linear.y', 'filter vy'),
@@ -337,25 +343,20 @@ def chain(v: View):
 def map_(v: View):
     """Planning a run: the pool from the course file, the props, and Mongla on it.
 
-    The map takes the left whole, because a plan is read off it; the mission's
-    decision layer and the filter's own numbers sit beside it, and the 3D
-    scene shows the hull's attitude the plan view cannot."""
-    return row((60, v('map', instrument('Map'))),
-               (40, col((5, v('mission', instrument('Mission'))),
-                        (4, row(v('navigation', instrument('Navigation')), v('hull', scene()))))))
+    The map takes three quarters: a plan is read off it. Beside it only what
+    the plan view cannot show: the vehicle's state and its attitude."""
+    return row((74, v('map', instrument('Map'))),
+               (26, col((3, v('vehicle', instrument('Vehicle'))), (2, v('hull', scene())))))
 
 
 def mission(v: View):
-    """A run in progress: what Mongla sees, where it is, what it decided, and the way out.
-
-    The cameras on the left as everywhere; then the map, and the decision
-    layer above the Control Center, whose STOP, SURFACE and DISARM stay first."""
-    extra = {'downward': ['flow_annotations']}
-    cams = [v(c, camera(c, *extra.get(c, []))) for c in CAMERAS]
-    return row((38, col(*cams)),
-               (34, v('map', instrument('Map'))),
-               (28, col((4, v('mission', instrument('Mission'))),
-                        (5, v('control', instrument('ControlCenter'))))))
+    """The decision layer: the mission, its task and clock, the verb running
+    and how each ended; the error the verb is closing and the demand it sends."""
+    return row((48, v('mission', instrument('Mission'))),
+               (52, col(v('align', align('align x px', 'align y px')),
+                        v('demand', plot(series('/mongla/demand.vector.x', 'surge'),
+                                         series('/mongla/demand.vector.y', 'sway'),
+                                         series('/mongla/demand.vector.z', 'heave'))))))
 
 
 def bins_downward(v: View):

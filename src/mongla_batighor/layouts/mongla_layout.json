@@ -19,6 +19,9 @@
           },
           "/mongla/vision/downward/flow_annotations": {
             "visible": true
+          },
+          "/mongla/vision/downward/floor_annotations": {
+            "visible": true
           }
         }
       }
