@@ -64,9 +64,9 @@ LEDGER_BOUND = {
                                                'the uncalibrated state, measured '
                                                'on the downward camera; added '
                                                'only under allow_uncalibrated (#80)'),
-        'FLOW_TD_MEASURED_S': (-0.0113, 'td = -11.3 ms, sd 0.84 ms',
+        'FLOW_TD_MEASURED_S': (-0.0134, 'td = -13.4 ms',
                                'camera<->gyro offset the online estimator '
-                               'starts from, three 60 s runs on the vehicle'),
+                               'starts from, in the flight camera mode'),
         'FLOW_ROT_RESIDUAL_CALIBRATED': (0.10, '575.7 → 57.1 mm/s',
                                          'rotation left after a calibrated '
                                          'de-rotation gain (#23)'),

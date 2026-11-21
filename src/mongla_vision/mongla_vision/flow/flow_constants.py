@@ -140,14 +140,15 @@ FLOW_SCALE_SIGMA_FRAC = 0.036
 FLOW_UNCALIBRATED_SCALE_SIGMA_FRAC = 0.0308
 
 
-# The camera<->gyro offset the online estimator STARTS from. Measured on the
-# vehicle's own downward camera and SROT board, three 60 s hand-wobble runs:
-# -11.3 ms, sd 0.84 ms (measured-bars, 2026-10-03). It was 0.0, so every run
-# began 11 ms wrong and stayed so until enough rotation arrived for a fit --
+# The camera<->gyro offset the online estimator STARTS from: -13.4 ms, in the
+# flight mode (640x360, about 200 fps), the downward camera rigid on the SROT
+# board, windows 0.02 ms apart (measured-bars 108). The offset depends on the
+# camera mode, so a value measured in another mode is not this one. A start of
+# 0 would leave every run 13 ms wrong until enough rotation arrived for a fit,
 # and on a level transit that may be never. Negative: the board's ATTITUDE
 # rates are stamped AFTER the motion they describe. The estimator still runs
 # and slews from here.
-FLOW_TD_MEASURED_S = -0.0113
+FLOW_TD_MEASURED_S = -0.0134
 
 
 FLOW_ROT_RESIDUAL_CALIBRATED = 0.10
