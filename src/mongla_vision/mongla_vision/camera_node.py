@@ -54,6 +54,7 @@ from mongla_vision import (
 from mongla_vision.calibration.binding import calibration_for_profile
 from mongla_vision.cameras.discover import discover_cameras
 from mongla_vision.cameras.reopen import ABSENT, GAVE_UP, REOPEN, CameraWatch
+from mongla_runtime.tether import changes
 
 
 # The browser's quality for a frame we encode ourselves; a camera's own JPEG
@@ -424,6 +425,9 @@ class CameraNode(Node):
     def _on_set(self, params):
         from rcl_interfaces.msg import SetParametersResult
         from .cameras.v4l2_mailbox import exposure_controls
+        params = changes(self, params)     # a declaration is not a change (B-145)
+        if not params:
+            return SetParametersResult(successful=True)
         fixed = [p.name for p in params if p.name not in self.LIVE_PARAMS]
         if fixed:
             return SetParametersResult(successful=False, reason=(

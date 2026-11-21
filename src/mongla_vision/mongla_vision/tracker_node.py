@@ -50,6 +50,7 @@ from mongla_vision.tracking.bytetrack       import ByteTrackWrapper
 from mongla_vision.tracking.roboflow_tracker import RoboflowTracker
 from mongla_vision.tracking.kalman    import TrackKalmanSmoother
 from mongla_vision.tracking.tracker   import TrackedDetection
+from mongla_runtime.tether import changes
 
 
 def _build_tracker(tracker_type, *, track_buffer, min_hits,
@@ -325,6 +326,9 @@ class TrackerNode(Node):
         parameter successful" on the deck and changed nothing.
         """
         from rcl_interfaces.msg import SetParametersResult
+        params = changes(self, params)     # a declaration is not a change (B-145)
+        if not params:
+            return SetParametersResult(successful=True)
         fixed = [p.name for p in params if p.name != 'classes']
         if fixed:
             return SetParametersResult(
