@@ -1,0 +1,25 @@
+.claude/context/packages/mongla_manager/README.md
+  s_4af8d6f83b24e8::t_c0b567914bfc2a 67
+src/mongla_batighor/mongla_batighor/views.py
+  s_4af8d6f83b24e8::t_72dd057509cc97 367
+src/mongla_manager/mongla_manager/node_telemetry.py
+  s_4af8d6f83b24e8::t_847f53602fd371 82-85
+src/mongla_manager/test/test_stale_telemetry_is_absent.py
+  s_4af8d6f83b24e8::t_f9b7260bcba90e 14-15,112-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "6b64a83c4e960654136a9ac2b9aba784ac05d7f8",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
