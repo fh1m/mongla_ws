@@ -20,7 +20,7 @@ Fill the four tunables, then:
     ros2 run mongla_planner mission survey_course
 """
 
-COURSE = None          # course name, e.g. the file stem under ~/.mongla/courses
+COURSE = None          # course name, e.g. the file stem under ~/mongla/deck/courses
 ANCHOR_PROP = None     # a prop with a measured bearing, visible from the station
 MODEL = None           # a detector model that emits every surveyed prop's class
 SURVEY_PROPS = ()      # prop names in the order to turn to them

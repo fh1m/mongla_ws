@@ -1,0 +1,42 @@
+# A pool -- the blank venue. kutum/setup.sh copies it to
+# ~/mongla/deck/courses/pool.yaml, and the starter deck file names it
+# (`course: pool`). Rename it for a real venue, or copy a packaged course.
+#
+# Fill it in at the pool, then check:
+#     ros2 run mongla_localization course_survey --course pool --floor X Y DEPTH --shield M
+#     ros2 run mongla_manager bringup_check
+# Every key and who reads it: .claude/context/missions/course-file.md
+
+course: pool
+frame: "pool: origin where the vehicle starts, +x the way it first faces (bearing 0), +y right (bearing 90)"
+
+# The venue, in one place: every package reads these from here, and a deck
+# file that also sets one is refused at launch. Unset until measured: a
+# mission refuses to start until flow has a floor (depth_m or floor points).
+#
+#   depth_m              floor depth, POSITIVE metres below the surface
+#   depth_min_m/_max_m   where a sloping or stepped floor actually lies
+#   floor                soundings [x, y, depth] in this frame
+#   tile_m               floor tile pitch: a second height and a yaw bound
+#   lane_lines           true when the floor has lane lines
+#   shield_max_depth_m   the manager surfaces a hull past this depth
+pool:
+  depth_m:
+  depth_min_m:
+  depth_max_m:
+  floor: []
+  tile_m:
+  shield_max_depth_m:
+
+# Each prop: detect_class (what the model emits), x_m, y_m, depth_m (NEGATIVE
+# below the surface), bearing_deg (the way its face points), width_m (what the
+# detector boxes, measured), measured: true once taped. For example:
+#
+#   gate:
+#     detect_class: gate
+#     x_m: 6.0
+#     y_m: 0.0
+#     bearing_deg: 0
+#     width_m: 1.5
+#     measured: true
+props: {}

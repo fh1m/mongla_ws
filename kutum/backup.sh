@@ -11,7 +11,8 @@
 #
 #   ~/hailo_models   compiled XFeat artifacts. On 2026-11-07 these existed
 #                    nowhere but the vehicle.
-#   ~/.mongla        the deck's own config: bringup.yaml, courses, geometry
+#   ~/mongla/deck    the deck: bringup.yaml and the venue course files
+#                    (~/.mongla links to it; a link copies as a link, so the folder is named)
 #   ~/calib_*        the calibration captures the guide resumes from
 #   ~/hailort_src, ~/hailort_drivers, ~/hailo_dkms
 #                    HailoRT 4.24 and its PCIe driver, built from source. The
@@ -31,7 +32,7 @@ host="${TARGET#*@}"; host="${host%%.*}"
 DEST="${KUTUM_BACKUP:-$HOME/kutum-backup}/$host"
 mkdir -p "$DEST"
 
-what=(hailo_models .mongla 'calib_*' hailort_src hailort_drivers hailo_dkms)
+what=(hailo_models mongla/deck 'calib_*' hailort_src hailort_drivers hailo_dkms)
 [ "${2:-}" = "--runs" ] && what+=(mongla_runs data)
 
 for w in "${what[@]}"; do

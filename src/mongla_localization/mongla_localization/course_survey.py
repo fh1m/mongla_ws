@@ -3,12 +3,20 @@
 The packaged course files ship with every position unset (a prior nobody
 measured dead-reckons the vehicle somewhere wrong, confidently). This is how the
 numbers get in at the venue: one prop per call, written to the DECK copy
-(`$MONGLA_COURSE_DIR` or `~/.mongla/courses/<course>.yaml`), never the package.
+(`$MONGLA_COURSE_DIR` or `~/mongla/deck/courses/<course>.yaml`), never the package.
 The loader reads the deck copy first, so no rebuild is needed.
 
     course_survey --course sauvc26 --list
     course_survey --course sauvc26 --prop final_gate --x 16.0 --y 0.0 --bearing 0
     course_survey --course sauvc26 --prop flare_red --x 9.5 --y 2.1 --depth -0.8
+    course_survey --course sauvc26 --prop final_gate --width 1.50
+    course_survey --course sauvc26 --floor 0 0 1.28 --floor 17.5 0 2.0 --shield 1.5
+    course_survey --course sauvc26 --tile 0.25
+
+`--width` is what the detector BOXES, measured on the real prop: the pose path
+ranges on it. `--floor X Y DEPTH` adds one floor sounding (depth POSITIVE,
+metres below the surface) and may be repeated; flow's height follows them.
+`--shield` is the depth the hull must never pass here.
 
 The CLI re-reads the file through `load_course` after writing, so a malformed
 value is caught here rather than in the water.
@@ -24,7 +32,8 @@ import yaml
 
 from mongla_localization import course_map as cm
 
-_FIELDS = (('x', 'x_m'), ('y', 'y_m'), ('depth', 'depth_m'), ('bearing', 'bearing_deg'))
+_FIELDS = (('x', 'x_m'), ('y', 'y_m'), ('depth', 'depth_m'), ('bearing', 'bearing_deg'),
+           ('width', 'width_m'))
 
 
 def deck_dir() -> pathlib.Path:
@@ -78,6 +87,40 @@ def survey(course: str, prop: str, values: dict, *, detect_class: str = '',
     return out
 
 
+def survey_pool(course: str, *, floor=(), tile_m=None, shield_m=None,
+                lane_lines=None, out_dir: pathlib.Path | None = None) -> pathlib.Path:
+    """Add floor soundings and set the venue numbers under `pool:`; return the file."""
+    out_dir = pathlib.Path(out_dir) if out_dir else deck_dir()
+    out = out_dir / f'{course}.yaml'
+    src = out if out.is_file() else cm._PKG_COURSES / f'{course}.yaml'
+    if not src.is_file():
+        raise FileNotFoundError(f'no packaged course {course!r} to start from')
+    raw = yaml.safe_load(src.read_text()) or {}
+    pool = raw.get('pool') or {}
+    pts = list(pool.get('floor') or [])
+    for x, y, d in floor:
+        if not d > 0.0:
+            raise ValueError(f'floor depth {d} must be POSITIVE metres below the surface')
+        pts.append([float(x), float(y), float(d)])
+    if pts:
+        pool['floor'] = pts
+    for key, v in (('tile_m', tile_m), ('shield_max_depth_m', shield_m)):
+        if v is not None:
+            if not v > 0.0:
+                raise ValueError(f'{key} must be positive, got {v}')
+            pool[key] = float(v)
+    if lane_lines is not None:
+        pool['lane_lines'] = bool(lane_lines)
+    raw['pool'] = pool
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix('.yaml.tmp')
+    tmp.write_text('# Written by course_survey: MEASURED at the venue. The packaged\n'
+                   '# copy is the unmeasured template; this deck copy wins.\n'
+                   + yaml.safe_dump(raw, sort_keys=False))
+    os.replace(tmp, out)
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     ap.add_argument('--course', required=True)
@@ -87,6 +130,15 @@ def main(argv=None) -> int:
     ap.add_argument('--depth', type=float, help='metres, NEGATIVE below the surface')
     ap.add_argument('--bearing', type=float, help='compass bearing the prop face points')
     ap.add_argument('--detect-class', default='')
+    ap.add_argument('--width', type=float,
+                    help='metres: what the detector boxes, measured on the real prop')
+    ap.add_argument('--floor', type=float, nargs=3, action='append', default=[],
+                    metavar=('X', 'Y', 'DEPTH'),
+                    help='a floor sounding in the pool frame, depth POSITIVE; repeatable')
+    ap.add_argument('--tile', type=float, help='floor tile pitch, metres')
+    ap.add_argument('--shield', type=float,
+                    help='the depth (positive metres) the hull must never pass')
+    ap.add_argument('--lane-lines', choices=('true', 'false'))
     ap.add_argument('--list', action='store_true')
     a = ap.parse_args(argv)
     if a.depth is not None and a.depth > 0.0:
@@ -95,19 +147,35 @@ def main(argv=None) -> int:
     if a.prop:
         try:
             path = survey(a.course, a.prop,
-                          {'x': a.x, 'y': a.y, 'depth': a.depth, 'bearing': a.bearing},
+                          {'x': a.x, 'y': a.y, 'depth': a.depth, 'bearing': a.bearing,
+                           'width': a.width},
                           detect_class=a.detect_class)
         except (KeyError, FileNotFoundError, ValueError) as exc:
             print(f'refused: {exc}')
             return 2
         print(f'wrote {path}')
+    if a.floor or a.tile is not None or a.shield is not None or a.lane_lines:
+        try:
+            path = survey_pool(a.course, floor=a.floor, tile_m=a.tile, shield_m=a.shield,
+                               lane_lines=None if a.lane_lines is None
+                               else a.lane_lines == 'true')
+        except (FileNotFoundError, ValueError) as exc:
+            print(f'refused: {exc}')
+            return 2
+        print(f'wrote {path}')
     course = cm.load_course(a.course)
+    pool = course.pool
+    floor = pool.get('floor') or []
+    print(f'pool: depth {pool.get("depth_m")}, floor soundings {len(floor)}, '
+          f'tile {pool.get("tile_m")}, lane lines {pool.get("lane_lines")}, '
+          f'depth floor {pool.get("shield_max_depth_m")}')
     print(f'{course.name}  ({course.source})')
     for name, p in sorted(course.props.items()):
         pos = f'({p.x_m:+.2f}, {p.y_m:+.2f})' if p.has_position else 'unset'
         brg = f'{p.bearing_deg:.0f} deg' if p.has_bearing else '-'
+        wid = f'{p.width_m:.3f} m' if p.width_m is not None else '-'
         print(f'  {name:16s} {"MEASURED" if p.measured else "nominal ":8s} '
-              f'pos {pos:18s} bearing {brg}')
+              f'pos {pos:18s} bearing {brg:8s} width {wid}')
     return 0
 
 

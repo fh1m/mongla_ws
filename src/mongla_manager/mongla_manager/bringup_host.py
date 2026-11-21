@@ -307,18 +307,29 @@ def _check_sensor_offsets() -> tuple[str, str]:
     return (PASS if h.ok else WARN), h.evidence
 
 
-def depth_floor_verdict(nodes: dict) -> tuple[str, str]:
-    """PASS / WARN for the manager's depth floor, from the deck file's `nodes:`."""
+def depth_floor_verdict(nodes: dict, course: str = '') -> tuple[str, str]:
+    """PASS / WARN for the manager's depth floor: the deck course's `pool:
+    shield_max_depth_m`, else the deck file's `nodes: mongla_manager:`."""
     raw = (nodes.get('mongla_manager') or {}).get('shield_max_depth_m', 0.0)
+    where = 'the deck file'
+    if course:
+        try:
+            from mongla_localization.course_map import load_course
+            c = load_course(course)
+            if c.shield_max_depth_m() is not None:
+                raw, where = c.shield_max_depth_m(), f'course {course}'
+        except Exception as exc:                    # noqa: BLE001
+            return WARN, f'course: {course} cannot be loaded ({exc})'
     try:
         floor = float(raw)
     except (TypeError, ValueError):
         return WARN, f'shield_max_depth_m is {raw!r}, not a number'
     if floor > 0.0:
-        return PASS, f'the manager surfaces a hull past {floor:.2f} m'
-    return WARN, ('no depth floor: set shield_max_depth_m under nodes: '
-                  'mongla_manager: in ~/.mongla/bringup.yaml, to the depth '
-                  'the hull must never pass in this venue')
+        return PASS, f'the manager surfaces a hull past {floor:.2f} m ({where})'
+    return WARN, ('no depth floor: set pool: shield_max_depth_m in the venue\'s '
+                  'course (~/mongla/deck/courses/<name>.yaml) to the depth the '
+                  'hull must never pass. Every mission start says this until '
+                  'it is set')
 
 
 def flow_height_verdict(top: dict) -> tuple[str, str]:
@@ -341,6 +352,30 @@ def flow_height_verdict(top: dict) -> tuple[str, str]:
     if str(top.get('flow', 'true')).strip().lower() in ('false', '0', 'no'):
         return WARN, ('flow:=false: the vehicle has no velocity sensor this '
                       'run; localization drifts on the IMU alone')
+    course = str(top.get('course') or '').strip()
+    if course:
+        # The deck names the venue; bringup turns its pool: into the flow
+        # arguments, and the mission runner gives flow its floor survey.
+        try:
+            from mongla_localization.course_map import load_course
+            c = load_course(course)
+        except Exception as exc:                    # noqa: BLE001
+            return WARN, (f'course: {course} cannot be loaded ({exc}); missions '
+                          f'will refuse to start until flow has a floor')
+        floor, pool = c.pool_floor(), c.pool_depth()
+        if floor:
+            return PASS, (f'flow scales on {course}\'s floor, surveyed at '
+                          f'{len(floor)} points ({c.source})')
+        if pool is not None and pool[1] == pool[1] and pool[2] == pool[2]:
+            return PASS, (f'flow scales on {course}: {pool[0]:.2f} m, floor '
+                          f'{pool[1]:.2f}-{pool[2]:.2f} m')
+        if pool is not None:
+            return WARN, (f'flow scales on {course}: {pool[0]:.2f} m with no floor '
+                          f'range or survey, so a sloping floor is a scale error. '
+                          f'Add pool: floor: points (or depth_min_m/depth_max_m) '
+                          f'to {c.source}')
+        return WARN, (f'course: {course} gives no pool: depth_m or floor: points, '
+                      f'so missions will refuse to start ({c.source})')
     lo, hi = num('pool_depth_min_m'), num('pool_depth_max_m')
     ranged = math.isfinite(lo) and math.isfinite(hi) and 0 < lo <= hi
     if math.isfinite(num('pool_depth_m')) and num('pool_depth_m') > 0:
@@ -357,10 +392,11 @@ def flow_height_verdict(top: dict) -> tuple[str, str]:
         return PASS, f'flow scales on a floor between {lo:.2f} and {hi:.2f} m'
     if num('tile_m') > 0:
         return PASS, f'flow reads its height off {num("tile_m"):.3f} m tiles'
-    return WARN, ('flow has no height until a mission\'s use_course() gives it '
-                  'the course\'s pool: depth_m; a run with no course refuses every '
-                  'interval. Set pool: in ~/.mongla/courses/<course>.yaml, or '
-                  'pool_depth_m or tile_m in ~/.mongla/bringup.yaml')
+    return WARN, ('flow has no floor, so missions will REFUSE to start '
+                  '(mission --allow-no-height for a bench). Name the venue: '
+                  'course: <name> in ~/mongla/deck/bringup.yaml, its pool: in '
+                  '~/mongla/deck/courses/<name>.yaml; or pool_depth_m / tile_m '
+                  'on the command line')
 
 
 def _check_flow_height() -> tuple[str, str]:
@@ -389,7 +425,7 @@ def _check_depth_floor() -> tuple[str, str]:
         nodes = ld.read_nodes(path) if path is not None else {}
     except Exception as exc:                        # noqa: BLE001
         return WARN, f'bringup.yaml unreadable: {exc!r}'
-    return depth_floor_verdict(nodes)
+    return depth_floor_verdict(nodes, ld.deck_value('course'))
 
 
 def _check_model_separation() -> tuple[str, str]:

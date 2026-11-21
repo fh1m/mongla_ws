@@ -85,6 +85,7 @@ _NOT_SWITCHES = {
     'fwd_classes', 'dwn_classes', 'lock_class', 'camera', 'camera_profile',
     'model', 'models', 'active_model', 'classes', 'conf', 'imgsz', 'max_det',
     'batighor_port', 'foxglove_port',
+    'course',          # names the venue, like a model name; not on/off
 }
 _ROADMAP = os.path.join(_SRC, '..', '.claude', 'context', 'ROADMAP.md')
 

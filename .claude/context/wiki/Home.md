@@ -110,7 +110,7 @@ cannot go stale.
 ### Configure it: one file
 
 ```yaml
-# ~/.mongla/bringup.yaml — every setting on the vehicle, in one place
+# ~/mongla/deck/bringup.yaml — every setting on the vehicle, in one place
 vision: true                 # top level: the capability switches
 nodes:                       # under nodes: any node parameter, by node name
   mongla_manager:

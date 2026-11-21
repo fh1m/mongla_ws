@@ -66,6 +66,11 @@
           "value": "/mongla/vision/downward/flow_calibration.data",
           "label": "scale from",
           "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/flow/height_source.data",
+          "label": "height from",
+          "timestampMethod": "receiveTime"
         }
       ],
       "isSynced": false,

@@ -85,7 +85,7 @@ Nothing to edit in a config file — the model is chosen by **stem**:
 ros2 launch mongla_manager bringup.launch.py vision:=true fwd_model:=<stem>
 ```
 
-or put `fwd_model: <stem>` in `~/.mongla/bringup.yaml`. A mission picks it
+or put `fwd_model: <stem>` in `~/mongla/deck/bringup.yaml`. A mission picks it
 with `mongla.set_model('<stem>')` and `mongla.set_classes('<class>')`, and
 `test_missions_only_name_classes_a_model_emits.py` fails if a mission names
 a class the model does not emit.

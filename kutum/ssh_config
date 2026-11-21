@@ -1,0 +1,32 @@
+# Kutum, found wherever it is and kept connected. Install once on each
+# machine that talks to the vehicle (host and container share ~/.ssh here):
+#
+#     mkdir -p ~/.ssh/cm && chmod 700 ~/.ssh/cm
+#     sed "s#@KUTUM_DIR@#$PWD/kutum#" kutum/ssh_config >> ~/.ssh/config
+#     ssh kutum true      # first time: accept the host key once
+#
+# Then `ssh kutum`, `rsync ... kutum:`, `sftp kutum` and a file manager's
+# sftp://kutum/ all work, with no password and no address to remember:
+#
+#   ProxyCommand   kutum/find.py: mDNS, resolver, cached address, then a LAN
+#                  sweep for Kutum's MAC (~/.config/mongla/kutum.macs). The
+#                  name kutum.local does not have to resolve.
+#   HostKeyAlias   one host key whatever address answered, so a new DHCP
+#                  lease is not a "host key changed" warning.
+#   ControlMaster  the first connection stays open for 10 minutes and every
+#                  later ssh, scp, rsync and sftp rides it: no new handshake,
+#                  no new key exchange, which is most of why scp felt slow.
+#   ServerAlive    a dropped Wi-Fi link is noticed in about a minute instead
+#                  of hanging a deploy.
+Host kutum kutum.local
+    HostName kutum
+    User fh1m
+    ProxyCommand python3 @KUTUM_DIR@/find.py --proxy %p
+    HostKeyAlias kutum
+    ControlMaster auto
+    ControlPath ~/.ssh/cm/%C
+    ControlPersist 10m
+    ServerAliveInterval 15
+    ServerAliveCountMax 4
+    Compression no
+    IPQoS throughput

@@ -116,6 +116,10 @@ def _build_parser(known):
         help=f'mission to run. Known: {sorted(known)}')
     parser.add_argument(
         '--list', action='store_true', help='list known missions and exit')
+    parser.add_argument(
+        '--allow-no-height', action='store_true',
+        help='start even though flow has no floor (a bench run): every '
+             'velocity interval is refused and localization drifts on the IMU')
     return parser
 
 
@@ -192,6 +196,11 @@ def main(args=None):
     try:
         client.wait_for_connection(timeout=15.0)
         keepalive = MissionKeepAlive(node, parsed.name).start()
+        # Before anything moves: the course's floor to flow, then refuse a run
+        # flow cannot scale; the depth-floor warning at every start.
+        from . import preflight
+        preflight.run(mongla, node, log, missions[parsed.name],
+                      allow_no_height=parsed.allow_no_height)
         log.info(f'=== mission "{parsed.name}" -- start ===')
         missions[parsed.name](mongla, log_fn)
         log.info(f'=== mission "{parsed.name}" -- complete OK ===')

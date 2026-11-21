@@ -131,7 +131,7 @@ mongla.anchor_on('gate')           # take an absolute heading from a known beari
 mongla.absolute_heading()          # ...and read it back
 ```
 
-Course files live in `mongla_localization/courses/`, and your own copy in `~/.mongla/courses`
+Course files live in `mongla_localization/courses/`, and your own copy in `~/mongla/deck/courses`
 wins over the packaged one — so a survey on competition day needs no rebuild.
 
 A course also carries the venue's floor, and `use_course` hands it to optical flow while the
@@ -147,7 +147,7 @@ pool:
 
 A course with no `depth_m` leaves flow on the `pool_depth_m` it was launched with, and the
 log says so. Prop widths live in one other file, `target_geometry.yaml` (deck copy
-`~/.mongla/target_geometry.yaml`), keyed by class, and follow every target switch.
+`~/mongla/deck/target_geometry.yaml`), keyed by class, and follow every target switch.
 
 ## Managing the run
 

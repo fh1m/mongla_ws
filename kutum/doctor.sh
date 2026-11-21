@@ -61,6 +61,12 @@ if   [ -z "$arm" ]; then warn "vcgencmd missing -- the ARM clock cannot be read"
 elif [ "$arm" = 2800 ]; then ok "ARM clock: 2800 MHz"
 else warn "ARM clock: $arm MHz, not the 2800 setup.sh --system writes -- about 15 % less CPU and Hailo rate under full load"; fi
 
+# The deck: one visible folder for the vehicle's settings and the venue's
+# course files; ~/.mongla is a link to it (kutum/setup.sh step 6).
+if [ -L "$HOME/.mongla" ] && [ "$(readlink -f "$HOME/.mongla")" = "$(readlink -f "$HOME/mongla/deck")" ]; then
+  ok "deck: ~/mongla/deck ($(ls "$HOME/mongla/deck/courses" 2>/dev/null | wc -l) course files), ~/.mongla links to it"
+else warn "deck: ~/.mongla is not a link to ~/mongla/deck -- run kutum/setup.sh (the user half)"; fi
+
 # Batighor's web app (src/mongla_batighor): the pinned Lichtblick build.
 lbv="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$(dirname "${BASH_SOURCE[0]}")/../src/mongla_batighor/LICHTBLICK.json" 2>/dev/null)"
 if [ -f "$HOME/.mongla/batighor/web/$lbv/index.html" ]; then ok "Batighor: Lichtblick $lbv installed"

@@ -78,6 +78,9 @@ PUBLISHED_UNREAD = {
     '/mongla/localization/aiding':
         'a DIAGNOSTIC of which aiding sources the filter accepted. Read in a '
         'bag after a run, never in the loop.',
+    '/mongla/flow/height_source':
+        'read by the mission RUNNER process (mongla_planner/preflight.py), '
+        'which refuses to start a mission while it says none.',
 }
 
 # Subscribed with no in-graph publisher -> what actually feeds it.

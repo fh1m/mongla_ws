@@ -4,7 +4,7 @@
 
 Every node in the stack needs the same handful of things before it does any work of its
 own: an executor that stops cleanly on Ctrl-C, a way to die when the launch that started it
-dies, its parameters from `~/.mongla/bringup.yaml` with a misspelt key refused, a restart
+dies, its parameters from `~/mongla/deck/bringup.yaml` with a misspelt key refused, a restart
 when it crashes, and on the manager a realtime priority. This package is those things and
 nothing else. It imports nothing from Mongla, so every node package depends on it and none
 of them depends on another just for plumbing.

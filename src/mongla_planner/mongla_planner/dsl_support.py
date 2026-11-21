@@ -166,6 +166,12 @@ def _param_value(value) -> ParameterValue:
         return ParameterValue(type=ParameterType.PARAMETER_DOUBLE, double_value=value)
     if isinstance(value, int):
         return ParameterValue(type=ParameterType.PARAMETER_INTEGER, integer_value=value)
+    if isinstance(value, (list, tuple)) and value and all(
+            isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
+        # A list of numbers is a double array (a course's floor survey), not
+        # its str(): that would reach the node as a string and be refused.
+        return ParameterValue(type=ParameterType.PARAMETER_DOUBLE_ARRAY,
+                              double_array_value=[float(v) for v in value])
     return ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=str(value))
 
 

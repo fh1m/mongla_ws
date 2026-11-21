@@ -124,6 +124,41 @@ def _vision_pi_arguments(path: str) -> list:
     return [by_name[n] for n in VISION_PI_PASSTHROUGH]
 
 
+def _apply_course(args, from_file, file_path):
+    """The deck's `course:` is the venue's one file: its numbers become defaults.
+
+    Pool depth, floor range, tile size and lane lines become the bringup
+    arguments' defaults, and the depth floor the manager's
+    `shield_max_depth_m`. A deck file that ALSO sets one of them is refused:
+    two copies of one fact, and nobody can tell which the run used. A typed
+    name:=value still wins over both. Returns (args, log actions, manager
+    parameters).
+    """
+    name = (from_file or {}).get('course', '')
+    if not name:
+        return args, [], {}
+    from mongla_localization.course_map import load_course
+    course = load_course(name)
+    venue = course.launch_values()
+    twice = sorted(set(venue) & set(from_file))
+    nodes = launch_defaults.read_nodes(file_path) if file_path else {}
+    shield = course.shield_max_depth_m()
+    if shield is not None and 'shield_max_depth_m' in (nodes.get('mongla_manager') or {}):
+        twice.append('shield_max_depth_m')
+    if twice:
+        raise RuntimeError(
+            f'{file_path}: {", ".join(twice)} set here AND in the course {name} '
+            f'({course.source}). The course is the venue\'s one file: delete '
+            f'them from the deck file.')
+    args = launch_defaults.redefault(args, venue)
+    manager = {} if shield is None else {'shield_max_depth_m': float(shield)}
+    said = dict(venue, **({'shield_max_depth_m': repr(shield)} if manager else {}))
+    note = [LogInfo(msg=f'[bringup] venue from course {name} ({course.source}): '
+                        + (', '.join(f'{k}={v}' for k, v in sorted(said.items()))
+                           or 'no pool numbers'))]
+    return args, note, manager
+
+
 def generate_launch_description():
     args = [
         # ---- the board ------------------------------------------------------ #
@@ -189,6 +224,13 @@ def generate_launch_description():
         DeclareLaunchArgument('pool_depth_max_m', default_value='nan',
                               description='flow:=true -- the venue\'s deepest '
                                           'floor, metres (#35).'),
+        # Read by the mission runner, not by a node here: before any mission
+        # moves, it gives this course's pool: floor to flow, and refuses to
+        # start while flow has none (mongla_planner/preflight.py).
+        DeclareLaunchArgument('course', default_value='',
+                              description='the venue\'s course (file stem in '
+                                          '~/mongla/deck/courses): its pool: floor '
+                                          'scales flow before every mission.'),
         DeclareLaunchArgument('pool_depth_m', default_value='nan',
                               description='flow:=true -- metres from the DOWNWARD '
                                           'camera to the floor, until a mission\'s '
@@ -325,6 +367,8 @@ def generate_launch_description():
     args, from_file, file_path = launch_defaults.apply(args)
     file_note = ([LogInfo(msg=f'[bringup] settings from {file_path}: ' + ', '.join(
         f'{k}={v}' for k, v in sorted(from_file.items())))] if from_file else [])
+    args, venue_note, venue_manager = _apply_course(args, from_file, file_path)
+    file_note += venue_note
 
     manager_node = partial(
         Node,
@@ -355,6 +399,7 @@ def generate_launch_description():
             'velocity_uplink':  ParameterValue(LaunchConfiguration('velocity_uplink'), value_type=bool),
             'position_uplink':  ParameterValue(LaunchConfiguration('position_uplink'), value_type=bool),
             'vision.mixer_aware': ParameterValue(LaunchConfiguration('mixer_aware'), value_type=bool),
+            **venue_manager,
         }],
     )
 

@@ -18,6 +18,9 @@ kutum/
   armed_probe.py      is the board armed? read-only; deploy refuses if it cannot tell
   doctor.sh           is it still Kutum?                 (read-only, exits 1 on FAIL)
   backup.sh           pull what only the vehicle has     (run from the dev box)
+  find.py             find Kutum on any network; ssh's ProxyCommand (run from the dev box)
+  ssh_config          `ssh kutum` / `sftp kutum` from anywhere, kept connected (install once)
+  deck-README.txt     copied to ~/mongla/deck/README.txt: what the deck holds
   env.sh              what every terminal on the vehicle sources
   requirements.txt    the pip packages, pinned to what runs on the vehicle
   constraints.txt     numpy < 2, applied to every pip install
@@ -73,6 +76,37 @@ that network:
 ssh -o HostKeyAlias=kutum.local fh1m@fe80::2ecf:67ff:fe01:a84b%wlan0
 ip -br addr     # on Kutum: its IPv4 addresses, for everything else
 ```
+
+**`ssh kutum`, from anywhere, without remembering an address.** The
+dev container cannot resolve `kutum.local` even where the host can. Its
+nss-mdns needs the avahi daemon's socket, and the host's
+`/run/avahi-daemon/socket` was missing while the daemon ran (2026-11-21).
+Multicast answers do not reach this Wi-Fi either, by IPv4 or IPv6. So no
+script depends on the name. `find.py` tries the last address that worked,
+then mDNS, then the resolver, then a sweep of the LAN's port 22 for Kutum's
+MAC (one per line in `~/.config/mongla/kutum.macs`, on the dev box: not in
+git). It takes 55 ms when the cached address still works and about 7 s after
+a new DHCP lease. `ssh_config` makes it ssh's ProxyCommand and keeps one
+connection open for every later ssh, rsync and sftp. Measured over this
+Wi-Fi: the first login 0.87 s, every later one 13 ms, 20 MB by rsync or
+sftp in 1.9 s. Install it once per machine (the header of `ssh_config` has
+the three lines), then:
+
+```bash
+ssh kutum                          # a shell; the key, no password
+sftp kutum                         # or sftp://kutum/ in a file manager
+rsync -a runs/ kutum:mongla_runs/  # files, fast
+kutum/deploy.sh kutum              # every script takes the alias
+python3 kutum/find.py --all        # where it is, and how it was found
+```
+
+**Tailscale is the first path.** Kutum is on the owner's tailnet with
+Tailscale SSH on (2026-11-21), so `kutum` resolves through MagicDNS on any
+network both machines reach: a venue's Wi-Fi, a phone hotspot, a cable.
+Measured from the dev container: a login in 85 ms with no password, and the
+same host key as the LAN path, so one alias serves both. `find.py` tries the
+tailnet first and the LAN probes only when it is down. No password on the LAN
+path either: `ssh-copy-id kutum` once from each machine.
 
 If the ssh hangs rather than refuses, rerun the reply-route hook from there:
 `sudo env IFACE=wlan0 /etc/networkd-dispatcher/routable.d/50-kutum-source-routes`.

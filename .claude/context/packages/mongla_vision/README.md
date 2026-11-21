@@ -67,11 +67,11 @@ a confident zero.
 
 | Node | Publishes | Purpose |
 |---|---|---|
-| `camera_node` | `image_raw`, `camera_info` | the mailbox camera path; also plays video files |
+| `camera_node` | `image_raw`, `camera_info` | the mailbox camera path; also plays video files, steered by the display node's `video_seek_rel`, `video_seek_frame` and `video_speed` (playback speed, 1.0 = real time) |
 | `detector_node` | `detections`, `candidates`, `contours`, `image_debug` | inference, plus the always-on operator alignment line |
 | `tracker_node` | `tracks` | stable ids, and a predicted box across a short gap |
-| `lock_node` | `lock`, `correspondences` | the continuity ladder and the feature anchor |
-| `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled`, `flow_calibration`, `flow_tracks` | everything the downward camera can tell us. `flow_tracks` is the point pairs each accepted interval measured, only while someone watches: Batighor's `flow` layout draws them over the downward picture beside velocity, distance and quality. A measured slide is `tools/bench/flow_launch_check.py` |
+| `lock_node` | `lock`, `correspondences`, `anchor_decomposition` | the continuity ladder and the feature anchor. `anchor_decomposition` is a second range estimate, fitted frame-to-reference rather than frame-to-frame; published for a consumer to fuse, acted on by nothing yet |
+| `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled`, `distance_debug`, `flow_calibration`, `flow_tracks`, `/mongla/flow/height_source` | everything the downward camera can tell us. `distance_debug` is `[distance m, height m, tracks, active]` for the display and Batighor's flow plots. `/mongla/flow/height_source` (latched) says where the height comes from: `tiles`, `survey`, `survey, no position`, `pool_depth` or `none`, and a mission refuses to start on `none` ([the course file](../../missions/course-file.md)). `flow_tracks` is the point pairs each accepted interval measured, only while someone watches: Batighor's `flow` layout draws them over the downward picture beside velocity, distance and quality. A measured slide is `tools/bench/flow_launch_check.py` |
 
 `lock_node` is one class in seven files. `lock_node.py` holds the per-frame loop (detection
 in, rung chosen, anchor run) and the list of files. The other six are mixins of the same class,
