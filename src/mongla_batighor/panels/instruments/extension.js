@@ -303,7 +303,7 @@ function drawMap(s, forLocalization) {
     ["filter frame", loc ? `${loc.frame || "--"}  ${num(loc.x_m, 2)}, ${num(loc.y_m, 2)} m` : "--"],
     ["sigma", loc ? `${num(loc.sigma_xy_m, 2)} m  yaw ${num(loc.sigma_yaw_deg, 1)} deg` : "--"],
     ["usable", loc ? (loc.usable ? "yes" : `no: ${loc.reason || "--"}`) : "--", loc && loc.usable ? "live" : "warn"],
-    ["aided by", loc ? loc.aiding || "--" : "--"],
+    ["aiding", loc ? loc.aiding || "--" : "--"],
     ["going to", target ? `${num(target.x, 2)}, ${num(target.y, 2)} m within ${num(target.tol, 2, " m")}` : "--", target ? "live" : ""],
   ];
   if (forLocalization) {
@@ -579,7 +579,7 @@ const INSTRUMENTS = {
       const tw = o && o.twist && o.twist.twist && o.twist.twist.linear;
       return [
         planView(s.track || [], s.fixes || []),
-        kv(["aided by", s.aiding || "--", s.aiding === "aided" ? "live" : "warn"],
+        kv(["aiding", s.aiding || "--", s.aiding === "aided" ? "live" : "warn"],
           ["motion", s.motion || "--"],
           ["north, east", p ? `${num(p.x, 2)}, ${num(p.y, 2)} m` : "--"],
           ["speed", tw ? `${num(Math.hypot(tw.x, tw.y), 2)} m/s` : "--"],
@@ -696,7 +696,7 @@ const INSTRUMENTS = {
           ...rpm.map((r, i) => el("div", { style: "display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;justify-content:flex-end" },
             el("div", { style: `width:100%;height:${(100 * Math.abs(r)) / s.peak}%;background:${r < 0 ? "var(--mb-amber)" : "var(--mb-sea)"};border-radius:2px 2px 0 0` }),
             el("span", { class: "note" }, String(i + 1))))) : null,
-        kv(["ESC age", `${num(ageS(s.rAt), 1)} s`], ["battery", num(s.state && s.state.battery_voltage, 2, " V")]),
+        kv(["ESC age", `${num(ageS(s.rAt), 1)} s`], ["thruster pack", num(s.state && s.state.thruster_voltage, 2, " V")], ["electronics", num(s.state && s.state.battery_voltage, 2, " V")]),
       ];
     },
   },

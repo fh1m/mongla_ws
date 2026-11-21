@@ -25,8 +25,8 @@
     "Plot!power": {
       "paths": [
         {
-          "value": "/mongla/state.battery_voltage",
-          "label": "PM1 V",
+          "value": "/mongla/state.thruster_voltage",
+          "label": "thrusters V",
           "enabled": true
         }
       ],

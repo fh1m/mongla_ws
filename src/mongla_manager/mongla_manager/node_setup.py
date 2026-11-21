@@ -281,6 +281,7 @@ class SetupMixin:
         self._fast_armed  = False
         self._fast_mode   = ''
         self._fast_batt_v = math.nan
+        self._fast_thr_v  = math.nan
         self._start_recorder()          # BEFORE the reader -- it is the sink
         from .link_meter import LinkMeter
         self._link_meter = LinkMeter()  # BEFORE the reader -- it feeds it

@@ -47,7 +47,8 @@ bool    armed
 string  mode
 float32 yaw_deg
 float32 depth_m
-float32 battery_voltage
+float32 battery_voltage    # PM1, the electronics rail
+float32 thruster_voltage   # PM2, the thruster pack, over ESP-NOW from the second board
 ```
 
 Published when something changes, plus a slow heartbeat.

@@ -288,7 +288,7 @@ def localization(v: View):
             # strip; as rows here the strip needed 350 px and showed one row.
             (6, v('aiding', states(series('/mongla/localization/state.usable', 'usable', True),
                                    series('/mongla/localization/state.reason', 'why not', True),
-                                   series('/mongla/localization/aiding.data', 'aided by', True)))),
+                                   series('/mongla/localization/aiding.data', 'aiding', True)))),
             (3, v('pos', plot(series('/mongla/odom.pose.pose.position.x', 'x m'),
                               series('/mongla/odom.pose.pose.position.y', 'y m'),
                               series('/mongla/odom.pose.pose.position.z', 'z m (down)'),
@@ -317,7 +317,8 @@ def thrust(v: View):
         (50, col((2, v('thrust', instrument('Thrust'))),
                  (3, v('demand', plot(series('/mongla/demand.vector.x', 'surge'),
                                       series('/mongla/demand.vector.y', 'sway')))))),
-        (50, col(v('power', plot(series('/mongla/state.battery_voltage', 'PM1 V'))),
+        # What it cost: the pack the thrusters draw (PM2), not the electronics rail.
+        (50, col(v('power', plot(series('/mongla/state.thruster_voltage', 'thrusters V'))),
                  v('rates', plot(series('/mongla/imu.angular_velocity.x', 'roll rate'),
                                  series('/mongla/imu.angular_velocity.y', 'pitch rate'),
                                  series('/mongla/imu.angular_velocity.z', 'yaw rate'))))))
@@ -330,7 +331,8 @@ def board_health(v: View):
     return row(
         # Depth and volts on their own axes: on one, 12 V flattened the depth.
         (55, col(v('depthyaw', plot(series('/mongla/state.depth_m', 'depth m'))),
-                 v('battery', plot(series('/mongla/state.battery_voltage', 'PM1 V'))),
+                 v('battery', plot(series('/mongla/state.thruster_voltage', 'thrusters V'),
+                                   series('/mongla/state.battery_voltage', 'electronics V'))),
                  v('gyro', plot(series('/mongla/imu.angular_velocity.x', 'gx'),
                                 series('/mongla/imu.angular_velocity.y', 'gy'),
                                 series('/mongla/imu.angular_velocity.z', 'gz'))))),

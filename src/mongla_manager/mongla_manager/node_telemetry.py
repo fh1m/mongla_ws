@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 import time
 
+from mongla_control.fc import srot_protocol as _sp
 from mongla_interfaces.msg import MonglaState
 from mongla_localization.frames import BODY as _BODY_FRAME
 
@@ -17,6 +18,12 @@ from .node_support import (BAT_CHANGE_THRESH, DEPTH_CHANGE_THRESH, FORCE_PRINT_S
                            SROT_MESSAGE_RATES, YAW_CHANGE_THRESH, _SROT_DEPTH_OUT_WARN,
                            _kill_text, _quat_from_rpy)
 
+
+
+def _thruster_v(fc) -> float:
+    """PM2, the thruster pack, in volts; NaN when absent or untrusted."""
+    thr = fc.get_batteries().get(_sp.BATTERY_ID_THRUSTER)
+    return float(thr['voltage']) if thr else math.nan
 
 class TelemetryMixin:
     # A board sample older than this is not the state we are publishing, so
@@ -65,6 +72,7 @@ class TelemetryMixin:
         msg.yaw_deg         = float(yaw_deg) if yaw_deg is not None else math.nan
         msg.depth_m         = float(attitude['depth'])
         msg.battery_voltage = self._fast_batt_v
+        msg.thruster_voltage = self._fast_thr_v
         self.state_publisher.publish(msg)
 
     def _publish_demand(self):
@@ -325,6 +333,7 @@ class TelemetryMixin:
         self._fast_armed  = bool(armed)
         self._fast_mode   = mode or ''
         self._fast_batt_v = float(battery['voltage']) if battery else math.nan
+        self._fast_thr_v  = _thruster_v(self.fc)
 
         # A claim that was never confirmed by execute_callback is a leak, and a
         # leaked gate rejects every later verb in silence. Clear it and say so.
@@ -625,4 +634,5 @@ class TelemetryMixin:
         msg.yaw_deg         = float(yaw_deg) if yaw_deg is not None else math.nan
         msg.depth_m         = float(attitude['depth'])  if attitude else math.nan
         msg.battery_voltage = float(battery['voltage']) if battery  else math.nan
+        msg.thruster_voltage = _thruster_v(self.fc)
         self.state_publisher.publish(msg)
