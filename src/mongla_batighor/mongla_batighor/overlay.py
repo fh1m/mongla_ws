@@ -398,11 +398,11 @@ def floor_annotate(read) -> ImageAnnotations:
             timestamp=stamp, type=PointsAnnotation.LINE_LIST, outline_color=_color(rgba),
             thickness=th, points=[Point2(x=float(x), y=float(y)) for s in segs for x, y in s]))
         h = read.tile_height_m
-        words.append(f'tiles {read.period_px:.0f} px'
-                     + (f'  {h:.2f} m above' if h == h else '  no tile size')
-                     + f'  grid {read.grout_normal_deg[0] % 90:.0f} deg')
+        words.append((f'tiles {read.period_px:.0f} px'
+                      + (f'  {h:.2f} m above' if h == h else '  no tile size')
+                      + f'  grid {read.grout_normal_deg[0] % 90:.0f} deg', GROUT[0]))
     else:
-        words.append('tiles: none read')
+        words.append(('tiles: none read', INK_2))
     if read.lane:
         seg = lane_segment(read.lane_direction_deg, read.lane_offset_px, size)
         if seg:
@@ -410,12 +410,16 @@ def floor_annotate(read) -> ImageAnnotations:
             out.points.append(PointsAnnotation(
                 timestamp=stamp, type=PointsAnnotation.LINE_STRIP, outline_color=_color(rgba),
                 thickness=th, points=[Point2(x=float(x), y=float(y)) for x, y in seg]))
-        words.append(f'lane {read.lane_direction_deg:.0f} deg  {read.lane_offset_px:+.0f} px off centre')
-    for k, line in enumerate(words):
+        words.append((f'lane {read.lane_direction_deg:.0f} deg  {read.lane_offset_px:+.0f} px off centre',
+                      AMBER))
+    # Each line in the colour of what it names: keyed on the read rather than
+    # the line, "tiles: none read" was drawn in the lane's amber whenever a
+    # lane was read.
+    for k, (line, rgba) in enumerate(words):
         out.texts.append(TextAnnotation(
             timestamp=stamp, position=Point2(x=8.0, y=LABEL_PX + 6 + k * (LABEL_PX + 6)),
             text=line, font_size=LABEL_PX * 0.9,
-            text_color=_color(GROUT[0] if k == 0 and read.tiles else AMBER if read.lane else INK_2),
+            text_color=_color(rgba),
             background_color=_TEXT_BG))
     return out
 
