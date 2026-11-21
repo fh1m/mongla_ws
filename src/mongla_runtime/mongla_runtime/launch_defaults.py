@@ -276,6 +276,19 @@ def typed(launch_file: str) -> bool:
     return any(os.path.basename(a) == name for a in sys.argv[1:])
 
 
+def typed_value(name: str, argv=None) -> str:
+    """The value of `name:=value` typed on the `ros2 launch` command line, or ''.
+
+    For a decision made while the launch description is built, before
+    launch resolves its arguments: bringup reads the venue from the course
+    this names, as it does from the deck's `course:`.
+    """
+    for a in (sys.argv[1:] if argv is None else argv):
+        if a.startswith(name + ':='):
+            return a[len(name) + 2:].strip()
+    return ''
+
+
 def for_launch_file(args: list, launch_file: str) -> tuple[list, list]:
     """(arguments, extra actions) for a launch file other than bringup.
 

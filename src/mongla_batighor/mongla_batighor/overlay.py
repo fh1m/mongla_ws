@@ -14,7 +14,9 @@ For each camera this turns into `foxglove_msgs/ImageAnnotations` on
   * the anchor's matched features (its learned points), while it runs.
 
 The flow node's tracked pairs go to `<cam>/flow_annotations` (a segment from
-where each point was on the anchor frame to where it is now), and a running
+where each point was on the anchor frame to where it is now), what it read off
+the floor to `<cam>/floor_annotations` (every grout line the tile grating puts
+on the picture, and the lane line's centreline), and a running
 calibration's state to `/mongla/vision/calibration/annotations` (the corners,
 the cell the next pose belongs in, the point the fit is least sure of).
 Lichtblick's image panel draws them over `<cam>/stream/compressed`, the JPEG
@@ -25,6 +27,10 @@ subscribes to what it publishes (`Watched`).
 
 Kept out of `mongla_vision` so the vision stack does not depend on a viewer's
 message package: this is the one node that knows both.
+
+For the 3D scene it also turns `/mongla/demand` into an arrow on the hull
+(`demand_scene`, on `/mongla/batighor/scene`), the same way: only while
+watched.
 """
 from __future__ import annotations
 
@@ -199,13 +205,41 @@ def _slots(b, px):
             + [(x1 + 3, y1 + px + 3)])
 
 
-def hud(cam, model, size, arrivals, latency_s):
+# A detector at its slowest answers several times a second; a second of
+# nothing is a detector that is not running.
+SILENT_S = 1.0
+
+
+def silence(arrivals, since, now):
+    """Seconds the detector has said nothing, or None while it answers.
+
+    `arrivals`: monotonic times of its answers; `since`: when this node began
+    watching, which stands in for an answer until the first one comes."""
+    gap = now - (arrivals[-1] if arrivals else since)
+    return gap if gap >= SILENT_S else None
+
+
+UNREAD = 'unread'
+
+
+def hud(cam, model, size, arrivals, latency_s, silent_s=None, paused=UNREAD):
     """What the camera and detector are doing, in two lines over the picture.
 
     `arrivals`: monotonic times the detector's last answers came (its rate);
-    `latency_s`: from the frame's capture to its boxes reaching this node."""
+    `latency_s`: from the frame's capture to its boxes reaching this node;
+    `silent_s`: how long the detector has said nothing (`silence`), which
+    replaces the rate, said by `paused`, the detector's own parameter: True
+    (paused until a mission asks: the picture must not look like a dead
+    camera), False (silent and not paused: stopped or stalled, an alarm),
+    None (no node publishes this camera's detections), or UNREAD."""
     shape = f'{size[0]}x{size[1]}' if size else '--'
     first = '  '.join(filter(None, (cam, model or 'no model named', shape)))
+    if silent_s is not None:
+        s = f'{silent_s:.0f} s'
+        return [first, {True: f'detector paused {s}: it runs when a mission asks',
+                        False: f'DETECTOR SILENT {s}, NOT paused: stopped or stalled',
+                        None: f'NO DETECTOR publishes {cam} detections ({s})'}.get(
+                            paused, f'DETECTOR SILENT {s}, its pause not yet read')]
     if len(arrivals) >= 2 and arrivals[-1] > arrivals[0]:
         rate = f'{(len(arrivals) - 1) / (arrivals[-1] - arrivals[0]):.0f} Hz'
     else:
@@ -220,7 +254,7 @@ def _corners(b):
 
 
 def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
-             contours=None, features=None, size=None, hud=()) -> ImageAnnotations:
+             contours=None, features=None, size=None, hud=(), alarm=False) -> ImageAnnotations:
     """One frame's annotations: everything the vision stack holds, each as itself.
 
     Nothing is left off; each thing says what it is. A detection is drawn in
@@ -229,7 +263,8 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     it this frame is grey and says `coasting` (the tracker predicting). A
     candidate below the floor is thin, with its class and score. The lock is
     drawn over all of them in its rung's colour. `hud`: lines of what the
-    camera and detector are doing, top left.
+    camera and detector are doing, bottom left; `alarm` draws the second (the
+    detector's) in red.
 
     Any layer may be None (its node is not running). Boxes are in the image's
     own pixels, which is what the detector publishes, so they land on the
@@ -241,7 +276,8 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     # Bottom left, under the labels a box near the top carries; top left
     # until the camera has said its size. Placed first so no label covers it.
     base = (size[1] - 8 - (len(hud) - 1) * (LABEL_PX + 6)) if size else LABEL_PX + 6
-    hud_texts = [labels.place([(8.0, base + k * (LABEL_PX + 6))], line, GLASS)
+    hud_texts = [labels.place([(8.0, base + k * (LABEL_PX + 6))], line,
+                              RED if alarm and k == 1 else GLASS)
                  for k, line in enumerate(hud)]
     dets = [_box(d) for d in (detections.detections if detections else [])]
     # `candidates` carries the detections too (detector_node); drawn again
@@ -250,9 +286,23 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     weak = [_box(d) for d in (candidates.detections if candidates else [])
             if _key(_box(d)) not in shown]
     trks = [(d.id, _box(d)) for d in (tracks.detections if tracks else [])]
+    # Each track is named on one box, its best overlap, and each box carries
+    # one track. Matched by any overlap, two boxes on one bin each said
+    # "#783 #785" and neither said which track was following it.
+    boxes = dets + weak
+    pairs = sorted(((iou(b, t), i, j) for i, b in enumerate(boxes)
+                    for j, (tid, t) in enumerate(trks) if tid), reverse=True)
+    owner, held = {}, set()
+    for ov, i, j in pairs:
+        if ov < SAME_THING_IOU:
+            break
+        if i not in owner and j not in held:
+            owner[i] = trks[j][0]
+            held.add(j)
 
     def carried(b):
-        return [tid for tid, t in trks if tid and iou(b, t) >= SAME_THING_IOU]
+        i = next(k for k, x in enumerate(boxes) if x is b)
+        return [owner[i]] if i in owner else []
 
     if contours is not None:
         rgba, th = CONTOUR
@@ -301,8 +351,8 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
         texts.append(labels.place(_slots(b, small)[3:] + _slots(b, small)[:3], words, rgba, small))
     for b in dets:
         out.points.append(_loop(stamp, _corners(b), class_colour(b[4]), 2.5))
-    for tid, t in trks:
-        if any(iou(t, b) >= SAME_THING_IOU for b in dets + weak):
+    for j, (tid, t) in enumerate(trks):
+        if j in held or (not tid and any(iou(t, b) >= SAME_THING_IOU for b in boxes)):
             continue                          # named on the box it carries
         rgba, th = COASTING
         out.points.append(_loop(stamp, _corners(t), rgba, th))
@@ -355,6 +405,55 @@ def flow_annotate(tracks, size=None) -> ImageAnnotations:
     return out
 
 
+# The floor as the flow node read it: the grout in pale glass, so the tiles
+# stay visible beneath it, the lane's centreline in amber.
+GROUT = (_hex('#c4e2f3', 0.55), 1.5)
+LANE = (AMBER, 3.0)
+
+
+def floor_annotate(read) -> ImageAnnotations:
+    """One floor read (`FloorRead`) over its frame: every grout line the
+    grating's period, angle and offsets put on the picture, the lane line's
+    centreline, and what each one says in words, top left."""
+    from mongla_vision.flow.floor_read import grid_segments, lane_segment
+    stamp = read.header.stamp
+    out = ImageAnnotations(timestamp=stamp)
+    size = (read.width, read.height)
+    words = []
+    if read.tiles and read.period_px > 0 and len(read.grout_normal_deg) == len(read.grout_offset_px):
+        segs = grid_segments(list(zip(read.grout_normal_deg, read.grout_offset_px)),
+                             read.period_px, size)
+        rgba, th = GROUT
+        out.points.append(PointsAnnotation(
+            timestamp=stamp, type=PointsAnnotation.LINE_LIST, outline_color=_color(rgba),
+            thickness=th, points=[Point2(x=float(x), y=float(y)) for s in segs for x, y in s]))
+        h = read.tile_height_m
+        words.append((f'tiles {read.period_px:.0f} px'
+                      + (f'  {h:.2f} m above' if h == h else '  no tile size')
+                      + f'  grid {read.grout_normal_deg[0] % 90:.0f} deg', GROUT[0]))
+    else:
+        words.append(('tiles: none read', INK_2))
+    if read.lane:
+        seg = lane_segment(read.lane_direction_deg, read.lane_offset_px, size)
+        if seg:
+            rgba, th = LANE
+            out.points.append(PointsAnnotation(
+                timestamp=stamp, type=PointsAnnotation.LINE_STRIP, outline_color=_color(rgba),
+                thickness=th, points=[Point2(x=float(x), y=float(y)) for x, y in seg]))
+        words.append((f'lane {read.lane_direction_deg:.0f} deg  {read.lane_offset_px:+.0f} px off centre',
+                      AMBER))
+    # Each line in the colour of what it names: keyed on the read rather than
+    # the line, "tiles: none read" was drawn in the lane's amber whenever a
+    # lane was read.
+    for k, (line, rgba) in enumerate(words):
+        out.texts.append(TextAnnotation(
+            timestamp=stamp, position=Point2(x=8.0, y=LABEL_PX + 6 + k * (LABEL_PX + 6)),
+            text=line, font_size=LABEL_PX * 0.9,
+            text_color=_color(rgba),
+            background_color=_TEXT_BG))
+    return out
+
+
 def calibrate_annotate(state: dict, stamp) -> ImageAnnotations:
     """A calibration's state (`calibrate_node.state_dict`) over its camera:
     the board corners found, the cell the next pose belongs in, the point
@@ -387,6 +486,52 @@ def calibrate_annotate(state: dict, stamp) -> ImageAnnotations:
             font_size=LABEL_PX + 4, text_color=_color(TARGET[0] if k else FLOW[0]),
             background_color=_TEXT_BG))
     return out
+
+
+# The demand in the 3D scene: one arrow from the body origin, in the body
+# frame the hull hangs on, its length the demand's share of full force times
+# DEMAND_ARROW_M (a full demand reaches about the 0.7 m hull's length).
+DEMAND_TOPIC = '/mongla/batighor/scene'
+DEMAND_ARROW_M = 0.6
+# 14 px read about 7 px tall in the cockpit's 3D tile (desktop app, 2026-11-21).
+DEMAND_LABEL_PX = 22.0
+
+
+def demand_scene(x, y, stamp, frame):
+    """`foxglove_msgs/SceneUpdate` for a (surge, sway) demand in [-1, 1].
+
+    The arrow points where the board is told to push, in FRD: rotating x
+    toward y is a turn about +z (down). NaN, which the manager publishes
+    when it does not know the demand, is said in words with no arrow; zero
+    is a known demand of nothing and also draws none, but says so.
+    """
+    import math
+
+    from builtin_interfaces.msg import Duration
+    from foxglove_msgs.msg import (ArrowPrimitive, SceneEntity, SceneEntityDeletion,
+                                   SceneUpdate, TextPrimitive)
+    from geometry_msgs.msg import Point, Pose, Quaternion
+    update = SceneUpdate()
+    update.deletions.append(SceneEntityDeletion(
+        timestamp=stamp, type=SceneEntityDeletion.MATCHING_ID, id='demand'))
+    e = SceneEntity(timestamp=stamp, frame_id=frame, id='demand',
+                    lifetime=Duration(sec=1), frame_locked=True)
+    known = not (math.isnan(x) or math.isnan(y))
+    size = math.hypot(x, y) if known else 0.0
+    if size > 1e-3:
+        yaw = math.atan2(y, x)
+        length = DEMAND_ARROW_M * min(size, 1.0)
+        e.arrows.append(ArrowPrimitive(
+            pose=Pose(orientation=Quaternion(z=math.sin(yaw / 2), w=math.cos(yaw / 2))),
+            shaft_length=0.75 * length, head_length=0.25 * length,
+            shaft_diameter=0.025, head_diameter=0.07, color=_color(SEA)))
+    words = (f'demand {size:.0%}' if size > 1e-3 else 'demand none') if known \
+        else 'demand unknown'
+    e.texts.append(TextPrimitive(
+        pose=Pose(position=Point(z=-0.25)), billboard=True, font_size=DEMAND_LABEL_PX,
+        scale_invariant=True, color=_color(SEA if known else INK_2), text=words))
+    update.entities.append(e)
+    return update
 
 
 class Watched:
@@ -468,12 +613,14 @@ WATCH_PERIOD_S = 0.5
 def main(args=None):
     import rclpy
     from rclpy.node import Node
-    from rclpy.qos import DurabilityPolicy, QoSProfile
+    from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_parameter_events
+    from rcl_interfaces.msg import ParameterEvent
+    from rcl_interfaces.srv import GetParameters
     from sensor_msgs.msg import CameraInfo
     from std_msgs.msg import String
     from vision_msgs.msg import Detection2DArray, VisionInfo
 
-    from mongla_interfaces.msg import FlowTracks, TargetContours, TargetCorrespondences
+    from mongla_interfaces.msg import FloorRead, FlowTracks, TargetContours, TargetCorrespondences
     from mongla_vision import qos
 
     LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -486,6 +633,12 @@ def main(args=None):
             cams = list(self.declare_parameter(
                 'cameras', ['forward', 'downward']).value or [])
             self.watched = []
+            # Each detector's own `paused`, by node: a silent detector that is
+            # paused waits for a mission, one that is not is an alarm. Learnt
+            # from its parameter events, and asked once when first needed.
+            self.paused, self.asked, self.whose, self.askers = {}, set(), {}, {}
+            self.create_subscription(ParameterEvent, '/parameter_events', self._on_params,
+                                     qos_profile_parameter_events)
             for cam in cams:
                 ns = f'/mongla/vision/{cam}'
                 latest = dict.fromkeys(LAYERS)
@@ -532,8 +685,21 @@ def main(args=None):
                             draw()
                     return cb
 
-                def on_info(msg, latest=latest):
+                def on_info(msg, latest=latest, pub=pub, cam=cam):
                     latest['size'] = (msg.width, msg.height) if msg.width else None
+                    # The camera's own beat, one per frame on the frame's
+                    # stamp: while the detector is silent the overlay marks
+                    # the frame itself, so the Vision view (synchronised)
+                    # still shows the picture, and says why it has no boxes.
+                    now = time.monotonic()
+                    if latest.get('since') is None:
+                        latest['since'] = now
+                    quiet = silence(latest['arrivals'], latest['since'], now)
+                    if quiet is not None:
+                        paused = self._paused(f'/mongla/vision/{cam}/detections')
+                        pub.publish(annotate(msg.header.stamp, size=latest['size'], hud=hud(
+                            cam, latest['model'], latest['size'], (), None, silent_s=quiet,
+                            paused=paused), alarm=paused is not True))
 
                 def keep(key, latest=latest):
                     return lambda msg: latest.__setitem__(key, msg)
@@ -553,15 +719,26 @@ def main(args=None):
                      qos.DETECTIONS),
                     (CameraInfo, f'{ns}/camera_info', on_info, qos.CAMERA_INFO),
                     (VisionInfo, f'{ns}/vision_info', on_model, qos.LATCHED),
-                ], on_drop=lambda latest=latest: (latest.update(dict.fromkeys(LAYERS)),
+                ], on_drop=lambda latest=latest: (latest.update(dict.fromkeys(LAYERS), since=None),
                                                   latest.update(arrivals=deque(maxlen=RATE_WINDOW)))))
+
+                floor_pub = self.create_publisher(
+                    ImageAnnotations, f'{ns}/floor_annotations', 5)
+                self.watched.append(Watched(self, floor_pub, [
+                    (FloorRead, f'{ns}/floor_read',
+                     lambda msg, p=floor_pub: p.publish(floor_annotate(msg)), 5)]))
 
                 flow_pub = self.create_publisher(
                     ImageAnnotations, f'{ns}/flow_annotations', 5)
                 self.watched.append(Watched(self, flow_pub, [
                     (FlowTracks, f'{ns}/flow_tracks',
                      lambda msg, p=flow_pub, latest=latest:
-                     p.publish(flow_annotate(msg, latest['size'])), 5)]))
+                     p.publish(flow_annotate(msg, latest['size'])), 5),
+                    # Its own reader of the size: with only the Flow view
+                    # open, the camera's layers above are unwatched, the size
+                    # stayed unknown, and the flow line sat on the floor
+                    # read's caption at the top (seen 2026-11-21).
+                    (CameraInfo, f'{ns}/camera_info', on_info, qos.CAMERA_INFO)]))
 
             # A calibration, when one runs (`calibrate.launch.py`): its state
             # is latched, so a new viewer gets the current one at once.
@@ -574,10 +751,55 @@ def main(args=None):
 
             self.watched.append(Watched(self, cal_pub, [
                 (String, f'{cal}/state', on_calibration, LATCHED)]))
+            # The demand, for the 3D scene, at the manager's 20 Hz.
+            from foxglove_msgs.msg import SceneUpdate
+            from geometry_msgs.msg import Vector3Stamped
+            scene_pub = self.create_publisher(SceneUpdate, DEMAND_TOPIC, 5)
+
+            def on_demand(msg):
+                scene_pub.publish(demand_scene(msg.vector.x, msg.vector.y,
+                                               msg.header.stamp, msg.header.frame_id))
+
+            self.watched.append(Watched(self, scene_pub, [
+                (Vector3Stamped, '/mongla/demand', on_demand, 5)]))
             self.create_timer(WATCH_PERIOD_S, self._poll)
             self.cams = cams
             self.stages_pub = self.create_publisher(String, '/mongla/batighor/stages', LATCHED)
             self.create_timer(STAGES_PERIOD_S, self._stages)
+
+        def _on_params(self, ev):
+            for p in (*ev.new_parameters, *ev.changed_parameters):
+                if p.name == 'paused':
+                    self.paused[ev.node] = p.value.bool_value
+
+        def _paused(self, topic):
+            """The `paused` of the node publishing `topic`: True, False, None
+            (nobody publishes it) or UNREAD while its answer is on its way."""
+            now = time.monotonic()
+            at, node = self.whose.get(topic, (0.0, None))
+            if now - at > 1.0:                # the graph, once a second at most
+                infos = self.get_publishers_info_by_topic(topic)
+                node = None if not infos else \
+                    f"{infos[0].node_namespace.rstrip('/')}/{infos[0].node_name}"
+                self.whose[topic] = (now, node)
+            if node is None:
+                return None
+            if node in self.paused:
+                return self.paused[node]
+            if node not in self.asked:
+                cli = self.askers.get(node) or self.askers.setdefault(
+                    node, self.create_client(GetParameters, f'{node}/get_parameters'))
+                if cli.service_is_ready():
+                    self.asked.add(node)
+
+                    def answered(fut, node=node):
+                        res = fut.result()
+                        if res is not None and res.values:
+                            self.paused.setdefault(node, res.values[0].bool_value)
+                        else:
+                            self.asked.discard(node)      # ask again next frame
+                    cli.call_async(GetParameters.Request(names=['paused'])).add_done_callback(answered)
+            return UNREAD
 
         def _stages(self):
             names = [n for n, _ in self.get_topic_names_and_types()]

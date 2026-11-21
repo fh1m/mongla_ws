@@ -18,6 +18,10 @@ not send at all is listed with the ask that would produce it. Absence is
 `None` in the JSON and `--` on the panel, never 0.
 
     ros2 run mongla_batighor chain       # publishes /mongla/batighor/chain
+
+It measures only while someone watches: the stage subscriptions exist while
+`/mongla/batighor/chain` has a subscriber (`overlay.Watched`). Subscribed for
+good, it cost 17 % of a Pi core with nobody looking (2026-11-21).
 """
 from __future__ import annotations
 
@@ -156,18 +160,26 @@ def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
     class _Chain(Node):
         def __init__(self):
             super().__init__('mongla_chain')
+            from mongla_batighor.overlay import Watched
             self.meter = ChainMeter()
             self.rows = stages(cameras)
-            for st in self.rows:
-                self.create_subscription(
-                    _msg_class(st.msg), st.topic,
-                    lambda m, k=st.key, s=st.stamped: self.meter.note(
-                        k, _stamp_s(m) if s else None, time.time()),
-                    _qos(st.qos))
             self.pub = self.create_publisher(String, TOPIC, 10)
+            self.watched = Watched(self, self.pub, [
+                (_msg_class(st.msg), st.topic,
+                 lambda m, k=st.key, s=st.stamped: self.meter.note(
+                     k, _stamp_s(m) if s else None, time.time()),
+                 _qos(st.qos))
+                for st in self.rows], on_drop=self._forget)
             self.create_timer(period_s, self._publish)
 
+        def _forget(self):
+            # The next viewer must not see rates from before it looked.
+            self.meter = ChainMeter(self.meter.window_s)
+
         def _publish(self):
+            self.watched.poll()
+            if not self.watched.subs:
+                return
             got = self.meter.summary(time.time())
             empty = {'n': 0, 'hz': 0.0, 'age_ms_p50': None, 'age_ms_p95': None,
                      'last_s': None}

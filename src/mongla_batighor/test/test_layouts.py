@@ -63,6 +63,11 @@ _HEADERLESS = ('Float32', 'Float64', 'UInt8', 'Int32', 'Bool', 'String',
 
 
 def _headerless(src, topic):
+    # An action's feedback message (goal id and feedback) has no header: the
+    # pixel-error plots read /mongla/move/_action/feedback and drew nothing
+    # by header stamp (found by mutation, 2026-11-21).
+    if topic.endswith('/_action/feedback'):
+        return True
     # On the last two segments, as above: the leaf alone let a calibration's
     # `{NS}/state` (a String) pass for /mongla/state (stamped).
     parent, leaf = topic.rsplit('/', 2)[-2:]
@@ -92,3 +97,4 @@ def test_the_headerless_check_sees_a_headerless_topic():
     assert _headerless(src, '/mongla/vision/downward/flow_quality')
     assert not _headerless(src, '/mongla/vision/downward/velocity')
     assert not _headerless(src, '/mongla/state')
+    assert _headerless(src, '/mongla/move/_action/feedback')

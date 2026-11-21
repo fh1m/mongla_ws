@@ -41,6 +41,9 @@ PUBLISHED_UNREAD = {
     '/mongla/esc_rpm':
         'operator telemetry. 958/958 frames read exactly 0 with nothing '
         'attached, so it is watched by a human rather than acted on.',
+    '/mongla/thruster_pack':
+        'operator telemetry: PM2, the thruster pack. Read by Batighor (the '
+        'Thrust panel and the Thrust and Health plots), watched by a human.',
     '/mongla/board_link':
         'operator telemetry: what the link carries and every named channel '
         'with its age, for a human in Batighor\'s board_link layout. The '
@@ -58,6 +61,19 @@ PUBLISHED_UNREAD = {
         'the flow node\'s tracked point pairs, for a human: overlay.py turns '
         '`flow_tracks` into them and Batighor\'s `flow` layout draws them '
         'over the downward camera. Built only while someone watches.',
+    '/floor_read':
+        'where on the picture the tile grating and the lane line were read '
+        '(flow/floor_read.py), as data. mongla_batighor/overlay.py reads it '
+        'while someone watches (`Watched`) and draws /floor_annotations; the '
+        'flow node builds it only while it has a subscriber.',
+    '/floor_annotations':
+        'the floor read drawn for a human: every grout line and the lane '
+        'centreline over the downward camera, in Batighor\'s cockpit, flow '
+        'and mission views. Built only while someone watches.',
+    '/mongla/batighor/course':
+        'for a human: the course file a run uses (pool outline, props, '
+        'soundings), from mongla_batighor/course.py, latched; the Map and '
+        'Localization map instruments draw it.',
     '/flow_tracks':
         'the tracked pairs as data. mongla_batighor/overlay.py reads it, but '
         'subscribes only while someone watches (`Watched`, a table of '
@@ -75,6 +91,18 @@ PUBLISHED_UNREAD = {
         'for a human: each chain stage\'s rate and age, from '
         'mongla_batighor/chain.py twice a second; the Chain instrument '
         '(panels/instruments/extension.js) draws it.',
+    '/mongla/mission/source':
+        'for a human: the running mission\'s file, latched by the runner '
+        '(mongla_planner/mission.py, MissionText); the MissionText instrument '
+        '(panels/instruments/extension.js) shows it in Batighor\'s mission view.',
+    '/mongla/mission/line':
+        'for a human: the line of the mission\'s file that sent each verb, '
+        'latched by the runner (mission.py, MissionText); the MissionText '
+        'instrument marks it.',
+    '/mongla/batighor/scene':
+        'for a human: the demand as an arrow on the hull, from '
+        'mongla_batighor/overlay.py (demand_scene), built only while someone '
+        'watches; Lichtblick\'s 3D panel draws it (views.py, scene()).',
     '/mongla/localization/aiding':
         'a DIAGNOSTIC of which aiding sources the filter accepted. Read in a '
         'bag after a run, never in the loop.',
@@ -88,6 +116,9 @@ SUBSCRIBED_UNFED = {
     '/target_pose':
         'published by `pnp_node`, whose topic name is built with a variant '
         'suffix the scanner cannot resolve. Real, and launched.',
+    '/parameter_events':
+        'published by rclpy for every node (each parameter set or declared); '
+        'the Batighor overlay reads each detector\'s `paused` from it.',
 }
 
 

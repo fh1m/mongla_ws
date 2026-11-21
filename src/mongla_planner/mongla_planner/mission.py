@@ -165,6 +165,57 @@ class MissionKeepAlive:
             self._beat('')
 
 
+class MissionText:
+    """The mission as text, and where in it the vehicle is, for Batighor.
+
+    An operator reading a map needs the plan beside it: which line of the
+    mission sent the verb the manager runs now. The whole file is published
+    once (helpers in it are part of the plan), and every verb sent publishes
+    the line of that file it came from: the innermost frame in the file, so a
+    task chained from another module reads as the line that called it.
+    Best-effort, like the task topic: a report never stops a mission.
+    """
+
+    def __init__(self, node, name: str, fn):
+        import inspect
+        import json
+        from rclpy.qos import DurabilityPolicy, QoSProfile
+        from std_msgs.msg import String
+        self._json, self._String = json, String
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self._line = node.create_publisher(String, '/mongla/mission/line', latched)
+        src = node.create_publisher(String, '/mongla/mission/source', latched)
+        self.file = inspect.getsourcefile(fn) or ''
+        try:
+            with open(self.file) as f:
+                text = f.read()
+            first = inspect.getsourcelines(fn)[1]
+        except (OSError, TypeError):
+            text, first = '', 0
+        src.publish(String(data=json.dumps(
+            {'name': name, 'file': self.file, 'first_line': first, 'text': text})))
+
+    def where(self, frame=None) -> int:
+        """The line of the mission's file in the call stack, innermost; 0 if none."""
+        import sys
+        f = frame or sys._getframe(1)
+        while f is not None:
+            if f.f_code.co_filename == self.file:
+                return f.f_lineno
+            f = f.f_back
+        return 0
+
+    def on_send(self, cmd: str) -> None:
+        try:
+            import sys
+            line = self.where(sys._getframe(1))
+            if line:
+                self._line.publish(self._String(data=self._json.dumps(
+                    {'line': line, 'cmd': cmd})))
+        except Exception:                          # noqa: BLE001 -- never stops a mission
+            pass
+
+
 def main(args=None):
     missions = discover()
     parsed   = _build_parser(missions).parse_args(args)
@@ -196,6 +247,7 @@ def main(args=None):
     try:
         client.wait_for_connection(timeout=15.0)
         keepalive = MissionKeepAlive(node, parsed.name).start()
+        client.on_send = MissionText(node, parsed.name, missions[parsed.name]).on_send
         # Before anything moves: the course's floor to flow, then refuse a run
         # flow cannot scale; the depth-floor warning at every start.
         from . import preflight

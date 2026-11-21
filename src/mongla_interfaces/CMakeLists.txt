@@ -18,6 +18,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MessageRate.msg"
   "msg/NamedValue.msg"
   "msg/FlowTracks.msg"
+  "msg/FloorRead.msg"
   "srv/Helm.srv"
   DEPENDENCIES action_msgs std_msgs
 )

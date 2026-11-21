@@ -6,6 +6,8 @@ from __future__ import annotations
 import contextlib
 from .client import MoveFailed, MoveRejected, TaskAbandoned  # arm() raises MoveFailed; task() raises TaskAbandoned
 
+TASK_TOPIC = '/mongla/mission/task'   # a task's start and end, JSON, latched
+
 
 class PlanMixin:
     """Methods of `MonglaMission`; see `mongla_dsl.py` for the node."""
@@ -40,6 +42,7 @@ class PlanMixin:
         eff = mine if outer is None else (outer if mine is None else min(outer, mine))
         self.client._task_deadline = eff
         outcome = 'done'
+        self._say_task(name, 'running', deadline_s, 0.0)
         try:
             yield
         except TaskAbandoned:
@@ -52,9 +55,36 @@ class PlanMixin:
             raise
         finally:
             self.client._task_deadline = outer
+            self._say_task(name, outcome, deadline_s, _t.monotonic() - start)
             self.__dict__.setdefault('_scoreboard', []).append({
                 'cmd': f'task:{name}', 'success': outcome == 'done',
                 'elapsed': round(_t.monotonic() - start, 2), 'msg': outcome})
+
+    def _say_task(self, name: str, state: str, deadline_s, elapsed_s: float) -> None:
+        """Publish a task's start or end on `TASK_TOPIC`, for every operator.
+
+        The decision layer, seen from Batighor: which task the mission is in,
+        its deadline, and how the last one ended. Latched, so a browser that
+        opens mid-task sees it. Best-effort: a report never stops a mission.
+        """
+        try:
+            import json
+            from rclpy.qos import DurabilityPolicy, QoSProfile
+            from std_msgs.msg import String
+            pub = self.__dict__.get('_task_pub')
+            if pub is None:
+                pub = self.client.node.create_publisher(
+                    String, TASK_TOPIC,
+                    QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+                self.__dict__['_task_pub'] = pub
+            budget = getattr(self, '_budget', None)
+            left = budget.remaining_s() if budget is not None and budget.started else None
+            pub.publish(String(data=json.dumps({
+                'task': name, 'state': state,
+                'deadline_s': deadline_s, 'elapsed_s': round(elapsed_s, 2),
+                'budget_left_s': left})))
+        except Exception as exc:            # noqa: BLE001 -- see the docstring
+            self.log.warning(f'[TASK ] {name}: not published ({exc})')
 
     def use_budget(self, total_s: float = 900.0, *, reserve_s: float = 45.0):
         """Ration the run by the clock. OPT-IN: nothing is rationed until this is called.

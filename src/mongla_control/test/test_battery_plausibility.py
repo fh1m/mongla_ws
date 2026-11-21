@@ -140,3 +140,42 @@ def test_the_bar_sits_between_the_two_measured_regimes():
     """Guard the constant itself. The floating pin steps a median 6.48 V; a pack
     sags about 1 V. A bar outside that gap silently stops separating them."""
     assert 1.0 < sp.BATTERY_MAX_STEP_V < 6.48
+
+
+def test_the_battery_on_the_state_topic_is_guarded_too(fc):
+    """Kutum on the real board, 2026-11-22: /mongla/state read 1.39, 2.47,
+    13.77, 1.39 V within a minute from the unwired PM1 pin. The guard sat in
+    get_batteries(); the manager reads get_battery(), which skipped it."""
+    _feed(fc, FLOATING_PIN_V, bid=0)
+    assert math.isnan(fc.get_battery()['voltage'])
+    _feed(fc, REAL_PACK_V * 2, bid=0)     # a whole window, so the pin's jumps have left it
+    assert not math.isnan(fc.get_battery()['voltage'])
+
+
+# The same pin on Kutum, 2026-11-22, one board sample a second: the value each
+# second, a held value repeated for as long as the board held it.
+FLOATING_PIN_HELD_V = ([10.19] + [1.39] * 5 + [13.83, 11.99, 13.79, 3.25, 3.03]
+                       + [1.39] * 3 + [5.86, 13.51, 13.85, 14.03, 14.11, 13.02]
+                       + [1.39] * 6 + [12.61, 14.22, 13.89, 14.0, 12.69])
+
+
+def test_a_pin_that_holds_a_value_between_jumps_is_not_trusted(fc):
+    """The median step is 0 V on this pin (it holds a value for seconds) and
+    it sits at 13-14 V like a real pack, so the median passed it to
+    /mongla/state. A real pack never jumps 2 V; one glitch jumps twice."""
+    _feed(fc, FLOATING_PIN_HELD_V)
+    assert fc.battery_trusted(0) is False
+
+
+def test_a_condemned_pin_stays_condemned_through_its_quiet_spells(fc):
+    """Kutum, 2026-11-22: condemned, the pin then held 1.39 V long enough that
+    fewer than three jumps were left in the window, and /mongla/state read
+    1.4 V again. A line is released only by a whole window with no jump."""
+    flips = []
+    for v in FLOATING_PIN_HELD_V + [1.39] * 14 + [13.0] + FLOATING_PIN_HELD_V:
+        fc.note_battery(_Msg(0, v))
+        flips.append(fc.battery_trusted(0))
+    first = flips.index(False)
+    assert not any(flips[first:]), f'trusted again at sample {flips.index(True, first)}'
+    _feed(fc, REAL_PACK_V * 2)
+    assert fc.battery_trusted(0) is True

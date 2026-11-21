@@ -78,3 +78,22 @@ def test_bringup_takes_the_venue_from_the_course(venue):
     with pytest.raises(RuntimeError, match='pool_depth_m'):
         mod._apply_course(args, {'course': 'venue', 'pool_depth_m': '2.0'},
                           venue / 'bringup.yaml')
+
+
+def test_a_typed_course_brings_its_venue_too(venue, monkeypatch):
+    """`course:=venue` typed with no deck `course:` sets the venue numbers and
+    the depth floor, as the deck's would (B-146): it used to set none."""
+    import importlib.util
+    import os
+    import sys
+    path = os.path.join(os.path.dirname(__file__), '..', 'launch', 'bringup.launch.py')
+    spec = importlib.util.spec_from_file_location('bringup_launch', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    from launch.actions import DeclareLaunchArgument
+    args = [DeclareLaunchArgument('pool_depth_m', default_value='nan')]
+    monkeypatch.setattr(sys, 'argv', ['ros2', 'launch', 'mongla_manager', 'bringup.launch.py',
+                                      'course:=venue'])
+    out, _, manager = mod._apply_course(args, {}, None)
+    assert {a.name: a.default_value[0].text for a in out} == {'pool_depth_m': '1.6'}
+    assert manager == {'shield_max_depth_m': 1.5}

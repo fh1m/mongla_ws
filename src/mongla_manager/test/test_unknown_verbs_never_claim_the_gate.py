@@ -24,7 +24,8 @@ def _node():
         _gate=_CommandGate(),
         get_logger=lambda: log,
         mongla=types.SimpleNamespace(request_abort=lambda: None),
-        safety_latch_reason=lambda: '')
+        safety_latch_reason=lambda: '',
+        _say_doing=lambda *a, **k: None)
     return amn, node
 
 

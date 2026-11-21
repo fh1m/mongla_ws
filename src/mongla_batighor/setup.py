@@ -20,7 +20,7 @@ setup(
         *[('share/' + package_name + '/' + d, glob(d + '/*'))
           for d in sorted(glob('panels/*')) if glob(d + '/extension.js')],
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
-        ('share/' + package_name + '/theme', glob('theme/*.css')),
+        ('share/' + package_name + '/theme', glob('theme/*.css') + glob('theme/*.svg')),
         # The site's own font files, one copy in the repo: Kutum serves them,
         # because the deck has no internet at the pool.
         ('share/' + package_name + '/theme/fonts',
@@ -46,6 +46,7 @@ setup(
             'deck = mongla_batighor.deck:main',
             'views = mongla_batighor.views:main',
             'chain = mongla_batighor.chain:main',
+            'course = mongla_batighor.course:main',
         ],
     },
 )

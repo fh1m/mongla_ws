@@ -38,11 +38,14 @@ def test_replay_parameter_is_declared(dual_src):
         'the replay switch is gone -- a bag can no longer drive the graph')
 
 
-def test_direct_feed_is_off_under_replay(dual_src):
-    assert "direct = not bool(self.get_parameter('replay').value)" in dual_src
+def test_replay_feeds_the_detector_by_reference(dual_src):
+    """Under replay one reader per camera feeds the detector, so the detector
+    must not subscribe as well (B-147). Behaviour is pinned in
+    test_dual_node_degrades.test_replay_reads_each_image_once_and_feeds_everything_by_reference."""
+    assert '_ReplayFeed(launcher, camera,' in dual_src
     assert "Parameter('direct_feed', value=direct)" in dual_src, (
-        'direct_feed is hardcoded again; under replay the detector will not '
-        'subscribe and every recorded frame is dropped in silence')
+        'direct_feed is no longer passed; the detector would fall back to '
+        'its own subscription two seconds in')
 
 
 def test_replay_keeps_the_detector_and_builds_no_camera(dual_src):

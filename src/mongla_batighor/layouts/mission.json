@@ -1,0 +1,49 @@
+{
+  "configById": {
+    "mongla.batighor.Map!map": {},
+    "mongla.batighor.MissionText!text": {},
+    "mongla.batighor.Mission!mission": {},
+    "Plot!demand": {
+      "paths": [
+        {
+          "value": "/mongla/demand.vector.x",
+          "label": "surge",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/demand.vector.y",
+          "label": "sway",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "demand"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "mongla.batighor.Map!map",
+    "second": {
+      "direction": "row",
+      "first": "mongla.batighor.MissionText!text",
+      "second": {
+        "direction": "column",
+        "first": "mongla.batighor.Mission!mission",
+        "second": "Plot!demand",
+        "splitPercentage": 60.0
+      },
+      "splitPercentage": 53.1
+    },
+    "splitPercentage": 36.0
+  }
+}

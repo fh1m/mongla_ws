@@ -234,7 +234,7 @@ def test_a_real_node_refuses_a_value_the_launch_overrode(tmp_path, monkeypatch):
     node, ctx = _node_with(tmp_path, monkeypatch, {'mixer_aware': False},
                            inline={'mixer_aware': True})
     try:
-        with pytest.raises(RuntimeError, match='launch argument sets this'):
+        with pytest.raises(RuntimeError, match='the launch sets this.*launch file fixes it'):
             refuse_unknown(node)
     finally:
         _close(node, ctx)

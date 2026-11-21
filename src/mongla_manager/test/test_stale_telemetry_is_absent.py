@@ -11,6 +11,8 @@ Real `SrotFC` on a fake master, real `BoardYaw`, the node's real
 methods run unbound on a stub; only the age of the cached ATTITUDE is varied.
 """
 import math
+
+import pytest
 import pathlib
 import sys
 import time
@@ -49,6 +51,7 @@ class _StubNode:
         self.fc = fc
         self.yaw_source = BoardYaw(fc)
         self.state_publisher = _Pub()
+        self.thruster_pack_publisher = _Pub()
 
     def _state_stamp(self):
         return Time()
@@ -107,3 +110,39 @@ def test_a_stale_heartbeat_is_an_unknown_mode():
     fc.master.messages['HEARTBEAT'] = SimpleNamespace(
         base_mode=0, autopilot=0, custom_mode=0, _timestamp=time.time() - 60.0)
     assert fc.get_mode() == 'UNKNOWN'
+
+
+def test_the_demand_says_heave_is_unknown_not_zero():
+    """The board reports surge and sway demand only. The message's z was left
+    at its default 0.0, and Batighor plotted it as a heave demand of exactly
+    zero: a confident number nothing measured."""
+    from geometry_msgs.msg import Vector3Stamped
+    from mongla_manager.node_telemetry import TelemetryMixin
+    for d in ((0.4, -0.2), None):
+        pub = _Pub()
+        stub = SimpleNamespace(
+            fc=SimpleNamespace(demand=lambda d=d: d), demand_publisher=pub,
+            _Vector3Stamped=Vector3Stamped,
+            get_clock=lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=Time)))
+        TelemetryMixin._publish_demand(stub)
+        v = pub.msgs[-1].vector
+        if d is None:
+            assert math.isnan(v.x) and math.isnan(v.y)
+        else:
+            assert (v.x, v.y) == pytest.approx(d)
+        assert math.isnan(v.z)
+
+
+def test_the_thruster_pack_is_on_the_state_and_absent_is_nan():
+    """PM2, the pack the thrusters draw, reached only the console; it is
+    /mongla/thruster_pack (MonglaState kept its shape, so old bags decode). Batighor's
+    Thrust view plotted PM1 (the electronics rail) as 'what it cost'."""
+    node = _StubNode(_fc_with_attitude(0.0))
+    att = node.fc.get_attitude()
+    amn.AUVManagerNode._publish_state(node, att, None, 'MANUAL', False, 0.0)
+    pack = node.thruster_pack_publisher.msgs[-1]
+    assert math.isnan(pack.voltage) and not pack.present
+    node.fc.note_battery(SimpleNamespace(id=1, voltages=[14630], current_battery=-1))
+    amn.AUVManagerNode._publish_state(node, att, None, 'MANUAL', False, 0.0)
+    pack = node.thruster_pack_publisher.msgs[-1]
+    assert abs(pack.voltage - 14.63) < 1e-3 and pack.present

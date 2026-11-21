@@ -8,7 +8,8 @@
             "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "forward camera"
     },
     "Image!downward": {
       "imageMode": {
@@ -18,7 +19,8 @@
             "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "downward camera"
     },
     "mongla.batighor.Vehicle!vehicle": {},
     "mongla.batighor.ControlCenter!control": {}
@@ -37,11 +39,11 @@
       "splitPercentage": 50.0
     },
     "second": {
-      "direction": "column",
+      "direction": "row",
       "first": "mongla.batighor.Vehicle!vehicle",
       "second": "mongla.batighor.ControlCenter!control",
-      "splitPercentage": 50.0
+      "splitPercentage": 39.7
     },
-    "splitPercentage": 70.0
+    "splitPercentage": 37.0
   }
 }

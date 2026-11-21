@@ -44,14 +44,18 @@ def generate_launch_description():
                               description='Batighor web port'),
         DeclareLaunchArgument('foxglove_port', default_value='8765',
                               description='foxglove_bridge WebSocket port'),
+        DeclareLaunchArgument('course', default_value='',
+                              description='the course the map draws (file stem in '
+                                          '~/mongla/deck/courses), until a mission names '
+                                          'its own; bringup passes its own'),
     ]
     # `launch: batighor:` in ~/.mongla/bringup.yaml re-defaults these, and its
     # `nodes:` reach the nodes below -- only when this file is the one typed.
     args, settings = launch_defaults.for_launch_file(args, __file__)
     # The bridge exposes every topic over a WebSocket that Lichtblick, in the
-    # browser or on the desktop, renders. use_compression cuts tether
-    # bandwidth; still confirm detection FPS is unperturbed with it up and
-    # images being viewed (Mongla is FPS-coupled). See foxglove-and-bags.md.
+    # browser or on the desktop, renders. use_compression stays on: turned off,
+    # a frame's latency to the dev box did not move beyond the A/A noise
+    # (measured-bars 103), and it is the tether's bandwidth that it saves.
     bridge = partial(
         Node, package='foxglove_bridge', executable='foxglove_bridge',
         name='foxglove_bridge', output='screen',
@@ -83,10 +87,16 @@ def generate_launch_description():
     # for the Chain view.
     chain = partial(Node, package='mongla_batighor', executable='chain',
                     name='mongla_chain', output='screen')
+    # The pool on the map: the course file, read again when it changes
+    # (course.py), for the Map instrument.
+    course = partial(Node, package='mongla_batighor', executable='course',
+                     name='batighor_course', output='screen',
+                     parameters=[{'course': LaunchConfiguration('course')}])
     return LaunchDescription(args + settings + [
         *respawning(bridge, 'the Foxglove bridge'),
         *respawning(serve, 'the Batighor web app'),
         *respawning(overlay, 'the Batighor overlay'),
         *respawning(helm, 'the Batighor helm'),
         *respawning(chain, 'the Batighor chain meter'),
+        *respawning(course, 'the Batighor course map'),
     ])

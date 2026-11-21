@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 import time
 
+from mongla_control.fc import srot_protocol as _sp
 from mongla_interfaces.msg import MonglaState
 from mongla_localization.frames import BODY as _BODY_FRAME
 
@@ -17,6 +18,12 @@ from .node_support import (BAT_CHANGE_THRESH, DEPTH_CHANGE_THRESH, FORCE_PRINT_S
                            SROT_MESSAGE_RATES, YAW_CHANGE_THRESH, _SROT_DEPTH_OUT_WARN,
                            _kill_text, _quat_from_rpy)
 
+
+
+def _thruster_v(fc) -> float:
+    """PM2, the thruster pack, in volts; NaN when absent or untrusted."""
+    thr = fc.get_batteries().get(_sp.BATTERY_ID_THRUSTER)
+    return float(thr['voltage']) if thr else math.nan
 
 class TelemetryMixin:
     # A board sample older than this is not the state we are publishing, so
@@ -79,7 +86,10 @@ class TelemetryMixin:
         # arrival monotonic() and must never subtract these stamps.
         m.header.stamp = self.get_clock().now().to_msg()
         m.header.frame_id = _BODY_FRAME
-        m.vector.x, m.vector.y =(math.nan, math.nan) if d is None else d
+        m.vector.x, m.vector.y = (math.nan, math.nan) if d is None else d
+        # The board reports surge and sway demand only; z left at 0.0 read as
+        # a measured heave demand of zero.
+        m.vector.z = math.nan
         self.demand_publisher.publish(m)
 
     def _imu_rates_tick(self):
@@ -623,3 +633,11 @@ class TelemetryMixin:
         msg.depth_m         = float(attitude['depth'])  if attitude else math.nan
         msg.battery_voltage = float(battery['voltage']) if battery  else math.nan
         self.state_publisher.publish(msg)
+        from sensor_msgs.msg import BatteryState
+        pack = BatteryState()
+        pack.header = msg.header
+        pack.voltage = _thruster_v(self.fc)
+        pack.current = pack.charge = pack.capacity = pack.design_capacity = math.nan
+        pack.percentage = pack.temperature = math.nan
+        pack.present = math.isfinite(pack.voltage)
+        self.thruster_pack_publisher.publish(pack)
