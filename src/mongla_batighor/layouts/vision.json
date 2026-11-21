@@ -21,7 +21,6 @@
       "xAxisRange": 60,
       "lichtblickPanelTitle": "lock ladder"
     },
-    "mongla.batighor.Detectors!detectors": {},
     "Plot!authority": {
       "paths": [
         {
@@ -43,6 +42,7 @@
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "lock authority"
     },
+    "mongla.batighor.Detectors!detectors": {},
     "Plot!target_range": {
       "paths": [
         {
@@ -177,34 +177,34 @@
       "first": {
         "direction": "column",
         "first": "mongla.batighor.Vision!vision",
-        "second": "StateTransitions!ladder",
-        "splitPercentage": 50.0
+        "second": {
+          "direction": "column",
+          "first": "StateTransitions!ladder",
+          "second": "Plot!authority",
+          "splitPercentage": 57.1
+        },
+        "splitPercentage": 30.0
       },
       "second": {
         "direction": "column",
         "first": "mongla.batighor.Detectors!detectors",
         "second": {
           "direction": "column",
-          "first": "Plot!authority",
+          "first": {
+            "direction": "row",
+            "first": "Plot!target_range",
+            "second": "Plot!pose",
+            "splitPercentage": 50.0
+          },
           "second": {
             "direction": "column",
-            "first": {
-              "direction": "row",
-              "first": "Plot!target_range",
-              "second": "Plot!pose",
-              "splitPercentage": 50.0
-            },
-            "second": {
-              "direction": "column",
-              "first": "Plot!anchor",
-              "second": "Plot!align",
-              "splitPercentage": 50.0
-            },
-            "splitPercentage": 33.3
+            "first": "Plot!anchor",
+            "second": "Plot!align",
+            "splitPercentage": 50.0
           },
-          "splitPercentage": 25.0
+          "splitPercentage": 33.3
         },
-        "splitPercentage": 42.9
+        "splitPercentage": 53.8
       },
       "splitPercentage": 50.0
     },

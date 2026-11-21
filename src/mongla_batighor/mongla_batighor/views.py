@@ -231,11 +231,14 @@ def vision(v: View):
     # settings, read against what the ladder does, over the numbers the lock
     # produces, one unit per plot (metres, degrees and pixels on one axis
     # flattened all but the largest).
-    now = col((5, v('vision', instrument('Vision'))),
-              (5, v('ladder', states(*_ladder_lines()))))
+    # The Vision instrument is a few rows (at half the column it was mostly
+    # empty, beside a Detectors panel that scrolled): the lock's authority
+    # sits under it, beside the ladder it scores.
+    now = col((3, v('vision', instrument('Vision'))),
+              (4, v('ladder', states(*_ladder_lines()))),
+              (3, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS)))))
     numbers = col(
-        (6, v('detectors', instrument('Detectors'))),
-        (2, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS)))),
+        (7, v('detectors', instrument('Detectors'))),
         (2, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
                 v('pose', plot(series(f'{fwd}/target_pose_fused.bearing_deg', 'bearing deg'),
                                series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),

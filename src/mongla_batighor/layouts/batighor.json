@@ -193,7 +193,6 @@
       "xAxisRange": 60,
       "lichtblickPanelTitle": "lock ladder"
     },
-    "mongla.batighor.Detectors!vision.detectors": {},
     "Plot!vision.authority": {
       "paths": [
         {
@@ -215,6 +214,7 @@
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "lock authority"
     },
+    "mongla.batighor.Detectors!vision.detectors": {},
     "Plot!vision.target_range": {
       "paths": [
         {
@@ -1066,34 +1066,34 @@
               "first": {
                 "direction": "column",
                 "first": "mongla.batighor.Vision!vision.vision",
-                "second": "StateTransitions!vision.ladder",
-                "splitPercentage": 50.0
+                "second": {
+                  "direction": "column",
+                  "first": "StateTransitions!vision.ladder",
+                  "second": "Plot!vision.authority",
+                  "splitPercentage": 57.1
+                },
+                "splitPercentage": 30.0
               },
               "second": {
                 "direction": "column",
                 "first": "mongla.batighor.Detectors!vision.detectors",
                 "second": {
                   "direction": "column",
-                  "first": "Plot!vision.authority",
+                  "first": {
+                    "direction": "row",
+                    "first": "Plot!vision.target_range",
+                    "second": "Plot!vision.pose",
+                    "splitPercentage": 50.0
+                  },
                   "second": {
                     "direction": "column",
-                    "first": {
-                      "direction": "row",
-                      "first": "Plot!vision.target_range",
-                      "second": "Plot!vision.pose",
-                      "splitPercentage": 50.0
-                    },
-                    "second": {
-                      "direction": "column",
-                      "first": "Plot!vision.anchor",
-                      "second": "Plot!vision.align",
-                      "splitPercentage": 50.0
-                    },
-                    "splitPercentage": 33.3
+                    "first": "Plot!vision.anchor",
+                    "second": "Plot!vision.align",
+                    "splitPercentage": 50.0
                   },
-                  "splitPercentage": 25.0
+                  "splitPercentage": 33.3
                 },
-                "splitPercentage": 42.9
+                "splitPercentage": 53.8
               },
               "splitPercentage": 50.0
             },
