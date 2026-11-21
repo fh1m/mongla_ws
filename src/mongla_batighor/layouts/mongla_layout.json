@@ -8,7 +8,8 @@
             "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "forward camera"
     },
     "Image!downward": {
       "imageMode": {
@@ -24,7 +25,8 @@
             "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "downward camera"
     },
     "mongla.batighor.ControlCenter!control": {},
     "mongla.batighor.Vehicle!vehicle": {},
@@ -79,7 +81,8 @@
           "url": "/model/mongla.urdf",
           "order": 1
         }
-      }
+      },
+      "lichtblickPanelTitle": "attitude"
     },
     "mongla.batighor.Vision!vision": {}
   },

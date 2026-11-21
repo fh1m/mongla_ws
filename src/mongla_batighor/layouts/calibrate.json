@@ -8,12 +8,14 @@
             "visible": true
           }
         }
-      }
+      },
+      "lichtblickPanelTitle": "calibration camera"
     },
     "Image!undistorted": {
       "imageMode": {
         "imageTopic": "/mongla/vision/calibration/undistorted/compressed"
-      }
+      },
+      "lichtblickPanelTitle": "undistorted"
     },
     "mongla.batighor.Calibrate!calibrate": {}
   },

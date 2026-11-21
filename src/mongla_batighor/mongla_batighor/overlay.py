@@ -614,7 +614,12 @@ def main(args=None):
                 self.watched.append(Watched(self, flow_pub, [
                     (FlowTracks, f'{ns}/flow_tracks',
                      lambda msg, p=flow_pub, latest=latest:
-                     p.publish(flow_annotate(msg, latest['size'])), 5)]))
+                     p.publish(flow_annotate(msg, latest['size'])), 5),
+                    # Its own reader of the size: with only the Flow view
+                    # open, the camera's layers above are unwatched, the size
+                    # stayed unknown, and the flow line sat on the floor
+                    # read's caption at the top (seen 2026-11-21).
+                    (CameraInfo, f'{ns}/camera_info', on_info, qos.CAMERA_INFO)]))
 
             # A calibration, when one runs (`calibrate.launch.py`): its state
             # is latched, so a new viewer gets the current one at once.

@@ -129,6 +129,19 @@ Lichtblick build: the release cannot load server panels (its `apiUrl` is unset).
 | Every operator gets the same panels, from one place | a team that published its Foxglove extensions so every member had the latest GUI | [Foxglove, Duke Robotics spotlight](https://foxglove.dev/blog/spotlight-duke-robotics-clubs-journey-to-underwater-autonomy) |
 | Every published topic is shown somewhere, or named with the reason it is not | an operator cannot reason about what they cannot see | `test_views.py` |
 
+## The console
+
+`batighor`, the desktop app's default, is every view in one window: a status strip across the
+top and one tab per view below it (`views.CONSOLE`, `build('batighor')`). Only the open tab's
+panels mount, so twelve views cost what one does. Each tab has its own glyph (`theme/batighor.css`).
+
+The strip is the `Status` instrument (`statusOf`): vehicle, mode, depth, heading, battery,
+mission, the verb running, each camera's lock rung, navigation, health and link. Health counts
+errors, warnings and unknown rows apart, so a bench with no barometer reads "8 unknown", not
+"8 faults". The same function marks the tabs: a dot on a tab says that view has something live
+(sea), a warning (amber) or an error (red) in it. Red means look now, and only errors and an armed
+vehicle use it.
+
 ## Video, by link
 
 ### The desktop app
@@ -138,8 +151,19 @@ panels, writes every view into `~/.lichtblick-suite/layouts/`, and starts the Li
 desktop app connected, on the cockpit (`--view <name>` for another). Lichtblick 1.27 imports a
 folder layout once, by file name, and a layout opened from a link carries no file name, so the
 next start imported the folder copy beside it; so no link names a layout, and the app selects
-the view by name (`--defaultLayout`). A view changed on Kutum is named with how to refresh it
-(delete it under Layouts, restart). On a dense screen the app is started at a scale read from
+the view by name (`--defaultLayout`); the default is `batighor`, the console below.
+
+**Keeping the app in step with Kutum.** The app keeps its first copy of a layout, so the
+instruments panel brings them up to date itself: at start, in the desktop app only, it asks
+`http://<host>:8000/layouts/index.json` on the host it last connected to, fetches each layout,
+and replaces every copy that came from one of Kutum's files and that nobody edited, then reloads
+once (`syncLayouts`, the pure decision is `layoutUpdates`). "Edited" means a value the file
+holds was changed; the defaults the app writes into a panel when it mounts, and the tab an
+operator last chose, are not edits, and are kept under Kutum's values (the console never updated
+while they counted). A real edit is kept and named in the console log; Revert in the layout's
+menu takes Kutum's. `kutum/deploy.sh` runs the desktop step after a release when the app is
+installed on the dev box and Batighor answers; with the stack down it says to run
+`tools/pool/batighor_desktop.py kutum --no-launch` after bringup. On a dense screen the app is started at a scale read from
 the screen's pixels and millimetres (`--force-device-scale-factor`, `--scale` to set it): a 4K
 15-inch panel at scale 1 drew the panels' 12 px type 1 mm tall. If the app is already open it
 keeps its view, and the tool says so.

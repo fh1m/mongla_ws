@@ -135,8 +135,9 @@ def embed_fonts(code: bytes, base: str) -> bytes:
 
 # The density the app's sizes were drawn for, on a laptop read at arm's
 # length. A 4K 15-inch panel is ~290 dpi; at device scale 1, the app's 12 px
-# type is 1 mm tall on it (seen on the dev box 2026-11-12).
-READ_DPI = 120
+# type is 1 mm tall on it (seen on the dev box 2026-11-12); at 120 it drew at 2.5,
+# 1506 px of layout, and every view was cramped (2026-11-21): 140 gives it 2.
+READ_DPI = 140
 
 
 def screen_scale(xrandr: str) -> float | None:
