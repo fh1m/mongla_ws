@@ -205,13 +205,32 @@ def _slots(b, px):
             + [(x1 + 3, y1 + px + 3)])
 
 
-def hud(cam, model, size, arrivals, latency_s):
+# A detector at its slowest answers several times a second; a second of
+# nothing is a detector that is not running.
+SILENT_S = 1.0
+
+
+def silence(arrivals, since, now):
+    """Seconds the detector has said nothing, or None while it answers.
+
+    `arrivals`: monotonic times of its answers; `since`: when this node began
+    watching, which stands in for an answer until the first one comes."""
+    gap = now - (arrivals[-1] if arrivals else since)
+    return gap if gap >= SILENT_S else None
+
+
+def hud(cam, model, size, arrivals, latency_s, silent_s=None):
     """What the camera and detector are doing, in two lines over the picture.
 
     `arrivals`: monotonic times the detector's last answers came (its rate);
-    `latency_s`: from the frame's capture to its boxes reaching this node."""
+    `latency_s`: from the frame's capture to its boxes reaching this node;
+    `silent_s`: how long the detector has said nothing (`silence`), which
+    replaces the rate: a detector paused until a mission asks is silent, and
+    the picture must not look like a dead camera."""
     shape = f'{size[0]}x{size[1]}' if size else '--'
     first = '  '.join(filter(None, (cam, model or 'no model named', shape)))
+    if silent_s is not None:
+        return [first, f'detector silent {silent_s:.0f} s: paused until a mission asks, or stopped']
     if len(arrivals) >= 2 and arrivals[-1] > arrivals[0]:
         rate = f'{(len(arrivals) - 1) / (arrivals[-1] - arrivals[0]):.0f} Hz'
     else:
@@ -647,8 +666,19 @@ def main(args=None):
                             draw()
                     return cb
 
-                def on_info(msg, latest=latest):
+                def on_info(msg, latest=latest, pub=pub, cam=cam):
                     latest['size'] = (msg.width, msg.height) if msg.width else None
+                    # The camera's own beat, one per frame on the frame's
+                    # stamp: while the detector is silent the overlay marks
+                    # the frame itself, so the Vision view (synchronised)
+                    # still shows the picture, and says why it has no boxes.
+                    now = time.monotonic()
+                    if latest.get('since') is None:
+                        latest['since'] = now
+                    quiet = silence(latest['arrivals'], latest['since'], now)
+                    if quiet is not None:
+                        pub.publish(annotate(msg.header.stamp, size=latest['size'], hud=hud(
+                            cam, latest['model'], latest['size'], (), None, silent_s=quiet)))
 
                 def keep(key, latest=latest):
                     return lambda msg: latest.__setitem__(key, msg)
@@ -668,7 +698,7 @@ def main(args=None):
                      qos.DETECTIONS),
                     (CameraInfo, f'{ns}/camera_info', on_info, qos.CAMERA_INFO),
                     (VisionInfo, f'{ns}/vision_info', on_model, qos.LATCHED),
-                ], on_drop=lambda latest=latest: (latest.update(dict.fromkeys(LAYERS)),
+                ], on_drop=lambda latest=latest: (latest.update(dict.fromkeys(LAYERS), since=None),
                                                   latest.update(arrivals=deque(maxlen=RATE_WINDOW)))))
 
                 floor_pub = self.create_publisher(
