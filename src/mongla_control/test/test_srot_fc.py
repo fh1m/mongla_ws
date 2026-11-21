@@ -1460,6 +1460,19 @@ def test_an_older_board_reports_unknown_rather_than_assuming_either_way():
     assert ok is False and 'UNKNOWN' in reason and 'relative' in reason
 
 
+def test_a_board_new_enough_for_yaw_ref_that_has_not_sent_it_yet_is_not_called_old():
+    """Kutum on the real board, 2026-11-22: the manager checked before the first
+    YAW_REF arrived and logged 'fw < 9' against a board reporting rev 14, while
+    health, a second later, read YAW_REF refused: noise. Absent on a board that has
+    the field is 'not heard yet'; only a board older than rev 9 lacks it."""
+    fc = _fc()
+    fc._behaviour_rev = 14
+    ok, reason = fc.check_yaw_reference()
+    assert ok is False and 'not heard yet' in reason and 'fw < 9' not in reason
+    fc._behaviour_rev = 8
+    assert 'fw < 9' in fc.check_yaw_reference()[1]
+
+
 def test_the_guard_subtracts_the_previews_own_target():
     """DEPTH_CMD is preview(depth, 0.10), so the 0.10 m target is baked into it and a
     perfectly-zeroed barometer in air still reads -0.10 m of raw "error". Judging the
