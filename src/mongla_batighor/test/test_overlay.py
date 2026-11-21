@@ -301,3 +301,28 @@ def test_the_stats_sit_at_the_bottom_once_the_camera_has_said_its_size():
     out = annotate(STAMP, _arr(), size=(640, 480), hud=['a', 'b'])
     ys = [t.position.y for t in out.texts]
     assert ys[-1] == 472 and ys[0] < ys[1]
+
+
+def test_the_floor_read_is_drawn_as_the_grid_and_the_lane_it_says():
+    """A FloorRead becomes its grout lines (both families, every line across
+    the frame), the lane centreline, and what each says in words; a read that
+    found nothing draws no lines and says so."""
+    from foxglove_msgs.msg import PointsAnnotation
+    from mongla_batighor.overlay import floor_annotate
+    from mongla_interfaces.msg import FloorRead
+    m = FloorRead()
+    m.width, m.height = 640, 480
+    m.tiles, m.period_px = True, 64.0
+    m.grout_normal_deg, m.grout_offset_px = [0.0, 90.0], [10.0, 20.0]
+    m.tile_height_m = 1.25
+    m.lane, m.lane_direction_deg, m.lane_offset_px = True, 0.0, 30.0
+    a = floor_annotate(m)
+    grid = [p for p in a.points if p.type == PointsAnnotation.LINE_LIST]
+    (lane,) = [p for p in a.points if p.type == PointsAnnotation.LINE_STRIP]
+    # Vertical lines at x = 10, 74, ... 586 (10) and horizontal at y = 20 ... 468 (8).
+    assert len(grid[0].points) == 2 * (10 + 8)
+    assert {round(p.y) for p in lane.points} == {270}       # centre 240, +30 along +y
+    words = ' '.join(t.text for t in a.texts)
+    assert 'tiles 64 px' in words and '1.25 m above' in words and 'lane 0 deg' in words
+    empty = floor_annotate(FloorRead(width=640, height=480))
+    assert not empty.points and 'none read' in empty.texts[0].text

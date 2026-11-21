@@ -71,7 +71,7 @@ a confident zero.
 | `detector_node` | `detections`, `candidates`, `contours`, `image_debug` | inference, plus the always-on operator alignment line |
 | `tracker_node` | `tracks` | stable ids, and a predicted box across a short gap |
 | `lock_node` | `lock`, `correspondences`, `anchor_decomposition` | the continuity ladder and the feature anchor. `anchor_decomposition` is a second range estimate, fitted frame-to-reference rather than frame-to-frame; published for a consumer to fuse, acted on by nothing yet |
-| `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled`, `distance_debug`, `flow_calibration`, `flow_tracks`, `/mongla/flow/height_source` | everything the downward camera can tell us. `distance_debug` is `[distance m, height m, tracks, active]` for the display and Batighor's flow plots. `/mongla/flow/height_source` (latched) says where the height comes from: `tiles`, `survey`, `survey, no position`, `pool_depth` or `none`, and a mission refuses to start on `none` ([the course file](../../missions/course-file.md)). `flow_tracks` is the point pairs each accepted interval measured, only while someone watches: Batighor's `flow` layout draws them over the downward picture beside velocity, distance and quality. A measured slide is `tools/bench/flow_launch_check.py` |
+| `flow_node` | `velocity`, `floor_height`, `floor_grid_deg`, `lane_heading_deg`, `distance_traveled`, `distance_debug`, `flow_calibration`, `flow_tracks`, `/mongla/flow/height_source` | everything the downward camera can tell us. `distance_debug` is `[distance m, height m, tracks, active]` for the display and Batighor's flow plots. `/mongla/flow/height_source` (latched) says where the height comes from: `tiles`, `survey`, `survey, no position`, `pool_depth` or `none`, and a mission refuses to start on `none` ([the course file](../../missions/course-file.md)). `flow_tracks` is the point pairs each accepted interval measured, and `floor_read` (`FloorRead`, `flow/floor_read.py`) where on the picture the tile grating and the lane line were read: both only while someone watches, and Batighor draws them over the downward picture (every grout line, the lane centreline) beside velocity, distance and quality. A measured slide is `tools/bench/flow_launch_check.py` |
 
 `lock_node` is one class in seven files. `lock_node.py` holds the per-frame loop (detection
 in, rung chosen, anchor run) and the list of files. The other six are mixins of the same class,
@@ -217,6 +217,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `detection/rangecrop.py` | Trade field of view for range, automatically, when the target is far. |
 | `detection/seg_decode.py` | Host-side decode of a RAW YOLOv8/v11-seg head, in the QUANTISED domain. |
 | `detection/yolo.py` | Ultralytics YOLO11 (or any compatible model file). |
+| `flow/floor_read.py` | Where the floor's tile grid and lane line lie in the picture, for an operator to see. |
 | `flow/flow_checks.py` | FlowVelocityNode, part 2 of 5: the checks that decide a measurement may be published. |
 | `flow/flow_constants.py` | Measured constants shared by `flow_node` and its mixins. |
 | `flow/flow_features.py` | Which pixels the flow node may trust: corners, caustics, and the round trip. |
