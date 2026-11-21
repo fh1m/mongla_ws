@@ -125,7 +125,7 @@ def _vision_pi_arguments(path: str) -> list:
 
 
 def _apply_course(args, from_file, file_path):
-    """The deck's `course:` is the venue's one file: its numbers become defaults.
+    """The course (typed `course:=`, else the deck's `course:`) is the venue's one file.
 
     Pool depth, floor range, tile size and lane lines become the bringup
     arguments' defaults, and the depth floor the manager's
@@ -134,7 +134,10 @@ def _apply_course(args, from_file, file_path):
     name:=value still wins over both. Returns (args, log actions, manager
     parameters).
     """
-    name = (from_file or {}).get('course', '')
+    # A typed `course:=` wins as every typed argument does, and it brings its
+    # venue with it: typed alone it used to set nothing but its own name, so
+    # the run flew with no depth floor while the map drew that course (B-146).
+    name = launch_defaults.typed_value('course') or (from_file or {}).get('course', '')
     if not name:
         return args, [], {}
     from mongla_localization.course_map import load_course
