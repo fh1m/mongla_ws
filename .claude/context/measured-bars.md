@@ -2271,8 +2271,8 @@ evidence of stillness.
 >
 > What survives is the request: `fps 60` costs nothing when ignored and takes
 > what a better unit offers, so the test pins the request, not a delivery.
-> A forward camera that delivers more is the Sonix on the forward port
-> (`fwd_profile:=pi_forward_global_shutter`, MJPG 640×360 @ 210 measured on
+> A forward camera that delivers more is the Sonix looking forward
+> (`fwd_profile:=pi_forward_global_shutter fwd_device_path:=/dev/mongla_cam_downward`, MJPG 640×360 @ 210 measured on
 > the same unit downward), and in the end a board-triggered global-shutter
 > sensor (`upstream/pr-w`).
 
