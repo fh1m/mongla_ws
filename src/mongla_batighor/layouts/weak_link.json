@@ -42,8 +42,8 @@
       "direction": "row",
       "first": "mongla.batighor.Vehicle!vehicle",
       "second": "mongla.batighor.ControlCenter!control",
-      "splitPercentage": 40.0
+      "splitPercentage": 39.7
     },
-    "splitPercentage": 30.0
+    "splitPercentage": 37.0
   }
 }

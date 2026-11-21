@@ -32,7 +32,7 @@ The rules every view keeps:
 ![The cockpit: the forward camera on the gate with its box and a track, the downward camera on the bins with the flow node's tracked points, the Control Center with STOP, SURFACE and DISARM, the Vehicle gauges, the hull in 3D, and the Vision panel with each camera's lock ladder and perception stages.](../../../docs/imgs/batighor/mongla_layout.webp)
 
 The view the app opens on, in three columns read left to right: the two cameras,
-each column as wide as its 4:3 pictures; the Control Center at full height; and the
+each column as wide as its 16:9 pictures (the vehicle profiles' 640x360, read from `cameras.yaml` by the test); the Control Center at full height; and the
 vehicle's numbers and attitude over the Vision panel.
 
 - **Control Center**: STOP, SURFACE and DISARM first and pinned, for anyone, one press,
@@ -148,7 +148,7 @@ the Vehicle panel and the Control Center, and nothing heavy.
 ![The downward view: the downward camera at full height with its boxes and lock, and beside it the Vision panel, the downward lock ladder, the alignment error, the heights and the anchor.](../../../docs/imgs/batighor/downward.webp)
 
 `downward` is everything under the hull, for the bins, the floor markers and any
-target below: the downward camera at full height, synchronised with its boxes, and
+target below: the downward camera across the top at its 16:9 shape, synchronised with its boxes, the alignment error under it, and
 beside it the Vision panel, the downward camera's ladder and which camera is live, a
 vision verb's pixel error, the floor height against depth, and the anchor's rotation
 and scale.

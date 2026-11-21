@@ -344,6 +344,40 @@
       },
       "lichtblickPanelTitle": "downward camera, the floor read"
     },
+    "Plot!flow.distance": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/distance_traveled.data",
+          "label": "distance m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "distance"
+    },
+    "Plot!flow.tracks": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/distance_debug.data[2]",
+          "label": "tracks",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "tracks"
+    },
     "Plot!flow.velocity": {
       "paths": [
         {
@@ -376,23 +410,6 @@
       "isSynced": true,
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "velocity"
-    },
-    "Plot!flow.distance": {
-      "paths": [
-        {
-          "value": "/mongla/vision/downward/distance_traveled.data",
-          "label": "distance m",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
-        }
-      ],
-      "showLegend": true,
-      "legendDisplay": "left",
-      "sidebarDimension": 190,
-      "followingViewWidth": 60,
-      "isSynced": true,
-      "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "distance"
     },
     "StateTransitions!flow.calibration": {
       "paths": [
@@ -438,23 +455,6 @@
       "isSynced": true,
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "flow quality and heights"
-    },
-    "Plot!flow.tracks": {
-      "paths": [
-        {
-          "value": "/mongla/vision/downward/distance_debug.data[2]",
-          "label": "tracks",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
-        }
-      ],
-      "showLegend": true,
-      "legendDisplay": "left",
-      "sidebarDimension": 190,
-      "followingViewWidth": 60,
-      "isSynced": true,
-      "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "tracks"
     },
     "mongla.batighor.LocalizationMap!localization.locmap": {},
     "mongla.batighor.Navigation!localization.navigation": {},
@@ -881,23 +881,6 @@
       },
       "lichtblickPanelTitle": "downward camera"
     },
-    "mongla.batighor.Vision!downward.vision": {},
-    "StateTransitions!downward.ladder": {
-      "paths": [
-        {
-          "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.class_id",
-          "label": "downward rung"
-        },
-        {
-          "value": "/mongla/vision/active_camera.data",
-          "label": "live camera",
-          "timestampMethod": "receiveTime"
-        }
-      ],
-      "isSynced": false,
-      "xAxisRange": 60,
-      "lichtblickPanelTitle": "lock ladder"
-    },
     "Plot!downward.align": {
       "paths": [
         {
@@ -920,6 +903,23 @@
       "isSynced": true,
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "pixel error"
+    },
+    "mongla.batighor.Vision!downward.vision": {},
+    "StateTransitions!downward.ladder": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.class_id",
+          "label": "downward rung"
+        },
+        {
+          "value": "/mongla/vision/active_camera.data",
+          "label": "live camera",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": false,
+      "xAxisRange": 60,
+      "lichtblickPanelTitle": "lock ladder"
     },
     "Plot!downward.floor": {
       "paths": [
@@ -1008,9 +1008,9 @@
                 "second": "mongla.batighor.Vision!cockpit.vision",
                 "splitPercentage": 44.4
               },
-              "splitPercentage": 45.7
+              "splitPercentage": 47.6
             },
-            "splitPercentage": 30.0
+            "splitPercentage": 37.0
           }
         },
         {
@@ -1097,36 +1097,36 @@
               },
               "splitPercentage": 50.0
             },
-            "splitPercentage": 30.0
+            "splitPercentage": 37.0
           }
         },
         {
           "title": "Flow",
           "layout": {
             "direction": "row",
-            "first": "Image!flow.floorcam",
+            "first": {
+              "direction": "column",
+              "first": "Image!flow.floorcam",
+              "second": {
+                "direction": "row",
+                "first": "Plot!flow.distance",
+                "second": "Plot!flow.tracks",
+                "splitPercentage": 50.0
+              },
+              "splitPercentage": 80.0
+            },
             "second": {
               "direction": "column",
               "first": "Plot!flow.velocity",
               "second": {
                 "direction": "column",
-                "first": "Plot!flow.distance",
-                "second": {
-                  "direction": "column",
-                  "first": "StateTransitions!flow.calibration",
-                  "second": {
-                    "direction": "column",
-                    "first": "Plot!flow.quality",
-                    "second": "Plot!flow.tracks",
-                    "splitPercentage": 60.0
-                  },
-                  "splitPercentage": 37.5
-                },
-                "splitPercentage": 20.0
+                "first": "StateTransitions!flow.calibration",
+                "second": "Plot!flow.quality",
+                "splitPercentage": 50.0
               },
-              "splitPercentage": 23.1
+              "splitPercentage": 33.3
             },
-            "splitPercentage": 58.0
+            "splitPercentage": 62.0
           }
         },
         {
@@ -1241,14 +1241,19 @@
               "splitPercentage": 50.0
             },
             "second": "mongla.batighor.Chain!chain.chain",
-            "splitPercentage": 30.0
+            "splitPercentage": 37.0
           }
         },
         {
           "title": "Downward",
           "layout": {
             "direction": "row",
-            "first": "Image!downward.down",
+            "first": {
+              "direction": "column",
+              "first": "Image!downward.down",
+              "second": "Plot!downward.align",
+              "splitPercentage": 80.0
+            },
             "second": {
               "direction": "column",
               "first": "mongla.batighor.Vision!downward.vision",
@@ -1257,20 +1262,15 @@
                 "first": "StateTransitions!downward.ladder",
                 "second": {
                   "direction": "column",
-                  "first": "Plot!downward.align",
-                  "second": {
-                    "direction": "column",
-                    "first": "Plot!downward.floor",
-                    "second": "Plot!downward.anchor",
-                    "splitPercentage": 50.0
-                  },
-                  "splitPercentage": 33.3
+                  "first": "Plot!downward.floor",
+                  "second": "Plot!downward.anchor",
+                  "splitPercentage": 50.0
                 },
-                "splitPercentage": 30.8
+                "splitPercentage": 40.0
               },
-              "splitPercentage": 27.8
+              "splitPercentage": 33.3
             },
-            "splitPercentage": 59.0
+            "splitPercentage": 62.0
           }
         },
         {

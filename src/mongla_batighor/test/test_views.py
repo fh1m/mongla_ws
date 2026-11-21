@@ -252,8 +252,23 @@ def test_the_3d_scene_draws_the_hull_not_frame_names():
 
 
 TAB_BODY_W_PX = 1884                  # the desktop app's window at scale 2, measured
-CAMERA_ASPECT = 4 / 3                 # every vehicle camera streams 640x480
-MOST_EMPTY = 0.30
+MOST_EMPTY = 0.15
+
+
+def _vehicle_aspect():
+    """Width over height of the vehicle's camera profiles, from cameras.yaml:
+    one truth. The test once assumed 640x480 (the replay footage); the
+    vehicle streams 640x360, and its pictures sat in panels 4:3 wide."""
+    import yaml
+    cams = yaml.safe_load((Path(views.__file__).resolve().parents[2] / 'mongla_vision'
+                           / 'config' / 'cameras.yaml').read_text())
+    cams = next(v for v in cams.values() if isinstance(v, dict) and 'cameras' in v)['cameras']
+    shapes = {cams[p]['width'] / cams[p]['height'] for p in ('pi_forward', 'pi_downward')}
+    assert len(shapes) == 1, shapes
+    return shapes.pop()
+
+
+CAMERA_ASPECT = _vehicle_aspect()
 CONTROL_PX = 600                      # keys, helm, command, mission and a few log lines
 
 
