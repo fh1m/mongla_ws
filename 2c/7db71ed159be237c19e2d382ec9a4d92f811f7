@@ -1,0 +1,49 @@
+.claude/context/packages/mongla_batighor/README.md
+  s_4af8d6f83b24e8::t_42e6c5e6213933 57-59,62,163
+src/mongla_batighor/mongla_batighor/serve.py
+  s_4af8d6f83b24e8::t_87a9d1a32a0e19 47,53-60,101,105-108
+src/mongla_batighor/mongla_batighor/views.py
+  s_4af8d6f83b24e8::t_966f22f8342346 199,236-237,259-262,265-266,278,346-349,353-359
+src/mongla_batighor/panels/control/extension.js
+  s_4af8d6f83b24e8::t_3ea73b82ebfb5c 149-155,233-235
+src/mongla_batighor/panels/instruments/extension.js
+  s_4af8d6f83b24e8::t_a7345dc840dbc8 109-120,122-132,134,136-137,178-179,181-194,196,199-203,219-328,477-479,482-495,650,653-656,689
+src/mongla_batighor/setup.py
+  s_4af8d6f83b24e8::t_d4690a7591b242 23
+src/mongla_batighor/test/test_panels.py
+  s_4af8d6f83b24e8::t_d6eb9bef15cd46 201-207,411-429
+src/mongla_batighor/test/test_serve_and_fetch.py
+  s_4af8d6f83b24e8::t_ec3b18e821f795 316-333
+src/mongla_batighor/test/test_the_map_draws_only_what_the_file_says.py
+  s_4af8d6f83b24e8::t_5859959c86a32b 5-9,32-33,46,48,54-57,69-90
+src/mongla_batighor/theme/batighor.css
+  s_4af8d6f83b24e8::t_b44c472bb472ac 42-43,145-149
+src/mongla_batighor/theme/mongla.svg
+  s_4af8d6f83b24e8::t_c0c34841028e1c 1
+src/mongla_batighor/layouts/flow.json
+  s_4af8d6f83b24e8::t_9e130441a8d93e 9-11
+src/mongla_batighor/layouts/localization.json
+  s_4af8d6f83b24e8::t_ab1da21abfa00e 3-4,124-140,235-241,252,255-262,264,266,268
+src/mongla_batighor/layouts/map.json
+  s_4af8d6f83b24e8::t_997fc2c0327e8b 4,69-71,73
+src/mongla_batighor/layouts/mission.json
+  s_4af8d6f83b24e8::t_c2d99dd52fad09 3-16,18-25,27-42,44-52,61-62,64-65,68
+src/mongla_batighor/layouts/mongla_layout.json
+  s_4af8d6f83b24e8::t_0c1af6204f8ca7 21-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "2c7db71ed159be237c19e2d382ec9a4d92f811f7",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
