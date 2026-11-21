@@ -44,6 +44,10 @@ def generate_launch_description():
                               description='Batighor web port'),
         DeclareLaunchArgument('foxglove_port', default_value='8765',
                               description='foxglove_bridge WebSocket port'),
+        DeclareLaunchArgument('course', default_value='',
+                              description='the course the map draws (file stem in '
+                                          '~/mongla/deck/courses), until a mission names '
+                                          'its own; bringup passes its own'),
     ]
     # `launch: batighor:` in ~/.mongla/bringup.yaml re-defaults these, and its
     # `nodes:` reach the nodes below -- only when this file is the one typed.
@@ -83,10 +87,16 @@ def generate_launch_description():
     # for the Chain view.
     chain = partial(Node, package='mongla_batighor', executable='chain',
                     name='mongla_chain', output='screen')
+    # The pool on the map: the course file, read again when it changes
+    # (course.py), for the Map instrument.
+    course = partial(Node, package='mongla_batighor', executable='course',
+                     name='batighor_course', output='screen',
+                     parameters=[{'course': LaunchConfiguration('course')}])
     return LaunchDescription(args + settings + [
         *respawning(bridge, 'the Foxglove bridge'),
         *respawning(serve, 'the Batighor web app'),
         *respawning(overlay, 'the Batighor overlay'),
         *respawning(helm, 'the Batighor helm'),
         *respawning(chain, 'the Batighor chain meter'),
+        *respawning(course, 'the Batighor course map'),
     ])

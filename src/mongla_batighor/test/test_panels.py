@@ -398,5 +398,7 @@ def test_the_vehicle_panel_calls_a_mission_running_as_the_helm_does():
     import pathlib
     from mongla_batighor import helm
     js = (pathlib.Path(__file__).resolve().parents[1] / 'panels' / 'instruments' / 'extension.js').read_text()
-    (limit,) = re.findall(r'ageS\(s\.aliveAt\) < ([0-9.]+)', js)
+    (limit,) = re.findall(r'const MISSION_ALIVE_S = ([0-9.]+);', js)
     assert float(limit) == helm.MISSION_ALIVE_S
+    # Every instrument that says a mission runs uses that one constant.
+    assert re.findall(r'ageS\(s\.aliveAt\) < (\w+)', js) == ['MISSION_ALIVE_S'] * 2

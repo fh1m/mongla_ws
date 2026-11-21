@@ -334,6 +334,30 @@ def chain(v: View):
                (60, v('chain', instrument('Chain'))))
 
 
+def map_(v: View):
+    """Planning a run: the pool from the course file, the props, and Mongla on it.
+
+    The map takes the left whole, because a plan is read off it; the mission's
+    decision layer and the filter's own numbers sit beside it, and the 3D
+    scene shows the hull's attitude the plan view cannot."""
+    return row((60, v('map', instrument('Map'))),
+               (40, col((5, v('mission', instrument('Mission'))),
+                        (4, row(v('navigation', instrument('Navigation')), v('hull', scene()))))))
+
+
+def mission(v: View):
+    """A run in progress: what Mongla sees, where it is, what it decided, and the way out.
+
+    The cameras on the left as everywhere; then the map, and the decision
+    layer above the Control Center, whose STOP, SURFACE and DISARM stay first."""
+    extra = {'downward': ['flow_annotations']}
+    cams = [v(c, camera(c, *extra.get(c, []))) for c in CAMERAS]
+    return row((38, col(*cams)),
+               (34, v('map', instrument('Map'))),
+               (28, col((4, v('mission', instrument('Mission'))),
+                        (5, v('control', instrument('ControlCenter'))))))
+
+
 def bins_downward(v: View):
     """Aligning over a target below: the floor with boxes, the detections, the error."""
     return row((60, v('down', camera('downward', synced=True))),
@@ -370,8 +394,9 @@ NOT_SHOWN = {
     'video_speed': "a replay command from the display node",
 }
 
-VIEWS = {f.__name__: f for f in (cockpit, vision, flow, localization, thrust, board_health,
-                                 board_link, chain, bins_downward, calibrate, weak_link)}
+VIEWS = {f.__name__.rstrip('_'): f for f in (cockpit, mission, map_, vision, flow, localization,
+                                             thrust, board_health, board_link, chain,
+                                             bins_downward, calibrate, weak_link)}
 FILE = {'cockpit': 'mongla_layout'}            # the default keeps the name links use
 
 

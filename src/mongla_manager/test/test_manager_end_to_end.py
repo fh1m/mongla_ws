@@ -210,3 +210,41 @@ def test_the_link_is_measured_and_published(rig):
     named = {n.name: n.value for n in m.named}
     assert named.get('YAW_REF') == 2.0 and named.get('LEAK') == 0.0
     assert m.board_drop_pct == 0.0 and m.board_errors == 0.0
+
+
+def test_what_the_vehicle_is_doing_is_published_as_it_happens(armed):
+    """/mongla/doing (doing.py): a move pre-empted by `stop` reads as the move
+    ending not-done and the stop done, newest first, with nothing left running."""
+    import json
+    from rclpy.executors import SingleThreadedExecutor
+    from rclpy.qos import DurabilityPolicy, QoSProfile
+    from std_msgs.msg import String
+    ac, board = armed
+    got = []
+    sub_node = rclpy.create_node('e2e_doing')
+    sub_node.create_subscription(String, '/mongla/doing', lambda m: got.append(json.loads(m.data)),
+                                 QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    ex = SingleThreadedExecutor()
+    ex.add_node(sub_node)
+    try:
+        first = _send(ac, 'move_forward', duration=3.0, gain=30.0)
+        t = time.monotonic()
+        while not any((d['now'] or {}).get('verb') == 'move_forward' for d in got) \
+                and time.monotonic() - t < 3.0:
+            ex.spin_once(timeout_sec=0.05)
+        running = [d for d in got if (d['now'] or {}).get('verb') == 'move_forward']
+        assert running, f'the running move was never published: {got[-1:]}'
+        assert running[-1]['now']['fields'] == {'duration': 3.0, 'gain': 30.0}
+        _wait(_send(ac, 'stop'))
+        _wait(first)
+        t = time.monotonic()
+        while time.monotonic() - t < 3.0 and not (
+                got and got[-1]['running'] == 0 and len(got[-1]['recent']) >= 2
+                and {r['verb'] for r in got[-1]['recent'][:2]} == {'stop', 'move_forward'}):
+            ex.spin_once(timeout_sec=0.05)
+        last = got[-1]
+        assert last['running'] == 0 and last['now'] is None
+        ends = {r['verb']: r['state'] for r in last['recent'][:2]}
+        assert ends['stop'] == 'done' and ends['move_forward'] != 'done', ends
+    finally:
+        sub_node.destroy_node()
