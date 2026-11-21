@@ -38,9 +38,14 @@ TOPICS = ('/mongla/localization/state', '/mongla/odom')
 def rivals(node) -> list:
     """`node on topic` for every other node publishing the filter's topics."""
     me = node.get_name()
-    return [f'{i.node_name} on {t}'
+    return [f'{i.node_name if i.node_name != UNKNOWN else "a node not yet named"} on {t}'
             for t in TOPICS for i in node.get_publishers_info_by_topic(t)
             if i.node_name != me]
+
+
+# What the graph reports for an endpoint whose node's name has not been
+# discovered yet: on CI the publisher was seen before its name.
+UNKNOWN = '_NODE_NAME_UNKNOWN_'
 
 
 def step(x, y, yaw_deg, surge, sway, speed, dt):
@@ -91,6 +96,10 @@ def run(a) -> int:
     node = Node('emulated_localization')
     end = time.monotonic() + 2.0              # let discovery see a filter already up
     while time.monotonic() < end and not rivals(node):
+        rclpy.spin_once(node, timeout_sec=0.1)
+    # A rival is found; give discovery a second to name it.
+    end = time.monotonic() + 1.0
+    while time.monotonic() < end and any('not yet named' in r for r in rivals(node)):
         rclpy.spin_once(node, timeout_sec=0.1)
     if rivals(node):
         print('ERROR: the filter is publishing (' + ', '.join(rivals(node)) + '); start '

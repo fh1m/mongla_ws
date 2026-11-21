@@ -6,6 +6,7 @@ five seconds apart (seen in the desktop app, 2026-11-21). The emulator now
 looks for another publisher before it publishes, and stops if one appears.
 """
 import os
+import re
 import subprocess
 import sys
 import time
@@ -38,7 +39,11 @@ def test_the_emulator_refuses_while_a_filter_publishes(monkeypatch):
             proc.kill()
         out, err = proc.communicate(timeout=10)
         assert proc.returncode == 1, (out, err)
-        assert 'localization_filter on /mongla/localization/state' in err
+        # Named once discovery has the name; on CI the endpoint came first
+        # and the graph reported a placeholder, which is said in words.
+        assert re.search(r'(localization_filter|a node not yet named) on '
+                         r'/mongla/localization/state', err), err
+        assert '_NODE_NAME_UNKNOWN_' not in err
         assert 'localization:=false' in err
         filt.destroy_node()
     finally:
