@@ -1,0 +1,29 @@
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_731e7d4008287a 928,952-963
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_c2dea2e9ea91cd 170,9196-9221
+README.md
+  s_4af8d6f83b24e8::t_03d63c74b359b7 64,865,868
+docs/index.html
+  s_4af8d6f83b24e8::t_21522a412f403a 1873-1875,1877
+src/mongla_manager/test/test_bringup_settings_file.py
+  s_4af8d6f83b24e8::t_08a807b9df1258 237
+src/mongla_runtime/mongla_runtime/params_file.py
+  s_4af8d6f83b24e8::t_f60acc9f4e8a9a 107-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "77912cfa8dd0d259a6222e048c9239073529dda2",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
