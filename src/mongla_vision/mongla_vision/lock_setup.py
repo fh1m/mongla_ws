@@ -4,6 +4,7 @@ import os
 
 from mongla_vision.anchor import loop_closure as _lc
 from mongla_vision.tracking.lock_state import FULL_AUTHORITY_S, ZERO_AUTHORITY_S
+from mongla_runtime.tether import changes
 
 
 
@@ -280,7 +281,7 @@ class LockSetupMixin:
         one leg and hand it back, without a relaunch.
         """
         from rcl_interfaces.msg import SetParametersResult
-        fixed = [p.name for p in params if p.name not in LIVE_PARAMS]
+        fixed = [p.name for p in changes(self, params) if p.name not in LIVE_PARAMS]
         if fixed:
             return SetParametersResult(successful=False, reason=(
                 f'{", ".join(fixed)}: read once at startup -- set it under '
