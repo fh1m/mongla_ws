@@ -113,6 +113,9 @@ SUBSCRIBED_UNFED = {
     '/target_pose':
         'published by `pnp_node`, whose topic name is built with a variant '
         'suffix the scanner cannot resolve. Real, and launched.',
+    '/parameter_events':
+        'published by rclpy for every node (each parameter set or declared); '
+        'the Batighor overlay reads each detector\'s `paused` from it.',
 }
 
 
