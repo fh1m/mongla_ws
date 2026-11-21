@@ -194,15 +194,12 @@ def col(*parts):
 
 # -- the views --------------------------------------------------------------
 
-def _ladder_lines(detail: bool) -> list:
-    out = []
-    for c in CAMERAS:
-        out.append(series(f'{V}/{c}/lock{RUNG}.class_id', f'{c} rung'))
-        if detail:
-            out.append(series(f'{V}/{c}/lock.detections[0].id', f'{c} holds'))
-            out.append(series(f'{V}/{c}/seeing.data', f'{c} seeing', True))
-    out.append(series(f'{V}/active_camera.data', 'live camera', True))
-    return out
+def _ladder_lines() -> list:
+    # Each camera's rung over time and which camera is live. What each holds
+    # and sees now is the Vision instrument's: as rows here too, the strip
+    # needed seven rows of 64 px and scrolled the downward camera out of view.
+    return [*(series(f'{V}/{c}/lock{RUNG}.class_id', f'{c} rung') for c in CAMERAS),
+            series(f'{V}/active_camera.data', 'live camera', True)]
 
 
 def cockpit(v: View):
@@ -227,8 +224,8 @@ def vision(v: View):
     # Both cameras' rungs and stages, side by side: at a sixth of the column
     # the instrument scrolled and hid the downward camera.
     right = col(
-        (6, v('vision', instrument('Vision'))),
-        (3, v('ladder', states(*_ladder_lines(True)))),
+        (5, v('vision', instrument('Vision'))),
+        (6, v('ladder', states(*_ladder_lines()))),
         (2, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c)
                                   for c in CAMERAS)))),
         # One unit per plot (test_views): metres, degrees and pixels on one
@@ -251,23 +248,23 @@ def flow(v: View):
         (58, v('floorcam', image(f'{d}/stream/compressed', f'{d}/flow_annotations',
                               f'{d}/floor_annotations'))),
         (42, col(
-            v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s', True),
+            (3, v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s', True),
                                series(f'{d}/velocity.twist.twist.linear.y', 'flow vy m/s', True),
                                series('/mongla/odom.twist.twist.linear.x', 'filter vx m/s'),
-                               series('/mongla/odom.twist.twist.linear.y', 'filter vy m/s'))),
-            v('distance', plot(series(f'{d}/distance_traveled.data', 'distance m', True))),
-            v('calibration', states(series(f'{d}/flow_calibration.data', 'scale from',
-                                           True),
-                                    # tiles | survey | survey, no position |
-                                    # pool_depth | none (a mission refuses none)
-                                    series('/mongla/flow/height_source.data',
-                                           'height from', True))),
+                               series('/mongla/odom.twist.twist.linear.y', 'filter vy m/s')))),
+            (2, v('distance', plot(series(f'{d}/distance_traveled.data', 'distance m', True)))),
+            (3, v('calibration', states(series(f'{d}/flow_calibration.data', 'scale from',
+                                               True),
+                                        # tiles | survey | survey, no position |
+                                        # pool_depth | none (a mission refuses none)
+                                        series('/mongla/flow/height_source.data',
+                                               'height from', True)))),
             # Quality and heights read 0 to a few; the track count reads to
             # ~160, and on one axis it flattened them onto the floor.
-            v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
-                              series(f'{d}/distance_debug.data[1]', 'height m', True),
-                              series(f'{d}/floor_height.range', 'floor m'))),
-            v('tracks', plot(series(f'{d}/distance_debug.data[2]', 'tracks', True))))))
+            (3, v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
+                                  series(f'{d}/distance_debug.data[1]', 'height m', True),
+                                  series(f'{d}/floor_height.range', 'floor m')))),
+            (2, v('tracks', plot(series(f'{d}/distance_debug.data[2]', 'tracks', True)))))))
 
 
 def localization(v: View):
@@ -280,11 +277,11 @@ def localization(v: View):
         (50, col((3, v('locmap', instrument('LocalizationMap'))),
                  (2, row(v('navigation', instrument('Navigation')), v('nav', scene()))))),
         (50, col(
-            (2, v('aiding', states(series('/mongla/localization/state.usable', 'usable', True),
+            # Motion is on the localization map and the mode on the status
+            # strip; as rows here the strip needed 350 px and showed one row.
+            (6, v('aiding', states(series('/mongla/localization/state.usable', 'usable', True),
                                    series('/mongla/localization/state.reason', 'why not', True),
-                                   series('/mongla/localization/aiding.data', 'aided by', True),
-                                   series('/mongla/localization/motion.data', 'motion', True),
-                                   series('/mongla/state.mode', 'mode')))),
+                                   series('/mongla/localization/aiding.data', 'aided by', True)))),
             (3, v('pos', plot(series('/mongla/odom.pose.pose.position.x', 'x m'),
                               series('/mongla/odom.pose.pose.position.y', 'y m'),
                               series('/mongla/odom.pose.pose.position.z', 'z m (down)'),

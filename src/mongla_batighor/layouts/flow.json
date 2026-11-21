@@ -148,13 +148,13 @@
             "direction": "column",
             "first": "Plot!quality",
             "second": "Plot!tracks",
-            "splitPercentage": 50.0
+            "splitPercentage": 60.0
           },
-          "splitPercentage": 33.3
+          "splitPercentage": 37.5
         },
-        "splitPercentage": 25.0
+        "splitPercentage": 20.0
       },
-      "splitPercentage": 20.0
+      "splitPercentage": 23.1
     },
     "splitPercentage": 58.0
   }

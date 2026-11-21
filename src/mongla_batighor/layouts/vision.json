@@ -32,26 +32,8 @@
           "label": "forward rung"
         },
         {
-          "value": "/mongla/vision/forward/lock.detections[0].id",
-          "label": "forward holds"
-        },
-        {
-          "value": "/mongla/vision/forward/seeing.data",
-          "label": "forward seeing",
-          "timestampMethod": "receiveTime"
-        },
-        {
           "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.class_id",
           "label": "downward rung"
-        },
-        {
-          "value": "/mongla/vision/downward/lock.detections[0].id",
-          "label": "downward holds"
-        },
-        {
-          "value": "/mongla/vision/downward/seeing.data",
-          "label": "downward seeing",
-          "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/vision/active_camera.data",
@@ -216,9 +198,9 @@
           },
           "splitPercentage": 25.0
         },
-        "splitPercentage": 27.3
+        "splitPercentage": 42.9
       },
-      "splitPercentage": 35.3
+      "splitPercentage": 26.3
     },
     "splitPercentage": 55.0
   }

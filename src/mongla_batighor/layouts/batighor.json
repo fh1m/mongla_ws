@@ -203,26 +203,8 @@
           "label": "forward rung"
         },
         {
-          "value": "/mongla/vision/forward/lock.detections[0].id",
-          "label": "forward holds"
-        },
-        {
-          "value": "/mongla/vision/forward/seeing.data",
-          "label": "forward seeing",
-          "timestampMethod": "receiveTime"
-        },
-        {
           "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.class_id",
           "label": "downward rung"
-        },
-        {
-          "value": "/mongla/vision/downward/lock.detections[0].id",
-          "label": "downward holds"
-        },
-        {
-          "value": "/mongla/vision/downward/seeing.data",
-          "label": "downward seeing",
-          "timestampMethod": "receiveTime"
         },
         {
           "value": "/mongla/vision/active_camera.data",
@@ -547,15 +529,6 @@
           "value": "/mongla/localization/aiding.data",
           "label": "aided by",
           "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mongla/localization/motion.data",
-          "label": "motion",
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mongla/state.mode",
-          "label": "mode"
         }
       ],
       "isSynced": false,
@@ -1048,9 +1021,9 @@
                   },
                   "splitPercentage": 25.0
                 },
-                "splitPercentage": 27.3
+                "splitPercentage": 42.9
               },
-              "splitPercentage": 35.3
+              "splitPercentage": 26.3
             },
             "splitPercentage": 55.0
           }
@@ -1073,13 +1046,13 @@
                     "direction": "column",
                     "first": "Plot!flow.quality",
                     "second": "Plot!flow.tracks",
-                    "splitPercentage": 50.0
+                    "splitPercentage": 60.0
                   },
-                  "splitPercentage": 33.3
+                  "splitPercentage": 37.5
                 },
-                "splitPercentage": 25.0
+                "splitPercentage": 20.0
               },
-              "splitPercentage": 20.0
+              "splitPercentage": 23.1
             },
             "splitPercentage": 58.0
           }
@@ -1123,7 +1096,7 @@
                 },
                 "splitPercentage": 21.4
               },
-              "splitPercentage": 12.5
+              "splitPercentage": 30.0
             },
             "splitPercentage": 50.0
           }

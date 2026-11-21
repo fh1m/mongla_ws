@@ -75,15 +75,6 @@
           "value": "/mongla/localization/aiding.data",
           "label": "aided by",
           "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mongla/localization/motion.data",
-          "label": "motion",
-          "timestampMethod": "receiveTime"
-        },
-        {
-          "value": "/mongla/state.mode",
-          "label": "mode"
         }
       ],
       "isSynced": false,
@@ -270,7 +261,7 @@
         },
         "splitPercentage": 21.4
       },
-      "splitPercentage": 12.5
+      "splitPercentage": 30.0
     },
     "splitPercentage": 50.0
   }
