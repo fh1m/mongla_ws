@@ -925,6 +925,19 @@ section (its lane witness and its fisheye lens could not grade it).
 peak accuracy. Injection: the old module fails 15 of them, the new one
 without fading 20, fading any dark blob fails a negative control.
 
+### B-148: the floating PM1 pin reached /mongla/state through get_battery() `REPRODUCED 2026-11-22` **FIXED 2026-11-22**
+
+**What.** On Kutum with the real board (USB power, nothing on GPIO36), the
+state strip and Batighor's PM1 plot read 1.39, 2.47, 13.77, 14.60 V within a
+minute. `battery_trusted` already condemns a pin whose median step exceeds
+2 V, but only `get_batteries()` asked it; the manager builds the state from
+`get_battery()`, which read the raw cache.
+
+**Fix.** `get_battery()` asks the same guard, so the unwired pin is NaN (`--`).
+
+**Guards.** `test_battery_plausibility.py::test_the_battery_on_the_state_topic_is_guarded_too`,
+which fails without the guard.
+
 ### B-147: under replay the composed lock starved both detectors `REPRODUCED 2026-11-21` **FIXED 2026-11-21**
 
 **What.** On Kutum's bench (`replay:=true`, two looped clips at 30 fps,
