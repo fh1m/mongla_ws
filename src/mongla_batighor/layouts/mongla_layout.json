@@ -100,10 +100,10 @@
       "direction": "column",
       "first": "Image!forward",
       "second": "Image!downward",
-      "splitPercentage": 60.0
+      "splitPercentage": 50.0
     },
     "second": {
-      "direction": "column",
+      "direction": "row",
       "first": "mongla.batighor.ControlCenter!control",
       "second": {
         "direction": "column",
@@ -114,10 +114,10 @@
           "splitPercentage": 50.0
         },
         "second": "mongla.batighor.Vision!vision",
-        "splitPercentage": 46.2
+        "splitPercentage": 44.4
       },
-      "splitPercentage": 40.9
+      "splitPercentage": 45.7
     },
-    "splitPercentage": 60.0
+    "splitPercentage": 30.0
   }
 }

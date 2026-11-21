@@ -51,7 +51,7 @@ TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'ancho
           'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates',
           'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops',
           'forward': 'forward camera', 'downward': 'downward camera', 'hull': 'attitude',
-          'nav': 'odometry, 3D', 'down': 'downward camera', 'dets': 'downward detections',
+          'nav': 'odometry, 3D', 'down': 'downward camera',
           'camera': 'calibration camera', 'locmap': 'localization map'}
 # The last minute, following the newest sample. Unset, the axis spans the whole
 # connection, and a panel opened later drew its data in the right-hand sliver
@@ -110,10 +110,6 @@ def align(x_label: str, y_label: str, *more: dict) -> tuple:
     fb = '/mongla/move/_action/feedback.feedback'
     return plot(series(f'{fb}.err_x_px', x_label, True), series(f'{fb}.err_y_px', y_label, True),
                 *more)
-
-
-def raw(topic: str) -> tuple:
-    return 'RawMessages', {'topicPath': topic}
 
 
 def scene() -> tuple:
@@ -202,34 +198,43 @@ def _ladder_lines() -> list:
             series(f'{V}/active_camera.data', 'live camera', True)]
 
 
-def cockpit(v: View):
-    """The default: both cameras, what the vehicle sees and feels, and control.
+# Each column of cameras is as wide as its 4:3 pictures, stacked two high:
+# wider, the panel was black beside the picture (test_views measures it).
+CAMERA_COLUMN = 30
 
-    The cameras take the left column whole. The lock's history is in `vision`;
-    here the Vision instrument says what holds the target now and which
-    stages run, and it needs the room more than a strip of history does."""
+
+def _cameras(v: View, *, synced: bool = False):
     extra = {'downward': ['flow_annotations', 'floor_annotations']}
-    cams = [(3 if i == 0 else 2, v(c, camera(c, *extra.get(c, []))))
-            for i, c in enumerate(CAMERAS)]
-    return row((60, col(*cams)),
-               (40, col((9, v('control', instrument('ControlCenter'))),
-                        (6, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
-                        (7, v('vision', instrument('Vision'))))))
+    return col(*(v(c, camera(c, *extra.get(c, []), synced=synced)) for c in CAMERAS))
+
+
+def cockpit(v: View):
+    """The default: both cameras, control, and what the vehicle sees and feels.
+
+    Three columns, read left to right: the pictures; the Control Center whole
+    (keys, helm, verb, mission, log: at a third of a column ARM and SEND were
+    below the fold); the vehicle's numbers and attitude over what holds the
+    target now and which stages run. The lock's history is in `vision`."""
+    return row((CAMERA_COLUMN, _cameras(v)),
+               (32, v('control', instrument('ControlCenter'))),
+               (38, col((4, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
+                        (5, v('vision', instrument('Vision'))))))
 
 
 def vision(v: View):
     """Detection and tracking in depth: every rung, its authority, the pose solved."""
-    cams = [(3, v(c, camera(c, synced=True))) for c in CAMERAS]
     fwd, dwn = f'{V}/forward', f'{V}/downward'
-    # Both cameras' rungs and stages, side by side: at a sixth of the column
-    # the instrument scrolled and hid the downward camera.
-    right = col(
-        (5, v('vision', instrument('Vision'))),
-        (6, v('ladder', states(*_ladder_lines()))),
-        (2, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c)
-                                  for c in CAMERAS)))),
-        # One unit per plot (test_views): metres, degrees and pixels on one
-        # axis flattened all but the largest.
+    # Two columns. Now: both cameras' rungs and stages side by side (at a
+    # sixth of a column the instrument scrolled and hid the downward camera)
+    # over the ladder's history, every row in view. Then: the detectors'
+    # settings, read against what the ladder does, over the numbers the lock
+    # produces, one unit per plot (metres, degrees and pixels on one axis
+    # flattened all but the largest).
+    now = col((5, v('vision', instrument('Vision'))),
+              (5, v('ladder', states(*_ladder_lines()))))
+    numbers = col(
+        (6, v('detectors', instrument('Detectors'))),
+        (2, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS)))),
         (2, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
                 v('pose', plot(series(f'{fwd}/target_pose_fused.bearing_deg', 'bearing deg'),
                                series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),
@@ -238,7 +243,9 @@ def vision(v: View):
                              series(f'{dwn}/anchor_decomposition.vector.z', 'range m')))),
         (2, v('align', align('align x px', 'align y px',
                              series(f'{fwd}/target_pose_fused.reproj_px', 'reproj px')))))
-    return row((55, col(*cams)), (45, right))
+    right = row(now, numbers)
+    return row((CAMERA_COLUMN, col(*(v(c, camera(c, synced=True)) for c in CAMERAS))),
+               (100 - CAMERA_COLUMN, right))
 
 
 def flow(v: View):
@@ -348,17 +355,20 @@ def chain(v: View):
     """Photons to thrust: each stage's rate and age, beside what the cameras see."""
     # The ages are computed by chain.py (seen minus stamp, per stage), so they
     # are one table in the Chain instrument, not plots of raw stamps.
-    return row((40, col(*(v(c, camera(c)) for c in CAMERAS))),
-               (60, v('chain', instrument('Chain'))))
+    return row((CAMERA_COLUMN, col(*(v(c, camera(c)) for c in CAMERAS))),
+               (100 - CAMERA_COLUMN, v('chain', instrument('Chain'))))
 
 
 def map_(v: View):
     """Planning a run: the pool from the course file, the props, and Mongla on it.
 
-    The map takes three quarters: a plan is read off it. Beside it only what
-    the plan view cannot show: the vehicle's state and its attitude."""
-    return row((74, v('map', instrument('Map'))),
-               (26, col((3, v('vehicle', instrument('Vehicle'))), (2, v('hull', scene())))))
+    The map takes most of the width: a plan is read off it. Beside it what the
+    plan view cannot show: the vehicle's state and attitude, and the decision
+    layer (task, verb, how each ended). The pool is drawn to its own shape,
+    so a wider map only added black beside it."""
+    return row((60, v('map', instrument('Map'))),
+               (40, col((4, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
+                        (5, v('mission', instrument('Mission'))))))
 
 
 def mission(v: View):
@@ -373,11 +383,27 @@ def mission(v: View):
                                              series('/mongla/demand.vector.y', 'sway')))))))
 
 
-def bins_downward(v: View):
-    """Aligning over a target below: the floor with boxes, the detections, the error."""
-    return row((60, v('down', camera('downward', synced=True))),
-               (40, col(v('dets', raw(f'{V}/downward/detections')),
-                        v('align', align('align x px', 'align y px')))))
+def downward(v: View):
+    """Everything under the hull: the downward camera at full height with its
+    boxes, and beside it what holds the
+    target, the ladder, the error an alignment closes, the heights it is
+    flown at and the anchor's matched view. The bins, the floor markers and
+    any target below are flown from here."""
+    d = f'{V}/downward'
+    return row(
+        # Synchronised, a frame shows only when every layer answered it; the
+        # flow and the floor read do not answer every frame, so they are the
+        # Flow view's. Here the boxes sit on their own frame.
+        (59, v('down', camera('downward', synced=True))),
+        (41, col(
+            (5, v('vision', instrument('Vision'))),
+            (4, v('ladder', states(series(f'{d}/lock{RUNG}.class_id', 'downward rung'),
+                                   series(f'{V}/active_camera.data', 'live camera', True)))),
+            (3, v('align', align('align x px', 'align y px'))),
+            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor m'),
+                                series('/mongla/state.depth_m', 'depth m')))),
+            (3, v('anchor', plot(series(f'{d}/anchor_decomposition.vector.x', 'rotation'),
+                                 series(f'{d}/anchor_decomposition.vector.y', 'scale')))))))
 
 
 def calibrate(v: View):
@@ -390,9 +416,9 @@ def calibrate(v: View):
 
 def weak_link(v: View):
     """For a slow connection: the small previews, and the vehicle's numbers."""
-    return row((70, col(*(v(c, camera(c, stream='preview')) for c in CAMERAS))),
-               (30, col(v('vehicle', instrument('Vehicle')),
-                        v('control', instrument('ControlCenter')))))
+    return row((CAMERA_COLUMN, col(*(v(c, camera(c, stream='preview')) for c in CAMERAS))),
+               (28, v('vehicle', instrument('Vehicle'))),
+               (42, v('control', instrument('ControlCenter'))))
 
 
 # What the stack publishes and no view shows, each with the reason. A topic
@@ -411,7 +437,7 @@ NOT_SHOWN = {
 
 VIEWS = {f.__name__.rstrip('_'): f for f in (cockpit, mission, map_, vision, flow, localization,
                                              thrust, board_health, board_link, chain,
-                                             bins_downward, calibrate, weak_link)}
+                                             downward, calibrate, weak_link)}
 FILE = {'cockpit': 'mongla_layout'}            # the default keeps the name links use
 
 # The console: every view as a tab of one layout, in the order a run is read.
@@ -421,7 +447,7 @@ CONSOLE = 'batighor'
 TABS = [('cockpit', 'Cockpit'), ('map', 'Map'), ('mission', 'Mission'), ('vision', 'Vision'),
         ('flow', 'Flow'), ('localization', 'Localization'), ('thrust', 'Thrust'),
         ('board_health', 'Health'), ('board_link', 'Link'), ('chain', 'Chain'),
-        ('bins_downward', 'Bins'), ('calibrate', 'Calibrate')]
+        ('downward', 'Downward'), ('calibrate', 'Calibrate')]
 
 
 def build(name: str) -> dict:

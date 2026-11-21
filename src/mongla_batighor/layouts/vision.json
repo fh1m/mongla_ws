@@ -1,29 +1,5 @@
 {
   "configById": {
-    "Image!forward": {
-      "imageMode": {
-        "imageTopic": "/mongla/vision/forward/stream/compressed",
-        "annotations": {
-          "/mongla/vision/forward/annotations": {
-            "visible": true
-          }
-        },
-        "synchronize": true
-      },
-      "lichtblickPanelTitle": "forward camera"
-    },
-    "Image!downward": {
-      "imageMode": {
-        "imageTopic": "/mongla/vision/downward/stream/compressed",
-        "annotations": {
-          "/mongla/vision/downward/annotations": {
-            "visible": true
-          }
-        },
-        "synchronize": true
-      },
-      "lichtblickPanelTitle": "downward camera"
-    },
     "mongla.batighor.Vision!vision": {},
     "StateTransitions!ladder": {
       "paths": [
@@ -45,6 +21,7 @@
       "xAxisRange": 60,
       "lichtblickPanelTitle": "lock ladder"
     },
+    "mongla.batighor.Detectors!detectors": {},
     "Plot!authority": {
       "paths": [
         {
@@ -156,6 +133,30 @@
       "isSynced": true,
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "pixel error"
+    },
+    "Image!forward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/forward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/forward/annotations": {
+            "visible": true
+          }
+        },
+        "synchronize": true
+      },
+      "lichtblickPanelTitle": "forward camera"
+    },
+    "Image!downward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          }
+        },
+        "synchronize": true
+      },
+      "lichtblickPanelTitle": "downward camera"
     }
   },
   "globalVariables": {},
@@ -172,11 +173,16 @@
       "splitPercentage": 50.0
     },
     "second": {
-      "direction": "column",
-      "first": "mongla.batighor.Vision!vision",
+      "direction": "row",
+      "first": {
+        "direction": "column",
+        "first": "mongla.batighor.Vision!vision",
+        "second": "StateTransitions!ladder",
+        "splitPercentage": 50.0
+      },
       "second": {
         "direction": "column",
-        "first": "StateTransitions!ladder",
+        "first": "mongla.batighor.Detectors!detectors",
         "second": {
           "direction": "column",
           "first": "Plot!authority",
@@ -200,8 +206,8 @@
         },
         "splitPercentage": 42.9
       },
-      "splitPercentage": 26.3
+      "splitPercentage": 50.0
     },
-    "splitPercentage": 55.0
+    "splitPercentage": 30.0
   }
 }
