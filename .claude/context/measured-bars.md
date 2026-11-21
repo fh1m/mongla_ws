@@ -172,6 +172,7 @@ is how `recommend()` happened.
 - [106. THE BOARD'S YAW AT REST drifts 0.001 deg/min over ten minutes (2026-11-22)](#106-the-boards-yaw-at-rest-drifts-0001-degmin-over-ten-minutes-2026-11-22)
 - [107. DE-ROTATION, FITTED ON A RIGID RIG: 98.5 % of a taped slide, against 63 % off (2026-11-22)](#107-de-rotation-fitted-on-a-rigid-rig-985--of-a-taped-slide-against-63--off-2026-11-22)
 - [108. THE CAMERA-TO-GYRO OFFSET IN THE FLIGHT MODE: td = -13.4 ms (2026-11-22)](#108-the-camera-to-gyro-offset-in-the-flight-mode-td---134-ms-2026-11-22)
+- [109. THE BOARD'S HEADING UNDER HAND MOTION: 3.5 deg rms AT NINE RETURNS (2026-11-22)](#109-the-boards-heading-under-hand-motion-35-deg-rms-at-nine-returns-2026-11-22)
 <!-- contents:end -->
 
 ---
@@ -9336,3 +9337,39 @@ which did not clear its own bar) is replaced as the flow node's starting value
 (`FLOW_TD_MEASURED_S`). `td_measure.py` now records in the flight mode by default
 (`--mode`). 13.4 ms is nearly three frames at 210 fps, so it is fed, never ignored.
 Not covered: water, the hull's own mount, a change of the camera's exposure mode.
+
+## 109. THE BOARD'S HEADING UNDER HAND MOTION: 3.5 deg rms AT NINE RETURNS (2026-11-22)
+
+The rig of section 107 (SROT board rev 14 with the downward camera, on Kutum, manager running,
+vision off), yawed freely by hand for 9.4 minutes: lifted to knee height, turned left and right
+in full turns at any speed, and returned again and again to rest flush against one wall edge.
+The truth is that edge: every rest has the same true heading, so any change in the board's yaw
+between rests is error. Rests are found from the board's own gyro (every axis under 0.03 rad/s
+for 4 s), not from the operator. `tools/bench/yaw_returns.py`, whose `--self-test` recovered a
+chosen 2.0 deg/min drift and a chosen image bias and refused a run with no rests.
+
+**Bar, from bead 5ag.9, before the run:** the board's yaw drift in deg/min recorded; image-rotation
+yaw fused only if it cuts the heading error at the rests by at least half against the board's.
+
+| rest | t (s) | board yaw error (deg) | image yaw error (deg) |
+|---|---|---|---|
+| 1 (reference) | 0 | 0 | 0 |
+| 2 | 43 | +6.48 | +35.3 |
+| 3 | 79 | +0.22 | +26.4 |
+| 4 | 113 | -0.36 | +7.7 |
+| 5 | 201 | -2.43 | -33.5 |
+| 6 | 272 | -2.40 | -41.0 |
+| 7 | 285 | +1.43 | -59.2 |
+| 8 | 365 | +1.42 | -62.3 |
+| 9 | 393 | -6.33 | -69.3 |
+| **rms** | | **3.50** | **46.1** |
+
+**Result.** The board's heading returns to the edge within **3.5 deg rms, worst 6.5 deg**, and the
+error changes sign from rest to rest: it is scatter, not a drift (the line fit, -0.76 deg/min, is
+carried by the last rest alone; at rest the same board drifts 0.001 deg/min, section 106). The
+scatter includes how flush a hand sets the rig against a wall, so 3.5 deg is an upper bound on
+the AHRS's own error. **Image-rotation yaw is not fused:** 46 deg rms, thirteen times the board's
+error, against a bar that asked for half. Its integration loses every frame the planar fit
+refuses, and hand turns lifted off the floor refuse often, so the method needs a steady view of
+the floor that a hull at depth has and this rig did not. Not covered: water, a hull with
+thrusters running (their currents near the magnetometer), turns at the hull's own rates.

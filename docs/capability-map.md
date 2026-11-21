@@ -66,6 +66,7 @@ and why the split exists.
 | Inner control loop | **500 Hz**, our source, on a core reserved for it | fw `include/config.h` (`CONTROL_LOOP_HZ 500`), core pinning in `src/main.cpp` | BENCH |
 | Attitude and heading hold | ours: angle → rate → torque, with gains we can change | fw `src/control/attitude.*`, `task_control_loop.cpp` | BENCH |
 | Heading stability at rest | drift **+0.001 °/min**, span **0.064° over 10 min**, the SROT board on Kutum under this stack | `measured-bars.md` §106 (2026-11-22); earlier §27 at rest | RIG |
+| Heading under motion | yawed freely by hand for 9.4 min, the board's heading returns to one wall edge within **3.5° rms** (worst 6.5°), scatter not drift; image-rotation yaw scored 46° and is not fused | `measured-bars.md` §109; `tools/bench/yaw_returns.py` | RIG |
 | Thruster mixing | the board mixes for vectored-8, the old Dubomini matrix, and we can read it. The Mongla hull has five thrusters in the CAD and seven when finished (see `vehicle-spec.md`); a geometry-driven mixer is open as srot-control-board#39 | fw `src/control/mixer.h`, `docs/THRUSTER_MAP.md` | BENCH |
 | Saturation behaviour | the whole demand scales together so the *shape* of the move survives; the host also fits the demand yaw-first before sending | fw `mixer.h`; host `mongla_control/allocation.py` | BUILT |
 | Flight modes | **eleven**, including two tuning modes and a pattern runner | fw `include/state_types.h` | BENCH |
