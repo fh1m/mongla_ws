@@ -154,6 +154,8 @@ def render_example() -> str:
          '# lines and the depth floor are read from it; one set here is refused.',
          '#',
          '# Each line shows the repository default.', '']
+    # Runs in CI without a built workspace: read the course module from source.
+    sys.path.insert(0, str(ROOT / 'src' / 'mongla_localization'))
     from mongla_localization.course_map import VENUE_LAUNCH
     in_course = {arg: key for key, arg in VENUE_LAUNCH.items()}
     for _, name, default, desc in launch_args(BRINGUP):
