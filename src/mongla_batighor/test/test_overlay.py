@@ -376,3 +376,21 @@ def test_two_boxes_on_one_thing_each_name_the_track_that_follows_it():
                    tracks=_arr(_det(100, 100, 40, 40, label='fire', track='1'),
                                _det(103, 103, 40, 40, label='fire', track='2')))
     assert sorted(t.text for t in out.texts) == ['#2 fire coasting', 'fire 0.80 #1']
+
+
+def test_a_silent_detector_still_lets_the_picture_show_and_says_why():
+    """The Vision view shows a picture only with its annotations. A detector
+    paused until a mission asks sends nothing, so the picture stayed blank
+    ("Waiting for synchronized annotations") and a paused detector looked
+    like a dead camera (seen on the bench, 2026-11-22). Silent past
+    SILENT_S, every frame is marked by the overlay itself, saying so."""
+    from mongla_batighor.overlay import SILENT_S, hud, silence
+    assert silence([], 10.0, 10.0 + SILENT_S / 2) is None       # just started
+    assert silence([], 10.0, 13.0) == pytest.approx(3.0)        # never answered
+    assert silence([5.0, 20.0], 0.0, 20.0 + SILENT_S / 2) is None  # answering
+    assert silence([5.0, 20.0], 0.0, 24.5) == pytest.approx(4.5)
+    lines = hud('forward', 'gate_sharks', (640, 480), [], None, silent_s=4.6)
+    assert len(lines) == 2                    # the flow line sits above two
+    assert lines[1] == 'detector silent 5 s: paused until a mission asks, or stopped'
+    out = annotate(STAMP, size=(640, 480), hud=lines)
+    assert [t.text for t in out.texts] == lines and not out.points
