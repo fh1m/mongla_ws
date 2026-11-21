@@ -1,0 +1,56 @@
+{
+  "configById": {
+    "Image!forward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/forward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/forward/annotations": {
+            "visible": true
+          }
+        }
+      }
+    },
+    "Image!downward": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/annotations": {
+            "visible": true
+          },
+          "/mongla/vision/downward/flow_annotations": {
+            "visible": true
+          }
+        }
+      }
+    },
+    "mongla.batighor.Map!map": {},
+    "mongla.batighor.Mission!mission": {},
+    "mongla.batighor.ControlCenter!control": {}
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "Image!forward",
+      "second": "Image!downward",
+      "splitPercentage": 50.0
+    },
+    "second": {
+      "direction": "row",
+      "first": "mongla.batighor.Map!map",
+      "second": {
+        "direction": "column",
+        "first": "mongla.batighor.Mission!mission",
+        "second": "mongla.batighor.ControlCenter!control",
+        "splitPercentage": 44.4
+      },
+      "splitPercentage": 54.8
+    },
+    "splitPercentage": 38.0
+  }
+}

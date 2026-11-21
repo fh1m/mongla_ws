@@ -503,7 +503,8 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('mongla_batighor'), 'launch', 'batighor.launch.py')),
         launch_arguments={'batighor_port': LaunchConfiguration('batighor_port'),
-                          'foxglove_port': LaunchConfiguration('foxglove_port')}.items(),
+                          'foxglove_port': LaunchConfiguration('foxglove_port'),
+                          'course': LaunchConfiguration('course')}.items(),
         condition=IfCondition(LaunchConfiguration('batighor')),
     )
 

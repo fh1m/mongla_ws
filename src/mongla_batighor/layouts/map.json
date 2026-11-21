@@ -1,0 +1,81 @@
+{
+  "configById": {
+    "mongla.batighor.Map!map": {},
+    "mongla.batighor.Mission!mission": {},
+    "mongla.batighor.Navigation!navigation": {},
+    "3D!hull": {
+      "followTf": "mongla",
+      "followMode": "follow-position",
+      "topics": {
+        "/mongla/odom": {
+          "visible": true
+        }
+      },
+      "scene": {
+        "backgroundColor": "#05070c",
+        "labelScaleFactor": 0.3,
+        "transforms": {
+          "showLabel": false,
+          "enablePreloading": true
+        }
+      },
+      "cameraState": {
+        "distance": 2.2,
+        "perspective": true,
+        "phi": 55,
+        "thetaOffset": 200,
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "layers": {
+        "hull": {
+          "visible": true,
+          "label": "Mongla",
+          "layerId": "foxglove.Urdf",
+          "instanceId": "hull",
+          "sourceType": "url",
+          "url": "/model/mongla.urdf",
+          "order": 1
+        }
+      }
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "mongla.batighor.Map!map",
+    "second": {
+      "direction": "column",
+      "first": "mongla.batighor.Mission!mission",
+      "second": {
+        "direction": "row",
+        "first": "mongla.batighor.Navigation!navigation",
+        "second": "3D!hull",
+        "splitPercentage": 50.0
+      },
+      "splitPercentage": 55.6
+    },
+    "splitPercentage": 60.0
+  }
+}

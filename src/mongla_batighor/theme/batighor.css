@@ -137,3 +137,6 @@
    is missing and why ("... flow fused without omega") was the part hidden. */
 .mb .health span{overflow-wrap:anywhere}
 .mb .health span:nth-child(odd){white-space:nowrap}
+/* The pool map fills what the panel has left, square metres kept square. */
+.mb svg.map{width:100%;flex:1 1 auto;min-height:220px;background:var(--mb-sunk);
+  border:1px solid var(--mb-rule);border-radius:3px}

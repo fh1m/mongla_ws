@@ -15,6 +15,7 @@ const RUNGS = ["detection", "held", "follow", "anchor", "lost"];
 const RUNG_COLOUR = { detection: "var(--mb-red)", held: "var(--mb-amber)", follow: "var(--mb-glass)", anchor: "var(--mb-violet)", lost: "var(--mb-ink-3)" };
 const LEVEL = ["ok", "warn", "err", "stale"];
 const REDRAW_MS = 100;
+const MISSION_ALIVE_S = 1.5;  // the runner beats at 2 Hz; silent this long is no mission (helm.MISSION_ALIVE_S)
 const TRACK_S = 120;          // the navigation plan view keeps two minutes of track
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -105,6 +106,90 @@ function planView(track, fixes) {
     svg("text", { x: W - 4, y: H - 4, "text-anchor": "end", "font-size": 8, fill: "var(--mb-ink-3)" }, `grid ${step} m`));
 }
 
+// The pool map: the course file's pool frame, north (bearing 0, +x) up and
+// +y right, in metres, with the vehicle on it only once it is anchored there.
+// A prop is drawn where the file puts it and as what the file claims: solid
+// when measured, dashed amber when a rulebook nominal; a prop with no position
+// is listed by the caller, never placed. Exported for the test.
+function poolMap(course, loc, track, fixes, target) {
+  const C = course || {}, P = C.pool || {};
+  const props = C.props || [];
+  const anchored = !!(loc && loc.anchored && loc.frame === "pool" && fin(loc.x_m) && fin(loc.y_m));
+  const pts = [...(P.outline || []).map(([x, y]) => ({ x, y })), ...(P.floor || []).map(([x, y]) => ({ x, y })),
+    ...props.map((p) => ({ x: p.x_m, y: p.y_m })), ...(anchored ? track : []), ...(anchored ? fixes : []),
+    ...(anchored ? [{ x: loc.x_m, y: loc.y_m }] : []), ...(target ? [target] : [])].filter((p) => fin(p.x) && fin(p.y));
+  if (!pts.length) return null;
+  let n0 = Infinity, n1 = -Infinity, e0 = Infinity, e1 = -Infinity;
+  for (const p of pts) { n0 = Math.min(n0, p.x); n1 = Math.max(n1, p.x); e0 = Math.min(e0, p.y); e1 = Math.max(e1, p.y); }
+  const span = Math.max(n1 - n0, e1 - e0, 4);
+  const pad = span * 0.08;
+  const cn = (n0 + n1) / 2, ce = (e0 + e1) / 2;
+  n0 = cn - span / 2 - pad; n1 = cn + span / 2 + pad; e0 = ce - span / 2 - pad; e1 = ce + span / 2 + pad;
+  const W = e1 - e0;
+  // SVG in metres: east right, north up (the y axis flipped by drawing at -x).
+  const X = (p) => p.y, Y = (p) => -p.x;
+  const u = W / 300;                      // one "pixel" of a 300 px wide map, in metres
+  const step = W > 40 ? 5 : W > 12 ? 2 : W > 5 ? 1 : 0.5;
+  const kids = [];
+  for (let g = Math.ceil(e0 / step) * step; g <= e1; g += step) kids.push(svg("line", { x1: g, y1: -n1, x2: g, y2: -n0, stroke: "var(--mb-rule)", "stroke-width": u }));
+  for (let g = Math.ceil(n0 / step) * step; g <= n1; g += step) kids.push(svg("line", { x1: e0, y1: -g, x2: e1, y2: -g, stroke: "var(--mb-rule)", "stroke-width": u }));
+  if ((P.outline || []).length >= 3) {
+    kids.push(svg("polygon", { points: P.outline.map(([x, y]) => `${y},${-x}`).join(" "), fill: "rgba(90,141,255,0.06)", stroke: "var(--mb-sea)", "stroke-width": 1.5 * u }));
+  }
+  for (const [x, y, d] of P.floor || []) {
+    kids.push(svg("circle", { cx: y, cy: -x, r: 2 * u, fill: "var(--mb-teal)" }));
+    kids.push(svg("text", { x: y + 4 * u, y: -x + 3 * u, "font-size": 8 * u, fill: "var(--mb-teal)" }, `${num(d, 2)} m`));
+  }
+  const text = (x, y, s, fill, anchor) => svg("text", { x, y, "font-size": 9 * u, fill, "text-anchor": anchor || "start" }, s);
+  for (const p of props) {
+    const ink = p.measured ? "var(--mb-ink)" : "var(--mb-amber)";
+    const dash = p.measured ? "" : `${3 * u},${2 * u}`;
+    const b = fin(p.bearing_deg) ? (p.bearing_deg * Math.PI) / 180 : null;
+    if (b !== null && fin(p.width_m)) {
+      // A gate: its posts across the direction its face points.
+      const h = p.width_m / 2, ax = -Math.sin(b), ay = Math.cos(b);
+      kids.push(svg("line", { x1: p.y_m - ay * h, y1: -(p.x_m - ax * h), x2: p.y_m + ay * h, y2: -(p.x_m + ax * h), stroke: ink, "stroke-width": 3 * u, "stroke-dasharray": dash, "stroke-linecap": "round" }));
+    } else {
+      kids.push(svg("circle", { cx: p.y_m, cy: -p.x_m, r: 4 * u, fill: "none", stroke: ink, "stroke-width": 1.5 * u, "stroke-dasharray": dash }));
+    }
+    if (b !== null) {
+      const L = 14 * u;
+      kids.push(svg("line", { x1: p.y_m, y1: -p.x_m, x2: p.y_m + L * Math.sin(b), y2: -(p.x_m + L * Math.cos(b)), stroke: ink, "stroke-width": u }));
+    }
+    kids.push(text(p.y_m + 6 * u, -p.x_m - 6 * u, p.measured ? p.name : `${p.name} (nominal)`, ink));
+  }
+  if (anchored) {
+    const tr = track.filter((p) => fin(p.x) && fin(p.y));
+    if (tr.length > 1) kids.push(svg("polyline", { points: tr.map((p) => `${X(p)},${Y(p)}`).join(" "), fill: "none", stroke: "var(--mb-sea)", "stroke-width": 1.5 * u }));
+    for (const f of fixes) kids.push(svg("circle", { cx: f.y, cy: -f.x, r: 3 * u, fill: "none", stroke: "var(--mb-amber)", "stroke-width": u }));
+    if (fin(loc.sigma_xy_m) && loc.sigma_xy_m > 0) kids.push(svg("circle", { cx: loc.y_m, cy: -loc.x_m, r: loc.sigma_xy_m, fill: "rgba(255,42,20,0.08)", stroke: "var(--mb-red)", "stroke-width": u, "stroke-dasharray": `${2 * u},${2 * u}` }));
+    const yaw = fin(loc.yaw_deg) ? (loc.yaw_deg * Math.PI) / 180 : 0;
+    const hull = [[10, 0], [-6, 5], [-3, 0], [-6, -5]].map(([f, r]) => {
+      const n = loc.x_m + u * (f * Math.cos(yaw) - r * Math.sin(yaw)), e = loc.y_m + u * (f * Math.sin(yaw) + r * Math.cos(yaw));
+      return `${e},${-n}`;
+    });
+    kids.push(svg("polygon", { points: hull.join(" "), fill: "var(--mb-red)", stroke: "var(--mb-d0)", "stroke-width": u }));
+    if (target) kids.push(svg("line", { x1: loc.y_m, y1: -loc.x_m, x2: target.y, y2: -target.x, stroke: "var(--mb-red)", "stroke-width": u, "stroke-dasharray": `${4 * u},${3 * u}` }));
+  }
+  if (target) {
+    const r = fin(target.tol) && target.tol > 0 ? target.tol : 6 * u;
+    kids.push(svg("circle", { cx: target.y, cy: -target.x, r, fill: "none", stroke: "var(--mb-red)", "stroke-width": 1.5 * u }));
+    kids.push(svg("line", { x1: target.y - r, y1: -target.x, x2: target.y + r, y2: -target.x, stroke: "var(--mb-red)", "stroke-width": u }));
+    kids.push(svg("line", { x1: target.y, y1: -target.x - r, x2: target.y, y2: -target.x + r, stroke: "var(--mb-red)", "stroke-width": u }));
+    kids.push(text(target.y + r + 3 * u, -target.x, "go_to", "var(--mb-red)"));
+  }
+  // The scale and north, where an operator looks for them.
+  kids.push(svg("line", { x1: e1 - pad / 2 - step, y1: -n0 - pad / 3, x2: e1 - pad / 2, y2: -n0 - pad / 3, stroke: "var(--mb-ink-2)", "stroke-width": 2 * u }));
+  kids.push(text(e1 - pad / 2, -n0 - pad / 3 - 4 * u, `${step} m`, "var(--mb-ink-2)", "end"));
+  kids.push(text(e0 + pad / 2, -n1 + pad / 2 + 4 * u, "N  bearing 0", "var(--mb-ink-3)"));
+  return svg("svg", { viewBox: `${e0} ${-n1} ${W} ${n1 - n0}`, preserveAspectRatio: "xMidYMid meet", class: "map" }, ...kids);
+}
+
+// Seconds as "1:05", the way a run clock reads.
+const clock = (s) => (fin(s) ? `${s < 0 ? "-" : ""}${Math.floor(Math.abs(s) / 60)}:${String(Math.floor(Math.abs(s) % 60)).padStart(2, "0")}` : "--");
+const STATE_CLASS = { running: "live", done: "ok", refused: "warn", canceled: "warn", failed: "err", abandoned: "warn" };
+const fieldsText = (f) => Object.entries(f || {}).map(([k, v]) => `${k}=${v === null ? "--" : typeof v === "number" ? +v.toFixed(3) : v}`).join("  ");
+
 function kv(...pairs) {
   return el("div", { class: "kv" }, ...pairs.flatMap(([k, v, cls]) => [el("span", {}, k), el("span", cls ? { class: cls } : {}, v)]));
 }
@@ -138,7 +223,7 @@ const INSTRUMENTS = {
     topics: ["/mongla/state", "/mongla/batighor/helm_state", "/mongla/flare_order", "/mongla/mission_alive"],
     fold(s, topic, m) {
       if (topic === "/mongla/state") { s.v = m; s.at = Date.now(); }
-      // The runner's 2 Hz beat, carrying its name; silent 1.5 s is no mission (helm.MISSION_ALIVE_S).
+      // The runner's 2 Hz beat, carrying its name.
       else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = Date.now(); }
       else if (topic === "/mongla/flare_order") { try { s.flare = JSON.parse(m.data); } catch { /* keep */ } }
       else { try { s.helm = JSON.parse(m.data); } catch { /* keep */ } }
@@ -158,7 +243,7 @@ const INSTRUMENTS = {
             el("span", { class: "big" }, num(below, 2), el("span", { class: "unit" }, "m deep")),
             el("span", { class: "big" }, num(v.yaw_deg, 0), el("span", { class: "unit" }, "deg")),
             el("span", { class: "big" }, num(v.battery_voltage, 1), el("span", { class: "unit" }, "V")))),
-        kv(ageS(s.aliveAt) < 1.5 ? ["mission", `running ${s.missionName || ""}`, "live"] : ["mission", "none"],
+        kv(ageS(s.aliveAt) < MISSION_ALIVE_S ? ["mission", `running ${s.missionName || ""}`, "live"] : ["mission", "none"],
           ["pilot", h.pilot || "nobody"], ["state age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 2 ? "warn" : ""],
           // Silence is "no order", never a default (node_vision._publish_flare_order).
           ["flare order", s.flare ? (s.flare.colours || []).join("-") : "none latched", s.flare ? "live" : ""]),
@@ -245,6 +330,101 @@ const INSTRUMENTS = {
           ["prop fixes", String((s.fixes || []).length)],
           ["odom age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 1 ? "warn" : ""]),
       ];
+    },
+  },
+
+  // The pool, the props and Mongla on them: course.py's course file, the
+  // filter's state (frame, anchored, sigma), its fixes, and the go_to the
+  // manager is flying (/mongla/doing). For planning a run as much as watching one.
+  Map: {
+    title: "Map",
+    topics: ["/mongla/batighor/course", "/mongla/localization/state", "/mongla/localization/fix", "/mongla/doing"],
+    fold(s, topic, m) {
+      s.track = s.track || []; s.fixes = s.fixes || [];
+      if (topic === "/mongla/batighor/course") { try { s.course = JSON.parse(m.data); s.cAt = Date.now(); } catch { /* keep */ } }
+      else if (topic === "/mongla/localization/state") {
+        // The track is kept in the frame it was drawn in; the anchor changes the frame, and a track across it would be a lie.
+        if (s.loc && s.loc.frame !== m.frame) s.track = [];
+        s.loc = m; s.lAt = Date.now();
+        if (m.frame === "pool" && fin(m.x_m) && fin(m.y_m)) {
+          const last = s.track[s.track.length - 1];
+          if (!last || Math.hypot(last.x - m.x_m, last.y - m.y_m) > 0.02) s.track.push({ x: m.x_m, y: m.y_m, t: s.lAt });
+          while (s.track.length && s.lAt - s.track[0].t > 10 * TRACK_S * 1000) s.track.shift();
+        }
+      } else if (topic === "/mongla/localization/fix") { if (m.point) { s.fixes.push({ x: m.point.x, y: m.point.y }); if (s.fixes.length > 40) s.fixes.shift(); } }
+      else { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
+    },
+    draw(s) {
+      const c = s.course, loc = s.loc;
+      if (!c) return [el("div", { class: "note" }, "no /mongla/batighor/course: is Batighor's course node running (batighor:=true)?")];
+      const now = s.doing && s.doing.now;
+      const f = now && now.verb === "go_to" ? now.fields || {} : null;
+      const target = f && fin(f.x_m) && fin(f.y_m) ? { x: f.x_m, y: f.y_m, tol: f.tolerance_m } : null;
+      const anchored = !!(loc && loc.anchored && loc.frame === "pool");
+      const out = [el("div", { class: "row" },
+        el("b", {}, c.course || "no course"), el("span", { class: "note" }, c.from === "mission" ? "from the mission" : "from the deck"),
+        loc ? el("span", { class: anchored ? "live" : "warn" }, anchored ? "anchored in the pool" : `not anchored (${loc.frame || "no input"})`) : el("span", { class: "stale" }, "no localization"))];
+      if (c.error) { out.push(el("div", { class: "err" }, c.error)); return out; }
+      const map = poolMap(c, loc, s.track || [], s.fixes || [], target);
+      out.push(map || el("div", { class: "note" }, "nothing placed yet: survey the pool (course_survey --corner, --prop, --floor)"));
+      const un = c.unplaced || [];
+      out.push(kv(
+        ["position", anchored ? `${num(loc.x_m, 2)}, ${num(loc.y_m, 2)} m  yaw ${num(loc.yaw_deg, 0)} deg` : loc ? `odom ${num(loc.x_m, 2)}, ${num(loc.y_m, 2)} m: not on this map until anchored` : "--", anchored ? "" : "warn"],
+        ["sigma", loc ? `${num(loc.sigma_xy_m, 2)} m  yaw ${num(loc.sigma_yaw_deg, 1)} deg` : "--"],
+        ["usable", loc ? (loc.usable ? "yes" : `no: ${loc.reason || "--"}`) : "--", loc && loc.usable ? "live" : "warn"],
+        ["aided by", loc ? loc.aiding || "--" : "--"],
+        ["going to", target ? `${num(target.x, 2)}, ${num(target.y, 2)} m within ${num(target.tol, 2, " m")}` : "--", target ? "live" : ""],
+        ["placed", `${(c.props || []).length} props, ${(c.props || []).filter((p) => !p.measured).length} of them nominal`],
+        ["unplaced", un.length ? un.map((p) => p.name).join(", ") : "none", un.length ? "warn" : ""],
+        ["pool", `depth ${num(c.pool && c.pool.depth_m, 2, " m")}  tile ${num(c.pool && c.pool.tile_m, 3, " m")}  floor stop ${num(c.pool && c.pool.shield_max_depth_m, 2, " m")}`],
+        ["file", c.source || "--"]));
+      return out;
+    },
+  },
+
+  // The decision layer: the mission, the task it is in and its clock, the
+  // verb the manager runs now with what was asked of it, and how each recent
+  // one ended (refusals too), whoever sent it.
+  Mission: {
+    title: "Mission",
+    topics: ["/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing"],
+    fold(s, topic, m) {
+      if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = Date.now(); }
+      else if (topic === "/mongla/mission/task") {
+        try {
+          const t = JSON.parse(m.data); t.at = Date.now();
+          s.tasks = [t, ...(s.tasks || []).filter((x) => !(x.task === t.task && x.state === "running"))].slice(0, 8);
+        } catch { /* keep */ }
+      } else { try { s.doing = JSON.parse(m.data); s.dAt = Date.now(); } catch { /* keep */ } }
+    },
+    draw(s) {
+      const live = ageS(s.aliveAt) < MISSION_ALIVE_S && s.missionName;
+      const out = [el("div", { class: "row" }, el("span", { class: "note" }, "mission"),
+        live ? el("b", { class: "live" }, s.missionName) : el("span", {}, "none running"))];
+      const task = (s.tasks || []).find((t) => t.state === "running");
+      if (task) {
+        const el_s = task.elapsed_s + ageS(task.at);
+        const left = fin(task.deadline_s) ? task.deadline_s - el_s : NaN;
+        out.push(kv(["task", task.task, "live"], ["elapsed", clock(el_s)],
+          ["deadline", fin(task.deadline_s) ? `${clock(left)} left of ${clock(task.deadline_s)}` : "none", left < 15 ? "warn" : ""],
+          ["run budget", fin(task.budget_left_s) ? `${clock(task.budget_left_s - ageS(task.at))} left` : "off"]));
+        if (fin(left)) out.push(el("div", { class: "bar" }, el("b", { style: `width:${Math.max(0, Math.min(100, (100 * left) / task.deadline_s))}%;${left < 15 ? "background:var(--mb-amber)" : ""}` })));
+      } else out.push(el("div", { class: "note" }, "no task running"));
+      const d = s.doing || {};
+      const now = d.now;
+      out.push(el("h3", {}, el("span", {}, "doing now")));
+      out.push(now ? kv(["verb", now.verb, "live"], ["asked", fieldsText(now.fields) || "defaults"],
+        // Both stamps are the manager's clock: the browser's may differ from Kutum's.
+        ["for", clock(d.stamp - now.since + ageS(s.dAt))])
+        : el("div", { class: "note" }, s.doing ? "nothing: the manager is idle" : "no /mongla/doing: is the manager running?"));
+      out.push(el("h3", {}, el("span", {}, "recent verbs, newest first")));
+      out.push(kv(...(d.recent || []).map((r) => [`${r.verb}`, `${r.state}${fin(r.ended - r.since) ? ` ${num(r.ended - r.since, 1)} s` : ""}${r.message ? `: ${r.message}` : ""}`, STATE_CLASS[r.state] || ""])));
+      const done = (s.tasks || []).filter((t) => t.state !== "running");
+      if (done.length) {
+        out.push(el("h3", {}, el("span", {}, "tasks ended")));
+        out.push(kv(...done.map((t) => [t.task, `${t.state} after ${clock(t.elapsed_s)}`, STATE_CLASS[t.state.split(":")[0]] || "err"])));
+      }
+      return out;
     },
   },
 
@@ -388,5 +568,6 @@ module.exports = {
     }
   },
   rungOf,
+  poolMap,
   INSTRUMENTS,
 };

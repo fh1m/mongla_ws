@@ -182,6 +182,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `connection_config.py` | How the manager finds the SROT board. |
 | `dispatch_policy.py` | Pure goal-acceptance policy for the /mongla/move action server. |
 | `distance_state.py` | manager-side bridge to the downward distance estimator. |
+| `doing.py` | What the vehicle is doing: every verb the manager takes, as it starts and as it ends. |
 | `flare_order_send.py` | ``ros2 run mongla_manager flare_order R-B-Y --port /dev/ttyACM0`` -- tell the vehicle. |
 | `health.py` | One health surface. Four states, and UNKNOWN is not OK. |
 | `health_reporters.py` | Each subsystem's private dialect, translated once. |
