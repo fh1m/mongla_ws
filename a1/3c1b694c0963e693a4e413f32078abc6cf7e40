@@ -1,0 +1,41 @@
+.claude/context/packages/mongla_batighor/README.md
+  s_4af8d6f83b24e8::t_93699100b65065 145-149
+.claude/context/packages/mongla_planner/README.md
+  s_4af8d6f83b24e8::t_cb22dfc5074177 99-102
+.claude/context/platform/batighor-views.md
+  s_4af8d6f83b24e8::t_1fdc18c0752478 52-73
+src/mongla_batighor/layouts/batighor.json
+  s_4af8d6f83b24e8::t_257f97722dbb30 144-145,992,994-1002,1004
+src/mongla_batighor/layouts/mission.json
+  s_4af8d6f83b24e8::t_4d8a59c82c372d 3-4,40,42-50,52
+src/mongla_batighor/mongla_batighor/views.py
+  s_4af8d6f83b24e8::t_a0a6747d48549e 359-368
+src/mongla_batighor/panels/instruments/extension.js
+  s_4af8d6f83b24e8::t_ca1beadf7fd4c3 27-31,245,256,345-372,453-454,458-459,462,481,483,518,566,620,623,626,659-674,679,681,707,736,778-790,801-804,809-811,941-942
+src/mongla_batighor/test/test_panels.py
+  s_4af8d6f83b24e8::t_ed9a6f610d7abe 410-411,499-574
+src/mongla_batighor/theme/batighor.css
+  s_4af8d6f83b24e8::t_7131a9271f23ad 137-145
+src/mongla_planner/mongla_planner/client.py
+  s_4af8d6f83b24e8::t_b3603b7914c6df 130-132,243-244
+src/mongla_planner/mongla_planner/mission.py
+  s_4af8d6f83b24e8::t_3accc864a3cbcf 168-218,250
+src/mongla_planner/test/test_the_mission_text_reaches_batighor.py
+  s_4af8d6f83b24e8::t_929059ccc0b536 1-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "a13c1b694c0963e693a4e413f32078abc6cf7e40",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
