@@ -327,6 +327,14 @@ def test_the_floor_read_is_drawn_as_the_grid_and_the_lane_it_says():
     assert 'tiles 64 px' in words and '1.25 m above' in words and 'lane 0 deg' in words
     empty = floor_annotate(FloorRead(width=640, height=480))
     assert not empty.points and 'none read' in empty.texts[0].text
+    # Each line in the colour of what it names: no tiles beside a lane read
+    # once drew "tiles: none read" in the lane's amber.
+    from mongla_batighor.overlay import AMBER, INK_2
+    lane_only = floor_annotate(FloorRead(width=640, height=480, lane=True,
+                                         lane_direction_deg=0.0, lane_offset_px=0.0))
+    tiles_line, lane_line = lane_only.texts
+    assert 'none read' in tiles_line.text and tiles_line.text_color == _color(INK_2)
+    assert lane_line.text_color == _color(AMBER)
 
 
 def test_the_demand_arrow_points_where_the_board_is_told_to_push():
