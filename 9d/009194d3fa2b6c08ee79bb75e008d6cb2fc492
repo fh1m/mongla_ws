@@ -1,0 +1,29 @@
+.claude/context/BUGS.md
+  s_4af8d6f83b24e8::t_49b442e11568e1 928-964
+.claude/context/kutum/pi-and-env-traps.md
+  s_4af8d6f83b24e8::t_b5ca44e9d25acf 110-130
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  s_4af8d6f83b24e8::t_6de9fb023e1b8c 223-228,299-339,344-346,366,434-438,442-445
+src/mongla_vision/test/test_composed_vision.py
+  s_4af8d6f83b24e8::t_530ecc5c10d24d 248-250
+src/mongla_vision/test/test_dual_node_degrades.py
+  s_4af8d6f83b24e8::t_f60a28abc35b3d 260-302
+src/mongla_vision/test/test_replay_lets_a_bag_drive_the_graph.py
+  s_4af8d6f83b24e8::t_888439631ccffc 41-45,47-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "9d009194d3fa2b6c08ee79bb75e008d6cb2fc492",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
