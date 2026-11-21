@@ -104,6 +104,14 @@ An anchor alone turns the axes but leaves the origin where the filter started; r
 survey there would be a confident wrong floor. Before that, flow scales on the middle of the
 soundings with their spread as its uncertainty (`survey, no position`).
 
+**On a slope, set `tile_m` if the floor is tiled.** The tile grating measures the height
+directly and comes first (`tiles` above), so neither the survey nor its middle is used while
+the grating is read. Without tiles, the gap before the first fix is real: at a 0.72 m spread
+the middle is off by up to 0.36 m, which is about 30 % of speed at 1.2 m. Height from the
+image's magnification over a barometer-measured depth change was built to close it, and
+failed real water: 36 % median error on a harbour seabed (measured-bars §100). Plan the run
+so the first prop fix comes early, or survey a flat stretch for the start.
+
 Measured on a synthetic floor sloping 1.28 to 2.00 m over 17.5 m, position known to 1 m:
 RMS height error under 0.05 m, against up to 0.72 m for one typed depth
 (`src/mongla_vision/test/test_floor_depth_follows_the_slope.py`; the bar as first written,
