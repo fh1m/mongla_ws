@@ -142,6 +142,11 @@ errors, warnings and unknown rows apart, so a bench with no barometer reads "8 u
 (sea), a warning (amber) or an error (red) in it. Red means look now, and only errors and an armed
 vehicle use it.
 
+**Do not rename a tab.** Clicking the tab that is already open starts Lichtblick's rename (its
+title is selected). The glyph and the dot are found by the tab's title, so a renamed tab loses
+both, and the edit marks the layout as the operator's, which stops it taking Kutum's. Escape
+leaves the rename unchanged; Revert in the layout's menu undoes one that was made.
+
 **The red alert in the top bar is not ours.** "Definition of schema 'sensor_msgs/msg/Range' has
 changed during the server's runtime" appears on every connection to Kutum. Lichtblick 1.27
 seeds its type table with its built-in Humble messages for any ROS 2 distro but foxy and

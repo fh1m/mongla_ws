@@ -97,7 +97,6 @@ body{background:var(--mb-d0)!important}
 [data-testid="toolbar-tab"]:has(button){color:var(--mb-ink);background:var(--mb-d1)!important;
   box-shadow:inset 0 -2px 0 var(--mb-red)}
 [data-testid="toolbar-tab"] button{display:none!important}
-[data-testid="toolbar-tab"]{user-select:none}
 [data-testid="toolbar-tab"][data-mb]:not([data-mb=""])::after{content:"";position:absolute;top:9px;right:7px;
   width:6px;height:6px;border-radius:50%;background:var(--mb-ink-3)}
 [data-testid="toolbar-tab"][data-mb="ok"]::after{background:var(--mb-teal)}
@@ -135,6 +134,15 @@ body{background:var(--mb-d0)!important}
 .mb h3{margin:0;font-size:10px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;
   color:var(--mb-ink-3);display:flex;justify-content:space-between;gap:8px}
 .mb .row{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap}
+/* A header that stays while the text under it scrolls to the running line. */
+.mb .row.pin{position:sticky;top:-10px;z-index:2;background:var(--mb-d1);padding:6px 0;margin-top:-6px}
+/* A mission's text: numbered, wrapped (never sideways), the running line marked. */
+.mb .code{background:var(--mb-d0);border:1px solid var(--mb-rule);border-radius:4px;padding:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.mb .code .ln{display:grid;grid-template-columns:5ch 1fr;gap:10px;padding:0 10px 0 0;border-left:2px solid transparent}
+.mb .code .ln .no{color:var(--mb-ink-3);text-align:right}
+.mb .code .ln.entry .no{color:var(--mb-ink-2)}
+.mb .code .ln.now{background:rgba(90,141,255,.16);border-left-color:var(--mb-sea)}
+.mb .code .ln.now .no{color:var(--mb-sea)}
 .mb .kv{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;align-items:center}
 .mb .kv > :nth-child(odd){color:var(--mb-ink-3)}
 /* A narrow panel wraps a long value; it never clips it or scrolls sideways. */
