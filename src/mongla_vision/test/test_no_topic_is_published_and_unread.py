@@ -41,6 +41,9 @@ PUBLISHED_UNREAD = {
     '/mongla/esc_rpm':
         'operator telemetry. 958/958 frames read exactly 0 with nothing '
         'attached, so it is watched by a human rather than acted on.',
+    '/mongla/thruster_pack':
+        'operator telemetry: PM2, the thruster pack. Read by Batighor (the '
+        'Thrust panel and the Thrust and Health plots), watched by a human.',
     '/mongla/board_link':
         'operator telemetry: what the link carries and every named channel '
         'with its age, for a human in Batighor\'s board_link layout. The '

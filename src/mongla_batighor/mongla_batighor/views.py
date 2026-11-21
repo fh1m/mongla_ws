@@ -322,7 +322,7 @@ def thrust(v: View):
                  (3, v('demand', plot(series('/mongla/demand.vector.x', 'surge'),
                                       series('/mongla/demand.vector.y', 'sway')))))),
         # What it cost: the pack the thrusters draw (PM2), not the electronics rail.
-        (50, col(v('power', plot(series('/mongla/state.thruster_voltage', 'thrusters V'))),
+        (50, col(v('power', plot(series('/mongla/thruster_pack.voltage', 'thrusters V'))),
                  v('rates', plot(series('/mongla/imu.angular_velocity.x', 'roll rate'),
                                  series('/mongla/imu.angular_velocity.y', 'pitch rate'),
                                  series('/mongla/imu.angular_velocity.z', 'yaw rate'))))))
@@ -335,7 +335,7 @@ def board_health(v: View):
     return row(
         # Depth and volts on their own axes: on one, 12 V flattened the depth.
         (55, col(v('depthyaw', plot(series('/mongla/state.depth_m', 'depth m'))),
-                 v('battery', plot(series('/mongla/state.thruster_voltage', 'thrusters V'),
+                 v('battery', plot(series('/mongla/thruster_pack.voltage', 'thrusters V'),
                                    series('/mongla/state.battery_voltage', 'electronics V'))),
                  v('gyro', plot(series('/mongla/imu.angular_velocity.x', 'gx'),
                                 series('/mongla/imu.angular_velocity.y', 'gy'),

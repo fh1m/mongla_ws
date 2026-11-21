@@ -281,7 +281,6 @@ class SetupMixin:
         self._fast_armed  = False
         self._fast_mode   = ''
         self._fast_batt_v = math.nan
-        self._fast_thr_v  = math.nan
         self._start_recorder()          # BEFORE the reader -- it is the sink
         from .link_meter import LinkMeter
         self._link_meter = LinkMeter()  # BEFORE the reader -- it feeds it
@@ -461,6 +460,12 @@ class SetupMixin:
         """Every topic the node publishes about the vehicle, and the IMU clock map."""
         self.state_publisher = self.create_publisher(
             MonglaState, '/mongla/state', 10)
+        # PM2, the thruster pack (over ESP-NOW from the second board), on its
+        # own standard topic: a field added to MonglaState left every bag
+        # recorded before it undecodable (0 of 39534, 2026-11-22).
+        from sensor_msgs.msg import BatteryState
+        self.thruster_pack_publisher = self.create_publisher(
+            BatteryState, '/mongla/thruster_pack', 10)
 
         # Body-frame angular rates for the downward optical-flow distance
         # estimator (rotation compensation). Vector3Stamped: x=pitch_rate,

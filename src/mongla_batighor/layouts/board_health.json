@@ -19,7 +19,7 @@
     "Plot!battery": {
       "paths": [
         {
-          "value": "/mongla/state.thruster_voltage",
+          "value": "/mongla/thruster_pack.voltage",
           "label": "thrusters V",
           "enabled": true
         },

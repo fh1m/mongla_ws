@@ -51,6 +51,7 @@ class _StubNode:
         self.fc = fc
         self.yaw_source = BoardYaw(fc)
         self.state_publisher = _Pub()
+        self.thruster_pack_publisher = _Pub()
 
     def _state_stamp(self):
         return Time()
@@ -133,12 +134,15 @@ def test_the_demand_says_heave_is_unknown_not_zero():
 
 
 def test_the_thruster_pack_is_on_the_state_and_absent_is_nan():
-    """PM2, the pack the thrusters draw, reached only the console. Batighor's
+    """PM2, the pack the thrusters draw, reached only the console; it is
+    /mongla/thruster_pack (MonglaState kept its shape, so old bags decode). Batighor's
     Thrust view plotted PM1 (the electronics rail) as 'what it cost'."""
     node = _StubNode(_fc_with_attitude(0.0))
     att = node.fc.get_attitude()
     amn.AUVManagerNode._publish_state(node, att, None, 'MANUAL', False, 0.0)
-    assert math.isnan(node.state_publisher.msgs[-1].thruster_voltage)
+    pack = node.thruster_pack_publisher.msgs[-1]
+    assert math.isnan(pack.voltage) and not pack.present
     node.fc.note_battery(SimpleNamespace(id=1, voltages=[14630], current_battery=-1))
     amn.AUVManagerNode._publish_state(node, att, None, 'MANUAL', False, 0.0)
-    assert abs(node.state_publisher.msgs[-1].thruster_voltage - 14.63) < 1e-3
+    pack = node.thruster_pack_publisher.msgs[-1]
+    assert abs(pack.voltage - 14.63) < 1e-3 and pack.present

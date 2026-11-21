@@ -677,13 +677,14 @@ const INSTRUMENTS = {
 
   Thrust: {
     title: "Thrust",
-    topics: ["/mongla/demand", "/mongla/esc_rpm", "/mongla/state"],
+    topics: ["/mongla/demand", "/mongla/esc_rpm", "/mongla/state", "/mongla/thruster_pack"],
     fold(s, topic, m) {
       if (topic === "/mongla/demand") { s.demand = m.vector; s.dAt = heard(); }
       else if (topic === "/mongla/esc_rpm") {
         s.rpm = Array.from(m.data || []); s.rAt = heard();
         s.peak = Math.max(s.peak || 1000, ...s.rpm.map((r) => Math.abs(r)));
-      } else s.state = m;
+      } else if (topic === "/mongla/thruster_pack") s.pack = m;
+      else s.state = m;
     },
     draw(s) {
       const d = s.demand || {};
@@ -699,7 +700,7 @@ const INSTRUMENTS = {
           ...rpm.map((r, i) => el("div", { style: "display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;justify-content:flex-end" },
             el("div", { style: `width:100%;height:${(100 * Math.abs(r)) / s.peak}%;background:${r < 0 ? "var(--mb-amber)" : "var(--mb-sea)"};border-radius:2px 2px 0 0` }),
             el("span", { class: "note" }, String(i + 1))))) : null,
-        kv(["ESC age", `${num(ageS(s.rAt), 1)} s`], ["thruster pack", num(s.state && s.state.thruster_voltage, 2, " V")], ["electronics", num(s.state && s.state.battery_voltage, 2, " V")]),
+        kv(["ESC age", `${num(ageS(s.rAt), 1)} s`], ["thruster pack", num(s.pack && s.pack.voltage, 2, " V")], ["electronics", num(s.state && s.state.battery_voltage, 2, " V")]),
       ];
     },
   },
