@@ -1,0 +1,35 @@
+kutum/README.md
+  s_4af8d6f83b24e8::t_879ee03decec09 103-109
+kutum/deck-bringup.yaml
+  s_4af8d6f83b24e8::t_101441c6302e59 1-16
+kutum/find.py
+  s_4af8d6f83b24e8::t_f4cc07cf01cbc0 15-16,195-203,232-233,281
+kutum/setup.sh
+  s_4af8d6f83b24e8::t_cbe1067833cd3c 352-362
+src/mongla_localization/mongla_localization/courses/pool.yaml
+  s_4af8d6f83b24e8::t_a89367a8641cfb 1-42
+src/mongla_manager/config/bringup.example.yaml
+  s_4af8d6f83b24e8::t_8dd501b46acffe 12-16,62,64,70,99,101
+src/mongla_manager/test/test_bringup_settings_file.py
+  s_4af8d6f83b24e8::t_ff532f39e95eb5 97-103
+src/mongla_manager/test/test_the_starter_deck_is_valid.py
+  s_4af8d6f83b24e8::t_83f1c10d4e28b6 1-31
+tools/ci/gen_reference.py
+  s_4af8d6f83b24e8::t_6e9f7a27d852ae 151-155,157-158,160-162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "9247f6573eef1c33987a09c222a1bec0ad486dbb",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
