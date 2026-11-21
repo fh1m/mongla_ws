@@ -231,6 +231,7 @@
         }
       ],
       "isSynced": false,
+      "xAxisRange": 60,
       "lichtblickPanelTitle": "lock ladder"
     },
     "Plot!vision.authority": {
@@ -423,6 +424,7 @@
         }
       ],
       "isSynced": false,
+      "xAxisRange": 60,
       "lichtblickPanelTitle": "velocity scale"
     },
     "Plot!flow.quality": {
@@ -557,6 +559,7 @@
         }
       ],
       "isSynced": false,
+      "xAxisRange": 60,
       "lichtblickPanelTitle": "aiding"
     },
     "Plot!localization.pos": {

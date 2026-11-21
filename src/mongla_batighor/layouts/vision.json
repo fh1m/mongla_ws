@@ -60,6 +60,7 @@
         }
       ],
       "isSynced": false,
+      "xAxisRange": 60,
       "lichtblickPanelTitle": "lock ladder"
     },
     "Plot!authority": {
