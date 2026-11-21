@@ -27,6 +27,10 @@ subscribes to what it publishes (`Watched`).
 
 Kept out of `mongla_vision` so the vision stack does not depend on a viewer's
 message package: this is the one node that knows both.
+
+For the 3D scene it also turns `/mongla/demand` into an arrow on the hull
+(`demand_scene`, on `/mongla/batighor/scene`), the same way: only while
+watched.
 """
 from __future__ import annotations
 
@@ -436,6 +440,52 @@ def calibrate_annotate(state: dict, stamp) -> ImageAnnotations:
     return out
 
 
+# The demand in the 3D scene: one arrow from the body origin, in the body
+# frame the hull hangs on, its length the demand's share of full force times
+# DEMAND_ARROW_M (a full demand reaches about the 0.7 m hull's length).
+DEMAND_TOPIC = '/mongla/batighor/scene'
+DEMAND_ARROW_M = 0.6
+# 14 px read about 7 px tall in the cockpit's 3D tile (desktop app, 2026-11-21).
+DEMAND_LABEL_PX = 22.0
+
+
+def demand_scene(x, y, stamp, frame):
+    """`foxglove_msgs/SceneUpdate` for a (surge, sway) demand in [-1, 1].
+
+    The arrow points where the board is told to push, in FRD: rotating x
+    toward y is a turn about +z (down). NaN, which the manager publishes
+    when it does not know the demand, is said in words with no arrow; zero
+    is a known demand of nothing and also draws none, but says so.
+    """
+    import math
+
+    from builtin_interfaces.msg import Duration
+    from foxglove_msgs.msg import (ArrowPrimitive, SceneEntity, SceneEntityDeletion,
+                                   SceneUpdate, TextPrimitive)
+    from geometry_msgs.msg import Point, Pose, Quaternion
+    update = SceneUpdate()
+    update.deletions.append(SceneEntityDeletion(
+        timestamp=stamp, type=SceneEntityDeletion.MATCHING_ID, id='demand'))
+    e = SceneEntity(timestamp=stamp, frame_id=frame, id='demand',
+                    lifetime=Duration(sec=1), frame_locked=True)
+    known = not (math.isnan(x) or math.isnan(y))
+    size = math.hypot(x, y) if known else 0.0
+    if size > 1e-3:
+        yaw = math.atan2(y, x)
+        length = DEMAND_ARROW_M * min(size, 1.0)
+        e.arrows.append(ArrowPrimitive(
+            pose=Pose(orientation=Quaternion(z=math.sin(yaw / 2), w=math.cos(yaw / 2))),
+            shaft_length=0.75 * length, head_length=0.25 * length,
+            shaft_diameter=0.025, head_diameter=0.07, color=_color(SEA)))
+    words = (f'demand {size:.0%}' if size > 1e-3 else 'demand none') if known \
+        else 'demand unknown'
+    e.texts.append(TextPrimitive(
+        pose=Pose(position=Point(z=-0.25)), billboard=True, font_size=DEMAND_LABEL_PX,
+        scale_invariant=True, color=_color(SEA if known else INK_2), text=words))
+    update.entities.append(e)
+    return update
+
+
 class Watched:
     """Subscriptions that exist only while someone watches what they feed.
 
@@ -632,6 +682,17 @@ def main(args=None):
 
             self.watched.append(Watched(self, cal_pub, [
                 (String, f'{cal}/state', on_calibration, LATCHED)]))
+            # The demand, for the 3D scene, at the manager's 20 Hz.
+            from foxglove_msgs.msg import SceneUpdate
+            from geometry_msgs.msg import Vector3Stamped
+            scene_pub = self.create_publisher(SceneUpdate, DEMAND_TOPIC, 5)
+
+            def on_demand(msg):
+                scene_pub.publish(demand_scene(msg.vector.x, msg.vector.y,
+                                               msg.header.stamp, msg.header.frame_id))
+
+            self.watched.append(Watched(self, scene_pub, [
+                (Vector3Stamped, '/mongla/demand', on_demand, 5)]))
             self.create_timer(WATCH_PERIOD_S, self._poll)
             self.cams = cams
             self.stages_pub = self.create_publisher(String, '/mongla/batighor/stages', LATCHED)

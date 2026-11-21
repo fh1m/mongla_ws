@@ -3,6 +3,7 @@
 `overlay.annotate` is the whole of the overlay node's logic; these build the
 messages the vision stack publishes and read back what Lichtblick would draw.
 """
+import pytest
 from builtin_interfaces.msg import Time
 from foxglove_msgs.msg import PointsAnnotation
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
@@ -326,3 +327,27 @@ def test_the_floor_read_is_drawn_as_the_grid_and_the_lane_it_says():
     assert 'tiles 64 px' in words and '1.25 m above' in words and 'lane 0 deg' in words
     empty = floor_annotate(FloorRead(width=640, height=480))
     assert not empty.points and 'none read' in empty.texts[0].text
+
+
+def test_the_demand_arrow_points_where_the_board_is_told_to_push():
+    """FRD: a pure sway right turns the arrow +90 deg about z (down), a pure
+    reverse 180; its length is the demand's share of full force."""
+    import math
+    from builtin_interfaces.msg import Time
+    from mongla_batighor.overlay import DEMAND_ARROW_M, demand_scene
+    for (x, y), yaw in (((1.0, 0.0), 0.0), ((0.0, 0.5), 90.0), ((-0.8, 0.0), 180.0)):
+        e = demand_scene(x, y, Time(), 'mongla').entities[0]
+        assert e.frame_id == 'mongla'
+        (a,) = e.arrows
+        q = a.pose.orientation
+        assert math.degrees(2 * math.atan2(q.z, q.w)) == pytest.approx(yaw)
+        assert a.shaft_length + a.head_length == pytest.approx(DEMAND_ARROW_M * math.hypot(x, y))
+
+
+def test_an_unknown_demand_is_said_and_never_drawn_as_none():
+    from builtin_interfaces.msg import Time
+    from mongla_batighor.overlay import demand_scene
+    unknown = demand_scene(float('nan'), 0.2, Time(), 'mongla').entities[0]
+    none = demand_scene(0.0, 0.0, Time(), 'mongla').entities[0]
+    assert not unknown.arrows and unknown.texts[0].text == 'demand unknown'
+    assert not none.arrows and none.texts[0].text == 'demand none'

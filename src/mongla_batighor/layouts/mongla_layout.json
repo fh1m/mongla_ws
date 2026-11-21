@@ -36,6 +36,9 @@
       "topics": {
         "/mongla/odom": {
           "visible": true
+        },
+        "/mongla/batighor/scene": {
+          "visible": true
         }
       },
       "scene": {

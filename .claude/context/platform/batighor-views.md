@@ -101,6 +101,13 @@ sources aid it (`aided (flow uncalibrated)` here), its position, its velocity be
 the flow's, the board's heading beside the one given, and the floor's height against
 the depth.
 
+On the hull in 3D, an arrow from its origin is the demand: where the board is told
+to push and what share of full force, with the words under it. While the board runs
+a move in AUTO it owns the demand and reports none here, so the scene says
+`demand unknown` and draws no arrow. The cameras' frusta and the detections are not
+in the scene: both need where each camera sits on the hull and which way its
+picture points, and neither is measured yet (`frames.yaml`).
+
 ## Thrust (`thrust`)
 
 ![The thrust view: the Thrust panel with the surge and sway demand as centred bars and a note that the board has not announced its ESCs, beside plots of the battery, the demand and the body rates.](../../../docs/imgs/batighor/thrust.webp)
