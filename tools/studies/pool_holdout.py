@@ -13,8 +13,11 @@ archive), one dataset with:
 
   * one coarse class set, by keyword, because every team names the props its
     own way ('Red pail', 'red_tub', 'Blue Bucket', 'ember-biru' are one prop).
-    Colour stays out of the class: teams disagree on it, and the hue of a box
-    is read after detection. Classes nothing maps are dropped, not guessed;
+    `--classes coarse` keeps colour out of the class; `--classes fine` keeps
+    it in (flare_red, drum_blue, ...) where the team's own name says it, and
+    leaves out a frame whose prop names no colour. Nothing in the stack reads
+    colour from a coarse box yet: which of the two to ship is the colour A/B
+    (tools/studies/colour_ab.py). Classes nothing maps are dropped, not guessed;
   * each team's own split, as the team published it: never re-split, capped
     or shuffled. train = the other sources' train splits, val = their valid
     splits, test = the held-out source's own test split (its train and valid
@@ -67,6 +70,19 @@ COARSE = (
     ('ember', 'drum'),             # Indonesian for bucket
 )
 CLASSES = ('gate', 'flare', 'drum')
+
+# The fine set: colour in the class, for the arm that learns it (`--classes
+# fine`). Only a label that NAMES its colour is used. A prop with no colour in
+# its label ('flare', 'pole', 'suar') cannot teach one, and leaving its box in
+# would teach that a red flare is background, so `rewrite` returns UNUSABLE
+# for the whole frame and `build` leaves it out. Colour words include the
+# Indonesian two teams use (merah, kuning, biru, oranye, hitam).
+FINE_CLASSES = ('gate', 'flare_red', 'flare_yellow', 'flare_blue', 'flare_orange',
+                'drum_red', 'drum_blue', 'ball')
+_COLOURS = (('red', 'red'), ('merah', 'red'), ('yellow', 'yellow'), ('kuning', 'yellow'),
+            ('blue', 'blue'), ('biru', 'blue'), ('orange', 'orange'),
+            ('oranye', 'orange'), ('black', 'black'), ('hitam', 'black'))
+UNCOLOURED = 'uncoloured'
 IMG_EXT = ('.jpg', '.jpeg', '.png', '.bmp')
 
 
@@ -76,6 +92,22 @@ def coarse(name: str):
         if key in n.split() or key in n:
             return out
     return None
+
+
+def fine(name: str):
+    """A fine class, UNCOLOURED for a prop whose label names no colour, or
+    None for a class nothing maps."""
+    base = coarse(name)
+    n = str(name).strip().lower().replace('-', ' ').replace('_', ' ')
+    if base is None:
+        return 'ball' if ('ball' in n or 'golf' in n.split()) and 'tiang' not in n else None
+    if base == 'gate':
+        return 'gate'
+    colour = next((c for k, c in _COLOURS if k in n), None)
+    if colour is None:
+        return UNCOLOURED
+    out = f'{base}_{colour}'
+    return out if out in FINE_CLASSES else None
 
 
 def dhash(path) -> int | None:
@@ -106,13 +138,13 @@ def near(h: int, bank: np.ndarray, bits: int) -> bool:
     return bool((_popcount(bank ^ np.uint64(h)) <= bits).any())
 
 
-def source_items(root: pathlib.Path):
+def source_items(root: pathlib.Path, mapper=None):
     """(split, image, label path, {source class id: coarse name or None})."""
     import yaml
     y = yaml.safe_load((root / 'data.yaml').read_text())
     names = y['names']
     names = names if isinstance(names, list) else [names[k] for k in sorted(names)]
-    cmap = {i: coarse(n) for i, n in enumerate(names)}
+    cmap = {i: (mapper or coarse)(n) for i, n in enumerate(names)}
     out = []
     for split in ('train', 'valid', 'val', 'test'):
         idir = root / split / 'images'
@@ -124,7 +156,9 @@ def source_items(root: pathlib.Path):
     return out, cmap
 
 
-def rewrite(label: pathlib.Path, cmap: dict) -> list[str]:
+def rewrite(label: pathlib.Path, cmap: dict, classes=CLASSES):
+    """YOLO lines in `classes`, or None when a box names no colour the fine
+    set needs (the frame cannot be used, see FINE_CLASSES)."""
     lines = []
     if label.exists():
         for line in label.read_text().splitlines():
@@ -132,12 +166,20 @@ def rewrite(label: pathlib.Path, cmap: dict) -> list[str]:
             if len(p) != 5:                  # polygons or junk: not a box
                 continue
             c = cmap.get(int(float(p[0])))
+            if c == UNCOLOURED:
+                return None
             if c is not None:
-                lines.append(' '.join([str(CLASSES.index(c))] + p[1:]))
+                lines.append(' '.join([str(classes.index(c))] + p[1:]))
     return lines
 
 
-def build(sources, holdout: str, out: pathlib.Path, hamming: int = 4) -> dict:
+def build(sources, holdout: str, out: pathlib.Path, hamming: int = 4,
+          classes: str = 'coarse') -> dict:
+    names = FINE_CLASSES if classes == 'fine' else CLASSES
+    mapper = fine if classes == 'fine' else coarse
+
+    def lab(path, cmap):
+        return rewrite(path, cmap, names)
     sources = [pathlib.Path(s) for s in sources]
     held = [s for s in sources if holdout in s.name]
     if len(held) != 1:
@@ -146,8 +188,8 @@ def build(sources, holdout: str, out: pathlib.Path, hamming: int = 4) -> dict:
     for sub in ('train', 'val', 'test', 'own_test'):
         (out / sub / 'images').mkdir(parents=True, exist_ok=True)
         (out / sub / 'labels').mkdir(parents=True, exist_ok=True)
-    report = {'holdout': held.name, 'classes': list(CLASSES), 'sources': {},
-              'dropped_as_holdout_copies': 0}
+    report = {'holdout': held.name, 'classes': list(names), 'sources': {},
+              'dropped_as_holdout_copies': 0, 'dropped_uncoloured': 0}
 
     (out / 'tests').mkdir(exist_ok=True)
 
@@ -160,14 +202,21 @@ def build(sources, holdout: str, out: pathlib.Path, hamming: int = 4) -> dict:
             '\n'.join(lines) + ('\n' if lines else ''))
         return dst
 
-    items, cmap = source_items(held)
+    items, cmap = source_items(held, mapper)
     test = [i for i in items if i[0] == 'test']
     if not test:
         raise SystemExit(f'{held.name} publishes no test split; hold out a source that does')
     bank = []
-    for _, img, lab in test:
-        place('test', img, rewrite(lab, cmap), held.name)
-        h = dhash(img)
+    for _, img, lp in test:
+        lines = lab(lp, cmap)
+        h = dhash(img)        # hashed even when unusable: its copies stay out of train
+        if h is not None:
+            bank.append(h)
+        if lines is None:
+            report['dropped_uncoloured'] += 1
+            continue
+        place('test', img, lines, held.name)
+        h = None
         if h is not None:
             bank.append(h)
     bank = np.array(bank, dtype=np.uint64)
@@ -177,29 +226,34 @@ def build(sources, holdout: str, out: pathlib.Path, hamming: int = 4) -> dict:
     for src in sources:
         if src == held:
             continue
-        items, cmap = source_items(src)
-        kept: dict = {'train': 0, 'val': 0, 'test': 0, 'dropped': 0}
+        items, cmap = source_items(src, mapper)
+        kept: dict = {'train': 0, 'val': 0, 'test': 0, 'dropped': 0, 'uncoloured': 0}
         own_test = []
-        for split, img, lab in items:
+        for split, img, lp in items:
             sub = {'train': 'train', 'valid': 'val', 'val': 'val', 'test': 'test'}[split]
             h = dhash(img)
             if h is not None and near(h, bank, hamming):
                 kept['dropped'] += 1
                 continue
+            lines = lab(lp, cmap)
+            if lines is None:
+                kept['uncoloured'] += 1
+                continue
             if sub == 'test':      # scored in-pool, never trained on
-                own_test.append(str(place('own_test', img, rewrite(lab, cmap), src.name)))
+                own_test.append(str(place('own_test', img, lines, src.name)))
             else:
-                place(sub, img, rewrite(lab, cmap), src.name)
+                place(sub, img, lines, src.name)
             kept[sub] += 1
         if own_test:
             (out / 'tests' / f'{src.name}.txt').write_text('\n'.join(own_test) + '\n')
         report['dropped_as_holdout_copies'] += kept['dropped']
+        report['dropped_uncoloured'] += kept['uncoloured']
         kept['map'] = {str(k): v for k, v in cmap.items()}
         report['sources'][src.name] = kept
 
     (out / 'data.yaml').write_text(
         f'path: {out}\ntrain: train/images\nval: val/images\ntest: test/images\n'
-        'names:\n' + ''.join(f'  {i}: {c}\n' for i, c in enumerate(CLASSES)))
+        'names:\n' + ''.join(f'  {i}: {c}\n' for i, c in enumerate(names)))
     (out / 'holdout.json').write_text(json.dumps(report, indent=1))
     return report
 
@@ -260,6 +314,21 @@ def _self_test() -> int:
               and coarse('ember-biru') == 'drum' and coarse('Blue Bucket') == 'drum'
               and coarse('gate-loreng') == 'gate' and coarse('golf-merah') is None,
               'other teams\' names map')
+        check(fine('Red flare') == 'flare_red' and fine('suar') == UNCOLOURED
+              and fine('pole') == UNCOLOURED and fine('bluedrum') == 'drum_blue'
+              and fine('Blue Bucket') == 'drum_blue' and fine('red_tub') == 'drum_red'
+              and fine('ember-biru') == 'drum_blue' and fine('ember-hitam') is None
+              and fine('golf-merah') == 'ball' and fine('Ball') == 'ball'
+              and fine('tiang-golf') is None and fine('GATE') == 'gate'
+              and fine('Cloth') is None,
+              'fine names: colour named or the frame is unusable; black drums and golf poles dropped')
+        rep2 = build([td / 'team_a', td / 'team_b'], 'team_a', td / 'fine', classes='fine')
+        check(rep2['sources']['team_b']['uncoloured'] == 2 and rep2['sources']['team_b']['train'] == 0
+              and rep2['dropped_as_holdout_copies'] == 1,
+              "fine: every team_b frame with a colourless 'flare' is left out, not trained as background")
+        flab = (td / 'fine/test/labels/team_a__f0.txt').read_text().split('\n')
+        check([x for x in flab if x] == ['0 .5 .5 .2 .2', '5 .3 .3 .1 .1'],
+              'fine: Gate -> gate, Red pail -> drum_red')
         print('self-test', 'PASSED' if ok else 'FAILED')
         return 0 if ok else 1
 
@@ -270,6 +339,8 @@ def main(argv=None) -> int:
     ap.add_argument('--holdout', help='substring naming the one source to hold out')
     ap.add_argument('--out', help='output dir (default: <data root>/holdout/<holdout>)')
     ap.add_argument('--hamming', type=int, default=4)
+    ap.add_argument('--classes', choices=('coarse', 'fine'), default='coarse',
+                    help='fine: colour in the class (FINE_CLASSES)')
     ap.add_argument('--self-test', action='store_true')
     a = ap.parse_args(argv)
     if a.self_test:
@@ -281,7 +352,7 @@ def main(argv=None) -> int:
     else:
         from data_root import data_root
         out = pathlib.Path(data_root('holdout', a.holdout))
-    rep = build(a.sources, a.holdout, out, hamming=a.hamming)
+    rep = build(a.sources, a.holdout, out, hamming=a.hamming, classes=a.classes)
     print(json.dumps({k: (v if k != 'sources' else
                           {s: {x: y for x, y in d.items() if x != 'map'} for s, d in v.items()})
                       for k, v in rep.items()}, indent=1))
