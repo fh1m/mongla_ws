@@ -98,3 +98,35 @@ def test_the_node_reads_a_published_chain_within_the_bar():
         src.destroy_node()
     finally:
         rclpy.shutdown()
+
+
+def test_nobody_watching_costs_no_subscription():
+    """Subscribed for good it cost 17 % of a Pi core with no viewer. With no
+    subscriber to the chain it holds none of its stages' subscriptions; a
+    viewer brings them, and they go when it does."""
+    rclpy = pytest.importorskip('rclpy')
+    from std_msgs.msg import String
+    rclpy.init()
+    try:
+        node = chain.ChainNode(cameras=('downward',), period_s=0.05)
+        ex = rclpy.executors.SingleThreadedExecutor()
+        ex.add_node(node)
+
+        def spin(s):
+            end = time.monotonic() + s
+            while time.monotonic() < end:
+                ex.spin_once(timeout_sec=0.01)
+        spin(0.5)
+        assert list(node.subscriptions) == []
+        viewer = rclpy.create_node('chain_viewer')
+        sub = viewer.create_subscription(String, chain.TOPIC, lambda m: None, 10)
+        ex.add_node(viewer)
+        spin(1.0)
+        assert len(list(node.subscriptions)) == len(chain.stages(('downward',)))
+        viewer.destroy_subscription(sub)
+        spin(1.0)
+        assert list(node.subscriptions) == []
+        node.destroy_node()
+        viewer.destroy_node()
+    finally:
+        rclpy.shutdown()
