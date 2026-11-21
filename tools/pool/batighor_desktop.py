@@ -15,7 +15,12 @@ layout from a URL. So this, on the operator's machine:
      which carries the hull's URL on the host named here.
 
 The app imports a layout file once, by file name (its `from`), and keeps
-its own copy; a later change to the file never reaches that copy. A link
+its own copy; a later change to the file never reaches that copy. The
+instruments panel keeps that copy in step instead: on every app start it
+takes each view from Kutum's server (`syncLayouts` in
+`panels/instruments`), keeping a view the operator edited (Revert in the
+layout's menu takes Kutum's). So the views the app shows are Kutum's, not
+this folder's, once it has connected to Kutum. A link
 that names a layout saves a copy with no `from`, so the next start imports
 the file again beside it: two of each in the menu. So no link names a
 layout. Every run writes every view to the folder (a fresh app imports them
@@ -249,9 +254,11 @@ def main(argv=None) -> int:
     print(f'ok  views: {", ".join(new + changed) if new or changed else "already current"}')
     # Said whether or not this launches: with --no-launch it once returned
     # first, and a changed view went unmentioned while the app kept the old.
+    # Deleting the app's copy does not help: the instruments panel takes
+    # Kutum's again at the next start. It is the panel that refreshes it.
     for name in changed:
-        print(f'WARNING: {name} changed on Kutum and the app keeps its older copy: in '
-              f'Layouts, delete {name}, then restart the app to import the new one')
+        print(f'ok  {name} changed on Kutum; the app takes it at its next start '
+              f'(unless you edited it: Revert in the layout\'s menu)')
     if a.no_launch:
         return 0
     app = shutil.which('lichtblick')
