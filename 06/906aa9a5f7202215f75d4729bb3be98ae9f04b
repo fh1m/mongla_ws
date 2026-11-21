@@ -1,0 +1,21 @@
+.claude/context/perception/model-pipeline.md
+  s_4af8d6f83b24e8::t_5e14c8f977892a 33,83-84,92-113
+tools/studies/pool_holdout.py
+  s_4af8d6f83b24e8::t_43455cebf17185 54-59,61-62,257-258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "06906aa9a5f7202215f75d4729bb3be98ae9f04b",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
