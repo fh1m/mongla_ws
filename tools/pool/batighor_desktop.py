@@ -247,6 +247,11 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 1
     print(f'ok  views: {", ".join(new + changed) if new or changed else "already current"}')
+    # Said whether or not this launches: with --no-launch it once returned
+    # first, and a changed view went unmentioned while the app kept the old.
+    for name in changed:
+        print(f'WARNING: {name} changed on Kutum and the app keeps its older copy: in '
+              f'Layouts, delete {name}, then restart the app to import the new one')
     if a.no_launch:
         return 0
     app = shutil.which('lichtblick')
@@ -265,9 +270,6 @@ def main(argv=None) -> int:
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f'ok  opened {view} on {a.host}' + (f' at scale {flags[0].split("=")[1]}' if flags else '')
           + (', drawing through Vulkan' if gpu else ''))
-    for name in changed:
-        print(f'WARNING: {name} changed on Kutum and the app keeps its older copy: in '
-              f'Layouts, delete {name}, then restart the app to import the new one')
     return 0
 
 
