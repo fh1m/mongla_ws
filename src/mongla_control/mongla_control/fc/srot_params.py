@@ -268,6 +268,10 @@ class SrotParams:
         Absent on fw < 9. Reported as unknown rather than assumed either way.
         """
         raw = self._named_value('YAW_REF')
+        if raw is None and (self._behaviour_rev or 0) >= 9:
+            return False, ('yaw reference UNKNOWN (YAW_REF not heard yet; the board '
+                           f'is rev {self._behaviour_rev} and sends it). Absolute `turn` '
+                           'may be aiming at a boot-relative heading; prefer relative turns')
         if raw is None:
             return False, ('yaw reference UNKNOWN (no YAW_REF -- fw < 9). Absolute '
                            '`turn` may be aiming at a boot-relative heading; prefer '

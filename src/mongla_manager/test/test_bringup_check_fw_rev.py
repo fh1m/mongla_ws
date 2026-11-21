@@ -205,6 +205,9 @@ def test_only_a_locked_yaw_reference_passes():
         assert 'relative' in detail
     # fw < 9 has no YAW_REF: unknown, not assumed either way.
     assert _yaw_ref_verdict(None)[0] == WARN
+    # A board new enough to send it, not heard in the window, is not called old.
+    assert 'not heard' in _yaw_ref_verdict(None, rev=14)[2]
+    assert 'older than rev 9' in _yaw_ref_verdict(None, rev=8)[2]
 
 
 def test_a_board_that_never_reports_depth_cmd_only_warns():
