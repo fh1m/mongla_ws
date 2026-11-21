@@ -1,0 +1,21 @@
+src/mongla_batighor/panels/calibrate/extension.js
+  s_4af8d6f83b24e8::t_f5977f58b358b4 22,90,131-150
+src/mongla_batighor/test/test_panels.py
+  s_4af8d6f83b24e8::t_03d7c5ac49a9f2 628-663
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "4e65f8ec8c639a60bb50d4464e8abcf6f2bef54c",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
