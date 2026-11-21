@@ -843,8 +843,11 @@ function makePanel(spec) {
 // baseline holds must still be in the working copy. Keys the working copy
 // adds are not edits: the app writes its defaults (cameraState, publish,
 // showXAxisLabels...) into a panel's config when the panel first mounts,
-// and choosing a tab writes the Tab panel's activeTabIdx. Counting either as
-// an edit kept the console from ever taking Kutum's layout again.
+// choosing a tab writes the Tab panel's activeTabIdx, and a 3D panel writes
+// its camera back as it renders (an angle of 200 returns as -160, the
+// distance creeps). Counting any of them as an edit kept the console from
+// ever taking Kutum's layout again. Where the camera looks is a view, like
+// the open tab, so Kutum's camera replaces it.
 function said(base, work) {
   if (Array.isArray(base) || base === null || typeof base !== "object") return JSON.stringify(base) === JSON.stringify(work);
   if (work === null || typeof work !== "object" || Array.isArray(work)) return false;
@@ -858,6 +861,7 @@ function unedited(base, work) {
   return Object.entries(cfg(base)).every(([id, c]) => {
     if (!(id in cfg(work))) return false;
     if (id.startsWith("Tab!") && c) { const { activeTabIdx, ...rest } = c; return said(rest, cfg(work)[id]); }
+    if (id.startsWith("3D!") && c) { const { cameraState, ...rest } = c; return said(rest, cfg(work)[id]); }
     return said(c, cfg(work)[id]);
   });
 }
