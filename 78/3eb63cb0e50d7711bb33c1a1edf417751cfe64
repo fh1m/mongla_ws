@@ -1,0 +1,29 @@
+.claude/context/measured-bars.md
+  s_4af8d6f83b24e8::t_4a1a57a2ca9a6b 166,9075-9107
+.claude/context/missions/course-file.md
+  s_4af8d6f83b24e8::t_bf9683c8fd60a9 107-114
+README.md
+  s_4af8d6f83b24e8::t_bcdd6adca431ff 64,865,868
+docs/index.html
+  s_4af8d6f83b24e8::t_1e3b96789fce35 1873-1875,1877
+tools/README.md
+  s_4af8d6f83b24e8::t_9c4eb581cedd7d 193
+tools/studies/heave_height.py
+  s_4af8d6f83b24e8::t_fd1610f0a4b579 1-514
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "783eb63cb0e50d7711bb33c1a1edf417751cfe64",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
