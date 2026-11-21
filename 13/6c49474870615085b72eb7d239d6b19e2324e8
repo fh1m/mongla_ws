@@ -1,0 +1,23 @@
+.claude/context/packages/mongla_batighor/README.md
+  s_4af8d6f83b24e8::t_edd6f79b49c51b 61
+src/mongla_batighor/mongla_batighor/chain.py
+  s_4af8d6f83b24e8::t_dcc8ffdc00496a 21-24,163,167-172,175-178,180-182
+src/mongla_batighor/test/test_chain.py
+  s_4af8d6f83b24e8::t_6bf34687555c7d 101-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "136c49474870615085b72eb7d239d6b19e2324e8",
+  "prompts": {},
+  "sessions": {
+    "s_4af8d6f83b24e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e04fd519-589d-4e28-bd6f-1517d1827ef2",
+        "model": "unknown"
+      },
+      "human_author": "Fahim Faisal <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
