@@ -83,6 +83,7 @@ For an engineer at the bench, with the board or the Pi: hardware probes, latency
 | `lighterglue_hailo.py` | LighterGlue rewritten for the Hailo-8 compiler, float first. |
 | `lighterglue_hailo_dfc.py` | Step 2 of 2: parse, quantise and emulate a LighterGlue half on the Hailo-8. |
 | `lighterglue_hailo_prep.py` | Step 1 of 2 for LighterGlue on the Hailo-8: ONNX halves and real calibration. |
+| `lock_score.py` | Score the lock ladder against the detector, on a running stack (read-only). |
 | `mine_hard_negatives.py` | Mine the frames the detector is most confidently WRONG about. |
 | `mixer_map.py` | Measure what the mixer ACTUALLY does, using the Pico's console as readback. |
 | `model_inventory.py` | Every model on this box, what it detects, and whether it has been checked. |
