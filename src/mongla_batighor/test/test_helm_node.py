@@ -315,3 +315,36 @@ def test_a_mission_runs_in_its_own_group_and_abort_is_ctrl_c(rig, monkeypatch):
     assert os.getpgid(proc.pid) == proc.pid       # its own group, so killpg reaches it
     assert call('ann', 'abort').ok
     assert proc.wait(timeout=5) == -signal.SIGINT
+
+
+def test_a_viewer_that_connects_late_still_sees_the_recent_log(tmp_path):
+    """The Control Center's log card was empty on every fresh connection: only
+    events after the connection showed, while helm.log on Kutum held days of
+    them (70 lines on 2026-11-22). foxglove_bridge delivers one latched message
+    per subscription, so the tail is one message. It must not append to the file."""
+    from mongla_batighor.helm import HISTORY_LINES, LOG_TAIL
+    log = tmp_path / 'helm.log'
+    lines = [json.dumps({'event': f'e{i}', 't': 1000 + i}) for i in range(HISTORY_LINES + 25)]
+    log.write_text('\n'.join(lines) + '\n')
+    rclpy.init()
+    helm, viewer = HelmNode(log_path=log), Node('late_viewer')
+    got = []
+    viewer.create_subscription(String, LOG_TAIL, lambda m: got.append(json.loads(m.data)), LATCHED)
+    ex = rclpy.executors.SingleThreadedExecutor()
+    ex.add_node(helm)
+    ex.add_node(viewer)
+    t0 = time.monotonic()
+    while not got and time.monotonic() - t0 < 10.0:
+        ex.spin_once(timeout_sec=0.05)
+    n_file = len(log.read_text().splitlines())
+    helm._log(event='new')
+    t0 = time.monotonic()
+    while len(got) < 2 and time.monotonic() - t0 < 5.0:
+        ex.spin_once(timeout_sec=0.05)
+    ex.shutdown()
+    helm.destroy_node()
+    viewer.destroy_node()
+    rclpy.shutdown()
+    assert [json.loads(l)['event'] for l in got[0]] == [f'e{i}' for i in range(25, HISTORY_LINES + 25)]
+    assert n_file == HISTORY_LINES + 25
+    assert json.loads(got[-1][-1])['event'] == 'new' and len(got[-1]) == HISTORY_LINES

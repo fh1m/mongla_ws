@@ -148,6 +148,13 @@ def build_goal(cmd: str, fields_json: str):
 
 LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
+# A viewer opened after the events (every fresh browser) would show an empty log
+# card while helm.log held days of them. foxglove_bridge hands a new subscriber
+# ONE latched message, so the history travels as one: the last HISTORY_LINES
+# lines as a JSON array on LOG_TAIL, re-latched on every entry.
+HISTORY_LINES = 200
+LOG_TAIL = '/mongla/batighor/log_tail'
+
 class HelmNode(Node):
     def __init__(self, log_path=None):
         super().__init__('batighor_helm')
@@ -162,6 +169,9 @@ class HelmNode(Node):
         self.pub_state = self.create_publisher(
             String, '/mongla/batighor/helm_state', LATCHED)
         self.pub_log = self.create_publisher(String, '/mongla/batighor/log', 50)
+        self.pub_tail = self.create_publisher(String, LOG_TAIL, LATCHED)
+        self._tail = self._read_tail()
+        self.pub_tail.publish(String(data=json.dumps(self._tail)))
         self.create_subscription(String, '/mongla/mission_alive',
                                  self._on_mission_alive, 10)
         self.create_service(Helm, '/mongla/batighor/helm', self._on_request)
@@ -188,6 +198,14 @@ class HelmNode(Node):
         self.pub_log.publish(String(data=line))
         with open(self.log_path, 'a') as f:
             f.write(line + '\n')
+        self._tail = (self._tail + [line])[-HISTORY_LINES:]
+        self.pub_tail.publish(String(data=json.dumps(self._tail)))
+
+    def _read_tail(self):
+        try:
+            return self.log_path.read_text().splitlines()[-HISTORY_LINES:]
+        except OSError:
+            return []
 
     def _flush_seat(self):
         for what in self.seat.events:
