@@ -31,9 +31,10 @@ The rules every view keeps:
 
 ![The cockpit: the forward camera on the gate with its box and a track, the downward camera on the bins with the flow node's tracked points, the Control Center with STOP, SURFACE and DISARM, the Vehicle gauges, the hull in 3D, and the Vision panel with each camera's lock ladder and perception stages.](../../../docs/imgs/batighor/mongla_layout.webp)
 
-The view the app opens on, in three columns read left to right: the two cameras,
+The console's first tab (`/` opens the console, `batighor`: the status strip over a tab per
+view), in three columns read left to right: the two cameras,
 each column as wide as its 16:9 pictures (the vehicle profiles' 640x360, read from `cameras.yaml` by the test); the Control Center at full height; and the
-vehicle's numbers and attitude over the Vision panel.
+vehicle's numbers and attitude over the Vision panel and the lock authority it holds with.
 
 - **Control Center**: STOP, SURFACE and DISARM first and pinned, for anyone, one press,
   one row of three keys sized by the panel's width, each saying under its name what

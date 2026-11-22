@@ -51,7 +51,8 @@ ros2 run mongla_planner mission sauvc_qualification
 
 **Topside laptop — watch live:** open `http://kutum.local:8000/` in any browser. Batighor
 serves Lichtblick already connected to `ws://<the same host>:8765` and opened on
-`src/mongla_batighor/layouts/mongla_layout.json`; `/?layout=board_health` opens another.
+the console, `src/mongla_batighor/layouts/batighor.json`: the status strip and a tab for every
+view. `/?layout=board_health` opens one view alone.
 
 **After the run — one folder has everything:**
 ```bash

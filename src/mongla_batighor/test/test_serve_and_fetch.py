@@ -36,6 +36,7 @@ def site(tmp_path):
     layouts = tmp_path / 'layouts'
     layouts.mkdir()
     (layouts / 'mongla_layout.json').write_text('{"configById": {}}')
+    (layouts / 'batighor.json').write_text('{"configById": {}}')
     srv = serve.make_server(0, web, layouts, bridge_port=8765)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f'http://127.0.0.1:{srv.server_address[1]}', big
@@ -65,7 +66,9 @@ def test_root_opens_the_app_on_this_host_bridge_and_layout(site):
     assert loc.startswith('/app/?ds=foxglove-websocket')
     assert 'ws%3A%2F%2F127.0.0.1%3A8765' in loc
     # Named, not sent: a layoutUrl raced the app's start-up (serve.app_link).
-    assert loc.endswith('&workspace=mongla&layout=mongla_layout') and 'layoutUrl' not in loc
+    # The console (status strip + a tab per view), not the bare cockpit: `/` opened
+    # `mongla_layout` and an operator saw no tab bar at all (2026-11-22).
+    assert loc.endswith('&workspace=mongla&layout=batighor') and 'layoutUrl' not in loc
 
 
 def test_the_link_names_the_host_the_browser_used():
@@ -338,7 +341,7 @@ def test_the_desktop_app_can_list_and_read_the_layouts(site):
     is a file: the index names every layout and both answer with CORS."""
     base, _ = site
     status, headers, body = _get(base + '/layouts/index.json')
-    assert status == 200 and json.loads(body) == ['mongla_layout']
+    assert status == 200 and json.loads(body) == ['batighor', 'mongla_layout']
     assert headers.get('Access-Control-Allow-Origin') == '*'
     status, headers, _ = _get(base + '/layouts/mongla_layout.json')
     assert status == 200 and headers.get('Access-Control-Allow-Origin') == '*'

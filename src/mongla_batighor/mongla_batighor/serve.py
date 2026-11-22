@@ -382,7 +382,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def make_server(port: int, web: Path, layouts: Path, bridge_port: int,
-                default_layout: str = 'mongla_layout',
+                default_layout: str = 'batighor',
                 panels_dir: Path | None = None) -> ThreadingHTTPServer:
     """The server; built once, so a panel or the bundle is read at start.
 
@@ -413,7 +413,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--port', type=int, default=8000)
     ap.add_argument('--bridge-port', type=int, default=8765)
-    ap.add_argument('--layout', default='mongla_layout')
+    ap.add_argument('--layout', default='batighor')
     a, _ = ap.parse_known_args(argv)          # launch adds --ros-args
     root = share()
     web = web_dir(pin(root)['version'])
