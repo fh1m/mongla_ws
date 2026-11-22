@@ -342,3 +342,22 @@ def test_the_desktop_app_can_list_and_read_the_layouts(site):
     assert headers.get('Access-Control-Allow-Origin') == '*'
     status, headers, _ = _get(base + '/layouts/mongla_layout.json')
     assert status == 200 and headers.get('Access-Control-Allow-Origin') == '*'
+
+
+def test_a_first_visit_opens_the_views_full_width():
+    """Lichtblick opens its left sidebar by default, a fifth of the screen
+    saying "Select a panel to edit its settings", and its first load writes
+    that default to the workspace store. The page marks a profile with no
+    store, and the first-visit script closes the sidebar in the store just
+    before its one reload; a stored choice is never touched. Checked live in
+    a fresh headless profile against Kutum. INJECTION: drop closeSidebar()
+    from the reload, or rename the seed key on one side, and this fails."""
+    from mongla_batighor import serve
+    page = serve.themed(b'<html><head><title>Lichtblick</title></head><body></body></html>')
+    assert b'localStorage.getItem("fox.workspace")===null' in page
+    assert b'closeSidebar();location.reload()' in page
+    assert b'open:false' in page
+    # The key the head writes is the key closeSidebar reads; renaming one side
+    # alone would leave every first visit with the sidebar open, silently.
+    assert b'sessionStorage.setItem("batighor.sidebar-seed","1")' in page
+    assert b'sessionStorage.getItem("batighor.sidebar-seed")' in page
