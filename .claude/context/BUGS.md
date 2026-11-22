@@ -925,6 +925,27 @@ section (its lane witness and its fisheye lens could not grade it).
 peak accuracy. Injection: the old module fails 15 of them, the new one
 without fading 20, fading any dark blob fails a negative control.
 
+### B-149: the floating PM1 pin climbed past both step rules `REPRODUCED 2026-11-22` **FIXED 2026-11-22**
+
+**What.** Hours after B-148's fix was deployed, Batighor's board_health view
+plotted the unwired PM1 pin as the electronics pack again, 1.39 to 4.14 V. An
+80 s recording of `/mongla/state` (one BATTERY_STATUS a second) showed a new
+shape: the pin rests at 1.391 V for 5 to 8 s, climbs in steps under the 2 V bar,
+and drops back once. A 16-sample window held at most two jumps, the median step
+was small, and the latch released after every quiet spell.
+
+**Fix.** Physics, not statistics: no lithium pack in service reads under an
+empty cell, 3.0 V (`BATTERY_MIN_V`; 1S is the smallest pack, so no cell count
+is assumed). Two samples under it in the window condemn the line
+(`BATTERY_MAX_LOWS`; one is a glitch, which
+`test_one_glitch_does_not_blank_a_real_pack` keeps trusted), and a condemned
+line is released only by a whole window with no jump and no low sample. The
+board could say this itself: an unwired sense input is a configuration it
+knows, and reporting it is a firmware ask, not a host statistic.
+
+**Guard.** `test_battery_plausibility.py::test_a_pin_that_ramps_under_the_jump_bar_is_not_trusted`
+replays the 80 s recording; it failed before the fix.
+
 ### B-148: the floating PM1 pin reached /mongla/state through get_battery() `REPRODUCED 2026-11-22` **FIXED 2026-11-22**
 
 **What.** On Kutum with the real board (USB power, nothing on GPIO36), the

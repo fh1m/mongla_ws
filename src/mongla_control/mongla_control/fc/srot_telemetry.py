@@ -262,6 +262,10 @@ class SrotTelemetry:
         sense line can be told from a battery."""
         prev = self._battery_last.get(bid)
         self._battery_last[bid] = voltage
+        if math.isfinite(voltage):
+            lows = self.__dict__.setdefault('_battery_lows', {}).setdefault(
+                bid, collections.deque(maxlen=sp.BATTERY_STEP_WINDOW))
+            lows.append(voltage < sp.BATTERY_MIN_V)
         if prev is None or not (math.isfinite(prev) and math.isfinite(voltage)):
             return
         ring = self._battery_steps.setdefault(
@@ -310,15 +314,21 @@ class SrotTelemetry:
         # jumping to 1.39 V and back). A pack never jumps the bar; one glitch
         # jumps it twice (out and back), so a third jump in the window is a pin.
         jumps = sum(1 for s in ring if s > sp.BATTERY_MAX_STEP_V)
+        # The step rules both passed a pin that climbs from its 1.391 V rest in
+        # steps under the bar and drops back once (Kutum 2026-11-22, B-149). No
+        # pack in service reads under an empty cell; one such frame is a glitch.
+        # Interim: the board knows its wiring (upstream ask X, item 4).
+        lows = sum(getattr(self, '_battery_lows', {}).get(bid, ()))
         # Latched: the pin's quiet spells (1.39 V held for seconds) leave too
         # few jumps in the window and it read as a battery again. A condemned
         # line is released only by a whole window with no jump at all.
         condemned = getattr(self, '_battery_condemned', None)
         if condemned is None:
             condemned = self._battery_condemned = set()
-        if mid > sp.BATTERY_MAX_STEP_V or jumps >= sp.BATTERY_MAX_JUMPS:
+        if (mid > sp.BATTERY_MAX_STEP_V or jumps >= sp.BATTERY_MAX_JUMPS
+                or lows >= sp.BATTERY_MAX_LOWS):
             condemned.add(bid)
-        elif jumps == 0 and len(ring) == ring.maxlen:
+        elif jumps == 0 and lows == 0 and len(ring) == ring.maxlen:
             condemned.discard(bid)
         return bid not in condemned
 
