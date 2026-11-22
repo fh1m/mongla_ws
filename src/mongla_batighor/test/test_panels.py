@@ -4,6 +4,7 @@ Lichtblick's side of each shape is its 1.30.0 source, `api/extensions/` and
 `providers/ExtensionCatalogProvider/utils.ts`; the bundle switch is the line
 read from the pinned release's `main.<hash>.js`.
 """
+import pathlib
 import io
 import json
 import re
@@ -671,3 +672,18 @@ def test_a_calibration_button_outlives_the_states_that_follow_it():
     assert found and not disabled, 'a named operator sees an apply button'
     assert kept, 'a new hold value does not replace the button'
     assert not rebuilt_same, 'a changed library does'
+
+
+def test_a_detector_setting_stays_on_one_row():
+    """Detectors at 1600 px (Kutum, 2026-11-22): a flex row wrapped a long
+    value ("model_path, as launched") onto its own line above its input, where
+    it read as the row above's; and the model datalists sat in the label/value
+    grid, so the odd/even label colours shifted after the first. The row is a
+    fixed three-column grid and the datalists live in their own rows."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    js = (root / 'panels' / 'control' / 'extension.js').read_text()
+    css = (root / 'theme' / 'batighor.css').read_text()
+    assert 'tuneGrid.append(list)' not in js
+    assert 'el("div", { class: "row tune" })' in js
+    assert '.mb .row.tune{display:grid' in css
+    assert 'text-overflow:ellipsis' in css.split('.mb .row.tune > :first-child', 1)[1].split('}', 1)[0]

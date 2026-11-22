@@ -193,12 +193,14 @@ function initPanel(context, kind = "ControlCenter") {
     for (const [s, kind] of Object.entries(TUNABLE)) {
       const key = `${cam}.${s}`;
       const input = el("input", { size: "10", type: kind === "float" ? "number" : "text", step: "any" });
+      const row = el("div", { class: "row tune" });
       if (s === "active_model") {
         // The detector's registry keys; typing "a,b" for two models still works.
+        // In the row, not the grid: a grid child shifts the odd/even label colours.
         const list = el("datalist", { id: `bh-models-${cam}` });
         input.setAttribute("list", list.id);
         modelLists[cam] = list;
-        tuneGrid.append(list);
+        row.append(list);
       }
       const set = el("button", {
         onclick: () => {
@@ -209,7 +211,9 @@ function initPanel(context, kind = "ControlCenter") {
       }, "Set");
       setButtons.push(set);
       now[key] = el("span", { class: "live" });
-      tuneGrid.append(el("label", {}, key), el("div", { class: "row" }, now[key], input, set));
+      row.prepend(now[key]);
+      row.append(input, set);
+      tuneGrid.append(el("label", {}, key), row);
     }
   }
   const tuneNote = el("span");
@@ -286,6 +290,7 @@ function initPanel(context, kind = "ControlCenter") {
       const unset = UNSET[s] && v === UNSET[s][0];
       cell.textContent = !tuning[cam] ? "--" : unset ? UNSET[s][1] : v === "" ? '""' : String(v);
       cell.className = unset ? "note" : "live";
+      cell.title = cell.textContent;   // the whole value, where the column cuts it
     }
     for (const [cam, list] of Object.entries(modelLists)) {
       // `models` is "key=stem,key2=stem2" or bare stems; the key is what

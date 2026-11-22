@@ -134,6 +134,11 @@ body{background:var(--mb-d0)!important}
 .mb h3{margin:0;font-size:10px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;
   color:var(--mb-ink-3);display:flex;justify-content:space-between;gap:8px}
 .mb .row{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap}
+/* A setting's row: value, input, Set on one line at any width. Wrapping put a
+   long value on its own line above its input, where it read as the row above's. */
+.mb .row.tune{display:grid;grid-template-columns:minmax(0,13ch) minmax(5ch,1fr) auto;gap:6px}
+.mb .row.tune > :first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mb .row.tune > input{width:100%;min-width:0;box-sizing:border-box}
 /* A header that stays while the text under it scrolls to the running line. */
 .mb .row.pin{position:sticky;top:-10px;z-index:2;background:var(--mb-d1);padding:6px 0;margin-top:-6px}
 /* A mission's text: numbered, wrapped (never sideways), the running line marked. */
