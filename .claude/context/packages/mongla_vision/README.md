@@ -46,6 +46,13 @@ leaving integer arithmetic — 31.5 ms down to **0.93 ms**, bit-for-bit identica
 The detector picks its runtime from the artifact it is given: a Hailo binary (`.hef`) on the
 vehicle, or plain PyTorch (`.pt`) on a dev box. Same interface, so nothing above it changes.
 
+The weights themselves (`models/*.pt`, `*.onnx`, `*.hef`) are versioned in **Git LFS**, beside
+the `<stem>.yaml` sidecar each one needs. A clone that never ran `git lfs pull` holds small text
+pointers under the models' names; the detector and `bringup_check` refuse a pointer by name with
+that fix, rather than hand it to the chip. CI checks out without LFS, so no CI run spends the
+repository's LFS bandwidth. Nothing under `docs/` is ever LFS: GitHub Pages would serve the
+pointer text (`test/test_lfs_holds_only_the_weights.py`).
+
 ### 4. Hold the target when the detector blinks
 
 Detectors flicker. Measured over 71 real gaps in real footage, the median gap is 0.155 s and

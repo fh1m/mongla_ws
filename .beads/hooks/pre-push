@@ -1,4 +1,19 @@
 #!/usr/bin/env sh
+# --- BEGIN GIT LFS ---
+# The model weights are in Git LFS (.gitattributes). Runs before beads and
+# hands it the same stdin: both read the ref list, and whichever ran second
+# would otherwise see none (LFS then pushes no objects, and the remote holds
+# pointers to files it never received).
+if command -v git-lfs >/dev/null 2>&1; then
+  _lfs_refs=$(mktemp)
+  cat > "$_lfs_refs"
+  git lfs pre-push "$@" < "$_lfs_refs" || { _lfs_exit=$?; rm -f "$_lfs_refs"; exit "$_lfs_exit"; }
+  exec < "$_lfs_refs"
+  rm -f "$_lfs_refs"
+else
+  echo >&2 "WARNING: git-lfs is not installed; model weights (Git LFS) will not be pushed"
+fi
+# --- END GIT LFS ---
 # --- BEGIN BEADS INTEGRATION v1.3.2 ---
 # This section is managed by beads. Do not remove these markers.
 if command -v bd >/dev/null 2>&1; then
