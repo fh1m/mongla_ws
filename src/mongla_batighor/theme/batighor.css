@@ -207,11 +207,12 @@ body{background:var(--mb-d0)!important}
 .mb label{color:var(--mb-ink-2)}
 
 .mb .msg{min-height:1.45em;color:var(--mb-ink-2)}
+.mb .msg:empty{display:none}
 .mb .msg.bad{color:var(--mb-red)}
 .mb .log, .mb pre{font-size:11px;line-height:1.4;white-space:pre;overflow:auto;margin:0;
   background:var(--mb-sunk);border:1px solid var(--mb-rule);border-radius:3px;padding:6px 8px;
   color:var(--mb-ink-2)}
-.mb .log{flex:1;min-height:8em}
+.mb .log{flex:1;min-height:6em;white-space:pre-wrap;overflow-wrap:anywhere}
 .mb pre{white-space:pre-wrap;max-height:12em}
 .mb table{border-collapse:collapse;width:100%;font-size:11px}
 .mb th{font-weight:400;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mb-ink-3);text-align:left}

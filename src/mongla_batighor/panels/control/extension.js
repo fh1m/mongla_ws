@@ -14,7 +14,9 @@
 
 const SERVICE = "/mongla/batighor/helm";
 const STATE = "/mongla/batighor/helm_state";
-const LOG = "/mongla/batighor/log";
+// One latched message holding the last 200 lines: a bridge hands a new viewer one message, so
+// the history cannot travel as a stream.
+const LOG = "/mongla/batighor/log_tail";
 const VEHICLE = "/mongla/state";
 const ANYONE = ["stop", "surface", "disarm"];
 // Under each key, what it does to the vehicle: three red keys alike in a
@@ -230,8 +232,7 @@ function initPanel(context, kind = "ControlCenter") {
   }
   if (has("helm")) {
     const cHelm = card(box, "helm");
-    cHelm.append(el("div", { class: "row" }, name, pilotLine),
-      el("div", { class: "row" }, bRequest, bGive, bRelease));
+    cHelm.append(el("div", { class: "row" }, name, bRequest, bGive, bRelease), el("div", { class: "row" }, pilotLine));
   } else {
     // Settings take a name too: the same one, kept in this browser.
     const cWho = card(box, "who");
@@ -317,21 +318,25 @@ function initPanel(context, kind = "ControlCenter") {
         el("span", {}, `heading ${num(vehicle.yaw_deg, 0)}`),
         el("span", {}, `battery ${num(vehicle.battery_voltage, 1, " V")}`)]
       : [el("span", { class: "stale" }, "no /mongla/state yet")]));
-    log.textContent = lines.slice(-200).join("\n");
+    const text = lines.slice(-200).join("\n");
+    if (log.textContent !== text) {
+      const stuck = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
+      log.textContent = text;
+      if (stuck) log.scrollTop = log.scrollHeight;
+    }
     log.scrollTop = log.scrollHeight;
   }
 
   function logLine(raw) {
     let e;
-    try { e = JSON.parse(raw); } catch { lines.push(raw); return; }
-    const t = new Date((e.t || 0) * 1000).toLocaleTimeString();
-    const who = (e.operator || "").padStart(10);
+    try { e = JSON.parse(raw); } catch { return String(raw); }
+    const t = new Date((e.t || 0) * 1000).toLocaleTimeString([], { hour12: false });
     let text = e.event;
     if (text === undefined) {
       text = [e.op, e.cmd, e.mission].filter(Boolean).join(" ");
       text += e.ok ? "  ok" : `  REFUSED: ${e.message || ""}`;
     }
-    lines.push(`${t} ${who}  ${text}`);
+    return e.operator ? `${t}  ${e.operator}: ${text}` : `${t}  ${text}`;
   }
 
   context.subscribe([{ topic: STATE }, { topic: LOG }, { topic: VEHICLE }]);
@@ -341,7 +346,10 @@ function initPanel(context, kind = "ControlCenter") {
       if (ev.topic === STATE) {
         try { helm = JSON.parse(ev.message.data); } catch { /* keep the last */ }
       } else if (ev.topic === LOG) {
-        logLine(ev.message.data);
+        try {
+          lines.length = 0;
+          for (const raw of JSON.parse(ev.message.data)) lines.push(logLine(raw));
+        } catch { /* keep the last */ }
       } else if (ev.topic === VEHICLE) {
         vehicle = ev.message;
       }

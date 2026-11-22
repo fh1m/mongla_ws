@@ -225,7 +225,9 @@ def cockpit(v: View):
     return row((CAMERA_COLUMN, _cameras(v)),
                (30, v('control', instrument('ControlCenter'))),
                (33, col((4, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
-                        (5, v('vision', instrument('Vision'))))))
+                        (4, v('vision', instrument('Vision'))),
+                        (2, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS),
+                                             y=(0, 1.05)))))))
 
 
 def vision(v: View):
