@@ -58,3 +58,28 @@ def test_too_few_scored_frames_is_unverified_not_passed():
 
 def test_the_bar_sits_between_the_healthy_and_the_diverged_builds():
     assert 0.06 < hc.MAX_INT8_SHIFT < 0.339
+
+
+def test_a_short_clip_gives_its_keyframes_once_and_the_rest_moves_on():
+    # A clip with 5 keyframes asked for a tenth of 30 must not repeat frames
+    # to fill its share; the longer clips take the remainder (side note
+    # 2026-11-22: repeats would still read as the full count).
+    take = hc.allocate([5, 100, 100], 30)
+    assert take[0] == 5 and sum(take) == 30
+    assert all(t <= c for t, c in zip(take, [5, 100, 100]))
+
+
+def test_an_archive_too_small_gives_fewer_not_repeated():
+    assert hc.allocate([3, 3, 3], 20) == [3, 3, 3]
+    assert hc.allocate([0, 50], 10) == [0, 10]
+
+
+def test_the_same_footage_filed_twice_is_read_once(tmp_path):
+    # The archive holds two such pairs; each copy took a share and gave the
+    # same frames, so 1024 frames requested came back 975 distinct.
+    a, b, c = tmp_path / 'a.mkv', tmp_path / 'b' / 'a.mkv', tmp_path / 'c.mkv'
+    b.parent.mkdir()
+    a.write_bytes(b'x' * 5000)
+    b.write_bytes(b'x' * 5000)
+    c.write_bytes(b'y' * 5000)
+    assert hc.unique_clips([a, b, c]) == [a, c]

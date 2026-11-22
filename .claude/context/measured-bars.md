@@ -173,6 +173,7 @@ is how `recommend()` happened.
 - [107. DE-ROTATION, FITTED ON A RIGID RIG: 98.5 % of a taped slide, against 63 % off (2026-11-22)](#107-de-rotation-fitted-on-a-rigid-rig-985--of-a-taped-slide-against-63--off-2026-11-22)
 - [108. THE CAMERA-TO-GYRO OFFSET IN THE FLIGHT MODE: td = -13.4 ms (2026-11-22)](#108-the-camera-to-gyro-offset-in-the-flight-mode-td---134-ms-2026-11-22)
 - [109. THE BOARD'S HEADING UNDER HAND MOTION: 3.5 deg rms AT NINE RETURNS (2026-11-22)](#109-the-boards-heading-under-hand-motion-35-deg-rms-at-nine-returns-2026-11-22)
+- [110. ONE HAILO COMPILE, TIMED: 53.8 min, OF WHICH THE GPU OPTIMISE IS 24.5 (2026-11-22)](#110-one-hailo-compile-timed-538-min-of-which-the-gpu-optimise-is-245-2026-11-22)
 <!-- contents:end -->
 
 ---
@@ -9379,3 +9380,26 @@ error, against a bar that asked for half. Its integration loses every frame the 
 refuses, and hand turns lifted off the floor refuse often, so the method needs a steady view of
 the floor that a hull at depth has and this rig did not. Not covered: water, a hull with
 thrusters running (their currents near the magnetometer), turns at the hull's own rates.
+
+## 110. ONE HAILO COMPILE, TIMED: 53.8 min, OF WHICH THE GPU OPTIMISE IS 24.5 (2026-11-22)
+
+`octagon` (YOLOv8n, 4 classes: sos, rescue, survey, repair) compiled for the Hailo-8 on the dev
+box: DFC 3.34.0, RTX 2060 (6 GiB) named by `hailo_compile.sh`, nothing else on the GPU, under
+`/usr/bin/time -v` (`mongla_data/hailo_logs/octagon_2026-11-22e.*`). Competition speed rule:
+every step timed.
+
+| step | time | note |
+|---|---|---|
+| calibration set, first draw | 178 s | 1024 distinct keyframes from 37 clips (2 duplicate clips read once); was over 23 min with seeking reads |
+| calibration set, cached | 3.5 s | the same 1024 frames from `~/hailo_work/calib/`, keyed on clips, size and seed |
+| optimise (fine-tune), GPU | 1467 s | the largest single step |
+| parse, INT8 check, allocate and compile | about 1760 s | by difference from the wall clock; the allocator is most of it |
+| **total** | **53 min 50 s** | peak RSS 4.4 GB |
+
+**INT8 against float, 100 held-out frames of a clip the calibration excluded (86 with a match):**
+median shift **+0.077** of confidence, p90 +0.099. The bar is `MAX_INT8_SHIFT = 0.10` on the median
+(`hailo_compile.py`), so this **passes with little room**; a model whose shift climbs past it is
+refused. The HEF runs as **3 contexts** on the chip (`hailortcli parse-hef`), so its rate on
+Kutum is measured before it is quoted, not assumed from the single-context models. Not covered:
+`compiler_optimization_level=max`, which the DFC suggests and which lengthens the compile; it
+is a candidate only with its own timing and a rate gain measured on Kutum.
