@@ -162,6 +162,28 @@ bridge sent, so the floor height is right; only the message-path completion lack
 
 ## Video, by link
 
+### What it looks like
+
+Captured 2026-11-22 from Kutum: the real SROT board on the cable, the vision stack replaying
+recorded footage (the 2025 gate at Mirpur with `gate_sharks` forward, the 2026 bins with
+`bin_fire_blood` downward) and an invented course. A bench, not the water; **RUNS TODAY** on the
+bench, **BUILT, NEVER FLOWN** in the hull. Only curated recorded clips are ever shown here, never a
+live camera.
+
+![The cockpit: both cameras with the lock drawn over them, the Control Center with the emergency keys pinned, the vehicle, the hull in 3D and each camera's lock ladder](../../../../docs/imgs/readme/batighor-cockpit.webp)
+
+![The vision view, animated: detections, the lock ladder lighting, and the lock's authority on its 0 to 1 axis](../../../../docs/imgs/readme/batighor-vision.webp)
+
+![The map: the pool outline and soundings, nominal props dashed amber, Mongla hollow amber by its start](../../../../docs/imgs/readme/batighor-map.webp)
+
+![The chain: both cameras beside each stage's age, frame to detect to track to lock](../../../../docs/imgs/readme/batighor-chain.webp)
+
+![Localization: usable and why not, aiding, position, sigma, velocity and heading from each source](../../../../docs/imgs/readme/batighor-localization.webp)
+
+![Downward: the camera at full height with its tracked floor features beside the speed, scale and height plots](../../../../docs/imgs/readme/batighor-downward.webp)
+
+![Health: every subsystem graded, the board's and Kutum's](../../../../docs/imgs/readme/batighor-health.webp)
+
 ### The desktop app
 
 `python3 tools/pool/batighor_desktop.py [host]` on the operator's machine installs Kutum's
