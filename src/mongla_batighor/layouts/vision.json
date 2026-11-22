@@ -40,6 +40,8 @@
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
+      "minYValue": 0,
+      "maxYValue": 1.05,
       "lichtblickPanelTitle": "lock authority"
     },
     "mongla.batighor.Detectors!detectors": {},
