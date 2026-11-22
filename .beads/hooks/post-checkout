@@ -1,4 +1,7 @@
 #!/usr/bin/env sh
+# --- BEGIN GIT LFS ---
+command -v git-lfs >/dev/null 2>&1 && git lfs post-checkout "$@"
+# --- END GIT LFS ---
 # --- BEGIN BEADS INTEGRATION v1.3.2 ---
 # This section is managed by beads. Do not remove these markers.
 if command -v bd >/dev/null 2>&1; then
