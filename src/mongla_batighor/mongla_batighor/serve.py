@@ -61,7 +61,17 @@ THEME_HEAD = (b'<link rel="stylesheet" href="/theme/batighor.css">'
               b'characterData:true});fix()})()</script>'
               b'<script>try{var k="studio.app-configuration.colorScheme";'
               b'if(localStorage.getItem(k)===null)localStorage.setItem(k,\'"dark"\')}'
-              b'catch(e){}</script>')
+              b'catch(e){}</script>'
+              # The views full width on a first visit: Lichtblick opens its left
+              # sidebar (panel settings) by default, a fifth of the screen saying
+              # "Select a panel to edit its settings". Its workspace store is
+              # zustand-persisted under "fox.workspace", version 1. A profile with
+              # no store yet is marked for the session; the app's first load then
+              # writes its default (open), and FIRST_VISIT_HEAD closes it in the
+              # store just before its one reload. A stored choice survives every
+              # later load, so an operator who opens the sidebar keeps it open.
+              b'<script>try{if(localStorage.getItem("fox.workspace")===null)'
+              b'sessionStorage.setItem("batighor.sidebar-seed","1")}catch(e){}</script>')
 
 
 # `?layout=` on a browser's first visit (B-141). Lichtblick 1.30.0 matches the
@@ -90,8 +100,13 @@ FIRST_VISIT_HEAD = (
     b'return x.layout&&x.layout.name===want}))};'
     b'g.onerror=function(){db.close();done(false)}};'
     b'r.onerror=function(){done(false)}})}'
+    b'function closeSidebar(){try{if(!sessionStorage.getItem("batighor.sidebar-seed"))return;'
+    b'var w=JSON.parse(localStorage.getItem("fox.workspace")||"{}");'
+    b'w.state=w.state||{};w.state.sidebars=w.state.sidebars||{};'
+    b'w.state.sidebars.left={item:"panel-settings",open:false};w.version=w.version||1;'
+    b'localStorage.setItem("fox.workspace",JSON.stringify(w))}catch(e){}}'
     b'function poll(){has(function(found){'
-    b'if(found){if(!first){sessionStorage.setItem(flag,"1");location.reload()}return}'
+    b'if(found){if(!first){sessionStorage.setItem(flag,"1");closeSidebar();location.reload()}return}'
     b'first=false;if(Date.now()-start<15000)setTimeout(poll,250)})}'
     b'poll()}catch(e){}})()</script>')
 
