@@ -324,3 +324,19 @@ def test_every_tab_carries_its_glyph():
     titles = {t for _, t in views.TABS}
     assert titles <= keyed, titles - keyed
     assert keyed <= titles, f'a glyph for no tab: {keyed - titles}'
+
+
+def test_lock_authority_keeps_its_whole_range():
+    """Authority is 0..1 by construction (`lock_state.authority_for`).
+    Autoscaled, a steady 1.0 drew on a 0.94-1.06 axis and read as noise
+    (Kutum, 2026-11-22)."""
+    import json
+    import pathlib
+    found = 0
+    for f in (pathlib.Path(__file__).resolve().parents[1] / 'layouts').glob('*.json'):
+        for cfg in json.loads(f.read_text()).get('configById', {}).values():
+            paths = [p.get('value', '') for p in cfg.get('paths', []) if isinstance(p, dict)]
+            if any('/lock' in p and p.endswith('.score') for p in paths):
+                found += 1
+                assert cfg.get('minYValue') == 0 and cfg.get('maxYValue', 0) >= 1, f.name
+    assert found, 'no authority plot found: the guard checks nothing'

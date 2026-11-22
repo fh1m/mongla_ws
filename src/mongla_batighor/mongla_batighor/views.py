@@ -59,15 +59,21 @@ TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'ancho
 PLOT_WINDOW_S = 60
 
 
-def plot(*lines: dict) -> tuple:
+def plot(*lines: dict, y: tuple = ()) -> tuple:
     # Legend at the left: 'top' stacks one line per series above the plot and
     # squashed small plots flat (seen on Kutum); 'floating' covered the data.
     # Lichtblick's default legend is 240 px, half a plot in a narrow column
     # (desktop app, 2026-11-12); LEGEND_PX holds a label such as
     # "board heading" whole (160 cut it).
-    return 'Plot', {'paths': list(lines), 'showLegend': True, 'legendDisplay': 'left',
-                    'sidebarDimension': LEGEND_PX, 'followingViewWidth': PLOT_WINDOW_S,
-                    'isSynced': True, 'xAxisVal': 'timestamp'}
+    # `y`: a bounded quantity keeps its whole range. Autoscaled, a steady
+    # authority of 1.0 drew on a 0.94-1.06 axis and read as noise (Kutum,
+    # 2026-11-22).
+    cfg = {'paths': list(lines), 'showLegend': True, 'legendDisplay': 'left',
+           'sidebarDimension': LEGEND_PX, 'followingViewWidth': PLOT_WINDOW_S,
+           'isSynced': True, 'xAxisVal': 'timestamp'}
+    if y:
+        cfg['minYValue'], cfg['maxYValue'] = y
+    return 'Plot', cfg
 
 
 def states(*lines: dict) -> tuple:
@@ -236,7 +242,8 @@ def vision(v: View):
     # sits under it, beside the ladder it scores.
     now = col((3, v('vision', instrument('Vision'))),
               (4, v('ladder', states(*_ladder_lines()))),
-              (3, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS)))))
+              (3, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS),
+                                   y=(0, 1.05)))))
     numbers = col(
         (7, v('detectors', instrument('Detectors'))),
         (2, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
