@@ -174,6 +174,7 @@ is how `recommend()` happened.
 - [108. THE CAMERA-TO-GYRO OFFSET IN THE FLIGHT MODE: td = -13.4 ms (2026-11-22)](#108-the-camera-to-gyro-offset-in-the-flight-mode-td---134-ms-2026-11-22)
 - [109. THE BOARD'S HEADING UNDER HAND MOTION: 3.5 deg rms AT NINE RETURNS (2026-11-22)](#109-the-boards-heading-under-hand-motion-35-deg-rms-at-nine-returns-2026-11-22)
 - [110. ONE HAILO COMPILE, TIMED: 53.8 min, OF WHICH THE GPU OPTIMISE IS 24.5 (2026-11-22)](#110-one-hailo-compile-timed-538-min-of-which-the-gpu-optimise-is-245-2026-11-22)
+- [111. COLOUR IN THE DETECTOR BEATS A HUE READER AFTER IT: AP50 0.237 AGAINST 0.179 (2026-11-23)](#111-colour-in-the-detector-beats-a-hue-reader-after-it-ap50-0237-against-0179-2026-11-23)
 <!-- contents:end -->
 
 ---
@@ -9403,3 +9404,43 @@ refused. The HEF runs as **3 contexts** on the chip (`hailortcli parse-hef`), so
 Kutum is measured before it is quoted, not assumed from the single-context models. Not covered:
 `compiler_optimization_level=max`, which the DFC suggests and which lengthens the compile; it
 is a candidate only with its own timing and a rate gain measured on Kutum.
+
+**The max level, tried (2026-11-22, `mongla_data/hailo_logs/octagon_max_2026-11-22.log`).** The
+same `octagon_optimized.har` (weights untouched) allocated again with
+`performance_param(compiler_optimization_level=max)`. One context failed ("recoverable single
+context error"); two contexts were partitioned and then failed to map, by timeout, at 100, 90,
+80 and 70 % utilisation; it settled on **3 contexts again**, in **6 h 35 min** of wall clock against
+about 29 min for the allocation at the default level. So the max level does not drop a context
+for this network on a Hailo-8. Its partition may still differ; the HEF
+(`hailo_work/octagon_max.hef`) is adopted only if `hailortcli run` on Kutum, chip otherwise
+idle, beats the default HEF's rate. Not yet measured.
+
+## 111. COLOUR IN THE DETECTOR BEATS A HUE READER AFTER IT: AP50 0.237 AGAINST 0.179 (2026-11-23)
+
+The bar was written before either model trained (`mongla_data/holdout/colour_ab/BAR.md`,
+2026-11-22). Two arms, same data and settings (YOLOv8n from COCO, 20 epochs, imgsz 640, batch 16,
+seed 0), scored on one held-out team's 183 test images that neither saw:
+A, one detector whose classes carry the colour (gate, flare red/yellow/blue/orange, drum
+red/blue, ball); B, a gate/flare/drum detector whose flare and drum boxes are coloured by a hue
+reader learned from A's training boxes (7325 samples). One AP50 routine scores both against the
+same fine labels (`tools/studies/colour_ab.py`); its self-test passed first.
+
+| class | ground truth | A, colour in the detector | B, hue reader after |
+|---|---|---|---|
+| gate | 73 | 0.479 | 0.494 |
+| flare_red | 42 | 0.159 | 0.218 |
+| flare_yellow | 64 | 0.304 | 0.197 |
+| flare_blue | 18 | 0.162 | 0.036 |
+| flare_orange | 38 | 0.002 | 0.000 |
+| drum_red | 197 | 0.248 | 0.111 |
+| drum_blue | 74 | 0.301 | 0.194 |
+| **mean of the 7 shared** | | **0.237** | **0.179** |
+
+Bar: a win needs a margin of 0.02. **A wins by 0.058.** The secondary condition holds: on 160 empty-water
+frames of our own, A raises 1.14 boxes per frame at confidence 0.25 against the coarse detector's
+1.81, inside the 1.5x allowance. Ball (A only): 0.040 on 33.
+
+What it does not show: the absolute numbers are low because the held-out team's pool, camera
+and props differ from every training team's, which is the condition the bar was written for
+(transfer, not fit). Orange flares are not found by either arm. Decision: a model for props told
+apart by colour carries the colour in its class names, and no hue reader is built.
