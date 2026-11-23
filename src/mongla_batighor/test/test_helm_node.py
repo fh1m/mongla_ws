@@ -348,3 +348,44 @@ def test_a_viewer_that_connects_late_still_sees_the_recent_log(tmp_path):
     assert [json.loads(l)['event'] for l in got[0]] == [f'e{i}' for i in range(25, HISTORY_LINES + 25)]
     assert n_file == HISTORY_LINES + 25
     assert json.loads(got[-1][-1])['event'] == 'new' and len(got[-1]) == HISTORY_LINES
+
+
+class FakeCamera(Node):
+    """A camera's viewer stream and its rate, under a name the helm cannot guess."""
+
+    def __init__(self, camera, rate):
+        from sensor_msgs.msg import CompressedImage
+        super().__init__(f'bench_cam_{camera}')
+        self.declare_parameter('stream_rate_hz', rate)
+        self.create_publisher(CompressedImage, f'/mongla/vision/{camera}/stream/compressed', 1)
+
+
+def test_a_lagging_browser_halves_the_viewers_video_and_nothing_else(rig):
+    """link.py's policy through the real service: the helm finds each camera by
+    the node that publishes its stream (names differ per launch), scales that
+    camera's own rate, and says so in the state and the log. Anyone may report
+    (the bridge cannot tell browsers apart and a report drives nothing); a
+    report that is not a lag changes nothing."""
+    call, _, _, states, log = rig
+    cams = {'forward': FakeCamera('forward', 30.0), 'downward': FakeCamera('downward', 20.0)}
+    ex = rclpy.executors.SingleThreadedExecutor()
+    for n in cams.values():
+        ex.add_node(n)
+    t = threading.Thread(target=ex.spin, daemon=True)
+    t.start()
+    try:
+        assert not call('', 'link', fields_json='{"lag_s": "slow"}').ok
+        assert _param(cams['forward'], 'stream_rate_hz') == 30.0
+        assert _until(lambda: call('', 'link', fields_json='{"lag_s": 0.0}').ok, 5.0)
+        r = call('', 'link', fields_json='{"lag_s": 1.4}')
+        assert r.ok and '0.5' in r.message, r.message
+        assert _until(lambda: _param(cams['forward'], 'stream_rate_hz') == 15.0
+                      and _param(cams['downward'], 'stream_rate_hz') == 10.0, 8.0), (
+            _param(cams['forward'], 'stream_rate_hz'), _param(cams['downward'], 'stream_rate_hz'))
+        assert _until(lambda: states and states[-1].get('video') == 0.5)
+        assert 'video' in log.read_text() and '1.4' in log.read_text()
+        assert 'link' not in [json.loads(l).get('op') for l in log.read_text().splitlines()]
+    finally:
+        ex.shutdown()
+        for n in cams.values():
+            n.destroy_node()
