@@ -32,6 +32,7 @@ GUARDS = (
     'test/test_package_xml_declares_imports.py',
     'test/test_tools_point_at_files_that_exist.py',
     'test/test_workspace_stays_clean.py',
+    'test/test_notes_never_leave_the_machine.py',
     'test/test_lfs_holds_only_the_weights.py',
     'test/test_recorded_messages_keep_their_shape.py',
     'test/test_kutum_has_one_name.py',
