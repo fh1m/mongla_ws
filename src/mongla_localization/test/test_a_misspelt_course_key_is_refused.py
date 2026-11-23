@@ -61,6 +61,7 @@ def test_an_unknown_top_level_or_pool_key_is_refused(tmp_path, monkeypatch):
 def test_every_shipped_course_loads(monkeypatch, tmp_path):
     monkeypatch.setenv(course_map._ENV, str(tmp_path))      # nothing there
     monkeypatch.setattr(course_map, '_HOME', tmp_path)
+    monkeypatch.setattr(course_map, '_deck', lambda: tmp_path)
     shipped = sorted(course_map._PKG_COURSES.glob('*.yaml'))
     assert shipped
     for p in shipped:

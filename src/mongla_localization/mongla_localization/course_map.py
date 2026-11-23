@@ -39,7 +39,14 @@ _PKG_COURSES = pathlib.Path(__file__).resolve().parent / 'courses'
 # Deck-side override, same contract as the geometry table: our pool is not the
 # venue, and a course must be re-measurable without a colcon build.
 _ENV = 'MONGLA_COURSE_DIR'
+# The legacy link: `kutum/setup.sh` makes ~/.mongla point at ~/mongla/deck, so
+# this is the deck again on Kutum; elsewhere it is an older machine's layout.
 _HOME = pathlib.Path.home() / '.mongla' / 'courses'
+
+
+def _deck() -> pathlib.Path:
+    """Where the docs and the operator put a course (bead bnc)."""
+    return pathlib.Path.home() / 'mongla' / 'deck' / 'courses'
 
 # Every key a course file may hold. Anything else is refused: a typo such as
 # `bearing:` for `bearing_deg:` would otherwise load as "unset" and surface
@@ -175,13 +182,17 @@ def _search_dirs() -> list:
     env = os.environ.get(_ENV, '').strip()
     if env:
         out.append(pathlib.Path(env).expanduser())
-    out.append(_HOME)
+    if _deck() not in out:
+        out.append(_deck())
+    if _HOME not in out:
+        out.append(_HOME)
     out.append(_PKG_COURSES)
     return out
 
 
 def load_course(name: str) -> Course:
-    """First `<name>.yaml` found: env override, then ~/.mongla, then the package.
+    """First `<name>.yaml` found: env override, the deck (~/mongla/deck/courses),
+    the legacy ~/.mongla/courses, then the package.
 
     Search order puts the deck FIRST on purpose. A course re-measured at the
     venue must win over the one committed months earlier, and it must do so
