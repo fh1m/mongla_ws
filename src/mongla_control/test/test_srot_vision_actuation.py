@@ -42,7 +42,7 @@ class _FakeSrot:
     def __init__(self):
         self.manual_calls = []
 
-    def manual(self, fwd, lat, up, yaw):
+    def manual(self, fwd, lat, up, yaw, frame_at=None):
         self.manual_calls.append((fwd, lat, up, yaw))
 
     # Read surface the loops touch.

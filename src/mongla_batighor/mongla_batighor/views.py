@@ -61,7 +61,8 @@ TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'ancho
           # a hundred boxes; the title says where the filter is (bead tci).
           'camera': 'calibration camera, while a calibration runs',
           'undistorted': 'undistorted, once a fit exists',
-          'locmap': 'localization map'}
+          'locmap': 'localization map',
+          'f2c': 'frame to command: each vision command, how old its frame was when it left'}
 # The last minute, following the newest sample. Unset, the axis spans the whole
 # connection, and a panel opened later drew its data in the right-hand sliver
 # (desktop app, 2026-11-12).
@@ -399,7 +400,11 @@ def chain(v: View):
     # The ages are computed by chain.py (seen minus stamp, per stage), so they
     # are one table in the Chain instrument, not plots of raw stamps.
     return row((CAMERA_COLUMN, col(*(v(c, camera(c)) for c in CAMERAS))),
-               (100 - CAMERA_COLUMN, v('chain', instrument('Chain'))))
+               (100 - CAMERA_COLUMN, col(
+                   (7, v('chain', instrument('Chain'))),
+                   # Each vision command's frame age when it left (bead a2c):
+                   # empty until a vision verb commands.
+                   (3, v('f2c', plot(series('/mongla/command_frame.vector.x', 'seconds')))))))
 
 
 def map_(v: View):

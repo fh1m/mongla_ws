@@ -84,7 +84,7 @@ class _FakeBoard:
     def get_attitude(self):
         return {'depth': -0.5}
 
-    def manual(self, fwd=0.0, lat=0.0, up=0.0, yaw=0.0):
+    def manual(self, fwd=0.0, lat=0.0, up=0.0, yaw=0.0, frame_at=None):
         self.rc.append({'forward': fwd * 100.0, 'lateral': lat * 100.0,
                         'yaw': yaw * 100.0, 'throttle': up * 100.0})
 

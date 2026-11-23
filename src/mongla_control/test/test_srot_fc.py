@@ -1627,6 +1627,23 @@ def test_demand_is_what_was_SENT_after_clamping():
     assert fc.demand() == (-0.25, 0.5)
 
 
+
+def test_a_command_records_how_old_its_frame_was_when_sent():
+    """Bead a2c step 1: frame-to-command was never measured, because the demand
+    carried its publish time, not the frame's. A command from a frame captured
+    80 ms ago reads back as 80 ms within 5 ms; a command from no frame (a stop,
+    a blind tick) records nothing and leaves the last value."""
+    fc = _fc()
+    assert fc.command_frame() is None
+    fc.manual(fwd=0.2, lat=0.0, up=0.0, yaw=0.0, frame_at=time.monotonic() - 0.080)
+    lag, wall, n = fc.command_frame()
+    assert abs(lag - 0.080) < 0.005, lag
+    assert abs((time.time() - wall) - 0.080) < 0.005 and n == 1
+    fc.manual(fwd=0.0, lat=0.0, up=0.0, yaw=0.0)
+    assert fc.command_frame()[2] == 1
+    fc.manual(fwd=0.0, lat=0.0, up=0.0, yaw=0.0, frame_at=float('nan'))
+    assert fc.command_frame()[2] == 1
+
 def test_a_board_primitive_makes_the_demand_UNKNOWN():
     """SROT_MOVE ramps its own demand on the board and reports none."""
     fc = _fc()
