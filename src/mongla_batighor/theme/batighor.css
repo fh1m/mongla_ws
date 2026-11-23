@@ -261,6 +261,10 @@ body{background:var(--mb-d0)!important}
 /* The demand's bars are the thing read on this panel: tall enough to judge by eye. */
 .mb .bar.centre{height:12px;border-radius:2px}
 .mb .bar.centre b{top:0;bottom:0}
+/* Bar and value on one line, the value right-aligned so the digits stay put. */
+.mb .demand{display:flex;align-items:center;gap:12px}
+.mb .demand .bar{flex:1 1 auto}
+.mb .demand > b{flex:none;width:6ch;text-align:right;font-weight:500}
 .mb .health{display:grid;grid-template-columns:max-content fit-content(40%) minmax(0,1fr);gap:5px 12px;align-items:baseline}
 .mb .health .lvl{font-style:normal;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
   border:1px solid currentColor;border-radius:2px;padding:1px 6px;text-align:center;min-width:7ch}

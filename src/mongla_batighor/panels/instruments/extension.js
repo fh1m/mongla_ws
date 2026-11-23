@@ -798,7 +798,8 @@ const INSTRUMENTS = {
       const rpm = s.rpm || [];
       return [
         el("div", { class: "note" }, "the demand sent to the board, -1 to 1 (NaN: a board primitive owns it)"),
-        kv(["surge", el("span", {}, centreBar(d.x), num(d.x, 2))], ["sway", el("span", {}, centreBar(d.y), num(d.y, 2))]),
+        kv(...[["surge", d.x], ["sway", d.y]].map(([k, x]) =>
+          [k, el("span", { class: "demand" }, centreBar(x), el("b", {}, num(x, 2)))])),
         el("div", { class: "note" }, rpm.length
           ? `ESC rpm, as each ESC reports it (scale: ${num(s.peak, 0)} rpm)`
           : "no ESC rpm: the board has not announced its ESCs (none is shown as zero)"),
