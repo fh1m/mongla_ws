@@ -345,7 +345,7 @@ def test_the_lock_passes_its_bank_s_grid_centre(monkeypatch):
         _odom_sigma=float('nan'), _places=lc.PlaceLog(),
         _m_per_px=lambda: 0.002, _closure_refusals=__import__('collections').Counter())
     node._count_refusal = lambda k: LockInputsMixin._count_refusal(node, k)
-    LockInputsMixin._place_tick(node, np.zeros((480, 640), np.uint8), None, 100.0)
+    LockInputsMixin._place_look(node, np.zeros((480, 640), np.uint8), None, 100.0)
     assert seen['centre'] == (320.0, 240.0)
 
 
@@ -372,11 +372,11 @@ def test_stale_odometry_neither_searches_nor_enrols():
     node._count_refusal = lambda k: LockInputsMixin._count_refusal(node, k)
     gray = np.zeros((480, 640), np.uint8)
     node._odom_t = 100.0 - 2 * LockInputsMixin._ODOM_MAX_AGE_S
-    LockInputsMixin._place_tick(node, gray, None, 100.0)
+    LockInputsMixin._place_look(node, gray, None, 100.0)
     assert calls == []
     assert node._closure_refusals['stale odometry'] == 1
     node._odom_t = 100.0 - 0.1
-    LockInputsMixin._place_tick(node, gray, None, 100.0)
+    LockInputsMixin._place_look(node, gray, None, 100.0)
     assert 'enrol' in calls
 
 

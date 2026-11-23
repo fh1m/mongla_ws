@@ -114,6 +114,25 @@ class LockInputsMixin:
         return alt
 
     def _place_tick(self, gray, header, now: float) -> None:
+        """One place look, unless the anchor worker holds the bank.
+
+        The bank is one object with two users: the anchor rung's worker
+        thread and this, on the ladder thread. A look skipped while the worker
+        runs is counted with the refusals; the next frame tries again.
+        """
+        lock = getattr(self, '_bank_lock', None)
+        if lock is None:
+            return self._place_look(gray, header, now)
+        if not lock.acquire(blocking=False):
+            if self._closer_on and gray is not None and self._anchor is not None:
+                self._count_refusal('bank busy')
+            return None
+        try:
+            return self._place_look(gray, header, now)
+        finally:
+            lock.release()
+
+    def _place_look(self, gray, header, now: float) -> None:
         """Remember where we are, and recognise where we have been.
 
         Recognition FIRST: enrolling before asking would add the current frame

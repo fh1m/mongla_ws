@@ -1,9 +1,22 @@
 """The anchor rung: enrol a reference or locate against the bank, and box what it found.
 
-Runs on the ladder thread when detection has lost the target.
+The ladder thread decides; one worker thread does the work. A locate costs
+~110 ms on the Pi (bead a2c), and run inside the tick it delayed every /lock
+behind it. Now the tick submits a job when one is due and applies a finished
+one on a later tick, so the follower and the detection publish at frame rate
+while the bank works.
+
+The bank still serves the target first: it enrols on every confident
+detection as before, and it locates at full rate whenever the detection is
+weak, held or gone. Only while a fresh accepted detection holds the target
+does the locate drop to one a second, which keeps its trend and health warm
+for the moment the detection fades.
 
 Mixed into `LockNode`.
 """
+import concurrent.futures
+from typing import NamedTuple
+
 import numpy as np
 
 from mongla_vision.anchor import health as _health
@@ -16,6 +29,27 @@ from mongla_vision.anchor import health as _health
 # above the trust bar; it is a margin, not a measurement.
 _ANCHOR_RESEED_INLIERS = 120
 
+# While a fresh accepted detection holds the target, one locate a second keeps
+# the trend and health fed; the full `anchor_hz` returns the moment the
+# detection is weak, held or gone. One second is a choice, not a measurement:
+# it is the trend's horizon over its minimum samples, not a tuned rate.
+ANCHOR_KEEPWARM_S = 1.0
+
+
+class _AnchorJob(NamedTuple):
+    """One piece of bank work in flight, and what applying it needs."""
+    future: object
+    kind: str              # 'enrol' or 'locate'
+    gen: int               # the target generation it was asked for
+    gray: object           # the frame it works on
+    header: object         # that frame's header
+    note: tuple = ()       # enrol: (label, uncovered, room)
+
+
+def detection_holds(f) -> bool:
+    """A fresh accepted detection has the target: the anchor can idle."""
+    return f.det_box is not None and (f.now - f.det_t) <= f.live_s
+
 
 class AnchorMixin:
     """Methods of `LockNode`; see `lock_node.py` for the node."""
@@ -27,7 +61,9 @@ class AnchorMixin:
         gray, header, now = f.gray, f.header, f.now
         det_header, det_box, det_conf, det_cls = (f.det_header, f.det_box,
                                                   f.det_conf, f.det_cls)
-        anchor_ran = False
+        anchor_ran = self._anchor_collect(f)
+        if self._anchor_job is not None:
+            return anchor_ran            # the worker is busy: nothing new is asked
         # The defect this replaced. The guard here used to be
         # `not self._anchor.has_reference`, so the reference was
         # snapped ONCE and never refreshed. Measured 2026-09-24 on
@@ -127,65 +163,99 @@ class AnchorMixin:
                         'model, so it is not snapped against a '
                         'frame it does not belong to.')
             else:
-                r = self._anchor.enrol(snap_gray, roi=det_box,
-                                       det_conf=det_conf,
-                                       label=det_cls)
-                if r.accepted:
-                    # A fresh checkpoint resets the staleness measure:
-                    # the number that triggered this refresh described
-                    # the reference we have just replaced.
-                    self._anchor_inliers = self._anchor._refresh
-                    self._anchor_enrolled += 1
-                    self._anchor_label = det_cls
-                    # Logged because a bank that silently stops
-                    # enrolling looks exactly like one that never
-                    # needed to, and those are opposite faults.
-                    self.get_logger().info(
-                        f'[LOCK ] checkpoint {self._anchor_enrolled}: '
-                        f'{r.keypoints} kp, bank {self._anchor.size}/'
-                        f'{self._anchor._cap}, '
-                        f'{"scale" if uncovered else ("room" if room else "quality")}')
-                elif r.reason != 'confidence':
-                    self.get_logger().debug(
-                        f'[LOCK ] checkpoint refused: {r.reason}')
+                self._anchor_submit(
+                    'enrol', f, snap_gray, det_header,
+                    lambda: self._anchor.enrol(snap_gray, roi=det_box,
+                                               det_conf=det_conf, label=det_cls),
+                    note=(det_cls, uncovered, room))
         elif (self._anchor.has_reference
-              and now >= self._anchor_next):
+              and now >= self._anchor_next
+              and (not detection_holds(f)
+                   or now - self._anchor_locate_t >= ANCHOR_KEEPWARM_S)):
             self._anchor_next = now + self._anchor_period
-            bp = self._anchor.locate(
-                gray, label=self._anchor_label or None)
-            # The bank answers best-of-bank; `pose` is the ordinary
-            # AnchorPose the rest of this node already consumes, so
-            # nothing downstream learns that there is now more than
-            # one reference.
-            # The per-reference yields, which used to be thrown
-            # AWAY. A fouled port collapses the match against EVERY
-            # reference at once; a target that left collapses only
-            # the one that used to win. Both arrive at the ladder as
-            # "the anchor is not matching" and need OPPOSITE
-            # responses -- stop trusting vision, or go and search.
-            # `bp` alone cannot carry that: it is a statement about
-            # the whole shortlist.
-            self._note_anchor_health()
-            # ANTICIPATE, do not merely react. A falling match
-            # quality predicts the next seconds will be worse, and
-            # the reference worth having is the one from BEFORE the
-            # detection is lost. Snapping then is cheap and
-            # reversible; snapping after costs the very view it
-            # needed.
-            self._anchor_trend.append(int(bp.inliers))
-            self._anchor_pose = bp.pose
-            self._anchor_inliers = int(bp.inliers)
-            anchor_ran = True
-            # The frame this pose was fitted to. The anchor runs at
-            # 3 Hz while this loop runs at frame rate, so between
-            # evaluations the pose below is REUSED -- up to 333 ms old
-            # -- and publishing it under the current frame's stamp
-            # would report a third of a second of staleness as ~18 ms.
-            # That defeats the freshness machinery precisely on the
-            # rung it exists to protect, and only on that rung, so it
-            # looks correct whenever a detection is present.
-            self._anchor_header = header
+            self._anchor_locate_t = now
+            label = self._anchor_label or None
+            self._anchor_submit(
+                'locate', f, gray, header,
+                lambda: self._anchor.locate(gray, label=label))
         return anchor_ran
+
+    def _anchor_submit(self, kind, f, gray, header, work, note=()) -> None:
+        """Hand one piece of bank work to the worker, holding the bank."""
+        if self._anchor_exec is None:
+            self._anchor_exec = concurrent.futures.ThreadPoolExecutor(
+                1, thread_name_prefix='anchor')
+
+        def run():
+            with self._bank_lock:
+                return work()
+        self._anchor_job = _AnchorJob(self._anchor_exec.submit(run), kind,
+                                      f.gen, gray, header, note)
+
+    def _anchor_collect(self, f) -> bool:
+        """Apply a finished job. True when it was a locate for this target."""
+        job = self._anchor_job
+        if job is None or not job.future.done():
+            return False
+        self._anchor_job = None
+        r = job.future.result()          # a raise reaches the ladder's fault count
+        if job.gen != f.gen:
+            return False                 # about the previous target (#75)
+        if job.kind == 'enrol':
+            label, uncovered, room = job.note
+            if r.accepted:
+                # A fresh checkpoint resets the staleness measure:
+                # the number that triggered this refresh described
+                # the reference we have just replaced.
+                self._anchor_inliers = self._anchor._refresh
+                self._anchor_enrolled += 1
+                self._anchor_label = label
+                # Logged because a bank that silently stops
+                # enrolling looks exactly like one that never
+                # needed to, and those are opposite faults.
+                self.get_logger().info(
+                    f'[LOCK ] checkpoint {self._anchor_enrolled}: '
+                    f'{r.keypoints} kp, bank {self._anchor.size}/'
+                    f'{self._anchor._cap}, '
+                    f'{"scale" if uncovered else ("room" if room else "quality")}')
+            elif r.reason != 'confidence':
+                self.get_logger().debug(
+                    f'[LOCK ] checkpoint refused: {r.reason}')
+            return False
+        bp = r
+        # The bank answers best-of-bank; `pose` is the ordinary
+        # AnchorPose the rest of this node already consumes, so
+        # nothing downstream learns that there is now more than
+        # one reference.
+        # The per-reference yields, which used to be thrown
+        # AWAY. A fouled port collapses the match against EVERY
+        # reference at once; a target that left collapses only
+        # the one that used to win. Both arrive at the ladder as
+        # "the anchor is not matching" and need OPPOSITE
+        # responses -- stop trusting vision, or go and search.
+        # `bp` alone cannot carry that: it is a statement about
+        # the whole shortlist.
+        self._note_anchor_health()
+        # ANTICIPATE, do not merely react. A falling match
+        # quality predicts the next seconds will be worse, and
+        # the reference worth having is the one from BEFORE the
+        # detection is lost. Snapping then is cheap and
+        # reversible; snapping after costs the very view it
+        # needed.
+        self._anchor_trend.append(int(bp.inliers))
+        self._anchor_pose = bp.pose
+        self._anchor_inliers = int(bp.inliers)
+        self._anchor_gray = job.gray
+        # The frame this pose was fitted to. The anchor runs at
+        # 3 Hz while this loop runs at frame rate, so between
+        # evaluations the pose below is REUSED -- up to 333 ms old
+        # -- and publishing it under the current frame's stamp
+        # would report a third of a second of staleness as ~18 ms.
+        # That defeats the freshness machinery precisely on the
+        # rung it exists to protect, and only on that rung, so it
+        # looks correct whenever a detection is present.
+        self._anchor_header = job.header
+        return True
 
     def _anchor_box(self, gray, anchor_ran: bool):
         """The anchor's box and confidence, and the follower reseeded from it."""
@@ -242,7 +312,12 @@ class AnchorMixin:
                     and anchor_ran
                     and int(self._anchor_inliers)
                     >= _ANCHOR_RESEED_INLIERS):
-                n = self._follower.reset(gray, ab)
+                # On the frame the anchor fitted, not the newest: the box
+                # belongs to that frame, and LK carries it forward from there.
+                seed = self._anchor_gray
+                if seed is None:
+                    seed = gray
+                n = self._follower.reset(seed, ab)
                 if n:
                     self._reseeds += 1
                     if self._reseeds in (1, 10, 100):
