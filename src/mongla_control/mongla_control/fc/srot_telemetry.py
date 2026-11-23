@@ -515,11 +515,11 @@ class SrotTelemetry:
         rpy = None if att is None else (float(att.roll), float(att.pitch),
                                         float(att.yaw))
         raw = (float(imu.xacc) * g, float(imu.yacc) * g, float(imu.zacc) * g)
+        gyro = (float(imu.xgyro) * 1e-3, float(imu.ygyro) * 1e-3, float(imu.zgyro) * 1e-3)
+        self._note_gyro(gyro)
         return {
             'rpy': rpy,
-            'gyro': (float(imu.xgyro) * 1e-3,
-                     float(imu.ygyro) * 1e-3,
-                     float(imu.zgyro) * 1e-3),
+            'gyro': gyro,
             # VEHICLE frame (FRD), or None until the frame is proven -- see
             # `_accel_in_vehicle_frame`. None, never the raw axes: a consumer
             # handed the wrong frame integrates gravity sideways.
@@ -577,6 +577,31 @@ class SrotTelemetry:
         if frame == 'sensor':
             return (raw[1], raw[0], -raw[2])
         return raw
+
+    def _note_gyro(self, gyro, now=None):
+        """When the gyro last read anything but exact zero on all three axes.
+
+        A working MEMS gyro reads noise at rest, never three exact zeros for
+        seconds; exact zero is what an unreported or dead sensor packs (bead
+        mongla_ws-5yn, 12 s of it on the Kutum bench). Flow's de-rotation and
+        the filter's prediction both use this gyro, so the health board says so.
+        """
+        now = time.monotonic() if now is None else now
+        if getattr(self, '_gyro_first', None) is None:
+            self._gyro_first = now
+        if any(v != 0.0 for v in gyro):
+            self._gyro_live = now
+        self._gyro_last = now
+
+    def gyro_state(self, now=None):
+        """{'zero_s': seconds of exact zeros, 'age_s'} or None before a sample."""
+        first = getattr(self, '_gyro_first', None)
+        if first is None:
+            return None
+        now = time.monotonic() if now is None else now
+        live = getattr(self, '_gyro_live', None)
+        return {'zero_s': now - (first if live is None else live),
+                'age_s': now - self._gyro_last}
 
     def accel_frame_state(self):
         """The accel-frame vote for the health board, or None before any

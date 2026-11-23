@@ -250,9 +250,13 @@ function poolMap(course, pose, track, fixes, target, opts) {
 const MAP_TOPICS = ["/mongla/batighor/course", "/mongla/localization/state", "/mongla/localization/fix", "/mongla/doing"];
 const rad = (d) => (fin(d) ? (d * Math.PI) / 180 : null);
 
+const FLOW_CAL = "/mongla/vision/downward/flow_calibration";
 function foldMap(s, topic, m) {
   s.track = s.track || []; s.fixes = s.fixes || [];
   if (topic === "/mongla/batighor/course") { try { s.course = JSON.parse(m.data); } catch { /* keep */ } }
+  // The flow's scale, whole: 'calibrated' or 'uncalibrated: <why>'. The flow
+  // view's state panel clips it after a few words.
+  else if (topic === FLOW_CAL) s.flowCal = m.data;
   else if (topic === "/mongla/localization/state") {
     // A frame change (the anchor, or a filter restart) starts the track and
     // the start again: a track across it would join two frames.
@@ -325,7 +329,8 @@ function drawMap(s, forLocalization) {
     ["going to", target ? `${num(target.x, 2)}, ${num(target.y, 2)} m within ${num(target.tol, 2, " m")}` : "--", target ? "live" : ""],
   ];
   if (forLocalization) {
-    rows.push(["arrows", "2 s ahead: filter (sea), flow (teal)"],
+    rows.push(["flow scale", s.flowCal || "--", s.flowCal === "calibrated" ? "live" : s.flowCal ? "warn" : ""],
+      ["arrows", "2 s ahead: filter (sea), flow (teal)"],
       ["last fix", lastFix ? `moved the estimate ${num(Math.hypot(lastFix.x - lastFix.fx, lastFix.y - lastFix.fy), 2, " m")}, ${num(ageS(lastFix.t), 0)} s ago` : "none yet"],
       ["motion", loc ? loc.motion || "--" : "--"],
       ["input ages", loc ? `imu ${num(loc.imu_age_s, 2)}  depth ${num(loc.depth_age_s, 2)}  flow ${num(loc.flow_age_s, 2)} s` : "--"]);
@@ -725,7 +730,7 @@ const INSTRUMENTS = {
   // the filter's and the flow's velocity as arrows, sigma, and the input ages.
   LocalizationMap: {
     title: "Localization map",
-    topics: [...MAP_TOPICS, "/mongla/odom", "/mongla/vision/downward/velocity"],
+    topics: [...MAP_TOPICS, "/mongla/odom", "/mongla/vision/downward/velocity", FLOW_CAL],
     fold: foldMap,
     head: startControl,
     draw: (s) => drawMap(s, true),

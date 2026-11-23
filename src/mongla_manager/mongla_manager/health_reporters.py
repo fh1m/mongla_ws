@@ -127,6 +127,27 @@ def imu_frame(state) -> Health:
         f"Board mounting or ATTITUDE roll sign unverified (bead mongla_ws-a9h)"))
 
 
+GYRO_DEAD_S = 2.0   # 100 samples at 50 Hz; a working gyro's noise is never 0 that long
+
+
+def gyro(state) -> Health:
+    """Whether the board's gyro reads noise or exact zeros (`SrotFC.gyro_state`).
+
+    Exact zero on all three axes is what an unreported or dead sensor packs,
+    and `/mongla/imu` publishes it all the same; flow's de-rotation and the
+    filter's prediction would then never see a turn.
+    """
+    if not state:
+        return unknown('gyro', 'no SCALED_IMU2 sample yet')
+    if state['zero_s'] >= GYRO_DEAD_S:
+        return degraded('gyro', (
+            f"gyro reads exactly 0 on all three axes for {state['zero_s']:.0f} s: a working "
+            f"gyro reads noise, so this one is unreported or dead and no turn is seen by "
+            f"flow's de-rotation or the filter. Turn the board ~90 deg by hand and watch "
+            f"the gyro plot (bead mongla_ws-5yn)"))
+    return ok('gyro', 'reads noise: alive')
+
+
 def leak_sensor(leak_enabled: Optional[bool], leaking: Optional[bool]) -> Health:
     """`LEAK_EN = 0` reads DRY, and that is the trap.
 

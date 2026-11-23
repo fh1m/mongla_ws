@@ -925,6 +925,23 @@ section (its lane witness and its fisheye lens could not grade it).
 peak accuracy. Injection: the old module fails 15 of them, the new one
 without fading 20, fading any dark blob fails a negative control.
 
+### B-150: the board's gyro read exactly zero and nothing said so `MEASURED 2026-11-23` **FLAGGED 2026-11-23**, open until the board is turned by hand
+
+**What.** On the Kutum bench a direct pymavlink probe read SCALED_IMU2's gyro as
+exactly (0, 0, 0) mrad/s for 12 s at rest, and `/mongla/imu` published those
+zeros at 50.7 Hz. Flow's de-rotation and the filter's prediction both use this
+gyro, and the console read `aided`. A working MEMS gyro reads noise at rest.
+Whether it also reads zero while turning is not known (bead `mongla_ws-5yn`).
+
+**Flag.** `SrotTelemetry._note_gyro` keeps when the gyro last read anything but
+three exact zeros; the `gyro` health row (`health_reporters.gyro`) turns
+degraded after 2 s of them (`GYRO_DEAD_S`) and says what to do. Not a fix: the
+cause is on the board (the BNO085's gyro report unrequested, or the sensor),
+and is a firmware question once turning confirms it.
+
+**Guard.** `test_a_gyro_that_reads_exactly_zero_says_so`, written first and
+seen to fail.
+
 ### B-149: the floating PM1 pin climbed past both step rules `REPRODUCED 2026-11-22` **FIXED 2026-11-22**
 
 **What.** Hours after B-148's fix was deployed, Batighor's board_health view

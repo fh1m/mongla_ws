@@ -115,6 +115,9 @@ def test_permission_runs_it_with_a_wider_sigma_and_says_so(tmp_path):
             n._admit_frame_size((1280, 720))
         assert loose._scale_ready()[0]
         assert states and states[-1].startswith('uncalibrated: ')
+        # The operator reads this on a narrow panel: the file by its name, the
+        # directory left to the node's log.
+        assert "'fwd.json'" in states[-1] and str(tmp_path) not in states[-1], states[-1]
         s_good = _published_sigma(good, 0.3, 0.0, 0.7, (0.0, 0.0))
         s_loose = _published_sigma(loose, 0.3, 0.0, 0.7, (0.0, 0.0))
         # The calibrated 3.6 % and the uncalibrated 3.08 % in quadrature.
