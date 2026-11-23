@@ -199,3 +199,11 @@ def test_snap_period_180_is_the_lane_lines_symmetry():
     assert snap_to_grid(60.0, 0.0, max_correction_deg=40.0) == pytest.approx(90.0)
     assert snap_to_grid(60.0, 0.0, max_correction_deg=40.0,
                         period_deg=180.0) is None
+
+
+@pytest.mark.parametrize('hull, bearing', [(float('nan'), 30.0), (10.0, float('nan'))])
+def test_no_finite_heading_is_no_anchor(hull, bearing):
+    # head() returns NaN when the board gives no heading: that anchored ok=True
+    # with a NaN offset, and the DSL logged "heading anchored" (audit 2026-11-24).
+    got = anchor_from(_fused(20.0), hull, bearing)
+    assert not got.ok and 'no finite heading' in got.reason

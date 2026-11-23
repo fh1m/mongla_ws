@@ -139,6 +139,14 @@ def anchor_from(fused, hull_relative_yaw_deg: float,
                              f'redefine a heading')
     absolute = absolute_heading(float(fused.yaw_deg), board_world_bearing_deg)
     offset = _wrap180(absolute - float(hull_relative_yaw_deg))
+    # A hull heading the board did not give (head() returns NaN) is not a
+    # zero: an anchor built on it is ok=True with a NaN offset, and every pool
+    # fix after it is built from boot-relative bearings.
+    if not (math.isfinite(absolute) and math.isfinite(offset)):
+        return Anchor(False, support=support, spread_deg=spread, rule=rule,
+                      reason=f'no finite heading to anchor (hull yaw '
+                             f'{hull_relative_yaw_deg!r}, prop bearing '
+                             f'{board_world_bearing_deg!r})')
     return Anchor(True, absolute_deg=absolute, offset_deg=offset,
                   support=support, spread_deg=spread, rule=rule)
 
