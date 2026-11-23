@@ -229,6 +229,8 @@ same "$KUTUM/system/limits/99-mongla-realtime.conf" /etc/security/limits.d/99-mo
 same "$KUTUM/system/netplan/60-kutum-eth.yaml"  /etc/netplan/60-kutum-eth.yaml          "Ethernet link-local"
 same "$KUTUM/system/networkd-dispatcher/50-kutum-source-routes" /etc/networkd-dispatcher/routable.d/50-kutum-source-routes "per-interface reply routes"
 same "$KUTUM/system/sysctl/60-kutum-multihome.conf" /etc/sysctl.d/60-kutum-multihome.conf "per-interface ARP"
+same "$KUTUM/system/systemd/kutum-source-routes.service" /etc/systemd/system/kutum-source-routes.service "reply-route refresh"
+same "$KUTUM/system/systemd/kutum-source-routes.timer" /etc/systemd/system/kutum-source-routes.timer "reply-route refresh timer"
 same "$KUTUM/system/motd/01-kutum" /etc/update-motd.d/01-kutum "login banner"
 systemctl is-enabled cpu-performance.service >/dev/null 2>&1 && ok "cpu-performance.service enabled" \
   || warn "cpu-performance.service not enabled"
@@ -255,8 +257,10 @@ for a in $phys; do
     fail "no reply route from $a -- with two interfaces up, traffic to it is answered by the wrong one (kutum/setup.sh --system)"
   fi
 done
-systemctl is-active networkd-dispatcher >/dev/null 2>&1 && ok "networkd-dispatcher: reply routes follow every new address" \
+systemctl is-active networkd-dispatcher >/dev/null 2>&1 && ok "networkd-dispatcher: reply routes follow an interface that comes up" \
   || warn "networkd-dispatcher not running -- a new DHCP address gets no reply route"
+systemctl is-active kutum-source-routes.timer >/dev/null 2>&1 && ok "kutum-source-routes.timer: a moved address gets its reply route within 30 s" \
+  || warn "kutum-source-routes.timer not running -- an address DHCP moves keeps the old reply route (kutum/setup.sh --system)"
 [ "$(hostname)" = kutum ] && ok "hostname kutum" \
   || fail "hostname is $(hostname), not kutum -- the laptop looks for kutum.local (kutum/setup.sh --system)"
 # Without it cloud-init may put the imaged hostname back at the next boot.

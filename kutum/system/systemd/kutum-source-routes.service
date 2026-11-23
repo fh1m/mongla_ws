@@ -1,0 +1,9 @@
+# Reply routes for every interface's current address (the dispatcher hook,
+# --all). Root, because it edits the routing policy; a oneshot that exits.
+[Unit]
+Description=Kutum: each interface replies by its own route
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/etc/networkd-dispatcher/routable.d/50-kutum-source-routes --all

@@ -10,8 +10,16 @@
 # So each interface gets its own table, holding its network and its gateway,
 # and a rule: traffic FROM an interface's address uses that interface's
 # table. Run by networkd-dispatcher whenever an interface becomes routable,
-# so a new DHCP address is followed; safe to run again.
+# and with --all every 30 s by kutum-source-routes.timer: a DHCP renewal that
+# moves the address while the interface stays routable is no state change,
+# so the dispatcher never ran and the rule kept the old address (eth0 .104
+# to .106, 2026-11-23, the doctor's FAIL). Changes nothing when the rule and
+# the table already say what the interface has.
 set -eu
+if [ "${1:-}" = --all ]; then
+  for i in /sys/class/net/*; do IFACE="${i##*/}" "$0" || true; done
+  exit 0
+fi
 IF="${IFACE:-${1:-}}"
 case "$IF" in eth*|wlan*|en*|wl*) ;; *) exit 0 ;; esac
 table=$((100 + $(cat "/sys/class/net/$IF/ifindex")))
@@ -20,6 +28,12 @@ addr=$(ip -4 -o addr show dev "$IF" scope global | awk '{print $4; exit}')
 src=${addr%/*}
 net=$(ip -4 route show dev "$IF" proto kernel scope link | awk '{print $1; exit}')
 gw=$(ip -4 route show default dev "$IF" | awk '{print $3; exit}')
+# Already right: no flush, so no gap in replies every 30 s.
+if ip rule show priority "$table" | grep -q "from $src lookup $table" \
+   && { [ -z "$net" ] || ip route show table "$table" | grep -q "^$net dev $IF .*src $src"; } \
+   && { [ -z "$gw" ] || ip route show table "$table" | grep -q "^default via $gw dev $IF"; }; then
+  exit 0
+fi
 ip route flush table "$table" 2>/dev/null || true
 [ -n "$net" ] && ip route add "$net" dev "$IF" src "$src" table "$table"
 [ -n "$gw" ] && ip route add default via "$gw" dev "$IF" table "$table"

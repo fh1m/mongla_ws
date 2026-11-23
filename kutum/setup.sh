@@ -233,9 +233,14 @@ if [ "${1:-}" = "--system" ]; then
   install -m 0755 "$KUTUM/system/networkd-dispatcher/50-kutum-source-routes" \
     /etc/networkd-dispatcher/routable.d/
   systemctl enable --now networkd-dispatcher
-  for i in /sys/class/net/*; do
-    IFACE="${i##*/}" /etc/networkd-dispatcher/routable.d/50-kutum-source-routes || true
-  done
+  # The dispatcher misses an address that moves while its interface stays
+  # routable (a DHCP renewal, 2026-11-23); the timer re-runs the hook, which
+  # changes nothing when the routes are already right.
+  install -m 0644 "$KUTUM/system/systemd/kutum-source-routes.service" /etc/systemd/system/
+  install -m 0644 "$KUTUM/system/systemd/kutum-source-routes.timer" /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now kutum-source-routes.timer
+  /etc/networkd-dispatcher/routable.d/50-kutum-source-routes --all
   systemctl enable --now avahi-daemon
   # The login banner (kutum/system/motd/01-kutum). Ubuntu's generic header,
   # help links, landscape sysinfo and news are made non-executable, not
