@@ -529,7 +529,7 @@ session; two notes on them:
 
 **Hooks** (`.claude/hooks/`): block edits to the generated `install/` tree; `py_compile` after
 an edit; run the matching test file for an edited source file, and the doc guards for an
-edited doc, skill, agent or config. `commit_guard.py` blocks a `Co-authored-by:` trailer in a
+edited doc, skill, agent or config. `commit_guard.py` blocks a `Co-authored-by:` trailer or an assistant session link in a
 commit, a push, or the staged diff, and a machine-local home path in a staged Markdown file.
 
 ## 12. Working rules
