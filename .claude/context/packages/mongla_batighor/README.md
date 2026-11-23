@@ -231,7 +231,11 @@ behind them. Each message still arrives, seconds old, so a gap between arrivals 
 it (three captures on 2026-11-23: about 1.5 MB/s of pictures against a 0.96 MB/s link).
 The status strip's **to kutum** cell measures it honestly: `/mongla/state`'s arrival time
 minus its own stamp, minus the least of that over the last minute, so the clocks' offset
-cancels. Amber over 0.5 s, red over 2 s. Every 2 s the browser reports that lag to the helm
+cancels. Amber over 0.5 s, red over 2 s. The lag is what the operator sees, so a busy laptop
+counts as much as a busy link: on the dev box with the test suite running (load 14 on 12
+cores) the headless browser read 0.85 s steady while the link itself carried messages in
+9 ms. After its first 15 s on screen (a page that has just loaded lags while its panels
+mount) and then every 2 s, the browser reports that lag to the helm
 (`op: link`, anyone, logged only when it changes something), and `link.py` sets the cameras'
 `stream_rate_hz` the way a congested network does: halved at once while any browser lags
 (held 2 s, so a full queue has time to drain), a quarter back after 10 s with no lag from
@@ -239,7 +243,9 @@ any of them, never above the camera's own rate or below 7.5 Hz of 30. Only the v
 copy slows. Detection reads `image_raw`, so a slow laptop never slows perception. The helm
 finds each camera node by who publishes its stream (the names differ per launch) and, while
 the scale is below 1, says the rate again each second, so a camera that respawned does not
-come back at full rate. The cell shows the scale beside the lag, `video x0.5`.
+come back at full rate. The cell shows the scale beside the lag, `video x0.5`. One stream serves every screen, so
+the slowest screen sets it for all: a screen showing a stale vehicle is worse than a
+7.5 Hz picture on the others.
 
 ## Decided, and what comes next
 
