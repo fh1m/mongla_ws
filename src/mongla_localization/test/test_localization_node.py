@@ -1531,3 +1531,19 @@ def test_a_refused_fix_is_counted_and_said():
     near = SimpleNamespace(header=far.header, point=SimpleNamespace(x=0.01, y=0.0, z=0.05))
     n._on_fix(near)
     assert n._n['fix'] == 1
+
+
+def test_the_motion_verdict_expires_when_flow_stops():
+    """Latched and decided only on a fused flow sample: with flow gone the
+    last "ok" stood, and the DSL's motion() kept answering it (audit
+    2026-11-24). Silent past MOTION_MAX_AGE_S, it reads unknown."""
+    n = _node()
+    n._pub_motion = _Recorder()
+    n._report_motion('ok')
+    n._last_flow_t = 100.0
+    n._expire_motion(100.0 + lp.MOTION_MAX_AGE_S * 0.5)
+    assert n._pub_motion.sent == ['ok']
+    n._expire_motion(100.0 + lp.MOTION_MAX_AGE_S + 0.1)
+    assert n._pub_motion.sent == ['ok', 'unknown']
+    n._expire_motion(200.0)
+    assert n._pub_motion.sent == ['ok', 'unknown'], 'once, on change'
