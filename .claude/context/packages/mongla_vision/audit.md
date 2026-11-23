@@ -150,7 +150,7 @@ caused. The dead-code sweep finds one module with no live importer,
 `trigger_stamps.py`, which waits on the board's camera trigger (upstream ask
 `pr-w`) and says so where the guard lists it.
 
-**Re-measured 2026-11-20**, release `00f54f90`, one subscriber process for every
+**Re-measured 2026-11-20**, release `a3b883ef`, one subscriber process for every
 `/mongla` topic (best effort, 15 s) instead of 22 checkers, no board:
 
 | `paused:=false` | camera | detections | tracks | lock |

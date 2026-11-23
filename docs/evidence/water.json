@@ -53,12 +53,12 @@
       "date": "2026-07",
       "date_precision": "month",
       "place": "RoboSub 2026",
-      "observed": "The team scored 6 234 points and placed 8th of 58. A pool run the same week sank a downward surge-only align to the floor, fixed in commit 7feb8551.",
+      "observed": "The team scored 6 234 points and placed 8th of 58. A pool run the same week sank a downward surge-only align to the floor, fixed in commit 6cf52580.",
       "code_in_water": "The Duburi ROS 2 stack in this repository's history (control, vision and planner over ArduSub), confirmed by the author.",
-      "code_identity": "best-known ref 7feb8551 (2026-07-15), the last commit before the competition gap; the exact commit flown is reported, verification pending",
+      "code_identity": "best-known ref 6cf52580 (2026-07-15), the last commit before the competition gap; the exact commit flown is reported, verification pending",
       "evidence": [
         {"kind": "path", "ref": "docs/data/robosub.json", "note": "official score sheets"},
-        {"kind": "commit", "ref": "7feb8551", "note": "records a pool observation of this stack"},
+        {"kind": "commit", "ref": "6cf52580", "note": "records a pool observation of this stack"},
         {"kind": "archive", "ref": "Duburi/2026/Cockpit (Jul 13, 2026)", "note": "BlueOS Cockpit recordings, GMT-7; off-repository, on the author's machine"}
       ],
       "active_today": "the ArduSub backend was removed on 2026-11-06 (tag last-with-pixhawk-and-sim); vision, planner and missions descend from it and carry their own status"

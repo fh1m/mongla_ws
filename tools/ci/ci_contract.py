@@ -3,8 +3,8 @@
 
     python3 tools/ci/ci_contract.py [--root DIR]
 
-Exits 1 and prints each violation. Both required checks run it: the
-integrity job through its tests, and the provenance job directly, so a
+Exits 1 and prints each violation. Two required checks run it: the
+integrity job through its tests, and the contract job directly, so a
 change that skips one job is still caught by the other (#93).
 
 Why an allowlist and not a list of bad patterns: GitHub reports a job
@@ -29,11 +29,11 @@ from pathlib import Path
 import yaml
 
 INTEGRITY = '.github/workflows/repository-integrity.yml'
-PROVENANCE = '.github/workflows/poc-check.yml'
+CONTRACT = '.github/workflows/contract.yml'
 ROS = '.github/workflows/ros.yml'
 
 INTEGRITY_JOB = ('source-integrity', 'Source integrity / active-code and documentation')
-PROVENANCE_JOB = ('poc-check', 'Verify AI Provenance')
+CONTRACT_JOB = ('contract', 'Workflow contract')
 # One job, two required checks: 'ROS humble' and 'ROS jazzy' (#65).
 ROS_JOB = ('ros', 'ROS ${{ matrix.distro }}')
 ROS_STRATEGY = {'fail-fast': 'false', 'matrix': {'distro': ['humble', 'jazzy']}}
@@ -41,10 +41,7 @@ ROS_CONTAINER = 'ros:${{ matrix.distro }}-ros-base'
 RUN_ROS = 'bash tools/ci/ci_ros.sh'
 
 RUN_GATE = 'python tools/ci/run_repo_integrity.py'
-RUN_PROVENANCE = 'python3 tools/ci/provenance_check.py'
 RUN_CONTRACT = 'python3 tools/ci/ci_contract.py'
-PROVENANCE_ENV = {'PR_BODY': '${{ github.event.pull_request.body }}',
-                  'PR_AUTHOR': '${{ github.event.pull_request.user.login }}'}
 # A pip install of quoted requirement specifiers and nothing else: no
 # `;`, `&&` or `||` can sit outside the quotes.
 PIP = re.compile(r"python3? -m pip install --disable-pip-version-check( '[^']+')+")
@@ -190,23 +187,20 @@ def ros_errors(text: str) -> list[str]:
     return errs
 
 
-def provenance_errors(text: str) -> list[str]:
+def contract_errors(text: str) -> list[str]:
     doc, errs = _load(text)
     if doc is None:
         return errs
-    errs, steps = _common(doc, *PROVENANCE_JOB,
-                          ('opened', 'synchronize', 'reopened', 'edited'))
+    errs, steps = _common(doc, *CONTRACT_JOB, ('opened', 'synchronize', 'reopened'))
+    if doc.get('permissions') != {'contents': 'read'}:
+        errs.append('permissions must be exactly contents: read')
     for step in steps:
-        run = str(step.get('run', '')).strip()
-        env = step.get('env')
-        if env is not None and not (run == RUN_PROVENANCE and env == PROVENANCE_ENV):
-            errs.append('only the provenance step takes env: PR_BODY and PR_AUTHOR, '
-                        'from the event')
-        _check_step(step, {RUN_PROVENANCE, RUN_CONTRACT}, errs, allow_failure_comment=True)
+        if 'env' in step:
+            errs.append('no env on a gating step')
+        _check_step(step, {RUN_CONTRACT}, errs)
     runs = [str(s.get('run', '')).strip() for s in steps]
-    for need in (RUN_PROVENANCE, RUN_CONTRACT):
-        if runs.count(need) != 1:
-            errs.append(f'exactly one step must run {need!r}')
+    if runs.count(RUN_CONTRACT) != 1:
+        errs.append(f'exactly one step must run {RUN_CONTRACT!r}')
     return errs
 
 
@@ -215,7 +209,7 @@ def errors(root: Path) -> list[str]:
     for path in sorted((root / '.github/workflows').glob('*.y*ml')):
         rel = path.relative_to(root)
         out += [f'{rel}: {e}' for e in pin_errors(path.read_text())]
-    for rel, check in ((INTEGRITY, integrity_errors), (PROVENANCE, provenance_errors),
+    for rel, check in ((INTEGRITY, integrity_errors), (CONTRACT, contract_errors),
                        (ROS, ros_errors)):
         path = root / rel
         if not path.is_file():
