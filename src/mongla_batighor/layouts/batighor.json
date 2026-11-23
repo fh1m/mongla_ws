@@ -1339,15 +1339,15 @@
         {
           "title": "Inspect",
           "layout": {
-            "direction": "row",
+            "direction": "column",
             "first": "TopicGraph!inspect.graph",
             "second": {
-              "direction": "column",
+              "direction": "row",
               "first": "SourceInfo!inspect.topics",
               "second": "RawMessages!inspect.raw",
-              "splitPercentage": 55.0
+              "splitPercentage": 50.0
             },
-            "splitPercentage": 50.0
+            "splitPercentage": 58.0
           }
         },
         {

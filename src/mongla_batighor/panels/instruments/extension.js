@@ -14,6 +14,9 @@
 const RUNGS = ["detection", "held", "follow", "anchor", "lost"];
 const RUNG_COLOUR = { detection: "var(--mb-red)", held: "var(--mb-amber)", follow: "var(--mb-glass)", anchor: "var(--mb-violet)", lost: "var(--mb-ink-3)" };
 const LEVEL = ["ok", "warn", "err", "stale"];
+// What each level is called on screen: STALE in /diagnostics means the
+// manager could not tell, which an operator reads as "unknown".
+const LEVEL_WORD = { ok: "ok", warn: "warn", err: "fail", stale: "unknown" };
 const REDRAW_MS = 100;
 const MISSION_ALIVE_S = 1.5;  // the runner beats at 2 Hz; silent this long is no mission (helm.MISSION_ALIVE_S)
 const TRACK_S = 120;          // the navigation plan view keeps two minutes of track
@@ -383,9 +386,15 @@ function healthRows(rows, filter) {
   const shown = rows.filter((r) => !key || r.name.includes(key) !== not)
     .sort((a, b) => (b.level - a.level) || a.name.localeCompare(b.name));
   return shown.length
-    ? el("div", { class: "health" }, ...shown.flatMap((r) => [
-      el("span", { class: LEVEL[r.level] || "stale" }, r.name.replace(/^mongla: /, "")),
-      el("span", { class: r.level ? LEVEL[r.level] : "", title: r.message }, r.message)]))
+    // The level in words in its own column: colour alone left the six
+    // unknown rows looking exactly like the good ones (2026-11-23).
+    ? el("div", { class: "health" }, ...shown.flatMap((r) => {
+      const lvl = LEVEL[Math.min(r.level, 3)] || "stale";
+      return [
+        el("i", { class: `lvl ${lvl}` }, LEVEL_WORD[lvl]),
+        el("span", { class: "name" }, r.name.replace(/^mongla: /, "")),
+        el("span", { class: r.level ? lvl : "", title: r.message }, r.message)];
+    }))
     : el("div", { class: "note" }, "no /diagnostics rows yet: the manager grades health once it runs");
 }
 
@@ -413,7 +422,7 @@ function vehicleBody(s, v, h, below) {
     const lvl = LEVEL[Math.min(r.level, 3)];
     // A good line says "ok"; only a line with something to say spends the room.
     // One word a line, the manager's sentence on hover (Health has it whole).
-    const word = { ok: "ok", warn: "warn", err: "fail", stale: "stale" }[lvl];
+    const word = LEVEL_WORD[lvl];
     return [label, word, lvl === "ok" ? "good" : lvl, r.message];
   });
   return [
@@ -432,8 +441,10 @@ function vehicleBody(s, v, h, below) {
       // Silence is "no order", never a default (node_vision._publish_flare_order).
       ["flare order", s.flare ? (s.flare.colours || []).join("-") : "none latched", s.flare ? "live" : ""]),
     el("div", { class: "rule" }, "board"),
-    el("div", { class: "kv two" }, ...board.flatMap(([k, val, cls, full]) =>
-      [el("span", {}, k), el("span", { class: cls || "", title: full }, val)])),
+    // One cell per line, label and word together: cells wrap whole, so a
+    // narrow card shows fewer per row and never cuts a word.
+    el("div", { class: "board" }, ...board.map(([k, val, cls, full]) =>
+      el("span", { class: "cell", title: full }, el("span", {}, k), el("b", { class: cls || "" }, val)))),
   ];
 }
 
@@ -446,7 +457,12 @@ function statusOf(s, now) {
   const age = (t) => (t ? (now - t) / 1000 : Infinity);
   const v = s.v, cells = [], tabs = {};
   const fresh = v && age(s.vAt) < 2;
-  cells.push(["vehicle", !v ? "--" : v.armed ? "ARMED" : "disarmed", !fresh ? "stale" : v.armed ? "armed" : "ok"]);
+  // Gone quiet: the last word stays, with its age, as a warning. A starved
+  // link (pictures filling a slow deck connection) showed a calm "disarmed"
+  // while nothing had arrived for seconds (2026-11-23).
+  const armedWord = !v ? "--" : v.armed ? "ARMED" : "disarmed";
+  cells.push(["vehicle", v && !fresh ? `${armedWord}  ${num(age(s.vAt), 1)} s old` : armedWord,
+    !v ? "stale" : !fresh ? "warn" : v.armed ? "armed" : "ok"]);
   cells.push(["mode", v ? v.mode || "--" : "--", ""]);
   cells.push(["depth", v && fin(v.depth_m) ? `${num(-v.depth_m, 2)} m` : "--", ""]);
   cells.push(["heading", v ? `${num(v.yaw_deg, 0)} deg` : "--", ""]);

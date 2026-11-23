@@ -165,9 +165,10 @@ body{background:var(--mb-d0)!important}
 .mb .vehicle > .kv{width:min(100%,52ch)}
 /* The board lines in two columns, each value one line: a long grade is cut
    with its full text on hover, and Health has it whole. */
-.mb .kv.two{grid-template-columns:max-content minmax(0,1fr) max-content minmax(0,1fr)}
-.mb .kv.two > :nth-child(odd){color:var(--mb-ink-3)}
-.mb .kv.two > :nth-child(even){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mb .board{width:min(100%,52ch);display:grid;grid-template-columns:repeat(auto-fill,minmax(17ch,1fr));gap:4px 16px}
+.mb .board .cell{display:flex;justify-content:space-between;gap:8px;white-space:nowrap}
+.mb .board .cell > span{color:var(--mb-ink-3)}
+.mb .board .cell > b{font-weight:500}
 .mb .rule{width:min(100%,52ch);font-size:9px;letter-spacing:.16em;text-transform:uppercase;
   color:var(--mb-ink-3);border-top:1px solid var(--mb-rule);padding-top:6px}
 .mb .wide{grid-column:1/-1}
@@ -257,11 +258,15 @@ body{background:var(--mb-d0)!important}
 @container (min-width:440px){.mb .cams{flex-direction:row;gap:18px}}
 .mb .bar{height:4px;background:var(--mb-d3);border-radius:2px;overflow:hidden}
 .mb .bar b{display:block;height:100%;background:var(--mb-sea)}
-.mb .health{display:grid;grid-template-columns:fit-content(45%) minmax(0,1fr);gap:2px 12px}
+.mb .health{display:grid;grid-template-columns:max-content fit-content(40%) minmax(0,1fr);gap:5px 12px;align-items:baseline}
+.mb .health .lvl{font-style:normal;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  border:1px solid currentColor;border-radius:2px;padding:1px 6px;text-align:center;min-width:7ch}
+.mb .health .lvl.ok{color:var(--mb-teal)}
+.mb .health .name{color:var(--mb-ink-2)}
 /* The evidence wraps: cut with an ellipsis, the part of a row that says what
    is missing and why ("... flow fused without omega") was the part hidden. */
 .mb .health span{overflow-wrap:anywhere}
-.mb .health span:nth-child(odd){white-space:nowrap}
+.mb .health .name{white-space:nowrap}
 /* The pool map fills what the panel has left, square metres kept square. */
 .mb svg.map{width:100%;flex:1 1 auto;min-height:220px;background:var(--mb-sunk);
   border:1px solid var(--mb-rule);border-radius:3px}

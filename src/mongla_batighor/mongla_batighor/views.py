@@ -461,9 +461,12 @@ def inspect(v: View):
     nodes and topics, every topic with its type and rate, and the vehicle's
     state message whole, field by field. Lichtblick's own panels; parameters
     stay closed to a browser (batighor.launch.py, BRIDGE_LIMITS)."""
-    return row((50, v('graph', ('TopicGraph', {}))),
-               (50, col((55, v('topics', ('SourceInfo', {}))),
-                        (45, v('raw', ('RawMessages', {'topicPath': '/mongla/state',
+    # The graph runs wide (every node and topic in one band): at half the
+    # screen it drew 800 px of hairline, unreadable (2026-11-23), so it gets
+    # the whole width and the two tables share the row under it.
+    return col((58, v('graph', ('TopicGraph', {}))),
+               (42, row((50, v('topics', ('SourceInfo', {}))),
+                        (50, v('raw', ('RawMessages', {'topicPath': '/mongla/state',
                                                        'diffEnabled': False,
                                                        'expansion': 'all'}))))))
 

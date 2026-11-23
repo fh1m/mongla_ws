@@ -134,7 +134,8 @@ drawing zeros.
 
 ![The board health view: depth and battery each on its own plot, the gyro, the manager's health board worst first, and Kutum's own rows: clock, disk, the Hailo chip, power and temperature.](../../../docs/imgs/batighor/board_health.webp)
 
-Every subsystem graded by the manager, worst first, each with its evidence; Kutum's
+Every subsystem graded by the manager, worst first, each with its level in words (ok, warn,
+fail, unknown) and its evidence; Kutum's
 rows below (its clock and RTC cell, disk, the Hailo's temperature and clock, power
 and temperature). `UNKNOWN` is a state, not a failure: on the bench there is no
 second board, so the kill switch is unseen, and the panel says that.
@@ -166,12 +167,13 @@ and gives the command that starts one.
 
 ## Inspect and Log
 
-`inspect` is for a question no view was built for: Lichtblick's topic graph across half
-the screen (every node and topic as the bridge sees them), and beside it the source's
-topics with their rates and the raw message on any topic, `/mongla/state` first.
+`inspect` is for a question no view was built for: Lichtblick's topic graph across the
+whole width (every node and topic as the bridge sees them), and under it the source's
+topics with their rates beside the raw message on any topic, `/mongla/state` first.
 
-`log` is the whole record at full height: every node's `/rosout` at warning and above, in
-Lichtblick's own log panel with its filter, beside the Control Center with the helm log.
+`log` is the whole record at full height: every node's `/rosout` at info and above, in
+Lichtblick's own log panel with its level and text filters, beside the Control Center,
+whose log keeps only the helm and the warnings.
 
 ## What the pictures do not show
 
