@@ -319,3 +319,26 @@ The novelty claim is **hypothetical** until a literature review and strong match
 - Do not overwrite the prior measurement records with corrected-looking numbers; append retractions and new evidence.
 
 **Decision:** Extend the current stack in the direction of *useful observations, calibrated correctness, and freshness-aware scheduling*, and publish only measured gains that survive source holdouts and end-to-end experiments.
+
+## M. Settled against the repository, 2026-11-24
+
+Section H asked that each experiment be checked against what the repo already measured before
+any new work. Each row cites the measurement that decides it, or the bead that holds it open.
+
+| ID | State | Evidence or next step |
+| --- | --- | --- |
+| E01 floor trackability | **open** | The flow gates exist (caustic and feature checks, turbidity confidence built and off, measured-bars 45); a per-patch trackability map does not. Bead `mongla_ws-3sn`, bar written: fewer bad velocities accepted on the measured 30 cm slides (measured-bars 10), none refused that are good today |
+| E02 landmark / bearing head | **open, needs labels** | No corner keypoints anywhere in the stack. Bead `mongla_ws-5h8`; it waits for corner-labelled frames |
+| E03 ROI confirmation | **open** | Nothing in the repo. Bead `mongla_ws-di2`, scored on the sealed own-footage check set |
+| E04 compact single-context network | **settled** | yolov8n, one context, matches yolo11n after INT8 and runs 3.3x faster on the chip (measured-bars 98); chosen by the owner 2026-11-23 |
+| E05 calibration set | **partly** | Every compile already measures INT8 against float on held-out frames and refuses a shift past 0.10 (`tools/bench/hailo_compile.py`, B-82). A source-balanced calibration set is untested; it rides on the next compile of the wide training run |
+| E06 scheduling | **partly** | One chip, three networks: XFeat at the anchor's rate costs the detectors nothing (measured-bars 95). Uncertainty-aware scheduling is untested and has no consumer yet |
+| E07 shared multi-task heads | **deferred** | No consumer for a second head exists; built now it would ship unreachable |
+| E08 restoration | **settled, negative** | Generic enhancement was measured in 17 configurations and removed; a new attempt needs a new, predeclared failure case |
+| E09 pruning / compression | **deferred** | The detector is one context at the chip's rate; nothing to buy until a second network needs the room |
+| E10 Model Zoo tracker | **settled** | STARK-Lightning on the Hailo-8: 6.7 ms a call and no longer a hold than the follower (measured-bars 96) |
+| E11 cheaper labelling | **in progress** | `tools/bench/label_contact_sheet.py`; the auto-label study and its scorer, written before any candidate (`tools/studies/autolabel_score.py`, bead `mongla_ws-qqd`) |
+| E12 silicon against float | **partly** | `tools/bench/hailo_int8_shift.py` measures the tensor shift per compile; whether a shift ever changes an action is untested |
+
+Two of the twelve are settled, one is settled negative, four are partly done or in progress,
+two are deferred for want of a consumer, and three are open with written bars.
