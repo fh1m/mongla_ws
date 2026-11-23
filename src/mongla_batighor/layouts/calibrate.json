@@ -9,13 +9,13 @@
           }
         }
       },
-      "lichtblickPanelTitle": "calibration camera"
+      "lichtblickPanelTitle": "calibration camera, while a calibration runs"
     },
     "Image!undistorted": {
       "imageMode": {
         "imageTopic": "/mongla/vision/calibration/undistorted/compressed"
       },
-      "lichtblickPanelTitle": "undistorted"
+      "lichtblickPanelTitle": "undistorted, once a fit exists"
     },
     "mongla.batighor.Calibrate!calibrate": {}
   },

@@ -769,3 +769,36 @@ process.exit(0);
     assert got['reports'] == [False, False, True, False, True], got['reports']
     assert got['words'] == ['video x1', 'video x0.5 set by this screen',
                             'video x0.25 set by screen c3d4', 'video --'], got['words']
+
+
+@NEEDS_NODE
+def test_the_localization_card_says_why_flow_is_uncalibrated_in_full():
+    """The flow view's state panel clipped the reason after a few words, and
+    the card said only 'flow uncalibrated'. The card now carries the flow's
+    own calibration state, whole, where it wraps."""
+    import json as _json
+    import subprocess as _sp
+    shim = ('const document={createElement:(t)=>({t,className:"",kids:[],attrs:{},style:{},'
+            'append(...k){this.kids.push(...k)},setAttribute(k,v){this.attrs[k]=v},'
+            'addEventListener(){},querySelector(){return null}}),'
+            'createElementNS:(n,t)=>document.createElement(t)};'
+            'const text=(e)=>typeof e==="string"?e:(e.kids||[]).map(text).join("");')
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    why = ("uncalibrated: 'calibration_downward_1280x720.json' was taken at 1280x720 "
+           "and the frames are 640x480")
+    probe = ('\nconst I=module.exports.INSTRUMENTS.LocalizationMap, s={};'
+             'const out=[];'
+             'I.fold(s,"/mongla/batighor/course",{data:JSON.stringify({course:"t",from:"deck",'
+             'pool:{depth_m:2,tile_m:0.25,outline:[[0,0],[4,0],[4,9],[0,9]]},props:[]})});'
+             f'I.fold(s,"/mongla/vision/downward/flow_calibration",{{data:{_json.dumps(why)}}});'
+             'out.push(I.draw(s).map(text).join("|"));'
+             'I.fold(s,"/mongla/vision/downward/flow_calibration",{data:"calibrated"});'
+             'out.push(I.draw(s).map(text).join("|"));'
+             'process.stdout.write(JSON.stringify(out));')
+    js = pre + shim + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS + probe
+    out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    bad, good = _json.loads(out.stdout)
+    assert 'flow scale' + why in bad, bad
+    assert 'flow scalecalibrated' in good, good

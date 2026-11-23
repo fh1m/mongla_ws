@@ -51,10 +51,17 @@ TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'ancho
           'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates',
           'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops',
           'forward': 'forward camera', 'downward': 'downward camera', 'hull': 'attitude',
-          'nav': 'odometry, 3D', 'down': 'downward camera', 'graph': 'nodes and topics',
+          'nav': 'odometry, 3D', 'down': 'downward camera', 'graph': 'nodes and topics: the diamond at the right, "No topics", draws nodes only',
           'topics': 'every topic, its type and rate', 'raw': 'one message, whole',
           'rosout': 'every node\'s log',
-          'camera': 'calibration camera', 'locmap': 'localization map'}
+          # Empty until a calibration runs, and the panel itself says only that
+          # the topic does not exist: the title says when there is a picture.
+          # Lichtblick keeps the graph's topic filter in the panel, not its
+          # config, so every topic shows at first and the graph is a line of
+          # a hundred boxes; the title says where the filter is (bead tci).
+          'camera': 'calibration camera, while a calibration runs',
+          'undistorted': 'undistorted, once a fit exists',
+          'locmap': 'localization map'}
 # The last minute, following the newest sample. Unset, the axis spans the whole
 # connection, and a panel opened later drew its data in the right-hand sliver
 # (desktop app, 2026-11-12).
