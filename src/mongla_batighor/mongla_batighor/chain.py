@@ -49,6 +49,7 @@ class Stage:
     stamped: bool
     clock: str                   # where its stamp comes from, or why it has none
     ask: str = ''                # for a stage with no stamp: what would give it one
+    idle: str = ''               # when silence is expected: what makes it speak
 
 
 def stages(cameras=CAMERAS) -> list:
@@ -77,7 +78,8 @@ def stages(cameras=CAMERAS) -> list:
         # age is frame-to-command plus the hop here (bead a2c).
         Stage('command', 'frame to command', '/mongla/command_frame',
               'geometry_msgs/Vector3Stamped', 'default', True,
-              'the frame the command acted on'),
+              'the frame the command acted on',
+              idle='until a vision verb drives (vision_align, vision_move)'),
         Stage('imu', 'board IMU', '/mongla/imu', 'sensor_msgs/Imu', 'default', True,
               'board clock mapped to host (latency above the fitted offset)'),
         Stage('rpm', 'ESC rpm', '/mongla/esc_rpm', 'std_msgs/Int32MultiArray',
@@ -190,7 +192,7 @@ def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
                 'window_s': self.meter.window_s,
                 'order': [s.key for s in self.rows],
                 'stages': {s.key: {**got.get(s.key, empty), 'label': s.label,
-                                   'clock': s.clock, 'ask': s.ask}
+                                   'clock': s.clock, 'ask': s.ask, 'idle': s.idle}
                            for s in self.rows},
                 'not_sent': [{'label': a, 'ask': b} for a, b in NOT_SENT],
             }
