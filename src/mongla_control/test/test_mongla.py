@@ -63,7 +63,7 @@ class FakeBoard:
             on_progress(1.0)
         return MoveResult(self._move_code, f'{verb}: done')
 
-    def manual(self, fwd=0.0, lat=0.0, up=0.0, yaw=0.0):
+    def manual(self, fwd=0.0, lat=0.0, up=0.0, yaw=0.0, frame_at=None):
         self.calls.append(('manual', fwd, lat, up, yaw))
 
     def send_neutral(self):

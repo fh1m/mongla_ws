@@ -44,6 +44,10 @@ PUBLISHED_UNREAD = {
     '/mongla/thruster_pack':
         'operator telemetry: PM2, the thruster pack. Read by Batighor (the '
         'Thrust panel and the Thrust and Health plots), watched by a human.',
+    '/mongla/command_frame':
+        'operator telemetry: each vision command\'s frame-to-command (bead a2c), '
+        'read by Batighor\'s chain node only while someone watches the Chain '
+        'view, and plotted there; nothing acts on it.',
     '/mongla/board_link':
         'operator telemetry: what the link carries and every named channel '
         'with its age, for a human in Batighor\'s board_link layout. The '

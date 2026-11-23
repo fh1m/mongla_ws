@@ -305,7 +305,11 @@ class SrotTelemetry:
         (`srot_changes.py`), so the bar sits at 2 V -- between the two by a
         factor of three either way.
         """
-        ring = self._battery_steps.get(bid)
+        # One snapshot: the reader thread appends to this ring while the timer
+        # judges it, and a Python-level walk of a live deque raised 'deque
+        # mutated during iteration' on Kutum (bead mongla_ws-43l).
+        live = self._battery_steps.get(bid)
+        ring = list(live) if live else []
         if not ring or len(ring) < sp.BATTERY_STEP_MIN_SAMPLES:
             return True                 # not enough evidence to accuse it
         mid = sorted(ring)[len(ring) // 2]
@@ -318,7 +322,7 @@ class SrotTelemetry:
         # steps under the bar and drops back once (Kutum 2026-11-22, B-149). No
         # pack in service reads under an empty cell; one such frame is a glitch.
         # Interim: the board knows its wiring (upstream ask X, item 4).
-        lows = sum(getattr(self, '_battery_lows', {}).get(bid, ()))
+        lows = sum(list(getattr(self, '_battery_lows', {}).get(bid, ())))
         # Latched: the pin's quiet spells (1.39 V held for seconds) leave too
         # few jumps in the window and it read as a battery again. A condemned
         # line is released only by a whole window with no jump at all.
@@ -328,7 +332,7 @@ class SrotTelemetry:
         if (mid > sp.BATTERY_MAX_STEP_V or jumps >= sp.BATTERY_MAX_JUMPS
                 or lows >= sp.BATTERY_MAX_LOWS):
             condemned.add(bid)
-        elif jumps == 0 and lows == 0 and len(ring) == ring.maxlen:
+        elif jumps == 0 and lows == 0 and len(ring) == live.maxlen:
             condemned.discard(bid)
         return bid not in condemned
 
@@ -516,7 +520,7 @@ class SrotTelemetry:
                                         float(att.yaw))
         raw = (float(imu.xacc) * g, float(imu.yacc) * g, float(imu.zacc) * g)
         gyro = (float(imu.xgyro) * 1e-3, float(imu.ygyro) * 1e-3, float(imu.zgyro) * 1e-3)
-        self._note_gyro(gyro)
+        self._note_gyro(gyro, rpy)
         return {
             'rpy': rpy,
             'gyro': gyro,
@@ -578,30 +582,37 @@ class SrotTelemetry:
             return (raw[1], raw[0], -raw[2])
         return raw
 
-    def _note_gyro(self, gyro, now=None):
-        """When the gyro last read anything but exact zero on all three axes.
+    def _note_gyro(self, gyro, rpy=None, now=None):
+        """Whether the gyro has been seen to move, and what the attitude did
+        while it read three exact zeros.
 
-        A working MEMS gyro reads noise at rest, never three exact zeros for
-        seconds; exact zero is what an unreported or dead sensor packs (bead
-        mongla_ws-5yn, 12 s of it on the Kutum bench). Flow's de-rotation and
-        the filter's prediction both use this gyro, so the health board says so.
+        At rest it reads exactly 0: the firmware packs whole mrad/s, so noise
+        under 1 mrad/s rounds away (Kutum bench, 2026-11-23, and it read the
+        owner's turn). Exact zero is therefore no evidence; a turn the attitude
+        made while the gyro read zero is (bead mongla_ws-5yn).
         """
         now = time.monotonic() if now is None else now
-        if getattr(self, '_gyro_first', None) is None:
-            self._gyro_first = now
         if any(v != 0.0 for v in gyro):
-            self._gyro_live = now
+            self._gyro_moved = now
+            self._gyro_zero_rpy = None
+            self._gyro_turned = 0.0
+        elif rpy is not None:
+            ref = getattr(self, '_gyro_zero_rpy', None)
+            if ref is None:
+                self._gyro_zero_rpy = ref = rpy
+            d = max(abs(math.atan2(math.sin(a - b), math.cos(a - b))) for a, b in zip(rpy, ref))
+            self._gyro_turned = max(getattr(self, '_gyro_turned', 0.0), math.degrees(d))
         self._gyro_last = now
 
     def gyro_state(self, now=None):
-        """{'zero_s': seconds of exact zeros, 'age_s'} or None before a sample."""
-        first = getattr(self, '_gyro_first', None)
-        if first is None:
+        """{'moved_s': seconds since it last read motion (None: never),
+        'turned_deg': attitude change during the current zero run} or None."""
+        if getattr(self, '_gyro_last', None) is None:
             return None
         now = time.monotonic() if now is None else now
-        live = getattr(self, '_gyro_live', None)
-        return {'zero_s': now - (first if live is None else live),
-                'age_s': now - self._gyro_last}
+        moved = getattr(self, '_gyro_moved', None)
+        return {'moved_s': None if moved is None else now - moved,
+                'turned_deg': getattr(self, '_gyro_turned', 0.0)}
 
     def accel_frame_state(self):
         """The accel-frame vote for the health board, or None before any

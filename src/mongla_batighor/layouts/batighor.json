@@ -894,6 +894,22 @@
       "lichtblickPanelTitle": "downward camera"
     },
     "mongla.batighor.Chain!chain.chain": {},
+    "Plot!chain.f2c": {
+      "paths": [
+        {
+          "value": "/mongla/command_frame.vector.x",
+          "label": "seconds",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 128,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "frame to command: each vision command, how old its frame was when it left"
+    },
     "Image!downward.down": {
       "imageMode": {
         "imageTopic": "/mongla/vision/downward/stream/compressed",
@@ -1289,7 +1305,12 @@
               "second": "Image!chain.downward",
               "splitPercentage": 50.0
             },
-            "second": "mongla.batighor.Chain!chain.chain",
+            "second": {
+              "direction": "column",
+              "first": "mongla.batighor.Chain!chain.chain",
+              "second": "Plot!chain.f2c",
+              "splitPercentage": 70.0
+            },
             "splitPercentage": 37.0
           }
         },

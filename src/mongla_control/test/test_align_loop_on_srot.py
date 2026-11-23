@@ -29,7 +29,7 @@ class _FakeSrot:
     def get_attitude(self):
         return {'depth': -0.5}
 
-    def manual(self, fwd, lat, up, yaw):
+    def manual(self, fwd, lat, up, yaw, frame_at=None):
         # MANUAL_CONTROL carries -1..1 UNITS, not percent. `_srot_drive`
         # divides by 100 on the way out, so everything recorded here is a unit
         # and every comparison against a *_PCT constant must scale by 100.

@@ -91,11 +91,21 @@ def mavlink_reader(is_alive, fault_count, last_fault) -> Health:
     return ok('mavlink_reader', 'draining the link')
 
 
-def barometer(named_value) -> Health:
-    """`named_value` is a callable name -> float|None (None = not reporting)."""
+def barometer(named_value, sys_healthy=None) -> Health:
+    """`named_value` is a callable name -> float|None (None = not reporting);
+    `sys_healthy` is SYS_STATUS's absolute-pressure bit (`SrotFC._baro_healthy`),
+    True / False / None, graded as `bringup_check` grades it when the board's own
+    BARO_HEALTH code is absent, so the row and the gate never disagree."""
     v = named_value('BARO_HEALTH')
     if v is None:
-        return unknown('barometer', 'BARO_HEALTH absent')
+        if sys_healthy is False:
+            return failed('barometer', (
+                'Bar30 unhealthy (SYS_STATUS): PROM CRC failed, the sample is stale or the '
+                'sensor is unplugged. The board refuses DEPTH_HOLD/AUTO, so every move verb is '
+                'DENIED; check its wiring and power-cycle (the PROM is read at boot)'))
+        if sys_healthy is True:
+            return ok('barometer', 'healthy (SYS_STATUS): AUTO and DEPTH_HOLD available')
+        return unknown('barometer', 'BARO_HEALTH absent and no SYS_STATUS yet')
     fn, why = _BARO.get(int(v), (failed, f'unknown code {int(v)}'))
     return fn('barometer', why)
 
@@ -127,25 +137,27 @@ def imu_frame(state) -> Health:
         f"Board mounting or ATTITUDE roll sign unverified (bead mongla_ws-a9h)"))
 
 
-GYRO_DEAD_S = 2.0   # 100 samples at 50 Hz; a working gyro's noise is never 0 that long
+GYRO_TURN_DEG = 3.0  # an attitude change this size with the gyro reading zero
 
 
 def gyro(state) -> Health:
-    """Whether the board's gyro reads noise or exact zeros (`SrotFC.gyro_state`).
+    """Whether the board's gyro sees turns (`SrotFC.gyro_state`).
 
-    Exact zero on all three axes is what an unreported or dead sensor packs,
-    and `/mongla/imu` publishes it all the same; flow's de-rotation and the
-    filter's prediction would then never see a turn.
+    At rest it reads exactly 0 (whole mrad/s on the wire), so zero alone says
+    nothing. Dead is the attitude turning while it reads zero; unproven is a
+    gyro never yet seen to move. Flow's de-rotation and the filter's
+    prediction both depend on it.
     """
     if not state:
         return unknown('gyro', 'no SCALED_IMU2 sample yet')
-    if state['zero_s'] >= GYRO_DEAD_S:
+    if state['turned_deg'] >= GYRO_TURN_DEG:
         return degraded('gyro', (
-            f"gyro reads exactly 0 on all three axes for {state['zero_s']:.0f} s: a working "
-            f"gyro reads noise, so this one is unreported or dead and no turn is seen by "
-            f"flow's de-rotation or the filter. Turn the board ~90 deg by hand and watch "
-            f"the gyro plot (bead mongla_ws-5yn)"))
-    return ok('gyro', 'reads noise: alive')
+            f"the attitude turned {state['turned_deg']:.0f} deg while the gyro read exactly 0: "
+            f"no turn reaches flow's de-rotation or the filter (bead mongla_ws-5yn)"))
+    if state['moved_s'] is None:
+        return unknown('gyro', 'not yet seen to move: it reads 0 at rest (whole mrad/s on '
+                               'the wire); turn the board to prove it')
+    return ok('gyro', f"sees turns: last moved {state['moved_s']:.0f} s ago")
 
 
 def leak_sensor(leak_enabled: Optional[bool], leaking: Optional[bool]) -> Health:

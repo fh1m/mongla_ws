@@ -262,7 +262,8 @@ class HealthMixin:
                          and self.reader_thread.is_alive()),
             lambda: int(getattr(self, '_reader_faults', 0)),
             lambda: str(getattr(self, '_reader_last_fault', ''))))
-        self._health.register('barometer', lambda: _hr.barometer(named))
+        self._health.register('barometer', lambda: _hr.barometer(
+            named, getattr(fc, '_baro_healthy', lambda: None)()))
         self._health.register('heading_ref', lambda: _hr.heading_reference(named))
         self._health.register('imu_frame', lambda: _hr.imu_frame(
             getattr(fc, 'accel_frame_state', lambda: None)()))
