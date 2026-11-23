@@ -140,9 +140,9 @@
           "direction": "column",
           "first": "mongla.batighor.Vision!vision",
           "second": "Plot!authority",
-          "splitPercentage": 63.6
+          "splitPercentage": 70.0
         },
-        "splitPercentage": 47.6
+        "splitPercentage": 52.4
       },
       "splitPercentage": 47.6
     },
