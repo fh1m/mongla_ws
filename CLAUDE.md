@@ -444,10 +444,8 @@ not port it back. A capability that needs something from it is rebuilt against t
   `run:` blocks shellchecked at the same level (`test/test_workflows_pass_actionlint.py`). An exception is a `# noqa: F...` or a
   `# shellcheck disable=` on the line, with its reason. Both workflows' shape is an
   allowlist in `tools/ci/ci_contract.py` (no `if:`, known actions, exact commands), which the
-  provenance job also runs, because GitHub counts a skipped required job as passed. A PR
-  description passes provenance with a filled `## AI Provenance` table, or the line
-  `Provenance: 100% human-written` on its own (`tools/ci/provenance_check.py`); a PR the
-  Dependabot app opened passes by its author. Dependabot proposes weekly and never
+  workflow contract job also runs, because GitHub counts a skipped required job as passed.
+  Dependabot proposes weekly and never
   merges itself; a `/kutum` pin moves only after it is installed on the vehicle
   (`kutum/setup.sh`, the user half: `deploy.sh` never installs pins) and `kutum/deploy.sh` then
   passes there, its doctor refusing any pin the machine does not have,
@@ -531,7 +529,7 @@ session; two notes on them:
 
 **Hooks** (`.claude/hooks/`): block edits to the generated `install/` tree; `py_compile` after
 an edit; run the matching test file for an edited source file, and the doc guards for an
-edited doc, skill, agent or config. `commit_guard.py` blocks a `Co-authored-by:` trailer in a
+edited doc, skill, agent or config. `commit_guard.py` blocks a `Co-authored-by:` trailer or an assistant session link in a
 commit, a push, or the staged diff, and a machine-local home path in a staged Markdown file.
 
 ## 12. Working rules

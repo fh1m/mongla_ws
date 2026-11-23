@@ -11,7 +11,7 @@ this is a scratch file for exercising the verbs and the PROP it points at is
 incidental -- the alignment behaviour it tests is the same.
 
 It called `vision.anchor_snap / anchor_align / anchor_clear`, which came from
-an experiment (commit 304c94b2) that never merged; those lines were removed
+an experiment (commit 8061acb6) that never merged; those lines were removed
 because the mission died on them with an AttributeError.
 """
 _FWD = '/mongla_detector_forward'

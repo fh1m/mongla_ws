@@ -31,7 +31,7 @@ contract = _load('ci_contract')
 runner = _load('run_repo_integrity')
 
 INTEGRITY = (ROOT / contract.INTEGRITY).read_text()
-PROVENANCE = (ROOT / contract.PROVENANCE).read_text()
+CONTRACT = (ROOT / contract.CONTRACT).read_text()
 GATE_STEP = '      - name: Run the integrity guards\n'
 GATE_RUN = '        run: python tools/ci/run_repo_integrity.py\n'
 
@@ -45,8 +45,7 @@ def test_the_real_workflows_keep_the_contract():
 def test_every_guard_the_runner_names_exists_and_includes_these_checks():
     assert all((ROOT / g).is_file() for g in runner.GUARDS)
     assert len(set(runner.GUARDS)) == len(runner.GUARDS)
-    for me in ('test/test_repository_integrity_workflow.py', 'test/test_provenance_check.py'):
-        assert me in runner.GUARDS
+    assert 'test/test_repository_integrity_workflow.py' in runner.GUARDS
 
 
 def _sub(text, old, new):
@@ -112,31 +111,26 @@ def test_each_way_to_quietly_disable_the_gate_is_refused(name):
     assert contract.integrity_errors(bad) + contract.pin_errors(bad), f'{name}: accepted'
 
 
-PROVENANCE_MUTATIONS = {
+CONTRACT_MUTATIONS = {
     'job if':
         lambda t: _sub(t, '    runs-on: ubuntu-24.04\n', "    if: false\n    runs-on: ubuntu-24.04\n"),
-    'provenance step removed':
-        lambda t: _sub(t, '        run: python3 tools/ci/provenance_check.py\n', '        run: true\n'),
     'contract step removed':
         lambda t: _sub(t, '        run: python3 tools/ci/ci_contract.py\n', '        run: echo skipped\n'),
     'body pasted into the shell':
-        lambda t: _sub(t, '        run: python3 tools/ci/provenance_check.py\n',
+        lambda t: _sub(t, '        run: python3 tools/ci/ci_contract.py\n',
                        '        run: echo "${{ github.event.pull_request.body }}"\n'),
-    'comment step widened to always':
-        lambda t: _sub(t, '        if: failure()\n', '        if: always()\n'),
-    'author taken from the body':
-        lambda t: _sub(t, 'PR_AUTHOR: ${{ github.event.pull_request.user.login }}',
-                       'PR_AUTHOR: ${{ github.event.pull_request.body }}'),
-    'edited trigger dropped':
-        lambda t: _sub(t, 'reopened, edited,', 'reopened,'),
+    'write permission':
+        lambda t: _sub(t, '  contents: read\n', '  contents: write\n'),
+    'synchronize trigger dropped':
+        lambda t: _sub(t, 'opened, synchronize, reopened', 'opened, reopened'),
 }
 
 
-@pytest.mark.parametrize('name', sorted(PROVENANCE_MUTATIONS))
-def test_each_way_to_quietly_disable_the_provenance_check_is_refused(name):
-    bad = PROVENANCE_MUTATIONS[name](PROVENANCE)
-    assert bad != PROVENANCE
-    assert contract.provenance_errors(bad), f'{name}: accepted'
+@pytest.mark.parametrize('name', sorted(CONTRACT_MUTATIONS))
+def test_each_way_to_quietly_disable_the_contract_check_is_refused(name):
+    bad = CONTRACT_MUTATIONS[name](CONTRACT)
+    assert bad != CONTRACT
+    assert contract.contract_errors(bad), f'{name}: accepted'
 
 
 def test_the_contract_reads_the_parsed_yaml_not_comments():
@@ -184,10 +178,3 @@ def test_the_runner_fails_a_missing_guard(tmp_path):
          f'sys.exit(m.main(guards=("test_gone.py",), root=pathlib.Path({str(tmp_path)!r})))\n'],
         capture_output=True, text=True)
     assert r.returncode == 1 and 'missing' in r.stdout
-
-
-def test_ai_provenance_rechecks_when_pr_body_is_edited():
-    """A required check that only ran on push would stay red after the
-    description is fixed; the contract requires `edited` too."""
-    doc = yaml.load(PROVENANCE, Loader=yaml.BaseLoader)
-    assert {'opened', 'synchronize', 'reopened', 'edited'} <= set(doc['on']['pull_request']['types'])

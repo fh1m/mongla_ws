@@ -1,6 +1,6 @@
 """CI must not paste attacker-controlled text into a shell.
 
-`.github/workflows/poc-check.yml` carried this until 2026-09-30 (issue #54):
+A workflow that read the pull request body carried this until 2026-09-30 (issue #54):
 
     PR_BODY="${{ github.event.pull_request.body }}"
 
@@ -13,19 +13,13 @@ The safe form passes the value through `env:`. The runner sets a variable and
 bash never parses its contents, so `"$PR_BODY"` is exactly the bytes the author
 typed.
 
-Two tests, because each catches a different mistake:
-
-* the STATIC one catches a new workflow, or a new step, written the old way;
-* the BEHAVIOURAL one runs the real script out of the real YAML against a
-  hostile body and proves the bytes stay data -- so if someone "simplifies" the
-  `env:` block back into the `run:` block, the demonstration fails rather than
-  the reasoning.
+The static test catches a new workflow, or a new step, written the old way.
+The behavioural test that ran a hostile body through the old step went with
+that step, when no required workflow read the body any more (2026-11-24).
 """
 
 import pathlib
 import re
-import subprocess
-import sys
 
 import pytest
 
@@ -72,45 +66,3 @@ def test_every_workflow_declares_least_privilege_permissions():
     assert not missing, (
         f'{missing} declare no `permissions:`, so the GITHUB_TOKEN scope is '
         'whatever the repository default happens to be. State it in the file.')
-
-
-HOSTILE = (
-    '## AI Provenance\n'
-    '| # | Author / Handle | Source URL | What came from this person |\n'
-    '|---|---|---|---|\n'
-    '| 1 | @someone | https://x | insight |\n'
-    '"; touch /tmp/mongla_poc_injection_marker; echo "'
-    "'; touch /tmp/mongla_poc_injection_marker2; echo '"
-    '$(touch /tmp/mongla_poc_injection_marker3)\n'
-    '`touch /tmp/mongla_poc_injection_marker4`\n'
-)
-
-
-def test_the_provenance_script_treats_a_hostile_body_as_data(tmp_path):
-    """Run the shipped `run:` script with a body that tries four ways to escape."""
-    wf = yaml.safe_load((ROOT / '.github' / 'workflows' / 'poc-check.yml')
-                        .read_text(encoding='utf-8'))
-    step = next(s for _, s in _run_steps(wf) if 'Provenance' in (s.get('name') or ''))
-
-    # The body must reach the script through `env:`, not through the script text.
-    assert 'PR_BODY' in (step.get('env') or {}), (
-        'the PR body is no longer passed through `env:` -- if it moved back into '
-        'the `run:` block, this is the injection from issue #54 again')
-
-    markers = [tmp_path / f'marker{n}' for n in range(1, 5)]
-    body = HOSTILE.replace('/tmp/mongla_poc_injection_marker', str(tmp_path / 'marker'))
-    script = tmp_path / 'step.sh'
-    script.write_text(step['run'], encoding='utf-8')
-    out = tmp_path / 'github_output'
-    out.touch()
-
-    r = subprocess.run(
-        ['bash', str(script)], capture_output=True, text=True, cwd=ROOT,
-        env={'PATH': f'{pathlib.Path(sys.executable).parent}:/usr/bin:/bin',
-             'PR_BODY': body, 'GITHUB_OUTPUT': str(out)})
-
-    fired = [m.name for m in markers if m.exists()]
-    assert not fired, f'the hostile body EXECUTED: {fired} created. stderr={r.stderr}'
-    # And it still classifies correctly: a populated table is a pass.
-    assert r.returncode == 0, f'rc={r.returncode} stdout={r.stdout} stderr={r.stderr}'
-    assert 'status=pass' in out.read_text(encoding='utf-8'), out.read_text()

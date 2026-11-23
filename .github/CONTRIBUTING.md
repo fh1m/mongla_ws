@@ -40,13 +40,12 @@ python3 tools/ci/run_repo_integrity.py     # the integrity gate, as CI runs it
 
 Four checks are required and none may be talked past: `ROS humble` and `ROS jazzy` build and
 test the whole stack in a clean container; the integrity gate runs every guard, including
-ruff (pyflakes rules), shellcheck and actionlint; and provenance reads your description.
+ruff (pyflakes rules), shellcheck and actionlint; and the workflow contract checks that
+none of the required workflows can be skipped.
 
 ## The pull request description
 
-Fill the template. It needs either an `## AI Provenance` table naming every outside source
-the change drew on, or the line `Provenance: 100% human-written` on its own. If the change
-compromises because data is missing, say so under **Compromises** and link the upstream ask.
+Fill the template. If the change compromises because data is missing, say so under **Compromises** and link the upstream ask.
 
 ## Where to start
 

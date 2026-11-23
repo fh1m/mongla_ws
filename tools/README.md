@@ -125,7 +125,6 @@ For the checks and generators CI runs, and the audits behind them.
 | `gen_tools_index.py` | Write tools/README.md: every tool, by folder, with the first sentence of its own description. |
 | `launch_param_sweep.py` | Node parameters that NO launch file passes. |
 | `orphan_sweep.py` | Every package's unreachable modules, not just `mongla_vision`'s. |
-| `provenance_check.py` | Decide the provenance check from a pull request body. |
 | `published_counts.py` | The test counts the README and the site publish, from the last full run. |
 | `qos_audit.py` | Every ROS 2 pub/sub in the stack, with its QoS -- looking for silent mismatches. |
 | `race_audit.py` | Find compound (non-atomic) operations on state shared across threads. |

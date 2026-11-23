@@ -1,0 +1,29 @@
+name: Workflow Contract
+
+# Runs tools/ci/ci_contract.py over the required workflows. A job skipped by
+# `if:` reports Success to branch protection, so the integrity job cannot be
+# trusted to check its own shape; this second required job checks it (#93).
+#
+# It reads no pull request text and needs nothing more than read access.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Workflow contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the candidate commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - name: Install the contract's YAML parser
+        run: python3 -m pip install --disable-pip-version-check 'PyYAML>=6,<7'
+      - name: Check the required workflows keep their shape
+        run: python3 tools/ci/ci_contract.py

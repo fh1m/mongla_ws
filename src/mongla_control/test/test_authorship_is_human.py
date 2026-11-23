@@ -26,7 +26,7 @@ import pytest
 # Agent identities, not people. Matched against author, committer and trailers.
 AGENTS = re.compile(
     r"claude|anthropic|cursor|copilot|codex|devin|chatgpt|openai|gemini|"
-    r"windsurf|aider",
+    r"windsurf|aider|git-ai",
     re.IGNORECASE,
 )
 
@@ -70,6 +70,26 @@ def test_no_agent_appears_as_author_or_committer():
         f"First: {offenders[0]}. Rewrite with `git-filter-repo --mailmap`, "
         "mapping the agent identity to the person who ran it."
     )
+
+
+# Other marks an assistant leaves in a message: a link back to its session, a
+# "made with" trailer, a "generated with" footer. The owner ruled all of them
+# out on 2026-11-24, when 218 session links and 490 attribution notes were
+# rewritten out of the public history.
+MARKS = re.compile(r"claude\.ai/code/|^[ \t]*made-with:|generated with \[?claude",
+                   re.IGNORECASE | re.MULTILINE)
+
+
+def test_no_commit_message_carries_an_assistant_mark():
+    hits = [ln for ln in _git("log", "--all", "--format=%h %B").splitlines()
+            if MARKS.search(ln)]
+    assert not hits, f"{len(hits)} line(s) carry an assistant mark. First: {hits[0]!r}"
+
+
+def test_no_attribution_notes_ref():
+    """An attribution tool stores its records as git notes; none are kept here."""
+    refs = _git("for-each-ref", "--format=%(refname)", "refs/notes").split()
+    assert not refs, f"notes refs present: {refs}"
 
 
 def test_no_agent_is_credited_as_co_author():

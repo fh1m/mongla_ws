@@ -30,7 +30,7 @@ jobs:
       - name: Install policy-test dependencies
         run: python -m pip install --disable-pip-version-check 'pytest>=8.2,<10' 'PyYAML>=6,<7' 'numpy>=1.26,<2' 'pymavlink==2.4.49' 'ruff==0.16.10' 'shellcheck-py==0.11.0.1' 'actionlint-py==1.7.12.25'
       # The guard list lives in that one file; tools/ci/ci_contract.py allows
-      # this exact command and nothing else here, and the provenance job
+      # this exact command and nothing else here, and the contract job
       # runs the same contract, so skipping this job is caught there (#93).
       - name: Run the integrity guards
         run: python tools/ci/run_repo_integrity.py

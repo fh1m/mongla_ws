@@ -7,7 +7,10 @@ Blocks (exit 2) when:
   * the command text, the staged diff, or the commits a push would send carry a
     `Co-authored-by:` trailer (the user is the sole author);
   * a staged Markdown file adds a machine-local home path (/home/<user>/ or
-    /Users/<user>/), which must not reach docs or the public site.
+    /Users/<user>/), which must not reach docs or the public site;
+  * the command, the staged diff or a pushed commit carries an assistant session
+    URL (a claude.ai code-session address). The repositories are public and the owner
+    ruled these out of every commit, PR and doc on 2026-11-24.
 
 Limits, on purpose: it sees only what is already staged when the commit runs, so a
 `git add ... && git commit` chain is checked on the staged set at that moment, and
@@ -22,6 +25,7 @@ import sys
 ROOT = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
 COAUTHOR = re.compile(r"co-authored-by:", re.IGNORECASE)
 HOME_PATH = re.compile(r"/(?:home|Users)/[A-Za-z0-9._-]+/")
+SESSION_LINK = re.compile(r"claude\.ai/code/session", re.IGNORECASE)
 
 
 def git(*args):
@@ -35,7 +39,7 @@ def git(*args):
 
 def block(reason):
     sys.stderr.write(f"[Hook] BLOCKED: {reason}\n"
-                     "  -> the user is the sole author: remove the trailer or the path, then retry.\n")
+                     "  -> the user is the sole author: remove the trailer, path or link, then retry.\n")
     sys.exit(2)
 
 
@@ -52,12 +56,16 @@ def main():
 
     if COAUTHOR.search(cmd):
         block("the command text carries a Co-authored-by trailer.")
+    if SESSION_LINK.search(cmd):
+        block("the command text carries an assistant session link.")
 
     if is_commit:
         staged = git("diff", "--cached", "-U0")
         added = [l[1:] for l in staged.splitlines() if l.startswith("+") and not l.startswith("+++")]
         if any(COAUTHOR.search(l) for l in added):
             block("the staged diff adds a Co-authored-by trailer.")
+        if any(SESSION_LINK.search(l) for l in added):
+            block("the staged diff adds an assistant session link.")
         md_files = re.findall(r"^\+\+\+ b/(.+\.md)$", staged, re.MULTILINE)
         if md_files:
             md_added = []
@@ -74,6 +82,8 @@ def main():
         log = git("log", "@{u}..HEAD", "--format=%B") or git("log", "origin/main..HEAD", "--format=%B")
         if COAUTHOR.search(log):
             block("a commit this push would send carries a Co-authored-by trailer.")
+        if SESSION_LINK.search(log):
+            block("a commit this push would send carries an assistant session link.")
 
 
 if __name__ == "__main__":
