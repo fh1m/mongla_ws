@@ -246,9 +246,13 @@ the scale is below 1, says the rate again each second, so a camera that respawne
 come back at full rate. The cell shows the scale beside the lag, `video x0.5`. On Kutum
 (2026-11-23) one report of 1.4 s halved both clips' streams from 30 to 15 Hz; an open
 console at 0.00 s of lag brought them back x0.25, x0.5, x0.75, x1 in 10 s steps, each change
-in the helm's log. One stream serves every screen, so
-the slowest screen sets it for all: a screen showing a stale vehicle is worse than a
-7.5 Hz picture on the others.
+in the helm's log. One stream serves every screen (the bridge
+cannot throttle one client), so the slowest screen sets it for all: a screen showing a stale
+vehicle is worse than a 7.5 Hz picture on the others. The cost is that one weak laptop or
+phone slows everyone's video, so each page reports with its own short id: the helm's log says
+`screen c3d4 reported 1.4 s of lag (close it if it is not needed)`, and every strip reads
+`video x0.5 set by screen c3d4`, or `set by this screen` on the one that did it. **On the
+day, if the pictures turn choppy, close the screen the strip names.**
 
 ## Decided, and what comes next
 

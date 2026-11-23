@@ -377,13 +377,16 @@ def test_a_lagging_browser_halves_the_viewers_video_and_nothing_else(rig):
         assert not call('', 'link', fields_json='{"lag_s": "slow"}').ok
         assert _param(cams['forward'], 'stream_rate_hz') == 30.0
         assert _until(lambda: call('', 'link', fields_json='{"lag_s": 0.0}').ok, 5.0)
-        r = call('', 'link', fields_json='{"lag_s": 1.4}')
+        r = call('', 'link', fields_json='{"lag_s": 1.4, "screen": "c3d4<x>"}')
         assert r.ok and '0.5' in r.message, r.message
         assert _until(lambda: _param(cams['forward'], 'stream_rate_hz') == 15.0
                       and _param(cams['downward'], 'stream_rate_hz') == 10.0, 8.0), (
             _param(cams['forward'], 'stream_rate_hz'), _param(cams['downward'], 'stream_rate_hz'))
         assert _until(lambda: states and states[-1].get('video') == 0.5)
         assert 'video' in log.read_text() and '1.4' in log.read_text()
+        # The screen is named in the log and the state, cleaned to an id.
+        assert 'screen c3d4x' in log.read_text(), log.read_text()
+        assert _until(lambda: states and states[-1].get('video_by') == 'c3d4x')
         assert 'link' not in [json.loads(l).get('op') for l in log.read_text().splitlines()]
     finally:
         ex.shutdown()

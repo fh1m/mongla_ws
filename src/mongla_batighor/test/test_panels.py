@@ -754,6 +754,7 @@ out.nsec = Math.round(s.lag * 1000);
 // lags while every panel mounts), then one every 2 s.
 const r = { lag: 1.0, mountAt: 0 };
 out.reports = [1000, 14000, 15500, 16000, 17600].map((t) => X.shouldReport(r, t));
+out.words = [X.videoWords(1, ""), X.videoWords(0.5, "ab12", "ab12"), X.videoWords(0.25, "c3d4", "ab12"), X.videoWords(NaN, "")];
 process.stdout.write(JSON.stringify(out));
 process.exit(0);
 ''')
@@ -766,3 +767,5 @@ process.exit(0);
     assert got['aged'] == 1, 'samples older than a minute are dropped'
     assert got['nsec'] == 300, got['nsec']
     assert got['reports'] == [False, False, True, False, True], got['reports']
+    assert got['words'] == ['video x1', 'video x0.5 set by this screen',
+                            'video x0.25 set by screen c3d4', 'video --'], got['words']

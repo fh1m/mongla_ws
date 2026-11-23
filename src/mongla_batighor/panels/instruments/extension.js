@@ -493,6 +493,17 @@ function noteLag(s, at, stamp) {
 // screen must not cut every screen's video for the half minute it takes to
 // climb back. Exported for the test.
 const REPORT_MS = 2000, WARM_MS = 15000;
+// This page's own short id, so the helm's log and every strip can say which
+// screen cut the shared video; the operator closes that one.
+const SCREEN = Math.floor(Math.random() * 0x10000).toString(16).padStart(4, "0");
+// The shared video's scale, and which screen cut it: "this screen" when it
+// was this one, so the operator knows which to close.
+function videoWords(scale, by, me = SCREEN) {
+  if (!fin(scale)) return "video --";
+  if (scale >= 1 || !by) return `video x${scale}`;
+  return `video x${scale} set by ${by === me ? "this screen" : `screen ${by}`}`;
+}
+
 function shouldReport(s, now) {
   if (!fin(s.lag)) return false;
   if (!fin(s.mountAt)) s.mountAt = now;
@@ -545,7 +556,7 @@ function statusOf(s, now) {
   // This screen's link to Kutum, apart from the board's line above: the lag
   // and the scale the helm put the viewers' video at for it (link.py).
   const lagLvl = !fin(s.lag) ? "stale" : s.lag > 2 ? "err" : s.lag > 0.5 ? "warn" : "ok";
-  cells.push(["to kutum", fin(s.lag) ? `lag ${num(s.lag, 2)} s  video x${fin(s.video) ? s.video : "--"}` : "--", lagLvl]);
+  cells.push(["to kutum", fin(s.lag) ? `lag ${num(s.lag, 2)} s  ${videoWords(s.video, s.videoBy)}` : "--", lagLvl]);
   tabs.Cockpit = v && v.armed ? "live" : "";
   tabs.Thrust = v && v.armed ? "live" : "";
   tabs.Mission = running ? "live" : "";
@@ -567,7 +578,7 @@ const INSTRUMENTS = {
       ...CAMERAS.map(lockTopic)],
     fold(s, topic, m) {
       if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteLag(s, heard(), sent() || (m.header && m.header.stamp)); }
-      else if (topic === "/mongla/batighor/helm_state") { try { s.video = JSON.parse(m.data).video; } catch { /* keep */ } }
+      else if (topic === "/mongla/batighor/helm_state") { try { const h = JSON.parse(m.data); s.video = h.video; s.videoBy = h.video_by || ""; } catch { /* keep */ } }
       else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
       else if (topic === "/mongla/mission/task") { try { s.task = JSON.parse(m.data); } catch { /* keep */ } }
       else if (topic === "/mongla/doing") { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
@@ -586,7 +597,7 @@ const INSTRUMENTS = {
       // no helm, no report, and nothing else depends on it.
       if (typeof callAny === "function" && shouldReport(s, Date.now())) {
         callAny("/mongla/batighor/helm", { who: "", op: "link", cmd: "", mission: "", confirms: [],
-          fields_json: JSON.stringify({ lag_s: Math.round(s.lag * 1000) / 1000 }) }).catch(() => { /* no helm */ });
+          fields_json: JSON.stringify({ lag_s: Math.round(s.lag * 1000) / 1000, screen: SCREEN }) }).catch(() => { /* no helm */ });
       }
       if (typeof document !== "undefined" && document.querySelectorAll) {
         for (const tab of document.querySelectorAll('[data-testid="toolbar-tab"]')) {
@@ -1062,6 +1073,7 @@ module.exports = {
   statusOf,
   noteLag,
   shouldReport,
+  videoWords,
   layoutUpdates,
   placeByStart,
   makePanel,
