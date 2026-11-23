@@ -19,14 +19,14 @@
     "speed": 1
   },
   "layout": {
-    "direction": "row",
+    "direction": "column",
     "first": "TopicGraph!graph",
     "second": {
-      "direction": "column",
+      "direction": "row",
       "first": "SourceInfo!topics",
       "second": "RawMessages!raw",
-      "splitPercentage": 55.0
+      "splitPercentage": 50.0
     },
-    "splitPercentage": 50.0
+    "splitPercentage": 58.0
   }
 }

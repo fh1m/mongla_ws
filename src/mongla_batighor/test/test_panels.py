@@ -512,6 +512,13 @@ def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
     assert cells['health'] == ('1 unknown', 'stale')
     assert cells['vehicle'] == ('ARMED', 'armed') and cells['depth'][0] == '1.20 m'
     assert got['tabs']['Cockpit'] == 'live' and got['tabs']['Vision'] == 'live'
+    # A view whose feed has gone quiet (a starved link, 2026-11-23) must not
+    # read as calm: the last word stays, with its age, as a warning.
+    js_old = js.replace('statusOf(' + _json.dumps(s) + ', 1500)', 'statusOf(' + _json.dumps(s) + ', 4600)')
+    old = _sp.run(['node', '-e', js_old], capture_output=True, text=True, timeout=30)
+    assert old.returncode == 0, old.stderr
+    cells = {k: (v, lvl) for k, v, lvl in _json.loads(old.stdout)['cells']}
+    assert cells['vehicle'] == ('ARMED  3.6 s old', 'warn'), cells['vehicle']
 
 
 @NEEDS_NODE
