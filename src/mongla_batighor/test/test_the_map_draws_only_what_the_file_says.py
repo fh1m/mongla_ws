@@ -29,8 +29,8 @@ global.document = { createElementNS: (_, t) => node(t), createElement: (t) => no
 const module = { exports: {} };
 const CAMERAS = ["forward", "downward"], VERBS = {}, TUNABLE = {}, THEME_CSS = "";
 %(src)s
-const [course, pose, target] = JSON.parse(process.argv[process.argv.length - 1]);
-module.exports.poolMap(course, pose, [], [], target);
+const [course, pose, target, px] = JSON.parse(process.argv[process.argv.length - 1]);
+module.exports.poolMap(course, pose, [], [], target, px ? { px } : undefined);
 process.stdout.write(JSON.stringify(drawn.map((n) => ({ tag: n.tag, attrs: n.attrs,
   text: n.kids.filter((k) => typeof k === "string").join("") }))));
 """
@@ -43,9 +43,9 @@ COURSE = {'course': 't', 'pool': {'outline': [[0, -5], [0, 5], [20, 5], [20, -5]
           'unplaced': [{'name': 'drum'}]}
 
 
-def _draw(pose, target=None):
+def _draw(pose, target=None, px=None):
     src = (PANELS / 'common.js').read_text() + (PANELS / 'instruments' / 'extension.js').read_text()
-    out = subprocess.run(['node', '-e', HARNESS % {'src': src}, json.dumps([COURSE, pose, target])],
+    out = subprocess.run(['node', '-e', HARNESS % {'src': src}, json.dumps([COURSE, pose, target, px])],
                          capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
@@ -126,3 +126,23 @@ def test_a_blank_venue_says_how_to_fill_it_and_a_filled_one_does_not():
     assert 'blank venue no floor, so flow refuses every interval' in _rows(blank)
     filled = {'course': 'pool', 'pool': {'depth_m': 2.0, 'floor': []}, 'props': []}
     assert 'blank venue' not in _rows(filled)
+
+
+def _label_px(drawn, words):
+    """A label's size on screen: its font size over the metres one pixel spans."""
+    svg = next(n for n in drawn if n['tag'] == 'svg')
+    _, _, w_m, h_m = (float(v) for v in svg['attrs']['viewBox'].split())
+    lab = next(n for n in drawn if n['tag'] == 'text' and words in n['text'])
+    return float(lab['attrs']['font-size']), w_m, h_m
+
+
+@pytest.mark.parametrize('w,h', [(300, 260), (760, 265), (900, 520)])
+def test_labels_keep_their_size_and_the_drawing_takes_the_panels_shape(w, h):
+    """Seen on Kutum 2026-11-23: the Localization map at half height drew the
+    pool as a square in the middle of a wide panel, its names at about 7 px.
+    Given the drawing's size, the map spans the panel's shape and every name
+    stays 12 px on screen, whatever the panel's size."""
+    drawn = _draw(None, px={'w': w, 'h': h})
+    font_m, w_m, h_m = _label_px(drawn, 'flare (nominal)')
+    assert abs(w_m / h_m - w / h) < 1e-6, (w_m, h_m)
+    assert abs(font_m / (w_m / w) - 12) < 1e-6, font_m / (w_m / w)

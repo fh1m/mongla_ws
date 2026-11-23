@@ -84,7 +84,7 @@ function depthGauge(depthBelow, floorM) {
 function centreBar(v) {
   const ok = fin(v);
   const w = ok ? Math.min(1, Math.abs(v)) * 50 : 0;
-  return el("div", { class: "bar", style: "position:relative" },
+  return el("div", { class: "bar centre", style: "position:relative" },
     el("b", { style: `position:absolute;${v < 0 ? "right" : "left"}:50%;width:${w}%;${ok ? "" : "display:none"}` }),
     el("i", { style: "position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--mb-ink-3)" }));
 }
@@ -153,11 +153,19 @@ function poolMap(course, pose, track, fixes, target, opts) {
   const span = Math.max(n1 - n0, e1 - e0, 4);
   const pad = span * 0.08;
   const cn = (n0 + n1) / 2, ce = (e0 + e1) / 2;
-  n0 = cn - span / 2 - pad; n1 = cn + span / 2 + pad; e0 = ce - span / 2 - pad; e1 = ce + span / 2 + pad;
+  // `opts.px`, the drawing's size on screen: the map takes the panel's shape
+  // (a square pool drawing in a wide panel left two thirds of it black) and
+  // `u` is one screen pixel, so a name is 12 px at any panel size; at half
+  // height the names were 7 px (Kutum, 2026-11-23). Without it, a square
+  // drawn as if 300 px wide.
+  const px = O.px && O.px.w > 0 && O.px.h > 0 ? O.px : null;
+  const m = px ? Math.max((span + 2 * pad) / px.w, (span + 2 * pad) / px.h) : (span + 2 * pad) / 300;
+  const hw = px ? (m * px.w) / 2 : span / 2 + pad, hh = px ? (m * px.h) / 2 : span / 2 + pad;
+  n0 = cn - hh; n1 = cn + hh; e0 = ce - hw; e1 = ce + hw;
   const W = e1 - e0;
   // SVG in metres: east right, north up (the y axis flipped by drawing at -x).
   const X = (p) => p.y, Y = (p) => -p.x;
-  const u = W / 300;                      // one "pixel" of a 300 px wide map, in metres
+  const u = m;                            // one screen pixel, in metres
   const step = W > 40 ? 5 : W > 12 ? 2 : W > 5 ? 1 : 0.5;
   const kids = [];
   for (let g = Math.ceil(e0 / step) * step; g <= e1; g += step) kids.push(svg("line", { x1: g, y1: -n1, x2: g, y2: -n0, stroke: "var(--mb-rule)", "stroke-width": u }));
@@ -169,9 +177,9 @@ function poolMap(course, pose, track, fixes, target, opts) {
     kids.push(svg("circle", { cx: y, cy: -x, r: 2 * u, fill: "var(--mb-teal)" }));
     // Left of the dot: prop names are written to the right of theirs, and a
     // sounding beside a prop read as one label (bench course, 2026-11-21).
-    kids.push(svg("text", { x: y - 4 * u, y: -x + 3 * u, "font-size": 8 * u, fill: "var(--mb-teal)", "text-anchor": "end", ...HALO(u) }, `${num(d, 2)} m`));
+    kids.push(svg("text", { x: y - 5 * u, y: -x + 4 * u, "font-size": 11 * u, fill: "var(--mb-teal)", "text-anchor": "end", ...HALO(u) }, `${num(d, 2)} m`));
   }
-  const text = (x, y, s, fill, anchor) => svg("text", { x, y, "font-size": 9 * u, fill, "text-anchor": anchor || "start", ...HALO(u) }, s);
+  const text = (x, y, s, fill, anchor) => svg("text", { x, y, "font-size": 12 * u, fill, "text-anchor": anchor || "start", ...HALO(u) }, s);
   for (const p of props) {
     const ink = p.measured ? "var(--mb-ink)" : "var(--mb-amber)";
     const dash = p.measured ? "" : `${3 * u},${2 * u}`;
@@ -296,7 +304,7 @@ function drawMap(s, forLocalization) {
     const ft = s.flow && s.flow.twist && s.flow.twist.twist && s.flow.twist.twist.linear;
     if (ft) vel.push({ ...turn(ft.x, ft.y), ink: "var(--mb-teal)" });
   }
-  const map = poolMap(c, pose, s.track || [], s.fixes || [], target, { rays: forLocalization, vel });
+  const map = poolMap(c, pose, s.track || [], s.fixes || [], target, { rays: forLocalization, vel, px: s.mapPx });
   out.push(map || el("div", { class: "note" }, "nothing placed yet: survey the pool (course_survey --corner, --prop, --floor)"));
   const un = c.unplaced || [];
   const where = pose ? `${num(pose.x, 2)}, ${num(pose.y, 2)} m  heading ${num(fin(pose.yaw) ? (pose.yaw * 180) / Math.PI : NaN, 0)} deg` : "--";
@@ -858,7 +866,13 @@ function makePanel(spec) {
       }
       done();
     };
-    const draw = () => box.replaceChildren(...spec.draw(s).filter(Boolean));
+    const draw = () => {
+      // A drawing that fits its panel needs the panel's size: the map's last
+      // box, read before it is replaced (one redraw late on a resize).
+      const was = box.querySelector("svg.map");
+      if (was) { const r = was.getBoundingClientRect(); s.mapPx = { w: r.width, h: r.height }; }
+      box.replaceChildren(...spec.draw(s).filter(Boolean));
+    };
     // Ages move with no message, and a silent node is what an operator must see.
     const tick = setInterval(() => { dirty = true; }, 1000);
     let raf = 0;
