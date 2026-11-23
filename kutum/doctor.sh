@@ -234,6 +234,12 @@ same "$KUTUM/system/systemd/kutum-source-routes.timer" /etc/systemd/system/kutum
 same "$KUTUM/system/motd/01-kutum" /etc/update-motd.d/01-kutum "login banner"
 systemctl is-enabled cpu-performance.service >/dev/null 2>&1 && ok "cpu-performance.service enabled" \
   || warn "cpu-performance.service not enabled"
+for unit in $(sed -n "s/^QUIET_TIMERS='\(.*\)'$/\1/p" "$KUTUM/setup.sh"); do
+  case "$(systemctl is-enabled "$unit" 2>/dev/null)" in
+    masked|'') ok "$unit off (a vehicle does not poll for firmware mid-run)" ;;
+    *) warn "$unit can fire mid-run -- sudo kutum/setup.sh --system masks it" ;;
+  esac
+done
 [ -e /dev/srot ] && ok "/dev/srot (the board, pinned to its port)" \
   || warn "no /dev/srot -- the board is found by searching (kutum/system/udev/make_srot_rule.sh pins it)"
 

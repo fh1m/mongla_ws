@@ -223,3 +223,16 @@ def test_the_pin_check_runs_before_the_switch():
     assert 'DIFF) fail "pin' in doctor
     deploy = (ROOT / 'kutum' / 'deploy.sh').read_text()
     assert deploy.index('kutum/doctor.sh" ||') < deploy.index('release.sh activate')
+
+
+def test_the_vehicle_masks_the_timers_it_never_runs_and_the_doctor_checks_them():
+    """fwupd took 46 % of a core a minute after its refresh timer fired on the
+    bench (bead 0yp). setup masks every name in QUIET_TIMERS; the doctor reads
+    the same line, so a timer added to one is checked by the other."""
+    setup = (KUTUM / 'setup.sh').read_text()
+    found = re.findall(r"^QUIET_TIMERS='([^']*)'$", setup, re.M)
+    assert found and 'fwupd-refresh.timer' in found[0].split()
+    assert 'systemctl mask --now "$unit"' in setup
+    assert 'for unit in $QUIET_TIMERS' in setup
+    doctor = (KUTUM / 'doctor.sh').read_text()
+    assert "s/^QUIET_TIMERS=" in doctor and '"$KUTUM/setup.sh"' in doctor
