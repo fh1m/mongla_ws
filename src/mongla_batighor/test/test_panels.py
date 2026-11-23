@@ -710,6 +710,8 @@ def test_the_log_folds_a_repeated_warning_into_one_line_with_a_count():
           + 'foldNodeLog(L,{t:1,key:"W lock: 7/8 collapsed",text:"a"});'
           + 'foldNodeLog(L,{t:2,key:"W loc: no aiding",text:"b"});'
           + 'foldNodeLog(L,{t:3,key:"W lock: 8/8 collapsed",text:"c"});'
+          + 'foldNodeLog(L,{t:4,key:"E mgr: thruster 3 no rpm",text:"d"});'
+          + 'foldNodeLog(L,{t:5,key:"E mgr: thruster 5 no rpm",text:"e"});'
           + 'process.stdout.write(JSON.stringify(L.map(e=>[e.t,e.n,e.text])));'
           # the heartbeat's setInterval would keep node running
           + 'process.exit(0);')
@@ -718,7 +720,8 @@ def test_the_log_folds_a_repeated_warning_into_one_line_with_a_count():
                   capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     got = _json.loads(out.stdout)
-    assert got == [[2, 1, 'b'], [3, 2, 'c  (x2)']], got
+    # Two thrusters failing are two lines, not one with a count (audit 2026-11-24).
+    assert got == [[2, 1, 'b'], [3, 2, 'c  (x2)'], [4, 1, 'd'], [5, 1, 'e']], got
 
 
 @NEEDS_NODE
@@ -802,3 +805,25 @@ def test_the_localization_card_says_why_flow_is_uncalibrated_in_full():
     bad, good = _json.loads(out.stdout)
     assert 'flow scale' + why in bad, bad
     assert 'flow scalecalibrated' in good, good
+
+
+@NEEDS_NODE
+def test_a_failed_safety_verb_never_reads_like_one_that_took():
+    """The log printed "disarm ended" for a disarm the manager failed, and
+    dropped its reason (audit 2026-11-24)."""
+    import json as _json
+    import subprocess as _sp
+    js = ((PANELS / 'control' / 'extension.js').read_text()
+          .replace('module.exports = {', 'const _x = {', 1)
+          + '\nconst f=(e)=>logLine(JSON.stringify({t:0,operator:"ana",...e})).text.slice(10);'
+          + 'process.stdout.write(JSON.stringify([f({event:"disarm ended",ok:false,message:"no heartbeat"}),'
+          + 'f({event:"disarm ended",ok:true,message:"disarmed"}),f({event:"pilot ana went silent"})]));'
+          + 'process.exit(0);')
+    pre = 'const module={exports:{}};const VERBS={},TUNABLE={},THEME_CSS="";'
+    out = _sp.run(['node', '-e', pre + (PANELS / 'common.js').read_text() + js],
+                  capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    bad, good, plain = _json.loads(out.stdout)
+    assert 'FAILED: no heartbeat' in bad
+    assert 'FAILED' not in good and good.endswith('disarm ended: disarmed')
+    assert plain.endswith('pilot ana went silent')

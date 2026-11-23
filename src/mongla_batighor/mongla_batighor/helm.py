@@ -388,6 +388,9 @@ class HelmNode(Node):
         r = res.results[0] if res is not None and res.results else None
         if r is not None and r.successful:
             self._log(operator=who, event=f'{cam} {name} is now {value!r}')
+            if name == 'paused' and value is False:
+                self.pub_camera.publish(String(data=cam))
+                self.camera = cam
         else:
             self._log(operator=who, event=f'{cam} {name} refused by the detector: '
                                           f'{r.reason if r is not None else "no answer"}')
@@ -417,13 +420,13 @@ class HelmNode(Node):
         if not self._set[cam].service_is_ready():
             return Verdict(False, f'the {cam} detector is not running')
         # What the DSL's use_camera does: the HUD follows, one detector infers.
-        self.pub_camera.publish(String(data=cam))
-        self.camera = cam
+        # The camera is the live one once its detector says it runs
+        # (`_was_set`); until then the panel must not light it.
         for other in CAMERAS:
             if other != cam and self._set[other].service_is_ready():
                 self._set_param(who, other, 'paused', True)
         self._set_param(who, cam, 'paused', False)
-        return Verdict(True, f'{cam} is the live camera')
+        return Verdict(True, f'asked {cam} to be the live camera')
 
     # -- the viewers' video -------------------------------------------
     def _link(self, fields_json):
