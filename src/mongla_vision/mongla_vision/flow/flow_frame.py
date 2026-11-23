@@ -108,7 +108,8 @@ class FlowFrameMixin:
         dt = t_now - self._anchor_t
         if dt <= 0.0:
             return 0.0
-        gz = interp_rate([(a, b, 0.0) for (a, b) in self._yaw_rate_buf],
+        # One snapshot: the IMU callback appends on another thread.
+        gz = interp_rate([(a, b, 0.0) for (a, b) in list(self._yaw_rate_buf)],
                          t_now - dt * 0.5 - self._td)
         if gz is None:
             return 0.0
@@ -403,7 +404,7 @@ class FlowFrameMixin:
         # then. Getting this sign wrong steers de-rotation the wrong way and
         # DOUBLES the residual rather than removing it, while returning an
         # entirely plausible number.
-        rates = integrate_rate(self._rate_buf, t - dt - self._td, t - self._td)
+        rates = integrate_rate(list(self._rate_buf), t - dt - self._td, t - self._td)
         pitch_rate = roll_rate = 0.0
         if rates is not None:
             pitch_rate, roll_rate = rates
