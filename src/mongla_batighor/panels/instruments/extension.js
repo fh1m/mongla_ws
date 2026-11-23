@@ -32,6 +32,10 @@ const ageS = (t) => (t ? (Date.now() - t) / 1000 : Infinity);
 // late keeps its own age (see LAST in makePanel).
 let HEARD = 0;
 const heard = () => HEARD || Date.now();
+// The bridge's own time for the message being folded (Lichtblick's
+// receiveTime: when Kutum's bridge took it), or null.
+let SENT = null;
+const sent = () => SENT;
 
 function svg(tag, attrs, ...kids) {
   const e = document.createElementNS(SVG, tag);
@@ -456,7 +460,11 @@ function vehicleBody(s, v, h, below) {
   ];
 }
 
-// How late this screen is, from the vehicle state's own stamp. foxglove_bridge
+// How late this screen is: arrival here minus the time Kutum's bridge took the
+// vehicle state (Lichtblick's receiveTime; the state's header stamp only when
+// there is none). The header is the board's capture time, which is data age,
+// not this screen's; on 2026-11-23 the strip read a steady 0.56 s from it
+// while a raw socket in the same page read 17 ms. foxglove_bridge
 // sends a client its messages in arrival order; when the pictures outrun the
 // link, every message waits behind them, each still arriving, each seconds
 // old, so a gap between arrivals cannot see it (2026-11-23). Arrival minus
@@ -468,7 +476,7 @@ function vehicleBody(s, v, h, below) {
 const LAG_WINDOW_MS = 60000;
 function noteLag(s, at, stamp) {
   if (!stamp || !fin(stamp.sec)) return;
-  const off = at - (stamp.sec * 1000 + (stamp.nanosec || 0) / 1e6);
+  const off = at - (stamp.sec * 1000 + (stamp.nanosec ?? stamp.nsec ?? 0) / 1e6);
   if (!fin(off)) return;
   const w = (s.lagWin = (s.lagWin || []).filter(([t]) => at - t <= LAG_WINDOW_MS));
   w.push([at, off]);
@@ -555,7 +563,7 @@ const INSTRUMENTS = {
       "/mongla/localization/state", "/mongla/board_link", "/mongla/batighor/helm_state",
       ...CAMERAS.map(lockTopic)],
     fold(s, topic, m) {
-      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteLag(s, heard(), m.header && m.header.stamp); }
+      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteLag(s, heard(), sent() || (m.header && m.header.stamp)); }
       else if (topic === "/mongla/batighor/helm_state") { try { s.video = JSON.parse(m.data).video; } catch { /* keep */ } }
       else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
       else if (topic === "/mongla/mission/task") { try { s.task = JSON.parse(m.data); } catch { /* keep */ } }
@@ -883,9 +891,10 @@ const INSTRUMENTS = {
 // at their own arrival times, so an old one reads as old.
 const LAST = new Map();
 
-function foldAt(spec, s, topic, m, at) {
+function foldAt(spec, s, topic, m, at, rx) {
   HEARD = at;
-  try { spec.fold(s, topic, m); } finally { HEARD = 0; }
+  SENT = rx || null;
+  try { spec.fold(s, topic, m); } finally { HEARD = 0; SENT = null; }
 }
 
 function makePanel(spec) {
@@ -900,15 +909,15 @@ function makePanel(spec) {
     root.append(box);
     for (const topic of spec.topics) {
       const last = LAST.get(topic);
-      if (last) foldAt(spec, s, topic, last.m, last.at);
+      if (last) foldAt(spec, s, topic, last.m, last.at, last.rx);
     }
     context.subscribe(spec.topics.map((topic) => ({ topic })));
     context.watch("currentFrame");
     context.onRender = (renderState, done) => {
       for (const ev of renderState.currentFrame || []) {
         const at = Date.now();
-        LAST.set(ev.topic, { m: ev.message, at });
-        foldAt(spec, s, ev.topic, ev.message, at);
+        LAST.set(ev.topic, { m: ev.message, at, rx: ev.receiveTime });
+        foldAt(spec, s, ev.topic, ev.message, at, ev.receiveTime);
         dirty = true;
       }
       done();
