@@ -178,7 +178,7 @@ live camera.
 
 ![The map: the pool outline and soundings, nominal props dashed amber, Mongla hollow amber by its start](../../../../docs/imgs/readme/batighor-map.webp)
 
-![The chain: both cameras beside each stage's age, frame to detect to track to lock](../../../../docs/imgs/readme/batighor-chain.webp)
+![The chain: both cameras beside each stage's age, frame to detect to track to lock, and the frame-to-command plot](../../../../docs/imgs/readme/batighor-chain.webp)
 
 ![Localization: usable and why not, aiding, position, sigma, velocity and heading from each source](../../../../docs/imgs/readme/batighor-localization.webp)
 

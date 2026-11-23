@@ -745,7 +745,7 @@ answer different questions, and neither commits to the other's repository.
 **Map**: plan a run. The pool from the course file, north up, the props you have placed and
 the ones you have not (listed, never put at the origin), and the hull on it.
 
-<p align="center"><img src="docs/imgs/readme/batighor-chain.webp" alt="The chain view: both cameras beside a table of how old each stage's data is, frame to detect to track to lock, with p50 and p95 in milliseconds." width="100%"></p>
+<p align="center"><img src="docs/imgs/readme/batighor-chain.webp" alt="The chain view: both cameras beside a table of how old each stage's data is, frame to detect to track to lock, with p50 and p95 in milliseconds, and below it the frame-to-command plot, empty until a vision verb drives." width="100%"></p>
 
 **Chain**: photons to thrust, each stage's age as p50 and p95. It also lists what the board
 does not send yet, each with the firmware ask that would fix it.
