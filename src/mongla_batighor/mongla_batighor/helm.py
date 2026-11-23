@@ -125,6 +125,11 @@ def build_goal(cmd: str, fields_json: str):
     if not isinstance(fields, dict):
         return None, 'fields must be a JSON object'
     allowed = COMMANDS[cmd]['fields']
+    # An empty box is not a zero: with no field listed the manager would read
+    # the rosidl 0.0 as asked for (north, the surface, the pool origin).
+    missing = [f for f in COMMANDS[cmd].get('required', ()) if f not in fields]
+    if missing:
+        return None, f'{cmd} needs {", ".join(missing)}: it has no default'
     types = Move.Goal.get_fields_and_field_types()
     goal = Move.Goal()
     goal.cmd = cmd
