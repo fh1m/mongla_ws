@@ -460,3 +460,24 @@ def test_imu_frame_says_why_the_imu_is_silent():
     for _ in range(30):
         fc2._accel_in_vehicle_frame((0.0, 0.0, g), (0.0, 0.0, 0.0))
     assert R.imu_frame(fc2.accel_frame_state()).state is State.OK
+
+
+def test_a_gyro_that_reads_exactly_zero_says_so():
+    """mongla_ws-5yn, Kutum bench 2026-11-23: SCALED_IMU2's gyro read exactly
+    (0, 0, 0) mrad/s for 12 s at rest and /mongla/imu published it at 50 Hz,
+    while flow's de-rotation and the filter's prediction both use it and the
+    console read 'aided'. A working MEMS gyro never reads exact zero on all
+    three axes for seconds; the row says so after 2 s, and noise reads OK."""
+    from mongla_control.fc.srot_telemetry import SrotTelemetry as _T
+    fc = _T.__new__(_T)
+    assert R.gyro(fc.gyro_state(now=0.0)).state is State.UNKNOWN
+    for i in range(60):                              # 1.2 s of zeros: not yet
+        fc._note_gyro((0.0, 0.0, 0.0), now=i * 0.02)
+    assert R.gyro(fc.gyro_state(now=1.2)).state is State.OK
+    for i in range(60, 120):                         # 2.4 s: dead
+        fc._note_gyro((0.0, 0.0, 0.0), now=i * 0.02)
+    h = R.gyro(fc.gyro_state(now=2.4))
+    assert h.state is State.DEGRADED, h
+    assert 'exactly 0' in h.evidence and '5yn' in h.evidence, h.evidence
+    fc._note_gyro((0.001, -0.002, 0.0), now=2.42)    # one noisy sample: alive again
+    assert R.gyro(fc.gyro_state(now=2.42)).state is State.OK
