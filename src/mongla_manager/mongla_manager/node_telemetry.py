@@ -91,6 +91,16 @@ class TelemetryMixin:
         # a measured heave demand of zero.
         m.vector.z = math.nan
         self.demand_publisher.publish(m)
+        cf = getattr(self.fc, 'command_frame', lambda: None)()
+        pub = getattr(self, 'command_frame_publisher', None)
+        if cf is not None and pub is not None and cf[2] != getattr(self, '_command_frame_n', 0):
+            self._command_frame_n = cf[2]
+            c = self._Vector3Stamped()
+            sec = int(cf[1])
+            c.header.stamp.sec, c.header.stamp.nanosec = sec, int((cf[1] - sec) * 1e9)
+            c.header.frame_id = _BODY_FRAME
+            c.vector.x, c.vector.y, c.vector.z = float(cf[0]), math.nan, math.nan
+            pub.publish(c)
 
     def _imu_rates_tick(self):
         """Publish body-frame angular rates (ATTITUDE) at 50 Hz.

@@ -74,7 +74,7 @@ def _mixer_saturated(lat_pct: float, yaw_pct: float, fwd_pct: float) -> bool:
 
 
 def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float,
-                prioritise: bool = True) -> None:
+                prioritise: bool = True, frame_at=None) -> None:
     """Write one MANUAL_CONTROL frame for the srot board.
 
     Prioritised before it leaves. The board scales a saturated horizontal
@@ -93,7 +93,11 @@ def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float,
             fwd, lat, yaw = fit['forward'], fit['lateral'], fit['yaw']
         except Exception:                   # noqa: BLE001
             pass
-    fc.manual(fwd=fwd, lat=lat, up=0.0, yaw=yaw)
+    # The capture instant (monotonic) of the frame this command acted on, so
+    # the board driver can record frame-to-command (bead a2c); none for a
+    # command from no frame.
+    extra = {} if frame_at is None else {'frame_at': frame_at}
+    fc.manual(fwd=fwd, lat=lat, up=0.0, yaw=yaw, **extra)
 
 
 def _srot_yaw_expressible(mag_pct: float, cap_pct: float) -> float:

@@ -72,9 +72,12 @@ def stages(cameras=CAMERAS) -> list:
         ]
     rows += [
         Stage('demand', 'demand', '/mongla/demand', 'geometry_msgs/Vector3Stamped',
-              'default', True, 'when the manager sent it',
-              ask='ours: the demand does not carry the frame it acted on, so '
-                  'frame-to-command is not measured'),
+              'default', True, 'when the manager sent it'),
+        # Only while a vision verb commands: one message per command, so its
+        # age is frame-to-command plus the hop here (bead a2c).
+        Stage('command', 'frame to command', '/mongla/command_frame',
+              'geometry_msgs/Vector3Stamped', 'default', True,
+              'the frame the command acted on'),
         Stage('imu', 'board IMU', '/mongla/imu', 'sensor_msgs/Imu', 'default', True,
               'board clock mapped to host (latency above the fitted offset)'),
         Stage('rpm', 'ESC rpm', '/mongla/esc_rpm', 'std_msgs/Int32MultiArray',

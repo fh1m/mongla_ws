@@ -103,3 +103,14 @@ def test_an_unsaturated_srot_frame_is_UNCHANGED():
     fc = _FakeFC()
     _srot_drive(fc, fwd_pct=20.0, lat_pct=-10.0, yaw_pct=5.0)
     assert fc.frames[-1] == {'fwd': 0.20, 'lat': -0.10, 'up': 0.0, 'yaw': 0.05}
+
+
+def test_the_frame_a_command_came_from_rides_with_it():
+    """Bead a2c: the frame's capture instant goes to `fc.manual` with the
+    command it produced, and a command from no frame carries none."""
+    from mongla_control.motion_vision import _srot_drive
+    fc = _FakeFC()
+    _srot_drive(fc, fwd_pct=20.0, lat_pct=0.0, yaw_pct=0.0, frame_at=123.5)
+    assert fc.frames[-1]['frame_at'] == 123.5
+    _srot_drive(fc, fwd_pct=0.0, lat_pct=0.0, yaw_pct=0.0)
+    assert 'frame_at' not in fc.frames[-1]

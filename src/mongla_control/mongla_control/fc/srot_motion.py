@@ -24,7 +24,8 @@ from .srot_moves import (  # noqa: F401
 class SrotMotion:
     """Methods of `SrotFC`; see `srot_fc.py` for the node."""
 
-    def manual(self, fwd: float, lat: float, up: float, yaw: float) -> None:
+    def manual(self, fwd: float, lat: float, up: float, yaw: float,
+               frame_at=None) -> None:
         """One MANUAL_CONTROL frame. x=fwd, y=lat(+starboard), z=heave(+up), r=yaw;
         all axes -1..1 (the board clamps; we clamp in srot_protocol). Buttons=0.
 
@@ -69,6 +70,18 @@ class SrotMotion:
         # (A cloud audit read this as "an unknown recorded as known"; it is not:
         # `test_demand_is_what_was_SENT_after_clamping` pins it, 2026-11-07.)
         self._demand = (x / sp.MC_AXIS_MAX, y / sp.MC_AXIS_MAX, time.monotonic())
+        # Frame-to-command (bead a2c): how old the frame this command acted on
+        # was at the instant it left, measured here, after the send.
+        if isinstance(frame_at, (int, float)) and math.isfinite(frame_at):
+            now = time.monotonic()
+            n = (self._command_frame[2] + 1) if getattr(self, '_command_frame', None) else 1
+            # The wall stamp is a stamp for Batighor's chain, never an age here.
+            self._command_frame = (now - frame_at, time.time() + (frame_at - now), n)
+
+    def command_frame(self):
+        """(frame-to-command s, the frame's capture time on the wall clock, count),
+        for the last command that came from a frame, or None."""
+        return getattr(self, '_command_frame', None)
 
     def demand(self):
         """(fwd, lat) in [-1, 1] in force on the board, or None when it is not known.

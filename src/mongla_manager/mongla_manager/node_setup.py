@@ -494,6 +494,12 @@ class SetupMixin:
         # as unknown -- silence would read as "the last value still holds".
         self.demand_publisher = self.create_publisher(
             Vector3Stamped, '/mongla/demand', 10)
+        # Frame-to-command (bead a2c): one message per vision command, stamped
+        # with the capture time of the frame it acted on; x is that frame's
+        # age at the instant the command left, measured in the board driver.
+        self.command_frame_publisher = self.create_publisher(
+            Vector3Stamped, '/mongla/command_frame', 10)
+        self._command_frame_n = 0
         self._imu_rpy_warned = False
         self._imu_last_ms = None
         # Board-clock -> host-clock mapping for the IMU stamp. See

@@ -6,6 +6,7 @@ shared parts are in `control.py`.
 
 from __future__ import annotations
 
+import math
 import time
 from types import SimpleNamespace
 from typing import Dict, NamedTuple, Optional, Set
@@ -319,6 +320,10 @@ class _Align(_VisionLoop):
             return self.outcome(TIMEOUT, reason, now)
 
         sample = self.sense()
+        # The instant the frame behind this tick was captured; constant across
+        # re-reads of one frame. None when there is no box to act on.
+        self.frame_at = (time.monotonic() - sample.age_s
+                         if _present(sample) and math.isfinite(sample.age_s) else None)
         if not _present(sample):
             self.stable = 0
             self.lat_i = 0.0   # bleed integral windup while blind
@@ -381,7 +386,8 @@ class _Align(_VisionLoop):
         """One MANUAL_CONTROL frame. ``fwd_pct`` is the forward range-hold
         (or the downward surge); 0 unless that axis is active."""
         _srot_drive(self.c.fc, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=yaw_pct,
-                    prioritise=self.c.mixer_aware)
+                    prioritise=self.c.mixer_aware,
+                    frame_at=getattr(self, 'frame_at', None))
 
     def sense(self):
         """The target box this tick.
