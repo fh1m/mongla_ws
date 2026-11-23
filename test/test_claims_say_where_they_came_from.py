@@ -99,7 +99,9 @@ def test_every_written_ask_is_filed_or_held_with_a_reason(ask):
         return
     table = (UPSTREAM / 'README.md').read_text()
     row = re.search(r'^\| \*{0,2}' + letter.upper() + r'\*{0,2} \|[^\n]*'
-                    r'https://github\.com/RakibulIslam1/srot-control-board/'
+                    # The repository moved to the Compasless organisation (2026-11);
+                    # GitHub redirects the old owner's links, so both count.
+                    r'https://github\.com/(?:RakibulIslam1|Compasless)/srot-control-board/'
                     r'(pull|issues)/\d+', table, re.M)
     assert row, (f'{ask.name} is written but has no row with a live URL in '
                  'the "filed as" table of upstream/README.md. File it, or add '

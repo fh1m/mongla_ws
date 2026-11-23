@@ -10,6 +10,7 @@ import sys
 
 HOOK = pathlib.Path(__file__).resolve().parents[1] / '.claude' / 'hooks' / 'commit_guard.py'
 LINK = 'claude.ai/code/' + 'session_0123'      # split so this file holds no link
+TRAILER = 'Claude-' + 'Session:'                # split for the same reason
 
 
 def _run(cmd, cwd):
@@ -21,7 +22,7 @@ def _run(cmd, cwd):
 
 def test_a_commit_message_with_a_session_link_is_refused(tmp_path):
     subprocess.run(['git', 'init', '-q'], cwd=tmp_path, check=True)
-    r = _run(f'git commit -m "x\n\nClaude-Session: https://{LINK}"', tmp_path)
+    r = _run(f'git commit -m "x\n\n{TRAILER} https://{LINK}"', tmp_path)
     assert r.returncode == 2 and 'session link' in r.stderr
 
 

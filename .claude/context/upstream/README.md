@@ -109,6 +109,7 @@ weeks and X for two months; this table exists so that cannot happen silently aga
 | **J** | issue [**#45**](https://github.com/RakibulIslam1/srot-control-board/issues/45) | **2026-11-10** |
 | **Y** | issue [**#77**](https://github.com/RakibulIslam1/srot-control-board/issues/77) | **2026-11-10** |
 | **Z** | issues [**#78**](https://github.com/RakibulIslam1/srot-control-board/issues/78) (lasers), [**#79**](https://github.com/RakibulIslam1/srot-control-board/issues/79) (altimeter), [**#80**](https://github.com/RakibulIslam1/srot-control-board/issues/80) (stereo pair), [**#81**](https://github.com/RakibulIslam1/srot-control-board/issues/81) (hydrophones) | **2026-11-11** |
+| **AA** | issue [**#83**](https://github.com/Compasless/srot-control-board/issues/83) | **2026-11-24** |
 | comments: the depth loop closed in `DEPTH_HOLD` on 2026-08-06/07, never in `AUTO` | issue [**#40**](https://github.com/RakibulIslam1/srot-control-board/issues/40) | **2026-11-08** |
 | demand echo `DEM_FWD` / `DEM_LAT` | PR [**#33**](https://github.com/RakibulIslam1/srot-control-board/pull/33) | **2026-11-07** |
 
