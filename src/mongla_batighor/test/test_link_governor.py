@@ -49,3 +49,21 @@ def test_a_report_that_is_not_a_number_changes_nothing():
     for bad in (float('nan'), float('inf'), -1.0, None, 'x'):
         assert g.report(bad, 100.0) is None
     assert g.scale == 1.0
+
+
+def test_the_screen_that_cut_the_video_is_named_until_it_is_back():
+    """One stream serves every screen, so the slowest sets it for all; the
+    operator must be able to see which screen that is and close it."""
+    g = StreamGovernor()
+    assert g.by == ''
+    g.report(0.02, 0.0, 'a1b2')
+    assert g.by == ''                               # a calm report names nobody
+    g.report(1.2, 1.0, 'c3d4')
+    assert g.by == 'c3d4'
+    g.report(1.2, 3.5, 'e5f6')                      # the next cut names its own screen
+    assert g.by == 'e5f6'
+    for t in (14.0, 24.1):
+        g.report(0.02, t, 'a1b2')
+    assert g.scale == 0.75 and g.by == 'e5f6'       # still cut: still that screen's doing
+    g.report(0.02, 34.2, 'a1b2')
+    assert g.scale == 1.0 and g.by == ''

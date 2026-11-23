@@ -239,6 +239,7 @@ class HelmNode(Node):
             'camera': self.camera,
             'tuning': self.tuning,
             'video': self.link.scale,
+            'video_by': self.link.by,
         }, sort_keys=True)
         if force or state != self._last_state:
             self._last_state = state
@@ -426,16 +427,20 @@ class HelmNode(Node):
     # -- the viewers' video -------------------------------------------
     def _link(self, fields_json):
         try:
-            lag = json.loads(fields_json or '{}').get('lag_s')
+            got = json.loads(fields_json or '{}')
+            lag, screen = got.get('lag_s'), got.get('screen')
         except (ValueError, AttributeError):
-            lag = None
+            lag, screen = None, None
+        # A page's own short id; cleaned, since anyone may report.
+        screen = re.sub(r'[^0-9a-z]', '', str(screen or '').lower())[:12] or 'unnamed'
         if isinstance(lag, bool) or not isinstance(lag, (int, float)) \
                 or not math.isfinite(lag) or lag < 0:
             return Verdict(False, 'link takes {"lag_s": seconds}')
-        scale = self.link.report(float(lag), time.monotonic())
+        scale = self.link.report(float(lag), time.monotonic(), screen)
         if scale is not None:
             self._log(event=f'viewer video at x{scale:g} of each camera\'s rate: '
-                            f'a browser reported {lag:.1f} s of lag')
+                            f'screen {screen} reported {lag:.1f} s of lag'
+                            + (' (close it if it is not needed)' if self.link.by == screen and scale < 1 else ''))
             self._apply_stream()
         return Verdict(True, f'video x{self.link.scale:g}')
 

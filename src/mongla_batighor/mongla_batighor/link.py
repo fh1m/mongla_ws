@@ -14,6 +14,12 @@ once on lag, add back a step only after a calm spell. Halving is held for
 `HOLD_S` so a queue that is already full has time to drain before it is
 judged again; a step up waits `CALM_S` after the last lag any browser
 reported, so one fast browser cannot undo what a slow one needed.
+
+One stream serves every screen, so the slowest screen sets it for all: a
+stale vehicle on one screen is worse than a 7.5 Hz picture on the others.
+The cost is that one weak laptop slows everyone's video, so the screen whose
+report made the last cut is kept in `by` until the rate is whole again; the
+helm logs it and every strip shows it, and the operator closes that screen.
 """
 from __future__ import annotations
 
@@ -34,8 +40,9 @@ class StreamGovernor:
         self.floor = FLOOR
         self._changed = -math.inf
         self._unsettled = -math.inf
+        self.by = ''          # the screen whose lag made the last cut
 
-    def report(self, lag_s, now: float):
+    def report(self, lag_s, now: float, screen: str = ''):
         """One browser's lag; the new scale when it changes, else None."""
         if isinstance(lag_s, bool) or not isinstance(lag_s, (int, float)) \
                 or not math.isfinite(lag_s) or lag_s < 0:
@@ -44,6 +51,7 @@ class StreamGovernor:
             self._unsettled = now
         if lag_s > LAG_HIGH_S:
             if self.scale > self.floor and now - self._changed >= HOLD_S:
+                self.by = screen
                 return self._set(max(self.floor, self.scale / 2), now)
             return None
         if lag_s < LAG_LOW_S and self.scale < 1.0 \
@@ -54,6 +62,8 @@ class StreamGovernor:
     def _set(self, scale, now):
         self.scale = scale
         self._changed = now
+        if scale >= 1.0:
+            self.by = ''
         return scale
 
     def rate(self, top_hz: float) -> float:
