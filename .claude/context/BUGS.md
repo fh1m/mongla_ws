@@ -925,22 +925,23 @@ section (its lane witness and its fisheye lens could not grade it).
 peak accuracy. Injection: the old module fails 15 of them, the new one
 without fading 20, fading any dark blob fails a negative control.
 
-### B-150: the board's gyro read exactly zero and nothing said so `MEASURED 2026-11-23` **FLAGGED 2026-11-23**, open until the board is turned by hand
+### B-150: a gyro reading exactly zero was flagged dead, but zero is what rest looks like `MEASURED 2026-11-23` **SETTLED 2026-11-23**
 
-**What.** On the Kutum bench a direct pymavlink probe read SCALED_IMU2's gyro as
-exactly (0, 0, 0) mrad/s for 12 s at rest, and `/mongla/imu` published those
-zeros at 50.7 Hz. Flow's de-rotation and the filter's prediction both use this
-gyro, and the console read `aided`. A working MEMS gyro reads noise at rest.
-Whether it also reads zero while turning is not known (bead `mongla_ws-5yn`).
+**What.** On the Kutum bench SCALED_IMU2's gyro read exactly (0, 0, 0) for 12 s
+at rest, and a first health row (4eb2bac3) called that a dead sensor. Then the
+owner turned the board by hand and the gyro read the turn. The firmware packs
+the gyro as whole mrad/s (`s.gx * 1000`), so noise under 1 mrad/s rounds to
+exactly 0: at rest, zero is the reading of a working gyro.
 
-**Flag.** `SrotTelemetry._note_gyro` keeps when the gyro last read anything but
-three exact zeros; the `gyro` health row (`health_reporters.gyro`) turns
-degraded after 2 s of them (`GYRO_DEAD_S`) and says what to do. Not a fix: the
-cause is on the board (the BNO085's gyro report unrequested, or the sensor),
-and is a firmware question once turning confirms it.
+**Fix.** Exact zero is no evidence either way. `SrotTelemetry._note_gyro`
+records when the gyro last read motion and how far the attitude turned during
+the current all-zero run; the `gyro` health row is degraded only when the
+attitude turned `GYRO_TURN_DEG` (3 deg) while the gyro read zero, unknown until
+the gyro has been seen to move, OK after. The first row's rule would have
+flagged every still vehicle.
 
-**Guard.** `test_a_gyro_that_reads_exactly_zero_says_so`, written first and
-seen to fail.
+**Guard.** `test_the_gyro_row_condemns_only_a_turn_it_did_not_see`; raising the
+turn bar out of reach fails it.
 
 ### B-149: the floating PM1 pin climbed past both step rules `REPRODUCED 2026-11-22` **FIXED 2026-11-22**
 

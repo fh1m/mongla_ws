@@ -462,22 +462,32 @@ def test_imu_frame_says_why_the_imu_is_silent():
     assert R.imu_frame(fc2.accel_frame_state()).state is State.OK
 
 
-def test_a_gyro_that_reads_exactly_zero_says_so():
-    """mongla_ws-5yn, Kutum bench 2026-11-23: SCALED_IMU2's gyro read exactly
-    (0, 0, 0) mrad/s for 12 s at rest and /mongla/imu published it at 50 Hz,
-    while flow's de-rotation and the filter's prediction both use it and the
-    console read 'aided'. A working MEMS gyro never reads exact zero on all
-    three axes for seconds; the row says so after 2 s, and noise reads OK."""
+
+def test_the_gyro_row_condemns_only_a_turn_it_did_not_see():
+    """mongla_ws-5yn, Kutum bench 2026-11-23: at rest SCALED_IMU2's gyro reads
+    exactly (0, 0, 0) -- the firmware packs whole mrad/s, so noise under 1
+    mrad/s rounds to 0 -- and it read motion when the owner turned the board.
+    Exact zero at rest is therefore not death; the evidence is the attitude
+    turning while the gyro reads zero. Never seen to move: unknown."""
+    import math
     from mongla_control.fc.srot_telemetry import SrotTelemetry as _T
+    still = (0.0, 0.0, 1.0)
     fc = _T.__new__(_T)
     assert R.gyro(fc.gyro_state(now=0.0)).state is State.UNKNOWN
-    for i in range(60):                              # 1.2 s of zeros: not yet
-        fc._note_gyro((0.0, 0.0, 0.0), now=i * 0.02)
-    assert R.gyro(fc.gyro_state(now=1.2)).state is State.OK
-    for i in range(60, 120):                         # 2.4 s: dead
-        fc._note_gyro((0.0, 0.0, 0.0), now=i * 0.02)
-    h = R.gyro(fc.gyro_state(now=2.4))
-    assert h.state is State.DEGRADED, h
-    assert 'exactly 0' in h.evidence and '5yn' in h.evidence, h.evidence
-    fc._note_gyro((0.001, -0.002, 0.0), now=2.42)    # one noisy sample: alive again
-    assert R.gyro(fc.gyro_state(now=2.42)).state is State.OK
+    for i in range(150):                             # 3 s still, zeros
+        fc._note_gyro((0.0, 0.0, 0.0), still, now=i * 0.02)
+    h = R.gyro(fc.gyro_state(now=3.0))
+    assert h.state is State.UNKNOWN and 'turn' in h.evidence, h   # not yet proven
+    fc._note_gyro((0.0, 0.0, 0.3), (0.0, 0.0, 1.01), now=3.02)   # a turn, seen
+    for i in range(152, 300):                        # still again: 0 is fine now
+        fc._note_gyro((0.0, 0.0, 0.0), (0.0, 0.0, 1.01), now=i * 0.02)
+    h = R.gyro(fc.gyro_state(now=6.0))
+    assert h.state is State.OK, h
+    # The attitude turns 10 deg while the gyro reads nothing: dead.
+    for i in range(300, 400):
+        yaw = 1.01 + math.radians(10.0) * (i - 300) / 100
+        fc._note_gyro((0.0, 0.0, 0.0), (0.0, 0.0, yaw), now=i * 0.02)
+    h = R.gyro(fc.gyro_state(now=8.0))
+    assert h.state is State.DEGRADED and '5yn' in h.evidence, h
+    fc._note_gyro((0.0, 0.0, 0.2), (0.0, 0.0, 1.2), now=8.02)    # it moves again
+    assert R.gyro(fc.gyro_state(now=8.02)).state is State.OK
