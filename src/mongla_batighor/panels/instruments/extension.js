@@ -170,7 +170,10 @@ function poolMap(course, pose, track, fixes, target, opts) {
   // SVG in metres: east right, north up (the y axis flipped by drawing at -x).
   const X = (p) => p.y, Y = (p) => -p.x;
   const u = m;                            // one screen pixel, in metres
-  const step = W > 40 ? 5 : W > 12 ? 2 : W > 5 ? 1 : 0.5;
+  // The grid's step from what is drawn, not the panel: a wide panel drew
+  // 5 m squares on a 9 m pool (2026-11-23).
+  const drawn = span + 2 * pad;
+  const step = drawn > 40 ? 5 : drawn > 12 ? 2 : drawn > 5 ? 1 : 0.5;
   const kids = [];
   for (let g = Math.ceil(e0 / step) * step; g <= e1; g += step) kids.push(svg("line", { x1: g, y1: -n1, x2: g, y2: -n0, stroke: "var(--mb-rule)", "stroke-width": u }));
   for (let g = Math.ceil(n0 / step) * step; g <= n1; g += step) kids.push(svg("line", { x1: e0, y1: -g, x2: e1, y2: -g, stroke: "var(--mb-rule)", "stroke-width": u }));

@@ -146,3 +146,16 @@ def test_labels_keep_their_size_and_the_drawing_takes_the_panels_shape(w, h):
     font_m, w_m, h_m = _label_px(drawn, 'flare (nominal)')
     assert abs(w_m / h_m - w / h) < 1e-6, (w_m, h_m)
     assert abs(font_m / (w_m / w) - 12) < 1e-6, font_m / (w_m / w)
+
+
+def test_the_grid_step_follows_the_pool_not_the_panel():
+    """A 20 x 10 m pool in a wide panel kept 5 m squares only because the
+    panel was wide; the step comes from what is drawn, so the same pool has
+    the same grid at any panel shape."""
+    def step(px):
+        drawn = _draw(None, px=px)
+        scale = next(n for n in drawn if n['tag'] == 'text' and n['text'].endswith(' m')
+                     and n['attrs'].get('text-anchor') == 'end'
+                     and n['attrs'].get('fill') == 'var(--mb-ink-2)')
+        return scale['text']
+    assert step({'w': 300, 'h': 300}) == step({'w': 1500, 'h': 300}) == '2 m'
