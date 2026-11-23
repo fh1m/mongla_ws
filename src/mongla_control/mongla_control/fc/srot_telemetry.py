@@ -305,7 +305,11 @@ class SrotTelemetry:
         (`srot_changes.py`), so the bar sits at 2 V -- between the two by a
         factor of three either way.
         """
-        ring = self._battery_steps.get(bid)
+        # One snapshot: the reader thread appends to this ring while the timer
+        # judges it, and a Python-level walk of a live deque raised 'deque
+        # mutated during iteration' on Kutum (bead mongla_ws-43l).
+        live = self._battery_steps.get(bid)
+        ring = list(live) if live else []
         if not ring or len(ring) < sp.BATTERY_STEP_MIN_SAMPLES:
             return True                 # not enough evidence to accuse it
         mid = sorted(ring)[len(ring) // 2]
@@ -318,7 +322,7 @@ class SrotTelemetry:
         # steps under the bar and drops back once (Kutum 2026-11-22, B-149). No
         # pack in service reads under an empty cell; one such frame is a glitch.
         # Interim: the board knows its wiring (upstream ask X, item 4).
-        lows = sum(getattr(self, '_battery_lows', {}).get(bid, ()))
+        lows = sum(list(getattr(self, '_battery_lows', {}).get(bid, ())))
         # Latched: the pin's quiet spells (1.39 V held for seconds) leave too
         # few jumps in the window and it read as a battery again. A condemned
         # line is released only by a whole window with no jump at all.
@@ -328,7 +332,7 @@ class SrotTelemetry:
         if (mid > sp.BATTERY_MAX_STEP_V or jumps >= sp.BATTERY_MAX_JUMPS
                 or lows >= sp.BATTERY_MAX_LOWS):
             condemned.add(bid)
-        elif jumps == 0 and lows == 0 and len(ring) == ring.maxlen:
+        elif jumps == 0 and lows == 0 and len(ring) == live.maxlen:
             condemned.discard(bid)
         return bid not in condemned
 

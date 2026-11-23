@@ -133,7 +133,8 @@ class SrotHealth:
 
     def statustext_log(self, since: float = 0.0):
         """(timestamp, severity, text) newest last, optionally since a time."""
-        return [r for r in self._statustext_log if r[0] >= since]
+        # A snapshot: the reader appends while a caller reads (bead 43l).
+        return [r for r in list(self._statustext_log) if r[0] >= since]
 
     def boot_warnings(self):
         """The startup announcements that change how the vehicle behaves, or None.
