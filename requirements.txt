@@ -62,6 +62,11 @@ opencv-python>=4.8; platform_machine == "x86_64"
 # plots in tools/ (scorers, sweeps)
 matplotlib>=3.5; platform_machine == "x86_64"
 
+# profiling a running node on the vehicle (bead a2c): a standalone binary,
+# no numpy; attaching needs root on Kutum (ptrace_scope=1), so `sudo -n py-spy
+# record --nonblocking` (a blocking record lost the Hailo chip once, B-147)
+py-spy>=0.4,<0.5
+
 # tests
 # The ROS distro's own python3-pytest (6.2 on Humble, 7.4 on Jazzy): ROS's
 # launch_testing plugin fails to load under pytest 9.

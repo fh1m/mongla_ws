@@ -8,6 +8,7 @@ rates within 2 % on the pure meter; within 5 ms through ROS. A stage that
 sent nothing reads absent (None), never 0.
 """
 import json
+import pathlib
 import time
 
 import pytest
@@ -130,3 +131,15 @@ def test_nobody_watching_costs_no_subscription():
         viewer.destroy_node()
     finally:
         rclpy.shutdown()
+
+
+def test_a_stage_silent_by_design_says_when_it_speaks():
+    """frame to command publishes only while a vision verb drives; a bare
+    'silent' read as a fault on the bench (Kutum 2026-11-23)."""
+    from mongla_batighor.chain import stages
+    by = {s.key: s for s in stages()}
+    assert 'vision' in by['command'].idle
+    assert not by['demand'].idle, 'a stage that should always flow has no excuse'
+    js = (pathlib.Path(__file__).resolve().parents[1] / 'panels' / 'instruments'
+          / 'extension.js').read_text()
+    assert 'r.idle' in js, 'the panel must show the reason'

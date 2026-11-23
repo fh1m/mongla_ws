@@ -172,6 +172,7 @@ For one-off measurements over recorded footage or bags; each one answers a quest
 | `approach_band.py` | Where does confidence actually peak, in the unit the CONTROLLER uses? The gap this closes. |
 | `aqualoc_replay.py` | Replay real underwater data through the shipped filter and flow chain. |
 | `attenuation_range.py` | Is the WATER ITSELF a rangefinder? Turbidity as signal, not noise. |
+| `autolabel_score.py` | Score an auto-labeller's boxes against hand labels it never saw. |
 | `bag_gaps.py` | Read a recorded session and report what it is WORTH as a fixture. |
 | `bank_scaling_bench.py` | How large can the checkpoint bank get before it stops fitting the budget? `CheckpointBank` ships a capacity of 5, ported from a prototype gallery rather than measured. |
 | `bank_shortlist_accuracy.py` | Does a cheap signature retrieve the RIGHT reference out of a large bank? `bank_scaling_bench.py` measured that a shortlist makes bank size free: 100 references cost what 10 do, because only the top-k ... |
