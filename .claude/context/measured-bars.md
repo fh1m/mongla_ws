@@ -175,6 +175,7 @@ is how `recommend()` happened.
 - [109. THE BOARD'S HEADING UNDER HAND MOTION: 3.5 deg rms AT NINE RETURNS (2026-11-22)](#109-the-boards-heading-under-hand-motion-35-deg-rms-at-nine-returns-2026-11-22)
 - [110. ONE HAILO COMPILE, TIMED: 53.8 min, OF WHICH THE GPU OPTIMISE IS 24.5 (2026-11-22)](#110-one-hailo-compile-timed-538-min-of-which-the-gpu-optimise-is-245-2026-11-22)
 - [111. COLOUR IN THE DETECTOR BEATS A HUE READER AFTER IT: AP50 0.237 AGAINST 0.179 (2026-11-23)](#111-colour-in-the-detector-beats-a-hue-reader-after-it-ap50-0237-against-0179-2026-11-23)
+- [112. THE ANCHOR OFF THE LOCK TICK: LOCK AGE p50 142 -> 87 ms, p95 317 -> 211 (2026-11-23)](#112-the-anchor-off-the-lock-tick-lock-age-p50-142---87-ms-p95-317---211-2026-11-23)
 <!-- contents:end -->
 
 ---
@@ -9444,3 +9445,25 @@ What it does not show: the absolute numbers are low because the held-out team's 
 and props differ from every training team's, which is the condition the bar was written for
 (transfer, not fit). Orange flares are not found by either arm. Decision: a model for props told
 apart by colour carries the colour in its class names, and no hue reader is built.
+
+## 112. THE ANCHOR OFF THE LOCK TICK: LOCK AGE p50 142 -> 87 ms, p95 317 -> 211 (2026-11-23)
+
+**Method.** Kutum, `preview_up` bench (two curated clips in replay, the real board on USB),
+`tools/bench/lock_score.py 90` per arm, one run each, the footage segment not aligned between
+arms. py-spy 0.4.1 (`--nonblocking --threads`, 200 Hz, 30 s) first attributed the time: each
+lock thread spent 42-50 % of wall in `bank_lookup.locate` inside `_ladder_tick`, at 3.7-4.5
+locates a second, so one locate is ~100-125 ms. The shared Python lock was held 39 % of wall.
+
+| arm | forward p50 / p95 ms | downward p50 / p95 ms | detections Hz (fwd / dwn) | unbridged s |
+|---|---|---|---|---|
+| anchor in the tick, 4.5 Hz (release 3f9fca1e) | 141.7 / 317.2 | 144.8 / 317.9 | 11.9 / 10.7 | 0 / 0 |
+| anchor in the tick, 0.5 Hz (deck override) | 97.4 / 263.7 | 88.4 / 215.6 | 12.7 / 13.3 | 0 / 0 |
+| worker thread, idle while a detection holds (2d125045) | 86.9 / 210.5 | 85.8 / 185.7 | 14.0 / 13.5 | 0 / 0 |
+
+**Bar, written before the change (bead a2c):** p50 down at least 50 ms and p95 at least 100 ms
+on both cameras, no unbridged loss. Met. A third clause, the anchor's average rate within 20 %
+of baseline, fails by design: the owner's rule moved the locate to once a second while a fresh
+accepted detection holds (`ANCHOR_KEEPWARM_S`, a choice, not a measurement), so the average
+fell from 3.7-3.9 to 0.9 Hz; its shortest interval stayed 0.234 s, the full `anchor_hz`, inside
+detection gaps. The remaining ~86 ms is upstream of the lock (detect ~35-40 ms, track, hops).
+Not yet shown: target-hold on a starved detector with labelled truth (bead 102.12).
