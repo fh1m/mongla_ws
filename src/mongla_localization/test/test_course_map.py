@@ -137,3 +137,19 @@ def test_anchor_on_refuses_an_unmeasured_bearing_rather_than_guessing():
     with pytest.raises(ValueError):
         MonglaMission.anchor_on(fake, 'gate')
     fake.anchor_heading.assert_not_called()
+
+
+def test_the_deck_courses_are_searched_where_the_docs_say(tmp_path, monkeypatch):
+    """~/mongla/deck/courses is the deck; ~/.mongla/courses is only the legacy link (bead bnc)."""
+    import pathlib as _p
+    from mongla_localization import course_map as cm
+    monkeypatch.delenv('MONGLA_COURSE_DIR', raising=False)
+    monkeypatch.setattr(_p.Path, 'home', classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(cm, '_HOME', tmp_path / '.mongla' / 'courses')
+    deck = tmp_path / 'mongla' / 'deck' / 'courses'
+    deck.mkdir(parents=True)
+    src = next(cm._PKG_COURSES.glob('*.yaml'))
+    (deck / 'venue_x.yaml').write_text(src.read_text())
+    dirs = cm._search_dirs()
+    assert dirs.index(deck) < dirs.index(tmp_path / '.mongla' / 'courses')
+    assert cm.load_course('venue_x') is not None

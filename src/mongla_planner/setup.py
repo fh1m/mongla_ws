@@ -13,7 +13,7 @@ setup(
     ],
     # The course priors travel WITH the package: a mission that loads one on
     # the vehicle must not depend on the source tree being present, and the
-    # deck override (~/.mongla/courses) is searched before this copy anyway.
+    # deck override (~/mongla/deck/courses) is searched before this copy anyway.
     package_data={package_name: ['courses/*.yaml']},
     include_package_data=True,
     install_requires=['setuptools'],
