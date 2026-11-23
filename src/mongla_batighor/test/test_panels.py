@@ -694,3 +694,28 @@ def test_a_detector_setting_stays_on_one_row():
     assert 'el("div", { class: "row tune" })' in js
     assert '.mb .row.tune{display:grid' in css
     assert 'text-overflow:ellipsis' in css.split('.mb .row.tune > :first-child', 1)[1].split('}', 1)[0]
+
+
+@NEEDS_NODE
+def test_the_log_folds_a_repeated_warning_into_one_line_with_a_count():
+    """foldNodeLog: a node that says the same thing every second (the lock's
+    'camera looks degraded', Kutum 2026-11-23) took the whole log card. A
+    repeat, digits aside, replaces its earlier line with a count; a different
+    message keeps its own line."""
+    import json as _json
+    import subprocess as _sp
+    js = ((PANELS / 'control' / 'extension.js').read_text()
+          .replace('module.exports = {', 'const _unused = {', 1)
+          + '\nconst L=[];'
+          + 'foldNodeLog(L,{t:1,key:"W lock: 7/8 collapsed",text:"a"});'
+          + 'foldNodeLog(L,{t:2,key:"W loc: no aiding",text:"b"});'
+          + 'foldNodeLog(L,{t:3,key:"W lock: 8/8 collapsed",text:"c"});'
+          + 'process.stdout.write(JSON.stringify(L.map(e=>[e.t,e.n,e.text])));'
+          # the heartbeat's setInterval would keep node running
+          + 'process.exit(0);')
+    pre = 'const module={exports:{}};const VERBS={},TUNABLE={},THEME_CSS="";'
+    out = _sp.run(['node', '-e', pre + (PANELS / 'common.js').read_text() + js],
+                  capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = _json.loads(out.stdout)
+    assert got == [[2, 1, 'b'], [3, 2, 'c  (x2)']], got
