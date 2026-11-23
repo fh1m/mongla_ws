@@ -258,6 +258,9 @@ body{background:var(--mb-d0)!important}
 @container (min-width:440px){.mb .cams{flex-direction:row;gap:18px}}
 .mb .bar{height:4px;background:var(--mb-d3);border-radius:2px;overflow:hidden}
 .mb .bar b{display:block;height:100%;background:var(--mb-sea)}
+/* The demand's bars are the thing read on this panel: tall enough to judge by eye. */
+.mb .bar.centre{height:12px;border-radius:2px}
+.mb .bar.centre b{top:0;bottom:0}
 .mb .health{display:grid;grid-template-columns:max-content fit-content(40%) minmax(0,1fr);gap:5px 12px;align-items:baseline}
 .mb .health .lvl{font-style:normal;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
   border:1px solid currentColor;border-radius:2px;padding:1px 6px;text-align:center;min-width:7ch}
@@ -267,8 +270,10 @@ body{background:var(--mb-d0)!important}
    is missing and why ("... flow fused without omega") was the part hidden. */
 .mb .health span{overflow-wrap:anywhere}
 .mb .health .name{white-space:nowrap}
-/* The pool map fills what the panel has left, square metres kept square. */
-.mb svg.map{width:100%;flex:1 1 auto;min-height:220px;background:var(--mb-sunk);
+/* The pool map fills what the panel has left, square metres kept square. Its
+   height is the space left, never its drawing's: poolMap shapes the drawing to
+   this box, and a box sized by its drawing would chase it. */
+.mb svg.map{width:100%;flex:1 1 0;height:0;min-height:220px;background:var(--mb-sunk);
   border:1px solid var(--mb-rule);border-radius:3px}
 /* Mongla's mark where Lichtblick's sat; the button is still the app menu. Inline,
    because the desktop app has no /theme/; test_serve_and_fetch keeps it mongla.svg. */

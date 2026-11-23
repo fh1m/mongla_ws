@@ -572,7 +572,7 @@ def test_a_panel_that_mounts_late_is_handed_what_came_before_at_its_own_age():
     import subprocess as _sp
     shim = ('const document={createElement:(t)=>({t,className:"",kids:[],attrs:{},'
             'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
-            'setAttribute(k,v){this.attrs[k]=v},addEventListener(){}}),'
+            'setAttribute(k,v){this.attrs[k]=v},addEventListener(){},querySelector(){return null}}),'
             'querySelector:()=>true,head:{append(){}}};'
             'const requestAnimationFrame=(f)=>0,cancelAnimationFrame=()=>{};'
             'const intervals=[];globalThis.setInterval=(f)=>{intervals.push(f);return 0};'
@@ -610,7 +610,7 @@ def test_the_pilot_keeps_the_helm_while_another_view_is_open():
     import subprocess as _sp
     shim = ('function E(t){return{t,className:"",style:{},dataset:{},kids:[],value:t==="select"?"go":"",checked:false,'
             'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
-            'setAttribute(){},addEventListener(){},querySelectorAll(){return[]},'
+            'setAttribute(){},addEventListener(){},querySelectorAll(){return[]},querySelector(){return null},'
             'classList:{toggle(){}},options:[]}}'
             'const document={createElement:E,querySelector:()=>true,head:{append(){}}};'
             'const localStorage={getItem:()=>"ana",setItem(){}};'
@@ -653,7 +653,7 @@ def test_a_calibration_button_outlives_the_states_that_follow_it():
     import subprocess as _sp
     shim = ('function E(t){return{t,className:"",style:{},dataset:{},kids:[],value:"",'
             'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
-            'setAttribute(){},addEventListener(){}}}'
+            'setAttribute(){},addEventListener(){},querySelector(){return null}}}'
             'globalThis.Node=function(){};'
             'const document={createElement:E,querySelector:()=>true,head:{append(){}}};'
             'const localStorage={getItem:()=>"ana",setItem(){}};')
