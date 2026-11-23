@@ -437,3 +437,26 @@ def test_a_run_recording_keeps_the_diagnostics():
         regex = re.search(rf"^{name}='(.+)'$", text, re.M).group(1)
         assert re.match(regex, '/diagnostics'), f'{name} drops /diagnostics'
         assert not re.match(regex, '/diagnostics_agg')
+
+
+def test_imu_frame_says_why_the_imu_is_silent():
+    """mongla_ws-a9h, Kutum bench 2026-11-23: the board inverted, neither accel
+    frame within 10 deg of the attitude's gravity, so `/mongla/imu` was never
+    published and the filter said only "no IMU sample yet (is the manager
+    running...?)" -- the manager was running. The row names the cause and both
+    angles against the bar, and a proven frame reads OK."""
+    import math
+    from mongla_control.fc.srot_telemetry import SrotTelemetry as _T
+    fc = _T.__new__(_T)
+    g = 9.80665
+    rpy = (math.radians(-6.42), math.radians(-175.94), 0.0)
+    for _ in range(30):
+        assert fc._accel_in_vehicle_frame((1.08, -0.51, -9.66), rpy) is None
+    h = R.imu_frame(fc.accel_frame_state())
+    assert h.state is State.DEGRADED, h
+    assert 'not proven' in h.evidence and '12.' in h.evidence and '10' in h.evidence, h.evidence
+    assert R.imu_frame(None).state is State.UNKNOWN
+    fc2 = _T.__new__(_T)
+    for _ in range(30):
+        fc2._accel_in_vehicle_frame((0.0, 0.0, g), (0.0, 0.0, 0.0))
+    assert R.imu_frame(fc2.accel_frame_state()).state is State.OK
