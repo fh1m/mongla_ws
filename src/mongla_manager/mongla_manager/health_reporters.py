@@ -91,11 +91,21 @@ def mavlink_reader(is_alive, fault_count, last_fault) -> Health:
     return ok('mavlink_reader', 'draining the link')
 
 
-def barometer(named_value) -> Health:
-    """`named_value` is a callable name -> float|None (None = not reporting)."""
+def barometer(named_value, sys_healthy=None) -> Health:
+    """`named_value` is a callable name -> float|None (None = not reporting);
+    `sys_healthy` is SYS_STATUS's absolute-pressure bit (`SrotFC._baro_healthy`),
+    True / False / None, graded as `bringup_check` grades it when the board's own
+    BARO_HEALTH code is absent, so the row and the gate never disagree."""
     v = named_value('BARO_HEALTH')
     if v is None:
-        return unknown('barometer', 'BARO_HEALTH absent')
+        if sys_healthy is False:
+            return failed('barometer', (
+                'Bar30 unhealthy (SYS_STATUS): PROM CRC failed, the sample is stale or the '
+                'sensor is unplugged. The board refuses DEPTH_HOLD/AUTO, so every move verb is '
+                'DENIED; check its wiring and power-cycle (the PROM is read at boot)'))
+        if sys_healthy is True:
+            return ok('barometer', 'healthy (SYS_STATUS): AUTO and DEPTH_HOLD available')
+        return unknown('barometer', 'BARO_HEALTH absent and no SYS_STATUS yet')
     fn, why = _BARO.get(int(v), (failed, f'unknown code {int(v)}'))
     return fn('barometer', why)
 

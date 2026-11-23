@@ -491,3 +491,17 @@ def test_the_gyro_row_condemns_only_a_turn_it_did_not_see():
     assert h.state is State.DEGRADED and '5yn' in h.evidence, h
     fc._note_gyro((0.0, 0.0, 0.2), (0.0, 0.0, 1.2), now=8.02)    # it moves again
     assert R.gyro(fc.gyro_state(now=8.02)).state is State.OK
+
+
+def test_the_barometer_row_reads_what_the_gate_reads():
+    """Kutum bench 2026-11-23, Bar30 unplugged: bringup_check printed
+    '[FAIL] Bar30 unhealthy' from SYS_STATUS while the health board read only
+    'BARO_HEALTH absent' -- the one fault that denies every move verb, easy to
+    miss. Without BARO_HEALTH the row grades SYS_STATUS's bit as the gate does,
+    and reads OK once the sensor is plugged in and healthy."""
+    none = lambda name: None
+    h = R.barometer(none, sys_healthy=False)
+    assert h.state is State.FAILED and 'every move verb' in h.evidence, h
+    assert R.barometer(none, sys_healthy=True).state is State.OK
+    assert R.barometer(none, sys_healthy=None).state is State.UNKNOWN
+    assert R.barometer(none).state is State.UNKNOWN
