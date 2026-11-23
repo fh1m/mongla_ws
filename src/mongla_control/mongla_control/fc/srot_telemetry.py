@@ -578,6 +578,17 @@ class SrotTelemetry:
             return (raw[1], raw[0], -raw[2])
         return raw
 
+    def accel_frame_state(self):
+        """The accel-frame vote for the health board, or None before any
+        sample at rest: {'frame', 'e_sensor_deg', 'e_vehicle_deg', 'agree_deg'}."""
+        err = getattr(self, '_accel_frame_err', None)
+        frame = getattr(self, '_accel_frame', None)
+        if err is None and frame is None:
+            return None
+        e_s, e_v = err if err is not None else (float('nan'), float('nan'))
+        return {'frame': frame, 'e_sensor_deg': e_s, 'e_vehicle_deg': e_v,
+                'agree_deg': self._ACCEL_FRAME_AGREE_DEG}
+
     _ACCEL_FRAME_VOTES = 25          # 0.5 s at the board's 50 Hz
     _ACCEL_FRAME_AGREE_DEG = 10.0    # level-trim offsets measured at ~1 deg
     _ACCEL_FRAME_REJECT_DEG = 60.0
@@ -602,6 +613,9 @@ class SrotTelemetry:
 
         e_sensor = ang((raw[1], raw[0], -raw[2]))
         e_vehicle = ang(raw)
+        # Kept for the health board: an unproven frame silences /mongla/imu,
+        # and the operator must see why (mongla_ws-a9h).
+        self._accel_frame_err = (e_sensor, e_vehicle)
         if e_sensor < self._ACCEL_FRAME_AGREE_DEG and e_vehicle > self._ACCEL_FRAME_REJECT_DEG:
             vote = 'sensor'
         elif e_vehicle < self._ACCEL_FRAME_AGREE_DEG and e_sensor > self._ACCEL_FRAME_REJECT_DEG:

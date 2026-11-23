@@ -264,6 +264,8 @@ class HealthMixin:
             lambda: str(getattr(self, '_reader_last_fault', ''))))
         self._health.register('barometer', lambda: _hr.barometer(named))
         self._health.register('heading_ref', lambda: _hr.heading_reference(named))
+        self._health.register('imu_frame', lambda: _hr.imu_frame(
+            getattr(fc, 'accel_frame_state', lambda: None)()))
         # Thrust-allocator saturation. Reads UNKNOWN until srot-control-board#20
         # merges -- `mixer::mix()` computes the per-group scale-down and drops
         # it, so today a saturating allocator and a quiet one are the same from
