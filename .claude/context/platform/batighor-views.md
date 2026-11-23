@@ -31,19 +31,26 @@ The rules every view keeps:
 
 ![The cockpit: the forward camera on the gate with its box and a track, the downward camera on the bins with the flow node's tracked points, the Control Center with STOP, SURFACE and DISARM, the Vehicle gauges, the hull in 3D, and the Vision panel with each camera's lock ladder and perception stages.](../../../docs/imgs/batighor/mongla_layout.webp)
 
-The view the app opens on, in three columns read left to right: the two cameras,
+The console's first tab (`/` opens the console, `batighor`: the status strip over a tab per
+view), in three columns read left to right: the two cameras,
 each column as wide as its 16:9 pictures (the vehicle profiles' 640x360, read from `cameras.yaml` by the test); the Control Center at full height; and the
-vehicle's numbers and attitude over the Vision panel.
+vehicle's numbers and attitude over the Vision panel and the lock authority it holds with.
 
 - **Control Center**: STOP, SURFACE and DISARM first and pinned, for anyone, one press,
   one row of three keys sized by the panel's width, each saying under its name what
   it does (hold here; go up, stay up; motors off). Below them the helm (a name, then
   Request, Give, Release), arming behind two ticks, every verb with its own fields,
-  missions, and the log. The live camera and the detectors' settings are the
+  missions, and the log: every press at the helm (the last 200 lines, kept on Kutum and
+  sent whole to a browser that joins late) merged by time with every node's warnings and
+  errors from `/rosout` (a node that repeats itself, digits aside, keeps one line with a
+  count, `(x12)`). The live camera and the detectors' settings are the
   **Detectors** panel, on the Vision and Downward views: together they needed
   1042 px and showed a third of it.
 - **Vehicle**: armed and mode, a compass, a depth gauge, the numbers, the mission
-  running (by its beat on `/mongla/mission_alive`) and who holds the helm.
+  running (by its beat on `/mongla/mission_alive`) and who holds the helm, centred in its
+  panel; under them the board's own lines from `/diagnostics` (link, leak, kill line,
+  barometer, heading reference, safety latch), one word each (ok, warn, fail, stale) with
+  the full sentence on hover.
 - **Vision**: per camera, the lock ladder's rungs (detection, held, follow, anchor,
   lost) lit in the rung's colour, the identity held and its authority, the model and
   its epoch, and every perception stage: lit when a node publishes it, struck through
@@ -128,7 +135,8 @@ drawing zeros.
 
 ![The board health view: depth and battery each on its own plot, the gyro, the manager's health board worst first, and Kutum's own rows: clock, disk, the Hailo chip, power and temperature.](../../../docs/imgs/batighor/board_health.webp)
 
-Every subsystem graded by the manager, worst first, each with its evidence; Kutum's
+Every subsystem graded by the manager, worst first, each with its level in words (ok, warn,
+fail, unknown) and its evidence; Kutum's
 rows below (its clock and RTC cell, disk, the Hailo's temperature and clock, power
 and temperature). `UNKNOWN` is a state, not a failure: on the bench there is no
 second board, so the kill switch is unseen, and the panel says that.
@@ -143,7 +151,11 @@ frames per second of each message and the board's named channels with their age.
 ![The weak-link view: the two cameras' small previews with their boxes, the Vehicle panel and the Control Center.](../../../docs/imgs/batighor/weak_link.webp)
 
 `weak_link` is the one to open over a poor connection: the cameras' small previews,
-the Vehicle panel and the Control Center, and nothing heavy.
+the Vehicle panel and the Control Center, and nothing heavy. Any view also slows its own
+video when the link cannot keep up. The status strip's **to kutum** cell shows this
+screen's lag behind the vehicle, measured from the state's own stamp, and the helm halves
+the cameras' viewer stream while any screen lags. Detection is never slowed; the package
+page has the rule.
 
 ![The downward view: the downward camera at full height with its boxes and lock, and beside it the Vision panel, the downward lock ladder, the alignment error, the heights and the anchor.](../../../docs/imgs/batighor/downward.webp)
 
@@ -157,6 +169,16 @@ and scale.
 
 `calibrate` runs a camera calibration from the browser. With none running it says so
 and gives the command that starts one.
+
+## Inspect and Log
+
+`inspect` is for a question no view was built for: Lichtblick's topic graph across the
+whole width (every node and topic as the bridge sees them), and under it the source's
+topics with their rates beside the raw message on any topic, `/mongla/state` first.
+
+`log` is the whole record at full height: every node's `/rosout` at info and above, in
+Lichtblick's own log panel with its level and text filters, beside the Control Center,
+whose log keeps only the helm and the warnings.
 
 ## What the pictures do not show
 

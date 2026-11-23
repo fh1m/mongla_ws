@@ -83,5 +83,18 @@ if [ "${1:-}" = "--check" ]; then
     exit 0
 fi
 
+# Trap 3 -- the GPU. With CUDA_VISIBLE_DEVICES unset, the DFC picks a GPU only
+# if its memory is at most 5 % used (hailo_model_optimization's
+# select_least_used_gpu), and otherwise logs "No GPU chosen and no suitable GPU
+# found, falling back to CPU" and runs AdaRound and fine-tuning on the CPU: a
+# yolov8n build that takes minutes on the GPU then takes most of an hour. On a
+# desktop the display alone can hold 5 %, and a training run always does. So
+# name the GPU; HAILO_SET_MEMORY_GROWTH (on by default) lets the build share it.
+if [ -z "${CUDA_VISIBLE_DEVICES:-}" ] && command -v nvidia-smi >/dev/null 2>&1 \
+        && nvidia-smi -L >/dev/null 2>&1; then
+    export CUDA_VISIBLE_DEVICES=0
+    log "GPU 0 named for the DFC: $(nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader)"
+fi
+
 exec env -u PYTHONPATH PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python \
     "$VENV/bin/python" "$HERE/hailo_compile.py" "$@"

@@ -42,7 +42,8 @@ def verdict(*, imu_age_s: float, anchored: bool, aiding: str | None,
     operator fixes them in, so the first reason is the one to act on.
     """
     if not math.isfinite(imu_age_s):
-        return 'no IMU sample yet (is the manager running and the board healthy?)'
+        return ('no IMU sample yet: is the manager running? If it is, its imu_frame '
+                'health row says why it withholds /mongla/imu')
     if imu_age_s > ODOM_MAX_AGE_S:
         return f'IMU silent for {imu_age_s:.1f} s'
     if not anchored:

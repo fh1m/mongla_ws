@@ -84,6 +84,26 @@ def _find_src_models_dir() -> Optional[Path]:
     return None
 
 
+LFS_SIGNATURE = b'version https://git-lfs'
+
+
+def _real(cand: Path) -> bool:
+    """True for a model file; raises for a Git LFS pointer standing in for one.
+
+    The weights are tracked in Git LFS. A clone that never ran `git lfs pull`
+    (CI checks out with lfs: false) holds a ~130-byte text pointer under the
+    model's name, which HailoRT or torch would reject as corrupt, far from the
+    cause. A pointer is refused here, by name, with the fix."""
+    if not cand.exists():
+        return False
+    with open(cand, 'rb') as f:
+        if f.read(len(LFS_SIGNATURE)) == LFS_SIGNATURE:
+            raise FileNotFoundError(
+                f'{cand} is a Git LFS pointer, not the model: run `git lfs pull` '
+                f'in the workspace (or copy the real file in) and rebuild')
+    return True
+
+
 def _resolve_model_path(name: str) -> str:
     """Resolve a bare model name to a full path.
 
@@ -117,7 +137,7 @@ def _resolve_model_path(name: str) -> str:
     hef_dir = os.environ.get('MONGLA_HEF_DIR', '').strip()
     if hef_dir:
         cand = Path(os.path.expanduser(hef_dir)) / f'{name}.hef'
-        if cand.exists():
+        if _real(cand):
             return str(cand)
 
     src_models = _find_src_models_dir()
@@ -126,7 +146,7 @@ def _resolve_model_path(name: str) -> str:
         # machine; the .pt is the dev-box fallback (footage replay, training).
         for ext in KNOWN_EXTENSIONS:
             cand = src_models / f'{name}{ext}'
-            if cand.exists():
+            if _real(cand):
                 return str(cand)
 
     share_models_dir: Optional[str] = None
@@ -136,9 +156,11 @@ def _resolve_model_path(name: str) -> str:
         share_models_dir = str(Path(share) / 'models')
         for ext in KNOWN_EXTENSIONS:
             cand = Path(share) / 'models' / f'{name}{ext}'
-            if cand.exists():
+            if _real(cand):
                 return str(cand)
-    except Exception:
+    except (ImportError, LookupError):
+        # No ament (a bare checkout) or no installed package: no share dir.
+        # Narrow on purpose: a broad except here swallowed the LFS refusal.
         pass
 
     # Map descriptive name → Ultralytics short stem for pretrained auto-download.

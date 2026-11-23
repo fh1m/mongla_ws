@@ -1,0 +1,12 @@
+# networkd-dispatcher runs the hook only when an interface changes state; a
+# DHCP renewal that moves an address does not (2026-11-23). This follows it.
+[Unit]
+Description=Kutum: follow a moved address with its reply route
+
+[Timer]
+OnBootSec=30
+OnUnitActiveSec=30
+AccuracySec=5
+
+[Install]
+WantedBy=timers.target

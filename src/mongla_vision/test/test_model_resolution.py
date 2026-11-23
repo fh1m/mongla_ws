@@ -97,3 +97,38 @@ def test_a_tilde_in_the_env_is_expanded(tree, tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(home))
     monkeypatch.setenv('MONGLA_HEF_DIR', '~/hailo_models')
     assert _resolve_model_path('gate').endswith('hailo_models/gate.hef')
+
+
+LFS_POINTER = (b'version https://git-lfs.github.com/spec/v1\n'
+               b'oid sha256:' + b'0' * 64 + b'\nsize 7104317\n')
+
+
+def test_a_git_lfs_pointer_is_refused_by_name_never_loaded(tree):
+    """The weights are in Git LFS. A clone without `git lfs pull` (CI checks
+    out with lfs: false) holds a 130-byte pointer named gate_sharks.hef; handed
+    to HailoRT it fails as a corrupt HEF, far from the cause. Refuse it here,
+    with the fix."""
+    (tree / 'gate_sharks.hef').write_bytes(LFS_POINTER)
+    with pytest.raises(FileNotFoundError, match='git lfs pull'):
+        _resolve_model_path('gate_sharks')
+
+
+def test_a_pointer_in_hef_dir_is_refused_too(tree, tmp_path, monkeypatch):
+    hef = tmp_path / 'hefs'
+    hef.mkdir()
+    (hef / 'octagon.hef').write_bytes(LFS_POINTER)
+    monkeypatch.setenv('MONGLA_HEF_DIR', str(hef))
+    with pytest.raises(FileNotFoundError, match='git lfs pull'):
+        _resolve_model_path('octagon')
+
+
+def test_a_pointer_in_the_installed_share_is_refused_too(tmp_path, monkeypatch):
+    monkeypatch.setattr('mongla_vision.detection.yolo._find_src_models_dir', lambda: None)
+    monkeypatch.delenv('MONGLA_HEF_DIR', raising=False)
+    share = tmp_path / 'share'
+    (share / 'models').mkdir(parents=True)
+    (share / 'models' / 'octagon.hef').write_bytes(LFS_POINTER)
+    import ament_index_python.packages as aip
+    monkeypatch.setattr(aip, 'get_package_share_directory', lambda _p: str(share))
+    with pytest.raises(FileNotFoundError, match='git lfs pull'):
+        _resolve_model_path('octagon')

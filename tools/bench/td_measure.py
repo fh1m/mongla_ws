@@ -183,7 +183,8 @@ def self_test() -> int:
 # --------------------------------------------------------------------------- #
 #  live recording
 # --------------------------------------------------------------------------- #
-def record(seconds: float, out: str, device: str) -> int:
+def record(seconds: float, out: str, device: str,
+           mode: tuple = (640, 360, 210)) -> int:
     import threading
     import cv2
     import rclpy
@@ -203,7 +204,11 @@ def record(seconds: float, out: str, device: str) -> int:
     spin = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spin.start()
 
-    cam = V4L2MailboxCamera(device=device, width=1280, height=720, fps=60)
+    # The flight mode by default: exposure and transfer time both depend on
+    # the mode, and td is only worth feeding if it was measured in the mode
+    # the vehicle runs (camera_profiles.yaml, pi_downward).
+    w, h, fps = mode
+    cam = V4L2MailboxCamera(device=device, width=w, height=h, fps=fps)
     img = []
     prev = prev_t = None
     t_end = time.monotonic() + seconds
@@ -253,13 +258,15 @@ def main() -> int:
     ap.add_argument('--self-test', action='store_true')
     ap.add_argument('--record', type=float, metavar='SECONDS')
     ap.add_argument('--out', default='td_run.npz')
-    ap.add_argument('--device', default='/dev/video0')
+    ap.add_argument('--device', default='/dev/mongla_cam_downward')
+    ap.add_argument('--mode', default='640x360x210', metavar='WxHxFPS',
+                    help='camera mode; the default is the downward flight mode')
     ap.add_argument('--analyse', metavar='NPZ')
     a = ap.parse_args()
     if a.self_test:
         return self_test()
     if a.record:
-        return record(a.record, a.out, a.device)
+        return record(a.record, a.out, a.device, tuple(int(v) for v in a.mode.split('x')))
     if a.analyse:
         return analyse(a.analyse)
     ap.print_help()

@@ -58,7 +58,11 @@ fails without it:
 
 - `system/networkd-dispatcher/50-kutum-source-routes` gives each interface a
   table and a rule, "from my address, use my table", rerun by
-  `networkd-dispatcher` whenever an interface gets an address;
+  `networkd-dispatcher` whenever an interface comes up, and every 30 s by
+  `kutum-source-routes.timer`: a DHCP renewal that moves an address while the
+  interface stays up is no state change, so the dispatcher never ran and the
+  rule kept the old address (2026-11-23). The hook changes nothing when the
+  routes are already right;
 - `system/sysctl/60-kutum-multihome.conf` makes each interface answer ARP for
   its own address only.
 
@@ -109,7 +113,7 @@ tailnet first and the LAN probes only when it is down. No password on the LAN
 path either: `ssh-copy-id kutum` once from each machine.
 
 If the ssh hangs rather than refuses, rerun the reply-route hook from there:
-`sudo env IFACE=wlan0 /etc/networkd-dispatcher/routable.d/50-kutum-source-routes`.
+`sudo /etc/networkd-dispatcher/routable.d/50-kutum-source-routes --all`.
 
 **The name is kutum**, set by `setup.sh --system`, and the doctor fails any
 other. A laptop that knew the Pi by its imaged name asks once to accept the

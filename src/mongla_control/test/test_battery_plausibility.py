@@ -179,3 +179,32 @@ def test_a_condemned_pin_stays_condemned_through_its_quiet_spells(fc):
     assert not any(flips[first:]), f'trusted again at sample {flips.index(True, first)}'
     _feed(fc, REAL_PACK_V * 2)
     assert fc.battery_trusted(0) is True
+
+
+# Kutum, 2026-11-22 10:23, PM1 unwired, /mongla/state recorded for 80 s: (s, V)
+# at each change, one BATTERY_STATUS a second. The pin climbs from its 1.391 V
+# rest in steps under the 2 V bar and drops back once, so a 16-sample window
+# never holds three jumps and the jump rule alone passed it.
+_RAMP_CHANGES = [(0, 1.908), (1, 1.391), (8, 1.423), (9, 2.484), (10, 2.305),
+                 (11, 1.391), (19, 2.525), (20, 1.391), (21, 2.964), (22, 3.618),
+                 (23, 1.391), (30, 3.934), (31, 2.506), (32, 3.912), (33, 1.391),
+                 (40, 2.748), (41, 3.937), (42, 3.993), (43, 1.391), (44, 1.413),
+                 (45, 1.391), (51, 2.744), (52, 3.799), (53, 3.871), (54, 1.685),
+                 (55, 1.391), (62, 1.545), (63, 1.83), (64, 2.3), (65, 1.391),
+                 (70, 1.519), (71, 1.391), (72, 3.309), (73, 1.423), (74, 1.391),
+                 (79, 3.667), (80, 3.902)]
+FLOATING_PIN_RAMP_V = [next(v for t0, v in reversed(_RAMP_CHANGES) if t0 <= t)
+                       for t in range(81)]
+
+
+def test_a_pin_that_ramps_under_the_jump_bar_is_not_trusted(fc):
+    """No lithium pack in service reads under 3.0 V (an empty cell; 1S is the
+    smallest pack), and this pin rests at 1.391 V for seconds at a time. Two
+    samples under the floor in a window condemn it; one is a glitch."""
+    flips = []
+    for v in FLOATING_PIN_RAMP_V:
+        fc.note_battery(_Msg(0, v))
+        flips.append(fc.battery_trusted(0))
+    first = flips.index(False)
+    assert first <= sp.BATTERY_STEP_MIN_SAMPLES + 1
+    assert not any(flips[first:]), f'trusted again at sample {flips.index(True, first)}'

@@ -138,32 +138,19 @@ class TestMediumSelectsFocalLength:
 
 
 class TestGyroGainDefault:
-    def test_de_rotation_is_OFF_by_default_and_that_is_measured(self):
-        """The default is 0.0, chosen by measurement on the vehicle.
+    def test_de_rotation_defaults_are_the_rig_fit_and_say_so(self):
+        """The default is the rig's fit, measured (measured-bars 107).
 
-        Three 30 cm slides, three gains, every arm on the SAME slide:
-
-            (-1.000, -1.000)   median 122.3 %   |err| 22.3 %
-            (+1.058, +0.830)   median  75.5 %   |err| 24.5 %
-            ( 0.000,  0.000)   median  90.1 %   |err|  9.9 %   <- best
-
-        The pair fitted on this mount OVER-corrects on a slide, and the old
-        -1.0 over-reads by as much the other way; the zero crossing is near
-        g = 0. §12 named the reason in advance -- the effective gain depends
-        on WHERE THE PIVOT IS, `f*(1 - r/h)`, so a gain excited by tilting
-        about the lens does not transfer to a slide pivoting about the
-        operator's shoulder.
-
-        Zero is also the only value that cannot DOUBLE the error: the
-        residual is `(S + g)`, so g = 0 leaves exactly the uncorrected term
-        whatever the sign of S. -1.0 was measurably the worst available
-        value on this hull.
-
-        NOT "de-rotation does not work" -- §12 measured it halving the
-        error at 0.638 rad/s, which is a yawing vehicle and most of a
-        mission. Re-enabling needs a high-rotation test at the pivot the
-        vehicle actually turns about."""
-        assert (_GYRO_GAIN_X_DEFAULT, _GYRO_GAIN_Y_DEFAULT) == (0.0, 0.0)
+        Three taped 30 cm slides on the rigid board-and-camera rig, every arm
+        on the same slide: rotation left in (0, 0) read 63.0 %, the fitted
+        (-1.102, -1.024) 98.5 %, the old lens pivot 108.7 %. The gain is -S
+        and S belongs to the mount, so the node warns at start-up that these
+        are the rig's until the hull's own fit (po7.13) replaces them. On the
+        old mount -1.0 was the worst value measured: a wrong-sign gain doubles
+        the error, which is what the warning is for."""
+        assert (_GYRO_GAIN_X_DEFAULT, _GYRO_GAIN_Y_DEFAULT) == pytest.approx((-1.102, -1.024))
+        from mongla_vision.flow.flow_constants import _GYRO_GAIN_FITTED_ON
+        assert 'rig' in _GYRO_GAIN_FITTED_ON and 'po7.13' in _GYRO_GAIN_FITTED_ON
 
     def test_the_lens_pivot_gains_are_kept_so_nobody_re_derives_them(self):
         """The measurement survives even though it is not the default: the
@@ -917,8 +904,10 @@ def _published_sigma(node, vx, vy, h, rates):
 def test_rotation_the_gains_leave_in_is_inside_the_published_sigma():
     """The falsifier, on the axis that actually matters: a downward camera's
     yaw is absorbed by the rigid fit, its PITCH is not. 0.1 rad/s at 0.7 m
-    with the shipped gain of 0 reads as 7 cm/s of motion that is not there,
-    and the fit's own sigma said ~1 mm/s."""
+    left uncorrected reads as 7 cm/s of motion that is not there, and the
+    fit's own sigma said ~1 mm/s. The shipped gains are the RIG's, not this
+    hull's, so they earn no reduction: the full term stays in the sigma.
+    INJECTION: drop `_gains_fitted` from flow_checks and this fails."""
     n = _make(pool_depth_m=4.0, estimate_time_offset=False)
     try:
         false_v = 0.7 * 0.1
@@ -963,11 +952,14 @@ def test_a_sloping_floor_is_inside_the_published_sigma():
 
 
 def test_the_time_offset_starts_from_the_measured_value():
-    """It started at 0.0 -- 11 ms wrong on this vehicle until a fit arrived,
-    and a level transit may never supply one (2026-10-03 measurement)."""
+    """It started at 0.0 -- 13 ms wrong on this vehicle until a fit arrived,
+    and a level transit may never supply one (measured-bars 108). The value
+    itself is pinned to the ledger in test_shipped_constants_match_the_ledger."""
+    from mongla_vision.flow.flow_constants import FLOW_TD_MEASURED_S
+    assert FLOW_TD_MEASURED_S < -0.005, 'the measured offset is negative and not near zero'
     n = _make(pool_depth_m=4.0)
     try:
-        assert n._td == pytest.approx(-0.0113)
+        assert n._td == pytest.approx(FLOW_TD_MEASURED_S)
     finally:
         n.destroy_node()
 

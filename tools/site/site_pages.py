@@ -32,6 +32,7 @@ from _site_splice import splice  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / 'docs'
 STATES = [('WATER', 'water', 'verified in water'),
+          ('RIG', 'rig', 'rig tested: the vehicle\'s own electronics, moved by hand against a truth'),
           ('BENCH', 'bench', 'verified on the bench or on real footage'),
           ('BUILT', 'built', 'built and tested, never flown'),
           ('BLOCKED', 'blocked', 'waiting on hardware or a firmware merge')]

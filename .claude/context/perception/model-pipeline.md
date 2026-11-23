@@ -52,8 +52,12 @@ held-out data there is, with two rules:
 
 Every team names the props its own way (`Red pail`, `red_tub`, `Blue Bucket`, `ember-biru` are
 one drum), so the tool maps names to one coarse class set by keyword and drops what it cannot
-map (`Cloth`, `pole`, a group box around several tubs). Colour is read after detection, not
-trained as a class, because teams disagree on it.
+map (`Cloth`, `pole`, a group box around several tubs). Colour is the open question: teams
+disagree on it, and nothing in the stack reads a hue from a coarse box. So the tool builds
+both, `--classes coarse` (gate, flare, drum) and `--classes fine` (the colour in the class,
+taken from the team's own name; a frame whose prop names no colour is left out), and
+`tools/studies/colour_ab.py` scores a fine detector against the coarse one plus a learned hue
+reader on the same held-out pool, against a bar written before either trained.
 
 The datasets live in `mongla_data/datasets/`, outside git, each with a `SOURCE.md` naming its
 author and licence.

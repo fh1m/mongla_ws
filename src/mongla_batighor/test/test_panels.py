@@ -4,6 +4,7 @@ Lichtblick's side of each shape is its 1.30.0 source, `api/extensions/` and
 `providers/ExtensionCatalogProvider/utils.ts`; the bundle switch is the line
 read from the pinned release's `main.<hash>.js`.
 """
+import pathlib
 import io
 import json
 import re
@@ -511,6 +512,13 @@ def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
     assert cells['health'] == ('1 unknown', 'stale')
     assert cells['vehicle'] == ('ARMED', 'armed') and cells['depth'][0] == '1.20 m'
     assert got['tabs']['Cockpit'] == 'live' and got['tabs']['Vision'] == 'live'
+    # A view whose feed has gone quiet (a starved link, 2026-11-23) must not
+    # read as calm: the last word stays, with its age, as a warning.
+    js_old = js.replace('statusOf(' + _json.dumps(s) + ', 1500)', 'statusOf(' + _json.dumps(s) + ', 4600)')
+    old = _sp.run(['node', '-e', js_old], capture_output=True, text=True, timeout=30)
+    assert old.returncode == 0, old.stderr
+    cells = {k: (v, lvl) for k, v, lvl in _json.loads(old.stdout)['cells']}
+    assert cells['vehicle'] == ('ARMED  3.6 s old', 'warn'), cells['vehicle']
 
 
 @NEEDS_NODE
@@ -564,7 +572,7 @@ def test_a_panel_that_mounts_late_is_handed_what_came_before_at_its_own_age():
     import subprocess as _sp
     shim = ('const document={createElement:(t)=>({t,className:"",kids:[],attrs:{},'
             'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
-            'setAttribute(k,v){this.attrs[k]=v},addEventListener(){}}),'
+            'setAttribute(k,v){this.attrs[k]=v},addEventListener(){},querySelector(){return null}}),'
             'querySelector:()=>true,head:{append(){}}};'
             'const requestAnimationFrame=(f)=>0,cancelAnimationFrame=()=>{};'
             'const intervals=[];globalThis.setInterval=(f)=>{intervals.push(f);return 0};'
@@ -602,7 +610,7 @@ def test_the_pilot_keeps_the_helm_while_another_view_is_open():
     import subprocess as _sp
     shim = ('function E(t){return{t,className:"",style:{},dataset:{},kids:[],value:t==="select"?"go":"",checked:false,'
             'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
-            'setAttribute(){},addEventListener(){},querySelectorAll(){return[]},'
+            'setAttribute(){},addEventListener(){},querySelectorAll(){return[]},querySelector(){return null},'
             'classList:{toggle(){}},options:[]}}'
             'const document={createElement:E,querySelector:()=>true,head:{append(){}}};'
             'const localStorage={getItem:()=>"ana",setItem(){}};'
@@ -645,7 +653,7 @@ def test_a_calibration_button_outlives_the_states_that_follow_it():
     import subprocess as _sp
     shim = ('function E(t){return{t,className:"",style:{},dataset:{},kids:[],value:"",'
             'append(...k){this.kids.push(...k)},replaceChildren(...k){this.kids=k},'
-            'setAttribute(){},addEventListener(){}}}'
+            'setAttribute(){},addEventListener(){},querySelector(){return null}}}'
             'globalThis.Node=function(){};'
             'const document={createElement:E,querySelector:()=>true,head:{append(){}}};'
             'const localStorage={getItem:()=>"ana",setItem(){}};')
@@ -671,3 +679,93 @@ def test_a_calibration_button_outlives_the_states_that_follow_it():
     assert found and not disabled, 'a named operator sees an apply button'
     assert kept, 'a new hold value does not replace the button'
     assert not rebuilt_same, 'a changed library does'
+
+
+def test_a_detector_setting_stays_on_one_row():
+    """Detectors at 1600 px (Kutum, 2026-11-22): a flex row wrapped a long
+    value ("model_path, as launched") onto its own line above its input, where
+    it read as the row above's; and the model datalists sat in the label/value
+    grid, so the odd/even label colours shifted after the first. The row is a
+    fixed three-column grid and the datalists live in their own rows."""
+    root = pathlib.Path(__file__).resolve().parents[1]
+    js = (root / 'panels' / 'control' / 'extension.js').read_text()
+    css = (root / 'theme' / 'batighor.css').read_text()
+    assert 'tuneGrid.append(list)' not in js
+    assert 'el("div", { class: "row tune" })' in js
+    assert '.mb .row.tune{display:grid' in css
+    assert 'text-overflow:ellipsis' in css.split('.mb .row.tune > :first-child', 1)[1].split('}', 1)[0]
+
+
+@NEEDS_NODE
+def test_the_log_folds_a_repeated_warning_into_one_line_with_a_count():
+    """foldNodeLog: a node that says the same thing every second (the lock's
+    'camera looks degraded', Kutum 2026-11-23) took the whole log card. A
+    repeat, digits aside, replaces its earlier line with a count; a different
+    message keeps its own line."""
+    import json as _json
+    import subprocess as _sp
+    js = ((PANELS / 'control' / 'extension.js').read_text()
+          .replace('module.exports = {', 'const _unused = {', 1)
+          + '\nconst L=[];'
+          + 'foldNodeLog(L,{t:1,key:"W lock: 7/8 collapsed",text:"a"});'
+          + 'foldNodeLog(L,{t:2,key:"W loc: no aiding",text:"b"});'
+          + 'foldNodeLog(L,{t:3,key:"W lock: 8/8 collapsed",text:"c"});'
+          + 'process.stdout.write(JSON.stringify(L.map(e=>[e.t,e.n,e.text])));'
+          # the heartbeat's setInterval would keep node running
+          + 'process.exit(0);')
+    pre = 'const module={exports:{}};const VERBS={},TUNABLE={},THEME_CSS="";'
+    out = _sp.run(['node', '-e', pre + (PANELS / 'common.js').read_text() + js],
+                  capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = _json.loads(out.stdout)
+    assert got == [[2, 1, 'b'], [3, 2, 'c  (x2)']], got
+
+
+@NEEDS_NODE
+def test_the_strip_measures_lag_from_the_states_own_stamp():
+    """noteLag + statusOf: a full bridge queue keeps delivering messages, each
+    seconds old, so an arrival-gap check reads fresh while the operator looks
+    at the past. The lag is arrival minus the state's own stamp, minus the
+    least of that over the last minute, so the two clocks' offset cancels.
+    Over 0.5 s it warns, over 2 s it is an error; the helm's video scale is
+    shown beside it."""
+    import json as _json
+    import subprocess as _sp
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    js = (pre + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS + r'''
+const X = module.exports, out = {};
+const st = (sec) => ({ sec: Math.floor(sec), nanosec: Math.round((sec % 1) * 1e9) });
+const s = { v: { armed: false, mode: "MANUAL" }, video: 0.5 };
+// Kutum's clock is 40 s behind this one; the link adds 10 ms, then 2.5 s.
+for (let i = 0; i < 20; i++) X.noteLag(s, 100000 + i * 50, st(60 + i * 0.05 - 0.01));
+s.vAt = 101000;
+out.calm = X.statusOf(s, 101000).cells.find((c) => c[0] === "to kutum");
+X.noteLag(s, 101050, st(61.05 - 0.01 - 0.7));
+out.slow = X.statusOf(s, 101050).cells.find((c) => c[0] === "to kutum");
+X.noteLag(s, 101100, st(61.1 - 0.01 - 2.5));
+out.late = X.statusOf(s, 101100).cells.find((c) => c[0] === "to kutum");
+X.noteLag(s, 170000, st(130 - 0.01));
+out.aged = s.lagWin.length;
+// Lichtblick's receiveTime spells it nsec; 0.3 s late against the floor above.
+X.noteLag(s, 170100, { sec: 130, nsec: 90e6 - 300e6 + 1e9 * 0 });
+out.nsec = Math.round(s.lag * 1000);
+// Reports: none in the first 15 s after mounting (a page that has just loaded
+// lags while every panel mounts), then one every 2 s.
+const r = { lag: 1.0, mountAt: 0 };
+out.reports = [1000, 14000, 15500, 16000, 17600].map((t) => X.shouldReport(r, t));
+out.words = [X.videoWords(1, ""), X.videoWords(0.5, "ab12", "ab12"), X.videoWords(0.25, "c3d4", "ab12"), X.videoWords(NaN, "")];
+process.stdout.write(JSON.stringify(out));
+process.exit(0);
+''')
+    run = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert run.returncode == 0, run.stderr
+    got = _json.loads(run.stdout)
+    assert got['calm'] == ['to kutum', 'lag 0.00 s  video x0.5', 'ok'], got['calm']
+    assert got['slow'] == ['to kutum', 'lag 0.70 s  video x0.5', 'warn'], got['slow']
+    assert got['late'] == ['to kutum', 'lag 2.50 s  video x0.5', 'err'], got['late']
+    assert got['aged'] == 1, 'samples older than a minute are dropped'
+    assert got['nsec'] == 300, got['nsec']
+    assert got['reports'] == [False, False, True, False, True], got['reports']
+    assert got['words'] == ['video x1', 'video x0.5 set by this screen',
+                            'video x0.25 set by screen c3d4', 'video --'], got['words']

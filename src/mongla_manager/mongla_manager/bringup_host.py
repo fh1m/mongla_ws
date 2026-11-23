@@ -597,6 +597,12 @@ def _launch_conf_default() -> float:
 _CONF_DEFAULT = _launch_conf_default()
 
 
+def _lfs_pointer(path: str) -> bool:
+    from mongla_vision.detection.yolo import LFS_SIGNATURE
+    with open(path, 'rb') as f:
+        return f.read(len(LFS_SIGNATURE)) == LFS_SIGNATURE
+
+
 def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
     """On Hailo the accelerated artifact is a `.hef`, compiled offline.
 
@@ -613,6 +619,13 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
     dangling = sorted({os.path.basename(p) for d in dirs
                        for p in glob(os.path.join(d, '*'))
                        if os.path.islink(p) and not os.path.exists(p)})
+    # A Git LFS pointer is not a model either: a clone that never ran
+    # `git lfs pull` holds 130 bytes of text under each model's name.
+    pointers = sorted({os.path.basename(p) for d in dirs for p in glob(os.path.join(d, '*.hef'))
+                       if os.path.exists(p) and _lfs_pointer(p)})
+    if pointers:
+        return FAIL, (f'{len(pointers)} .hef are Git LFS pointers, not models '
+                      f'({", ".join(pointers)}): run `git lfs pull` and rebuild')
     for d in dirs:
         for p in glob(os.path.join(d, '*.hef')):
             if not os.path.exists(p):

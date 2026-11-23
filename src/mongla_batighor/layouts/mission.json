@@ -18,7 +18,7 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 190,
+      "sidebarDimension": 112,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",

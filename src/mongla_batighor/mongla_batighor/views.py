@@ -51,7 +51,9 @@ TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'ancho
           'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates',
           'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops',
           'forward': 'forward camera', 'downward': 'downward camera', 'hull': 'attitude',
-          'nav': 'odometry, 3D', 'down': 'downward camera',
+          'nav': 'odometry, 3D', 'down': 'downward camera', 'graph': 'nodes and topics',
+          'topics': 'every topic, its type and rate', 'raw': 'one message, whole',
+          'rosout': 'every node\'s log',
           'camera': 'calibration camera', 'locmap': 'localization map'}
 # The last minute, following the newest sample. Unset, the axis spans the whole
 # connection, and a panel opened later drew its data in the right-hand sliver
@@ -59,15 +61,31 @@ TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'ancho
 PLOT_WINDOW_S = 60
 
 
-def plot(*lines: dict) -> tuple:
+def legend_px(lines) -> int:
+    """The legend as wide as its longest label, never LEGEND_PX for all.
+
+    LEGEND_PX holds a 13-character label whole (160 cut it): about 11.5 px a
+    character and 40 of swatch and padding. A plot labelled "gx" spent the same
+    190 px, half a narrow column, on blank legend (2026-11-22)."""
+    longest = max((len(s.get('label', '')) for s in lines), default=0)
+    return max(112, min(LEGEND_PX, round(48 + 11.5 * longest)))
+
+
+def plot(*lines: dict, y: tuple = ()) -> tuple:
     # Legend at the left: 'top' stacks one line per series above the plot and
     # squashed small plots flat (seen on Kutum); 'floating' covered the data.
     # Lichtblick's default legend is 240 px, half a plot in a narrow column
     # (desktop app, 2026-11-12); LEGEND_PX holds a label such as
     # "board heading" whole (160 cut it).
-    return 'Plot', {'paths': list(lines), 'showLegend': True, 'legendDisplay': 'left',
-                    'sidebarDimension': LEGEND_PX, 'followingViewWidth': PLOT_WINDOW_S,
-                    'isSynced': True, 'xAxisVal': 'timestamp'}
+    # `y`: a bounded quantity keeps its whole range. Autoscaled, a steady
+    # authority of 1.0 drew on a 0.94-1.06 axis and read as noise (Kutum,
+    # 2026-11-22).
+    cfg = {'paths': list(lines), 'showLegend': True, 'legendDisplay': 'left',
+           'sidebarDimension': legend_px(lines), 'followingViewWidth': PLOT_WINDOW_S,
+           'isSynced': True, 'xAxisVal': 'timestamp'}
+    if y:
+        cfg['minYValue'], cfg['maxYValue'] = y
+    return 'Plot', cfg
 
 
 def states(*lines: dict) -> tuple:
@@ -127,7 +145,9 @@ def scene() -> tuple:
                   # vehicle. At 2.2 m a 45-degree view of a wide panel is
                   # 3.4 m across and the 0.7 m hull filled a fifth of it;
                   # at 1.3 m it is 2 m, room for the hull and the demand.
-                  'cameraState': {'distance': 1.3, 'perspective': True, 'phi': 55,
+                  # 0.95 m: at 1.3 the hull read small in the cockpit's
+                  # corner (owner, 2026-11-22); the demand arrow still fits.
+                  'cameraState': {'distance': 0.95, 'perspective': True, 'phi': 55,
                                   'thetaOffset': 200, 'targetOffset': [0, 0, 0],
                                   'target': [0, 0, 0], 'targetOrientation': [0, 0, 0, 1],
                                   'fovy': 45, 'near': 0.01, 'far': 5000},
@@ -218,8 +238,12 @@ def cockpit(v: View):
     target now and which stages run. The lock's history is in `vision`."""
     return row((CAMERA_COLUMN, _cameras(v)),
                (30, v('control', instrument('ControlCenter'))),
-               (33, col((4, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
-                        (5, v('vision', instrument('Vision'))))))
+               # The Vehicle card carries the board's six lines under its gauges;
+               # at 10 of 21 its last row was cut (Kutum, 2026-11-23).
+               (33, col((11, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
+                        (7, v('vision', instrument('Vision'))),
+                        (3, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS),
+                                             y=(0, 1.05)))))))
 
 
 def vision(v: View):
@@ -236,16 +260,17 @@ def vision(v: View):
     # sits under it, beside the ladder it scores.
     now = col((3, v('vision', instrument('Vision'))),
               (4, v('ladder', states(*_ladder_lines()))),
-              (3, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS)))))
+              (3, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS),
+                                   y=(0, 1.05)))))
     numbers = col(
-        (7, v('detectors', instrument('Detectors'))),
-        (2, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
+        (5, v('detectors', instrument('Detectors'))),
+        (3, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
                 v('pose', plot(series(f'{fwd}/target_pose_fused.bearing_deg', 'bearing deg'),
                                series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),
-        (2, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'rotation'),
+        (3, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'rotation'),
                              series(f'{dwn}/anchor_decomposition.vector.y', 'scale'),
                              series(f'{dwn}/anchor_decomposition.vector.z', 'range m')))),
-        (2, v('align', align('align x px', 'align y px',
+        (3, v('align', align('align x px', 'align y px',
                              series(f'{fwd}/target_pose_fused.reproj_px', 'reproj px')))))
     right = row(now, numbers)
     return row((CAMERA_COLUMN, col(*(v(c, camera(c, synced=True)) for c in CAMERAS))),
@@ -288,8 +313,10 @@ def localization(v: View):
     the filter's and the flow's velocity); over time on the right."""
     d = f'{V}/downward'
     return row(
-        (50, col((3, v('locmap', instrument('LocalizationMap'))),
-                 (2, row(v('navigation', instrument('Navigation')), v('nav', scene()))))),
+        # The map most of the column: at 3/5 the pool drew 220 px tall under
+        # its table (2026-11-22); the track and the hull share the rest.
+        (50, col((7, v('locmap', instrument('LocalizationMap'))),
+                 (3, row(v('navigation', instrument('Navigation')), v('nav', scene()))))),
         (50, col(
             # Motion is on the localization map and the mode on the status
             # strip; as rows here the strip needed 350 px and showed one row.
@@ -431,6 +458,29 @@ def weak_link(v: View):
                (38, v('control', instrument('ControlCenter'))))
 
 
+def inspect(v: View):
+    """Everything on the wire, for when a number looks wrong: the graph of
+    nodes and topics, every topic with its type and rate, and the vehicle's
+    state message whole, field by field. Lichtblick's own panels; parameters
+    stay closed to a browser (batighor.launch.py, BRIDGE_LIMITS)."""
+    # The graph runs wide (every node and topic in one band): at half the
+    # screen it drew 800 px of hairline, unreadable (2026-11-23), so it gets
+    # the whole width and the two tables share the row under it.
+    return col((58, v('graph', ('TopicGraph', {}))),
+               (42, row((50, v('topics', ('SourceInfo', {}))),
+                        (50, v('raw', ('RawMessages', {'topicPath': '/mongla/state',
+                                                       'diffEnabled': False,
+                                                       'expansion': 'all'}))))))
+
+
+def log_(v: View):
+    """What every node says, newest last: the ROS log at info and above, beside
+    the Control Center's own record of who asked for what."""
+    return row((68, v('rosout', ('RosOut', {'searchTerms': [], 'minLogLevel': 2,
+                                            'topicToRender': '/rosout'}))),
+               (32, v('control', instrument('ControlCenter'))))
+
+
 # What the stack publishes and no view shows, each with the reason. A topic
 # not shown and not here fails test_views: an operator cannot see it.
 NOT_SHOWN = {
@@ -447,7 +497,7 @@ NOT_SHOWN = {
 
 VIEWS = {f.__name__.rstrip('_'): f for f in (cockpit, mission, map_, vision, flow, localization,
                                              thrust, board_health, board_link, chain,
-                                             downward, calibrate, weak_link)}
+                                             downward, calibrate, weak_link, inspect, log_)}
 FILE = {'cockpit': 'mongla_layout'}            # the default keeps the name links use
 
 # The console: every view as a tab of one layout, in the order a run is read.
@@ -457,7 +507,8 @@ CONSOLE = 'batighor'
 TABS = [('cockpit', 'Cockpit'), ('map', 'Map'), ('mission', 'Mission'), ('vision', 'Vision'),
         ('flow', 'Flow'), ('localization', 'Localization'), ('thrust', 'Thrust'),
         ('board_health', 'Health'), ('board_link', 'Link'), ('chain', 'Chain'),
-        ('downward', 'Downward'), ('calibrate', 'Calibrate')]
+        ('downward', 'Downward'), ('calibrate', 'Calibrate'), ('inspect', 'Inspect'),
+        ('log', 'Log')]
 
 
 def build(name: str) -> dict:
