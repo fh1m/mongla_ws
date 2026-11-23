@@ -771,6 +771,7 @@ process.exit(0);
                             'video x0.25 set by screen c3d4', 'video --'], got['words']
 
 
+@NEEDS_NODE
 def test_the_localization_card_says_why_flow_is_uncalibrated_in_full():
     """The flow view's state panel clipped the reason after a few words, and
     the card said only 'flow uncalibrated'. The card now carries the flow's
