@@ -456,6 +456,27 @@ function vehicleBody(s, v, h, below) {
   ];
 }
 
+// How late this screen is, from the vehicle state's own stamp. foxglove_bridge
+// sends a client its messages in arrival order; when the pictures outrun the
+// link, every message waits behind them, each still arriving, each seconds
+// old, so a gap between arrivals cannot see it (2026-11-23). Arrival minus
+// stamp is that wait plus the two clocks' offset; the least of it over the
+// last minute is the offset plus the link's own latency, so the difference
+// is the queue. A lag that lasts longer than the window becomes the new
+// floor and reads 0: a minute is longer than any queue the bridge holds.
+// Exported for the test.
+const LAG_WINDOW_MS = 60000;
+function noteLag(s, at, stamp) {
+  if (!stamp || !fin(stamp.sec)) return;
+  const off = at - (stamp.sec * 1000 + (stamp.nanosec || 0) / 1e6);
+  if (!fin(off)) return;
+  const w = (s.lagWin = (s.lagWin || []).filter(([t]) => at - t <= LAG_WINDOW_MS));
+  w.push([at, off]);
+  let least = Infinity;
+  for (const [, o] of w) least = Math.min(least, o);
+  s.lag = (off - least) / 1000;
+}
+
 // -- the table -----------------------------------------------------------
 
 // The status strip's cells and the console's tab marks, from one fold. Pure:
@@ -497,13 +518,17 @@ function statusOf(s, now) {
   cells.push(["health", worst < 0 ? "--" : said || "all ok", worst < 0 ? "stale" : LEVEL[worst]]);
   const l = s.link && age(s.linkAt) < 3 ? s.link : null;
   cells.push(["link", l ? `${num(100 * l.bytes_per_s / (l.capacity_bytes_per_s || NaN), 0)} %  drops ${num(l.board_drop_pct, 1)} %` : "--", !l ? "stale" : l.board_drop_pct > 1 ? "warn" : "ok"]);
+  // This screen's link to Kutum, apart from the board's line above: the lag
+  // and the scale the helm put the viewers' video at for it (link.py).
+  const lagLvl = !fin(s.lag) ? "stale" : s.lag > 2 ? "err" : s.lag > 0.5 ? "warn" : "ok";
+  cells.push(["to kutum", fin(s.lag) ? `lag ${num(s.lag, 2)} s  video x${fin(s.video) ? s.video : "--"}` : "--", lagLvl]);
   tabs.Cockpit = v && v.armed ? "live" : "";
   tabs.Thrust = v && v.armed ? "live" : "";
   tabs.Mission = running ? "live" : "";
   tabs.Vision = held.length ? "live" : "";
   tabs.Map = tabs.Localization = !loc ? "" : anchored ? "ok" : loc.usable ? "" : "warn";
   tabs.Health = worst < 0 ? "" : LEVEL[Math.min(worst, 3)] === "ok" ? "ok" : LEVEL[Math.min(worst, 3)];
-  tabs.Link = !l ? "" : l.board_drop_pct > 1 ? "warn" : "";
+  tabs.Link = lagLvl === "err" || lagLvl === "warn" ? lagLvl : !l ? "" : l.board_drop_pct > 1 ? "warn" : "";
   return { cells, tabs };
 }
 
@@ -514,9 +539,11 @@ const INSTRUMENTS = {
     title: "Status",
     kind: "status",
     topics: ["/mongla/state", "/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics",
-      "/mongla/localization/state", "/mongla/board_link", ...CAMERAS.map(lockTopic)],
+      "/mongla/localization/state", "/mongla/board_link", "/mongla/batighor/helm_state",
+      ...CAMERAS.map(lockTopic)],
     fold(s, topic, m) {
-      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); }
+      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteLag(s, heard(), m.header && m.header.stamp); }
+      else if (topic === "/mongla/batighor/helm_state") { try { s.video = JSON.parse(m.data).video; } catch { /* keep */ } }
       else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
       else if (topic === "/mongla/mission/task") { try { s.task = JSON.parse(m.data); } catch { /* keep */ } }
       else if (topic === "/mongla/doing") { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
@@ -530,6 +557,14 @@ const INSTRUMENTS = {
     },
     draw(s) {
       const { cells, tabs } = statusOf(s, Date.now());
+      // Every 2 s, this screen's lag to the helm, which sets the viewers'
+      // video for the slowest screen (link.py). Through any mounted panel;
+      // no helm, no report, and nothing else depends on it.
+      if (fin(s.lag) && Date.now() - (s.lagSent || 0) > 2000 && typeof callAny === "function") {
+        s.lagSent = Date.now();
+        callAny("/mongla/batighor/helm", { who: "", op: "link", cmd: "", mission: "", confirms: [],
+          fields_json: JSON.stringify({ lag_s: Math.round(s.lag * 1000) / 1000 }) }).catch(() => { /* no helm */ });
+      }
       if (typeof document !== "undefined" && document.querySelectorAll) {
         for (const tab of document.querySelectorAll('[data-testid="toolbar-tab"]')) {
           const lvl = tabs[tab.getAttribute("title")] || "";
@@ -1000,6 +1035,7 @@ module.exports = {
   poolMap,
   drawMap,
   statusOf,
+  noteLag,
   layoutUpdates,
   placeByStart,
   makePanel,

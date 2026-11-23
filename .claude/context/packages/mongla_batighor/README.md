@@ -225,6 +225,22 @@ camera that fell back showed the operator an empty panel. On Kutum's USB camera 
 0.062 ms to publish (`measured-bars` 84). Open `/` on the tether and `/?layout=weak_link` on
 anything slower.
 
+A slow link is also handled for you. foxglove_bridge sends a browser its messages in arrival
+order, so when the pictures need more than the link carries, the vehicle's state waits
+behind them. Each message still arrives, seconds old, so a gap between arrivals cannot see
+it (three captures on 2026-11-23: about 1.5 MB/s of pictures against a 0.96 MB/s link).
+The status strip's **to kutum** cell measures it honestly: `/mongla/state`'s arrival time
+minus its own stamp, minus the least of that over the last minute, so the clocks' offset
+cancels. Amber over 0.5 s, red over 2 s. Every 2 s the browser reports that lag to the helm
+(`op: link`, anyone, logged only when it changes something), and `link.py` sets the cameras'
+`stream_rate_hz` the way a congested network does: halved at once while any browser lags
+(held 2 s, so a full queue has time to drain), a quarter back after 10 s with no lag from
+any of them, never above the camera's own rate or below 7.5 Hz of 30. Only the viewers'
+copy slows. Detection reads `image_raw`, so a slow laptop never slows perception. The helm
+finds each camera node by who publishes its stream (the names differ per launch) and, while
+the scale is below 1, says the rate again each second, so a camera that respawned does not
+come back at full rate. The cell shows the scale beside the lag, `video x0.5`.
+
 ## Decided, and what comes next
 
 The owner's decisions (2026-11-11) are recorded on bead `mongla_ws-102.25`: Lichtblick plus
@@ -250,6 +266,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `deck.py` | The deck: Batighor in a terminal, for the person standing at the pool. |
 | `fetch.py` | Put the pinned Lichtblick web build on this machine. |
 | `helm.py` | The helm: the one way a browser drives the vehicle, and the log of who did. |
+| `link.py` | How fast the viewers' video runs, set by the slowest browser's lag. |
 | `model.py` | The hull in Lichtblick's 3D scene: the site's CAD, in the body frame, with its thrusters. |
 | `overlay.py` | What the vision stack sees, drawn by the browser over the camera's own picture. |
 | `panels.py` | Our panels, served to Lichtblick as a workspace's extensions. |

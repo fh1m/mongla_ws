@@ -719,3 +719,41 @@ def test_the_log_folds_a_repeated_warning_into_one_line_with_a_count():
     assert out.returncode == 0, out.stderr
     got = _json.loads(out.stdout)
     assert got == [[2, 1, 'b'], [3, 2, 'c  (x2)']], got
+
+
+@NEEDS_NODE
+def test_the_strip_measures_lag_from_the_states_own_stamp():
+    """noteLag + statusOf: a full bridge queue keeps delivering messages, each
+    seconds old, so an arrival-gap check reads fresh while the operator looks
+    at the past. The lag is arrival minus the state's own stamp, minus the
+    least of that over the last minute, so the two clocks' offset cancels.
+    Over 0.5 s it warns, over 2 s it is an error; the helm's video scale is
+    shown beside it."""
+    import json as _json
+    import subprocess as _sp
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    js = (pre + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS + r'''
+const X = module.exports, out = {};
+const st = (sec) => ({ sec: Math.floor(sec), nanosec: Math.round((sec % 1) * 1e9) });
+const s = { v: { armed: false, mode: "MANUAL" }, video: 0.5 };
+// Kutum's clock is 40 s behind this one; the link adds 10 ms, then 2.5 s.
+for (let i = 0; i < 20; i++) X.noteLag(s, 100000 + i * 50, st(60 + i * 0.05 - 0.01));
+s.vAt = 101000;
+out.calm = X.statusOf(s, 101000).cells.find((c) => c[0] === "to kutum");
+X.noteLag(s, 101050, st(61.05 - 0.01 - 0.7));
+out.slow = X.statusOf(s, 101050).cells.find((c) => c[0] === "to kutum");
+X.noteLag(s, 101100, st(61.1 - 0.01 - 2.5));
+out.late = X.statusOf(s, 101100).cells.find((c) => c[0] === "to kutum");
+X.noteLag(s, 170000, st(130 - 0.01));
+out.aged = s.lagWin.length;
+process.stdout.write(JSON.stringify(out));
+process.exit(0);
+''')
+    run = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert run.returncode == 0, run.stderr
+    got = _json.loads(run.stdout)
+    assert got['calm'] == ['to kutum', 'lag 0.00 s  video x0.5', 'ok'], got['calm']
+    assert got['slow'] == ['to kutum', 'lag 0.70 s  video x0.5', 'warn'], got['slow']
+    assert got['late'] == ['to kutum', 'lag 2.50 s  video x0.5', 'err'], got['late']
+    assert got['aged'] == 1, 'samples older than a minute are dropped'

@@ -151,7 +151,11 @@ frames per second of each message and the board's named channels with their age.
 ![The weak-link view: the two cameras' small previews with their boxes, the Vehicle panel and the Control Center.](../../../docs/imgs/batighor/weak_link.webp)
 
 `weak_link` is the one to open over a poor connection: the cameras' small previews,
-the Vehicle panel and the Control Center, and nothing heavy.
+the Vehicle panel and the Control Center, and nothing heavy. Any view also slows its own
+video when the link cannot keep up. The status strip's **to kutum** cell shows this
+screen's lag behind the vehicle, measured from the state's own stamp, and the helm halves
+the cameras' viewer stream while any screen lags. Detection is never slowed; the package
+page has the rule.
 
 ![The downward view: the downward camera at full height with its boxes and lock, and beside it the Vision panel, the downward lock ladder, the alignment error, the heights and the anchor.](../../../docs/imgs/batighor/downward.webp)
 
