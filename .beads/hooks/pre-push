@@ -1,4 +1,19 @@
 #!/usr/bin/env sh
+# --- BEGIN NOTES GUARD ---
+# Authorship notes (refs/notes/*) are a local debugging record and never leave
+# this machine: the repository is public (owner ruling 2026-11-24). An
+# attribution tool pushes them itself during a push, which runs this hook again
+# with the notes ref on stdin, so the refusal holds whichever tool pushes.
+_notes_refs=$(mktemp)
+cat > "$_notes_refs"
+if grep -qE '(^| )refs/notes/' "$_notes_refs"; then
+  echo >&2 "pre-push: refusing to push refs/notes/* (notes stay local)"
+  rm -f "$_notes_refs"
+  exit 1
+fi
+exec < "$_notes_refs"
+rm -f "$_notes_refs"
+# --- END NOTES GUARD ---
 # --- BEGIN GIT LFS ---
 # The model weights are in Git LFS (.gitattributes). Runs before beads and
 # hands it the same stdin: both read the ref list, and whichever ran second
