@@ -1,0 +1,22 @@
+{
+  "configById": {
+    "RosOut!rosout": {
+      "searchTerms": [],
+      "minLogLevel": 2,
+      "topicToRender": "/rosout",
+      "lichtblickPanelTitle": "every node's log"
+    },
+    "mongla.batighor.ControlCenter!control": {}
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "RosOut!rosout",
+    "second": "mongla.batighor.ControlCenter!control",
+    "splitPercentage": 68.0
+  }
+}

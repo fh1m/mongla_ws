@@ -398,6 +398,45 @@ function foldDiagnostics(s, m) {
   }
 }
 
+// The Vehicle card's content, centred in its panel by `.vehicle`. Under the
+// state, the board lines an operator checks before arming, graded by the
+// manager (/diagnostics): absent means not graded yet, never fine.
+const BOARD_LINES = [["link", "board_link"], ["leak", "leak"], ["kill line", "thruster_power"],
+  ["barometer", "barometer"], ["heading ref", "heading_ref"], ["safety latch", "safety_latch"]];
+
+function vehicleBody(s, v, h, below) {
+  // The manager names each row "mongla: <line>".
+  const graded = (key) => (s.health || []).find((r) => r.name === key || r.name.endsWith(`: ${key}`));
+  const board = BOARD_LINES.map(([label, key]) => {
+    const r = graded(key);
+    if (!r) return [label, "--", "stale", "not graded yet"];
+    const lvl = LEVEL[Math.min(r.level, 3)];
+    // A good line says "ok"; only a line with something to say spends the room.
+    // One word a line, the manager's sentence on hover (Health has it whole).
+    const word = { ok: "ok", warn: "warn", err: "fail", stale: "stale" }[lvl];
+    return [label, word, lvl === "ok" ? "good" : lvl, r.message];
+  });
+  return [
+    el("div", { class: "row" },
+      el("span", { class: v.armed ? "armed" : "ok" }, v.armed ? "ARMED" : "disarmed"),
+      el("span", {}, v.mode || "--"),
+      h.mission && el("span", { class: "live" }, `mission ${h.mission}`)),
+    el("div", { class: "row gauges" },
+      compass(v.yaw_deg), depthGauge(below, 3),
+      el("div", { class: "readouts" },
+        el("span", { class: "big" }, num(below, 2), el("span", { class: "unit" }, "m deep")),
+        el("span", { class: "big" }, num(v.yaw_deg, 0), el("span", { class: "unit" }, "deg")),
+        el("span", { class: "big" }, num(v.battery_voltage, 1), el("span", { class: "unit" }, "V")))),
+    kv(ageS(s.aliveAt) < MISSION_ALIVE_S ? ["mission", `running ${s.missionName || ""}`, "live"] : ["mission", "none"],
+      ["pilot", h.pilot || "nobody"], ["state age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 2 ? "warn" : ""],
+      // Silence is "no order", never a default (node_vision._publish_flare_order).
+      ["flare order", s.flare ? (s.flare.colours || []).join("-") : "none latched", s.flare ? "live" : ""]),
+    el("div", { class: "rule" }, "board"),
+    el("div", { class: "kv two" }, ...board.flatMap(([k, val, cls, full]) =>
+      [el("span", {}, k), el("span", { class: cls || "", title: full }, val)])),
+  ];
+}
+
 // -- the table -----------------------------------------------------------
 
 // The status strip's cells and the console's tab marks, from one fold. Pure:
@@ -479,9 +518,11 @@ const INSTRUMENTS = {
 
   Vehicle: {
     title: "Vehicle",
-    topics: ["/mongla/state", "/mongla/batighor/helm_state", "/mongla/flare_order", "/mongla/mission_alive"],
+    topics: ["/mongla/state", "/mongla/batighor/helm_state", "/mongla/flare_order", "/mongla/mission_alive",
+      "/diagnostics"],
     fold(s, topic, m) {
       if (topic === "/mongla/state") { s.v = m; s.at = heard(); }
+      else if (topic === "/diagnostics") foldDiagnostics(s, m);
       // The runner's 2 Hz beat, carrying its name.
       else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
       else if (topic === "/mongla/flare_order") { try { s.flare = JSON.parse(m.data); } catch { /* keep */ } }
@@ -491,25 +532,9 @@ const INSTRUMENTS = {
       const v = s.v, h = s.helm || {};
       if (!v) return [el("div", { class: "note" }, "no /mongla/state: is the manager running?")];
       const below = fin(v.depth_m) ? -v.depth_m : NaN;
-      return [
-        el("div", { class: "row" },
-          el("span", { class: v.armed ? "armed" : "ok" }, v.armed ? "ARMED" : "disarmed"),
-          el("span", {}, v.mode || "--"),
-          h.mission && el("span", { class: "live" }, `mission ${h.mission}`)),
-        el("div", { class: "row gauges" },
-          compass(v.yaw_deg), depthGauge(below, 3),
-          el("div", { class: "readouts" },
-            el("span", { class: "big" }, num(below, 2), el("span", { class: "unit" }, "m deep")),
-            el("span", { class: "big" }, num(v.yaw_deg, 0), el("span", { class: "unit" }, "deg")),
-            el("span", { class: "big" }, num(v.battery_voltage, 1), el("span", { class: "unit" }, "V")))),
-        kv(ageS(s.aliveAt) < MISSION_ALIVE_S ? ["mission", `running ${s.missionName || ""}`, "live"] : ["mission", "none"],
-          ["pilot", h.pilot || "nobody"], ["state age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 2 ? "warn" : ""],
-          // Silence is "no order", never a default (node_vision._publish_flare_order).
-          ["flare order", s.flare ? (s.flare.colours || []).join("-") : "none latched", s.flare ? "live" : ""]),
-      ];
+      return [el("div", { class: "vehicle" }, ...vehicleBody(s, v, h, below))];
     },
   },
-
   Vision: {
     title: "Vision",
     topics: [...CAMERAS.flatMap((c) => [lockTopic(c), seeingTopic(c), modelTopic(c)]), "/mongla/vision/active_camera", STAGES_TOPIC],

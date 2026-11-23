@@ -91,6 +91,11 @@ PUBLISHED_UNREAD = {
         'for a human: each chain stage\'s rate and age, from '
         'mongla_batighor/chain.py twice a second; the Chain instrument '
         '(panels/instruments/extension.js) draws it.',
+    '/mongla/batighor/log_tail':
+        'for a human: the helm\'s last 200 log lines as one latched message, '
+        'from mongla_batighor/helm.py, so a browser that joins late sees '
+        'them; the Control Center\'s log (panels/control/extension.js, LOG) '
+        'draws it.',
     '/mongla/mission/source':
         'for a human: the running mission\'s file, latched by the runner '
         '(mongla_planner/mission.py, MissionText); the MissionText instrument '

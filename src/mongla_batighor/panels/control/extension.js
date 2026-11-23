@@ -17,6 +17,7 @@ const STATE = "/mongla/batighor/helm_state";
 // One latched message holding the last 200 lines: a bridge hands a new viewer one message, so
 // the history cannot travel as a stream.
 const LOG = "/mongla/batighor/log_tail";
+const ROSOUT = "/rosout";
 const VEHICLE = "/mongla/state";
 const ANYONE = ["stop", "surface", "disarm"];
 // Under each key, what it does to the vehicle: three red keys alike in a
@@ -318,7 +319,8 @@ function initPanel(context, kind = "ControlCenter") {
         el("span", {}, `heading ${num(vehicle.yaw_deg, 0)}`),
         el("span", {}, `battery ${num(vehicle.battery_voltage, 1, " V")}`)]
       : [el("span", { class: "stale" }, "no /mongla/state yet")]));
-    const text = lines.slice(-200).join("\n");
+    const text = lines.length ? lines.slice(-200).join("\n")
+      : "nothing yet: every press at the helm is recorded here, and every node's warnings and errors arrive as they happen";
     if (log.textContent !== text) {
       const stuck = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
       log.textContent = text;
@@ -327,19 +329,37 @@ function initPanel(context, kind = "ControlCenter") {
     log.scrollTop = log.scrollHeight;
   }
 
+  // Two records, one card, in time order: the helm's (who asked for what,
+  // what it answered) and every node's warnings and errors from /rosout, the
+  // board's refusals and the stack's faults that no press caused.
+  const helmLog = [], nodeLog = [];
+  const clock = (t) => new Date(t * 1000).toLocaleTimeString([], { hour12: false });
+
   function logLine(raw) {
     let e;
-    try { e = JSON.parse(raw); } catch { return String(raw); }
-    const t = new Date((e.t || 0) * 1000).toLocaleTimeString([], { hour12: false });
+    try { e = JSON.parse(raw); } catch { return { t: 0, text: String(raw) }; }
     let text = e.event;
     if (text === undefined) {
       text = [e.op, e.cmd, e.mission].filter(Boolean).join(" ");
       text += e.ok ? "  ok" : `  REFUSED: ${e.message || ""}`;
     }
-    return e.operator ? `${t}  ${e.operator}: ${text}` : `${t}  ${text}`;
+    const t = e.t || 0;
+    return { t, text: e.operator ? `${clock(t)}  ${e.operator}: ${text}` : `${clock(t)}  ${text}` };
   }
 
-  context.subscribe([{ topic: STATE }, { topic: LOG }, { topic: VEHICLE }]);
+  // rcl_interfaces/Log: WARN is 30, ERROR 40, FATAL 50.
+  const LEVEL_NAME = { 30: "WARNING", 40: "ERROR", 50: "FATAL" };
+  function nodeLine(m) {
+    const t = (m.stamp?.sec ?? 0) + (m.stamp?.nanosec ?? 0) / 1e9;
+    return { t, text: `${clock(t)}  ${LEVEL_NAME[m.level] || m.level} ${m.name}: ${m.msg}` };
+  }
+
+  function merge() {
+    lines.length = 0;
+    for (const e of [...helmLog, ...nodeLog].sort((a, b) => a.t - b.t)) lines.push(e.text);
+  }
+
+  context.subscribe([{ topic: STATE }, { topic: LOG }, { topic: VEHICLE }, { topic: ROSOUT }]);
   context.watch("currentFrame");
   context.onRender = (renderState, done) => {
     for (const ev of renderState.currentFrame || []) {
@@ -347,9 +367,16 @@ function initPanel(context, kind = "ControlCenter") {
         try { helm = JSON.parse(ev.message.data); } catch { /* keep the last */ }
       } else if (ev.topic === LOG) {
         try {
-          lines.length = 0;
-          for (const raw of JSON.parse(ev.message.data)) lines.push(logLine(raw));
+          helmLog.length = 0;
+          for (const raw of JSON.parse(ev.message.data)) helmLog.push(logLine(raw));
+          merge();
         } catch { /* keep the last */ }
+      } else if (ev.topic === ROSOUT) {
+        if (ev.message.level >= 30) {
+          nodeLog.push(nodeLine(ev.message));
+          if (nodeLog.length > 200) nodeLog.splice(0, nodeLog.length - 200);
+          merge();
+        }
       } else if (ev.topic === VEHICLE) {
         vehicle = ev.message;
       }
