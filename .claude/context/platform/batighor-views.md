@@ -40,11 +40,16 @@ vehicle's numbers and attitude over the Vision panel and the lock authority it h
   one row of three keys sized by the panel's width, each saying under its name what
   it does (hold here; go up, stay up; motors off). Below them the helm (a name, then
   Request, Give, Release), arming behind two ticks, every verb with its own fields,
-  missions, and the log. The live camera and the detectors' settings are the
+  missions, and the log: every press at the helm (the last 200 lines, kept on Kutum and
+  sent whole to a browser that joins late) merged by time with every node's warnings and
+  errors from `/rosout`. The live camera and the detectors' settings are the
   **Detectors** panel, on the Vision and Downward views: together they needed
   1042 px and showed a third of it.
 - **Vehicle**: armed and mode, a compass, a depth gauge, the numbers, the mission
-  running (by its beat on `/mongla/mission_alive`) and who holds the helm.
+  running (by its beat on `/mongla/mission_alive`) and who holds the helm, centred in its
+  panel; under them the board's own lines from `/diagnostics` (link, leak, kill line,
+  barometer, heading reference, safety latch), one word each (ok, warn, fail, stale) with
+  the full sentence on hover.
 - **Vision**: per camera, the lock ladder's rungs (detection, held, follow, anchor,
   lost) lit in the rung's colour, the identity held and its authority, the model and
   its epoch, and every perception stage: lit when a node publishes it, struck through
@@ -158,6 +163,15 @@ and scale.
 
 `calibrate` runs a camera calibration from the browser. With none running it says so
 and gives the command that starts one.
+
+## Inspect and Log
+
+`inspect` is for a question no view was built for: Lichtblick's topic graph across half
+the screen (every node and topic as the bridge sees them), and beside it the source's
+topics with their rates and the raw message on any topic, `/mongla/state` first.
+
+`log` is the whole record at full height: every node's `/rosout` at warning and above, in
+Lichtblick's own log panel with its filter, beside the Control Center with the helm log.
 
 ## What the pictures do not show
 

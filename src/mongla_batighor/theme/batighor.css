@@ -116,6 +116,8 @@ body{background:var(--mb-d0)!important}
 [data-testid="toolbar-tab"][title="Chain"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%222.5%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%2213.5%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Cpath%20d%3D%22M4%208h2.5%20M9.5%208H12%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Downward"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2.5%203.5h11%20M6%203.5v2h4v-2%20M8%205.5v5.5%20M5.5%209l2.5%202.5%202.5-2.5%20M1.5%2014h13%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Calibrate"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2212%22%20height%3D%2212%22%2F%3E%3Cpath%20d%3D%22M2%208h12M8%202v12%22%2F%3E%3Cpath%20d%3D%22M2%202h6v6H2z%20M8%208h6v6H8z%22%20fill%3D%22%23000%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Inspect"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%227%22%20cy%3D%227%22%20r%3D%224.2%22%2F%3E%3Cpath%20d%3D%22M10.2%2010.2L14%2014%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Log"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2.5%204h11%20M2.5%208h11%20M2.5%2012h7%22%2F%3E%3C%2Fsvg%3E")}
 
 /* -- every panel ---------------------------------------------------------- */
 .mb, .mb *{font-family:var(--mb-mono)!important;box-sizing:border-box}
@@ -155,6 +157,19 @@ body{background:var(--mb-d0)!important}
 .mb .big{font-size:24px;line-height:1.05}
 .mb .unit{font-size:10px;color:var(--mb-ink-3);margin-left:3px;letter-spacing:.06em}
 .mb .note{color:var(--mb-ink-3);font-size:11px}
+/* The Vehicle card sits in the middle of its panel, not in a corner: the
+   dial, the gauge and the readouts centred, the tables a readable width. */
+.mb .vehicle{flex:1 1 auto;display:flex;flex-direction:column;justify-content:safe center;
+  align-items:center;gap:clamp(8px,2.4cqi,16px);min-height:100%}
+.mb .vehicle > .row{justify-content:center}
+.mb .vehicle > .kv{width:min(100%,52ch)}
+/* The board lines in two columns, each value one line: a long grade is cut
+   with its full text on hover, and Health has it whole. */
+.mb .kv.two{grid-template-columns:max-content minmax(0,1fr) max-content minmax(0,1fr)}
+.mb .kv.two > :nth-child(odd){color:var(--mb-ink-3)}
+.mb .kv.two > :nth-child(even){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mb .rule{width:min(100%,52ch);font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--mb-ink-3);border-top:1px solid var(--mb-rule);padding-top:6px}
 .mb .wide{grid-column:1/-1}
 /* The Vehicle readout grows with its tile: a dial and three numbers read
    from across the tent, not 80 px in the corner of a quarter-screen panel. */
