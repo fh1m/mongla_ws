@@ -12,8 +12,9 @@ typed. The rules of the token are `seat.py`; this node adds the vehicle:
     and only then sent to `/mongla/move` without waiting on it;
   * a mission is started as `mission <name>` in its own process group, so
     `abort` reaches it the way Ctrl-C would (it cancels, stops and disarms);
-  * when the pilot goes silent, a verb they sent by hand that is still running
-    is followed by `stop`. A mission is not stopped: a dropped laptop must not
+  * when the pilot goes silent, a motion verb they sent by hand that is still
+    running is followed by `stop`, and whether the manager took it is logged.
+    Another operator's `surface`, `stop` or `disarm` is left to finish. A mission is not stopped: a dropped laptop must not
     end a run the vehicle is flying by itself;
   * `tune` sets one of a detector's live settings (`seat.TUNABLE`) for any
     named operator while no mission runs, and `camera` makes one camera the
@@ -59,7 +60,7 @@ from rcl_interfaces.srv import GetParameters, SetParameters
 from std_msgs.msg import String
 
 from mongla_batighor.link import StreamGovernor
-from mongla_batighor.seat import CAMERAS, TUNABLE, Seat, Verdict
+from mongla_batighor.seat import ANYONE, CAMERAS, TUNABLE, Seat, Verdict
 from mongla_interfaces.action import Move
 from mongla_interfaces.srv import Helm
 
@@ -502,6 +503,21 @@ class HelmNode(Node):
                                       f'{res.message if res is not None else "no answer"}',
                   ok=bool(res is not None and res.ok))
 
+    def _stop_for_lost_pilot(self, pilot, running):
+        what = ', '.join(running)
+        if not self.move.server_is_ready():
+            self._log(operator=pilot, event=f'pilot lost with {what} running: '
+                                            'stop NOT sent, the manager is not answering',
+                      ok=False)
+            return
+        goal, _ = build_goal('stop', '')
+        self.move.send_goal_async(goal).add_done_callback(
+            lambda f: self._log(operator=pilot,
+                                event=f'pilot lost with {what} running: stop '
+                                      + ('accepted' if f.result() is not None
+                                         and f.result().accepted else 'REFUSED'),
+                                ok=bool(f.result() is not None and f.result().accepted)))
+
     def _on_mission_alive(self, msg):
         self.mission_heard = (msg.data, time.monotonic())
 
@@ -511,12 +527,15 @@ class HelmNode(Node):
             name, who, proc = self.mission
             self.mission = None
             self._log(operator=who, event=f'mission {name} ended, exit code {proc.returncode}')
+        pilot = self.seat.pilot
         if self.seat.tick(time.monotonic()):
-            running = [cmd for _, cmd in self.hand_goals.values()]
+            # Only the lost pilot's own motion. A watcher's surface or disarm
+            # must finish: a stop after surface takes the hull back out of
+            # SURFACE and holds it at depth.
+            running = [cmd for who, cmd in self.hand_goals.values()
+                       if who == pilot and cmd not in ANYONE]
             if running and not self._mission_running():
-                goal, _ = build_goal('stop', '')
-                self.move.send_goal_async(goal)
-                self._log(event=f'pilot lost with {", ".join(running)} running: stop sent')
+                self._stop_for_lost_pilot(pilot, running)
         self._flush_seat()
         self._publish_state()
 

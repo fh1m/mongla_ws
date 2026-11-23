@@ -34,7 +34,7 @@ class FakeManager(Node):
 
     def _run(self, handle):
         self.goals.append((handle.request.cmd, list(handle.request.set_fields)))
-        if handle.request.cmd.startswith('move_'):
+        if handle.request.cmd.startswith('move_') or handle.request.cmd == 'surface':
             t0 = time.monotonic()
             while time.monotonic() - t0 < self.HOLD_S:
                 time.sleep(0.02)
@@ -148,6 +148,17 @@ def test_a_silent_pilots_running_verb_is_followed_by_stop(rig):
     assert sent(2, timeout=3.0) == ['move_forward', 'stop']
     # The stop is sent first and the freed helm published after it, so the
     # state may arrive a moment later (seen on jazzy CI).
+    assert _until(lambda: states and states[-1]['pilot'] == '')
+
+
+def test_a_silent_pilot_never_stops_a_watchers_surface(rig):
+    # A stop after surface takes the hull back out of SURFACE (every board
+    # verb enters AUTO), so it would hold the vehicle at depth.
+    call, sent, _, states, _ = rig
+    call('ana', 'request')
+    call('ana', 'heartbeat')
+    call('bo', 'command', cmd='surface')
+    assert sent(2, timeout=3.0) == ['surface']
     assert _until(lambda: states and states[-1]['pilot'] == '')
 
 
