@@ -175,7 +175,7 @@ is how `recommend()` happened.
 - [109. THE BOARD'S HEADING UNDER HAND MOTION: 3.5 deg rms AT NINE RETURNS (2026-11-22)](#109-the-boards-heading-under-hand-motion-35-deg-rms-at-nine-returns-2026-11-22)
 - [110. ONE HAILO COMPILE, TIMED: 53.8 min, OF WHICH THE GPU OPTIMISE IS 24.5 (2026-11-22)](#110-one-hailo-compile-timed-538-min-of-which-the-gpu-optimise-is-245-2026-11-22)
 - [111. COLOUR IN THE DETECTOR BEATS A HUE READER AFTER IT: AP50 0.237 AGAINST 0.179 (2026-11-23)](#111-colour-in-the-detector-beats-a-hue-reader-after-it-ap50-0237-against-0179-2026-11-23)
-- [112. THE ANCHOR OFF THE LOCK TICK: LOCK AGE p50 142 -> 87 ms, p95 317 -> 211 (2026-11-23)](#112-the-anchor-off-the-lock-tick-lock-age-p50-142---87-ms-p95-317---211-2026-11-23)
+- [112. THE ANCHOR OFF THE LOCK TICK: NO MEASURABLE LOCK-AGE GAIN (142 -> 87 ms RETRACTED, 2026-11-24)](#112-the-anchor-off-the-lock-tick-no-measurable-lock-age-gain-142---87-ms-retracted-2026-11-24) — *taken back*
 <!-- contents:end -->
 
 ---
@@ -9446,7 +9446,7 @@ and props differ from every training team's, which is the condition the bar was 
 (transfer, not fit). Orange flares are not found by either arm. Decision: a model for props told
 apart by colour carries the colour in its class names, and no hue reader is built.
 
-## 112. THE ANCHOR OFF THE LOCK TICK: LOCK AGE p50 142 -> 87 ms, p95 317 -> 211 (2026-11-23)
+## 112. THE ANCHOR OFF THE LOCK TICK: NO MEASURABLE LOCK-AGE GAIN (142 -> 87 ms RETRACTED, 2026-11-24)
 
 **Method.** Kutum, `preview_up` bench (two curated clips in replay, the real board on USB),
 `tools/bench/lock_score.py 90` per arm, one run each, the footage segment not aligned between
@@ -9467,3 +9467,19 @@ accepted detection holds (`ANCHOR_KEEPWARM_S`, a choice, not a measurement), so 
 fell from 3.7-3.9 to 0.9 Hz; its shortest interval stayed 0.234 s, the full `anchor_hz`, inside
 detection gaps. The remaining ~86 ms is upstream of the lock (detect ~35-40 ms, track, hops).
 Not yet shown: target-hold on a starved detector with labelled truth (bead 102.12).
+
+**Retracted 2026-11-24.** The table above is one 90 s run per arm on footage that was not
+aligned between arms, and the baseline run happened to be slow. Re-measured as three A-B pairs,
+each run restarting both clips at frame 0 (release 4dc5099e, anchor in the tick at 4.5 Hz,
+against the worker on main):
+
+| run | forward p50 ms, tick / worker | downward p50 ms, tick / worker | forward p95 ms, tick / worker |
+|---|---|---|---|
+| 1 | 96.0 / 92.6 | 88.0 / 88.1 | 220.9 / 193.5 |
+| 2 | 100.7 / 107.9 | 104.3 / 96.5 | 220.9 / 223.9 |
+| 3 | 114.6 / 124.4 | 105.9 / 117.2 | 234.3 / 276.7 |
+
+Bar, written before the re-runs: every worker run below every tick run on both cameras. It
+fails; the paired median difference is +7.2 ms forward and +0.1 ms downward. The worker has no
+measurable effect on lock age. Both arms grow slower run to run, for a reason not yet found.
+The worker stays, for what its tests show (the tick never waits on a locate), not for speed.

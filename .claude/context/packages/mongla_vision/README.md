@@ -95,7 +95,8 @@ thread beside the ladder, so the follower and the detection publish while it wor
 every confident detection as before, and locates at `anchor_hz` whenever the detection is weak,
 held or gone; while a fresh accepted detection holds the target it locates once a second, to keep
 its trend and health warm. The place look shares the bank and skips a frame while the worker holds
-it, counted as `bank busy` (bead a2c).
+it, counted as `bank busy` (bead a2c). It does not make the lock measurably fresher: three paired
+runs found no lock-age difference (measured-bars 112, retracted gain).
 
 Under `vision_pi`, flow runs inside the vision process beside the downward camera and takes its
 frames by reference (`direct_feed`, measured-bars section 89); `vision` and `vision_dual` still
