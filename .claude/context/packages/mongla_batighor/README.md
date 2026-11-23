@@ -229,12 +229,12 @@ A slow link is also handled for you. foxglove_bridge sends a browser its message
 order, so when the pictures need more than the link carries, the vehicle's state waits
 behind them. Each message still arrives, seconds old, so a gap between arrivals cannot see
 it (three captures on 2026-11-23: about 1.5 MB/s of pictures against a 0.96 MB/s link).
-The status strip's **to kutum** cell measures it honestly: `/mongla/state`'s arrival time
-minus its own stamp, minus the least of that over the last minute, so the clocks' offset
-cancels. Amber over 0.5 s, red over 2 s. The lag is what the operator sees, so a busy laptop
-counts as much as a busy link: on the dev box with the test suite running (load 14 on 12
-cores) the headless browser read 0.85 s steady while the link itself carried messages in
-9 ms. After its first 15 s on screen (a page that has just loaded lags while its panels
+The status strip's **to kutum** cell measures it honestly: `/mongla/state`'s arrival in the
+panel minus the time Kutum's bridge took it (Lichtblick's `receiveTime`), minus the least of
+that over the last minute, so the clocks' offset cancels. Amber over 0.5 s, red over 2 s. Not
+the state's header stamp: that is the board's capture time, data age rather than this
+screen's lag, and it read a steady 0.56 s while a raw socket in the same page read 17 ms.
+Measured on the dev box over Tailscale: 0.00 to 0.01 s. After its first 15 s on screen (a page that has just loaded lags while its panels
 mount) and then every 2 s, the browser reports that lag to the helm
 (`op: link`, anyone, logged only when it changes something), and `link.py` sets the cameras'
 `stream_rate_hz` the way a congested network does: halved at once while any browser lags
@@ -243,7 +243,10 @@ any of them, never above the camera's own rate or below 7.5 Hz of 30. Only the v
 copy slows. Detection reads `image_raw`, so a slow laptop never slows perception. The helm
 finds each camera node by who publishes its stream (the names differ per launch) and, while
 the scale is below 1, says the rate again each second, so a camera that respawned does not
-come back at full rate. The cell shows the scale beside the lag, `video x0.5`. One stream serves every screen, so
+come back at full rate. The cell shows the scale beside the lag, `video x0.5`. On Kutum
+(2026-11-23) one report of 1.4 s halved both clips' streams from 30 to 15 Hz; an open
+console at 0.00 s of lag brought them back x0.25, x0.5, x0.75, x1 in 10 s steps, each change
+in the helm's log. One stream serves every screen, so
 the slowest screen sets it for all: a screen showing a stale vehicle is worse than a
 7.5 Hz picture on the others.
 
