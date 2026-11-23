@@ -286,7 +286,7 @@ Record CPU governor, ambient temperature and actual power at the 5V rail if a va
 
 **A mission-aware neural-perception execution framework for low-power autonomous robots**, with evidence that a particular additional observation or schedule reduces closed-loop errors at a fixed energy/latency budget.
 
-This can eventually compare multiple compute backends (Hailo-8, Pi CPU, Jetson) and vehicle platforms, but the first credible result should stay small: one underwater navigation failure case, one new observation, one rigorous test and one reproducible improvement.
+This can eventually compare multiple compute backends (Hailo-8, the Pi CPU, another accelerator) and vehicle platforms, but the first credible result should stay small: one underwater navigation failure case, one new observation, one rigorous test and one reproducible improvement.
 
 The novelty claim is **hypothetical** until a literature review and strong matched baselines establish it. A working source repository and carefully documented negative results are more valuable than “world first” wording without evidence.
 
