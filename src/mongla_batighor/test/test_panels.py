@@ -747,6 +747,9 @@ X.noteLag(s, 101100, st(61.1 - 0.01 - 2.5));
 out.late = X.statusOf(s, 101100).cells.find((c) => c[0] === "to kutum");
 X.noteLag(s, 170000, st(130 - 0.01));
 out.aged = s.lagWin.length;
+// Lichtblick's receiveTime spells it nsec; 0.3 s late against the floor above.
+X.noteLag(s, 170100, { sec: 130, nsec: 90e6 - 300e6 + 1e9 * 0 });
+out.nsec = Math.round(s.lag * 1000);
 // Reports: none in the first 15 s after mounting (a page that has just loaded
 // lags while every panel mounts), then one every 2 s.
 const r = { lag: 1.0, mountAt: 0 };
@@ -761,4 +764,5 @@ process.exit(0);
     assert got['slow'] == ['to kutum', 'lag 0.70 s  video x0.5', 'warn'], got['slow']
     assert got['late'] == ['to kutum', 'lag 2.50 s  video x0.5', 'err'], got['late']
     assert got['aged'] == 1, 'samples older than a minute are dropped'
+    assert got['nsec'] == 300, got['nsec']
     assert got['reports'] == [False, False, True, False, True], got['reports']
