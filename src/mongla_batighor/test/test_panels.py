@@ -747,6 +747,10 @@ X.noteLag(s, 101100, st(61.1 - 0.01 - 2.5));
 out.late = X.statusOf(s, 101100).cells.find((c) => c[0] === "to kutum");
 X.noteLag(s, 170000, st(130 - 0.01));
 out.aged = s.lagWin.length;
+// Reports: none in the first 15 s after mounting (a page that has just loaded
+// lags while every panel mounts), then one every 2 s.
+const r = { lag: 1.0, mountAt: 0 };
+out.reports = [1000, 14000, 15500, 16000, 17600].map((t) => X.shouldReport(r, t));
 process.stdout.write(JSON.stringify(out));
 process.exit(0);
 ''')
@@ -757,3 +761,4 @@ process.exit(0);
     assert got['slow'] == ['to kutum', 'lag 0.70 s  video x0.5', 'warn'], got['slow']
     assert got['late'] == ['to kutum', 'lag 2.50 s  video x0.5', 'err'], got['late']
     assert got['aged'] == 1, 'samples older than a minute are dropped'
+    assert got['reports'] == [False, False, True, False, True], got['reports']

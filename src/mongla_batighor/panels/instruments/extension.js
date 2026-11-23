@@ -477,6 +477,19 @@ function noteLag(s, at, stamp) {
   s.lag = (off - least) / 1000;
 }
 
+// When a screen reports its lag to the helm: every 2 s, and not in its first
+// 15 s, while a page that has just loaded lags as every panel mounts; one new
+// screen must not cut every screen's video for the half minute it takes to
+// climb back. Exported for the test.
+const REPORT_MS = 2000, WARM_MS = 15000;
+function shouldReport(s, now) {
+  if (!fin(s.lag)) return false;
+  if (!fin(s.mountAt)) s.mountAt = now;
+  if (now - s.mountAt < WARM_MS || now - (s.lagSent || -Infinity) < REPORT_MS) return false;
+  s.lagSent = now;
+  return true;
+}
+
 // -- the table -----------------------------------------------------------
 
 // The status strip's cells and the console's tab marks, from one fold. Pure:
@@ -560,8 +573,7 @@ const INSTRUMENTS = {
       // Every 2 s, this screen's lag to the helm, which sets the viewers'
       // video for the slowest screen (link.py). Through any mounted panel;
       // no helm, no report, and nothing else depends on it.
-      if (fin(s.lag) && Date.now() - (s.lagSent || 0) > 2000 && typeof callAny === "function") {
-        s.lagSent = Date.now();
+      if (typeof callAny === "function" && shouldReport(s, Date.now())) {
         callAny("/mongla/batighor/helm", { who: "", op: "link", cmd: "", mission: "", confirms: [],
           fields_json: JSON.stringify({ lag_s: Math.round(s.lag * 1000) / 1000 }) }).catch(() => { /* no helm */ });
       }
@@ -1036,6 +1048,7 @@ module.exports = {
   drawMap,
   statusOf,
   noteLag,
+  shouldReport,
   layoutUpdates,
   placeByStart,
   makePanel,
