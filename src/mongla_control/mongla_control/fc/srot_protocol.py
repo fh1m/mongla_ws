@@ -940,6 +940,8 @@ BATTERY_MAX_STEP_V = 2.0
 BATTERY_STEP_WINDOW = 16        # samples kept for the median
 BATTERY_STEP_MIN_SAMPLES = 8    # below this, do not accuse it
 BATTERY_MAX_JUMPS = 3           # jumps past the bar in the window: a glitch makes 2
+BATTERY_MIN_V = 3.0             # an empty lithium cell; no pack in service reads under it
+BATTERY_MAX_LOWS = 2            # samples under BATTERY_MIN_V in the window: a glitch makes 1
 
 CAL_MDIR_PARAMS = tuple(f'CAL_MDIR{i}' for i in range(1, 9))
 MOT_DIRECTION_PARAMS = tuple(f'MOT_{i}_DIRECTION' for i in range(1, 9))

@@ -14,7 +14,10 @@
 
 const SERVICE = "/mongla/batighor/helm";
 const STATE = "/mongla/batighor/helm_state";
-const LOG = "/mongla/batighor/log";
+// One latched message holding the last 200 lines: a bridge hands a new viewer one message, so
+// the history cannot travel as a stream.
+const LOG = "/mongla/batighor/log_tail";
+const ROSOUT = "/rosout";
 const VEHICLE = "/mongla/state";
 const ANYONE = ["stop", "surface", "disarm"];
 // Under each key, what it does to the vehicle: three red keys alike in a
@@ -193,12 +196,14 @@ function initPanel(context, kind = "ControlCenter") {
     for (const [s, kind] of Object.entries(TUNABLE)) {
       const key = `${cam}.${s}`;
       const input = el("input", { size: "10", type: kind === "float" ? "number" : "text", step: "any" });
+      const row = el("div", { class: "row tune" });
       if (s === "active_model") {
         // The detector's registry keys; typing "a,b" for two models still works.
+        // In the row, not the grid: a grid child shifts the odd/even label colours.
         const list = el("datalist", { id: `bh-models-${cam}` });
         input.setAttribute("list", list.id);
         modelLists[cam] = list;
-        tuneGrid.append(list);
+        row.append(list);
       }
       const set = el("button", {
         onclick: () => {
@@ -209,7 +214,9 @@ function initPanel(context, kind = "ControlCenter") {
       }, "Set");
       setButtons.push(set);
       now[key] = el("span", { class: "live" });
-      tuneGrid.append(el("label", {}, key), el("div", { class: "row" }, now[key], input, set));
+      row.prepend(now[key]);
+      row.append(input, set);
+      tuneGrid.append(el("label", {}, key), row);
     }
   }
   const tuneNote = el("span");
@@ -226,8 +233,7 @@ function initPanel(context, kind = "ControlCenter") {
   }
   if (has("helm")) {
     const cHelm = card(box, "helm");
-    cHelm.append(el("div", { class: "row" }, name, pilotLine),
-      el("div", { class: "row" }, bRequest, bGive, bRelease));
+    cHelm.append(el("div", { class: "row" }, name, bRequest, bGive, bRelease), el("div", { class: "row" }, pilotLine));
   } else {
     // Settings take a name too: the same one, kept in this browser.
     const cWho = card(box, "who");
@@ -286,6 +292,7 @@ function initPanel(context, kind = "ControlCenter") {
       const unset = UNSET[s] && v === UNSET[s][0];
       cell.textContent = !tuning[cam] ? "--" : unset ? UNSET[s][1] : v === "" ? '""' : String(v);
       cell.className = unset ? "note" : "live";
+      cell.title = cell.textContent;   // the whole value, where the column cuts it
     }
     for (const [cam, list] of Object.entries(modelLists)) {
       // `models` is "key=stem,key2=stem2" or bare stems; the key is what
@@ -312,31 +319,65 @@ function initPanel(context, kind = "ControlCenter") {
         el("span", {}, `heading ${num(vehicle.yaw_deg, 0)}`),
         el("span", {}, `battery ${num(vehicle.battery_voltage, 1, " V")}`)]
       : [el("span", { class: "stale" }, "no /mongla/state yet")]));
-    log.textContent = lines.slice(-200).join("\n");
-    log.scrollTop = log.scrollHeight;
+    const text = lines.length ? lines.slice(-200).join("\n")
+      : "nothing yet: every press at the helm is recorded here, and every node's warnings and errors arrive as they happen";
+    if (log.textContent !== text) {
+      const stuck = log.scrollTop + log.clientHeight >= log.scrollHeight - 4;
+      log.textContent = text;
+      if (stuck) log.scrollTop = log.scrollHeight;
+    }
   }
+
+  // Two records, one card, in time order: the helm's (who asked for what,
+  // what it answered) and every node's warnings and errors from /rosout, the
+  // board's refusals and the stack's faults that no press caused.
+  const helmLog = [], nodeLog = [];
+  const clock = (t) => new Date(t * 1000).toLocaleTimeString([], { hour12: false });
 
   function logLine(raw) {
     let e;
-    try { e = JSON.parse(raw); } catch { lines.push(raw); return; }
-    const t = new Date((e.t || 0) * 1000).toLocaleTimeString();
-    const who = (e.operator || "").padStart(10);
+    try { e = JSON.parse(raw); } catch { return { t: 0, text: String(raw) }; }
     let text = e.event;
     if (text === undefined) {
       text = [e.op, e.cmd, e.mission].filter(Boolean).join(" ");
       text += e.ok ? "  ok" : `  REFUSED: ${e.message || ""}`;
     }
-    lines.push(`${t} ${who}  ${text}`);
+    const t = e.t || 0;
+    return { t, text: e.operator ? `${clock(t)}  ${e.operator}: ${text}` : `${clock(t)}  ${text}` };
   }
 
-  context.subscribe([{ topic: STATE }, { topic: LOG }, { topic: VEHICLE }]);
+  // rcl_interfaces/Log: WARN is 30, ERROR 40, FATAL 50.
+  const LEVEL_NAME = { 30: "WARNING", 40: "ERROR", 50: "FATAL" };
+  function nodeLine(m) {
+    const t = (m.stamp?.sec ?? 0) + (m.stamp?.nanosec ?? 0) / 1e9;
+    const head = `${LEVEL_NAME[m.level] || m.level} ${m.name}`;
+    return { t, key: `${head}: ${m.msg}`,
+      text: `${clock(t)}  ${head}: ${m.msg}` };
+  }
+
+  function merge() {
+    lines.length = 0;
+    for (const e of [...helmLog, ...nodeLog].sort((a, b) => a.t - b.t)) lines.push(e.text);
+  }
+
+  context.subscribe([{ topic: STATE }, { topic: LOG }, { topic: VEHICLE }, { topic: ROSOUT }]);
   context.watch("currentFrame");
   context.onRender = (renderState, done) => {
     for (const ev of renderState.currentFrame || []) {
       if (ev.topic === STATE) {
         try { helm = JSON.parse(ev.message.data); } catch { /* keep the last */ }
       } else if (ev.topic === LOG) {
-        logLine(ev.message.data);
+        try {
+          helmLog.length = 0;
+          for (const raw of JSON.parse(ev.message.data)) helmLog.push(logLine(raw));
+          merge();
+        } catch { /* keep the last */ }
+      } else if (ev.topic === ROSOUT) {
+        if (ev.message.level >= 30) {
+          foldNodeLog(nodeLog, nodeLine(ev.message));
+          if (nodeLog.length > 200) nodeLog.splice(0, nodeLog.length - 200);
+          merge();
+        }
       } else if (ev.topic === VEHICLE) {
         vehicle = ev.message;
       }
@@ -349,7 +390,19 @@ function initPanel(context, kind = "ControlCenter") {
   draw();
 }
 
+// A node that says the same thing every second (the lock's "camera looks
+// degraded", Kutum 2026-11-23) filled the whole card. A repeat, digits aside,
+// replaces its earlier line: the newest text, with how many times it came.
+function foldNodeLog(list, e) {
+  const key = String(e.key).replace(/[0-9.]+/g, "#");
+  const i = list.findIndex((x) => x.key === key);
+  const n = i < 0 ? 1 : list[i].n + 1;
+  if (i >= 0) list.splice(i, 1);
+  list.push({ ...e, key, n, text: n > 1 ? `${e.text}  (x${n})` : e.text });
+}
+
 module.exports = {
+  foldNodeLog,
   activate(extensionContext) {
     for (const name of Object.keys(PARTS)) {
       extensionContext.registerPanel({ name, initPanel: (context) => initPanel(context, name) });

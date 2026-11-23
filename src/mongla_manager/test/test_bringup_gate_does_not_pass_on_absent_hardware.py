@@ -96,6 +96,17 @@ def test_a_hef_without_its_yaml_sidecar_fails_rather_than_warns(tmp_path):
     assert 'bin' in detail and 'sidecar' in detail
 
 
+def test_a_git_lfs_pointer_fails_the_gate_with_the_fix(tmp_path):
+    """The weights live in Git LFS; a clone without `git lfs pull` holds text
+    pointers under the models' names, with their sidecars beside them, and
+    would otherwise PASS here and fail on the chip."""
+    (tmp_path / 'gate.hef').write_bytes(b'version https://git-lfs.github.com/spec/v1\n'
+                                        b'oid sha256:00\nsize 7027121\n')
+    (tmp_path / 'gate.yaml').write_text('names: [gate]')
+    status, detail = bc._check_models_hailo([str(tmp_path)])
+    assert status == bc.FAIL and 'git lfs pull' in detail and 'gate.hef' in detail
+
+
 def test_hef_with_sidecars_passes(tmp_path):
     for stem in ('gate', 'bin'):
         (tmp_path / f'{stem}.hef').write_bytes(b'x')

@@ -47,6 +47,7 @@ success while doing nothing.
 
 | state | what it means | how much of this repo |
 |---|---|---|
+| **RIG** | rig tested: the vehicle's own electronics (SROT board, Kutum, cameras) fixed together and moved by hand against a truth | the newest claims, [on the capability map](docs/capability-map.md) |
 | **BENCH** | verified on hardware, on recorded footage, or against the live board | most of it |
 | **BUILT** | implemented, covered by tests, never flown | a lot of it |
 | **BLOCKED** | waiting on water, a firmware merge, or hardware | seven things, [listed](#what-stands-in-the-way) |
@@ -61,7 +62,7 @@ success while doing nothing.
 > automatic mode every move uses. If you are here to judge whether the software works underwater, the honest answer is
 > that nobody knows yet, and this page will not pretend otherwise.
 
-That is also why there is a [ledger of retractions](#the-ledger): 148 measurement entries, of
+That is also why there is a [ledger of retractions](#the-ledger): 153 measurement entries, of
 which 18 say in their own title that they took an earlier result back, and 10 more measured an idea
 and concluded it should stay switched off.
 
@@ -699,6 +700,83 @@ host-side is how a mission comes to believe it moved a metre it never moved.
 
 ---
 
+## Batighor: the lighthouse
+
+Batighor (বাতিঘর) is a lighthouse: it watches the water and guides the vessel home. It is
+the operator center, and it is a web page. Kutum serves [Lichtblick](https://github.com/Lichtblick-Suite/lichtblick)
+on our layouts, so any browser that opens `http://kutum.local:8000/` is connected to the
+vehicle, with nothing installed on the laptop. A second operator costs Kutum a few kilobytes.
+
+<p align="center"><img src="docs/imgs/readme/batighor-vision.webp" alt="Batighor's vision view, animated: the forward camera on a gate with the lock drawn as a red box and the detections beside it, the downward camera on the 2026 bins, the lock ladder lighting its rungs, and the lock's authority plotted from 0 to 1." width="100%"></p>
+
+<sub>The vision view. Recorded footage in place of the cameras (a bench, not the water),
+the real board on the USB-C cable, every plot live. Detector 11 to 18 Hz through the ROS
+graph on the bench; the lock rung is named on the picture, not buried in a log.</sub>
+
+**What it is not.** Bondor, the board team's ground station, talks to the board: telemetry
+over the cable and the LoRa bridge. Batighor talks to the stack on Kutum: what the cameras
+see, what the lock holds, what the filter believes, what the planner is about to do. The two
+answer different questions, and neither commits to the other's repository.
+
+<p align="center"><img src="docs/imgs/readme/batighor-cockpit.webp" alt="Batighor's cockpit view: forward and downward cameras with detections and the lock drawn over them, the Control Center with STOP, SURFACE and DISARM pinned at the top, the vehicle's compass and depth gauge, the hull in 3D, and the Vision instrument showing each camera's lock ladder." width="100%"></p>
+
+### The decisions that were made for the person on the pool deck
+
+- **STOP, SURFACE and DISARM are pinned.** Always one row of three keys, always on screen,
+  each saying under its name what it does. A key that needs a scroll is not one press.
+- **Absence is `--`, never `0.0`.** The board suppresses values it cannot stand behind; the
+  screen does the same. An unwired battery input reads `--`, not a pack at 1.4 V (that one
+  took two bug reports, B-148 and B-149, to get right).
+- **Honest about where the vehicle is.** Before the filter is anchored on a prop, Mongla is a
+  hollow amber hull labelled "by its start"; it turns solid red with its sigma only when the
+  filter has earned it. Props from a rulebook are dashed amber, `nominal`, until measured.
+- **A plot keeps its range.** A steady lock authority of 1.0 once drew on a 0.94 to 1.06 axis
+  and looked like a seizure. Bounded things are drawn on their bounds.
+- **The first thing you see is the views.** The sidebar that Lichtblick opens by default,
+  a fifth of the screen saying "Select a panel", is closed on a first visit.
+- **Every number has a place to be wrong.** Each view is generated from one table
+  (`views.py`), and a test fails if a topic the stack publishes shows up nowhere.
+
+<details>
+<summary><b>The other views</b> (thirteen layouts, one tab each)</summary>
+
+<p align="center"><img src="docs/imgs/readme/batighor-map.webp" alt="The map view: a pool outline with the floor soundings, the gate, bin and flare as dashed amber nominal props, and Mongla drawn hollow amber by its start." width="100%"></p>
+
+**Map**: plan a run. The pool from the course file, north up, the props you have placed and
+the ones you have not (listed, never put at the origin), and the hull on it.
+
+<p align="center"><img src="docs/imgs/readme/batighor-chain.webp" alt="The chain view: both cameras beside a table of how old each stage's data is, frame to detect to track to lock, with p50 and p95 in milliseconds." width="100%"></p>
+
+**Chain**: photons to thrust, each stage's age as p50 and p95. It also lists what the board
+does not send yet, each with the firmware ask that would fix it.
+
+<p align="center"><img src="docs/imgs/readme/batighor-localization.webp" alt="The localization view: the map, usable and why not, aiding, position, sigma, velocity from flow against the filter, heading from each source, and floor height against depth." width="100%"></p>
+
+**Localization**: whether the filter is usable, why not, and what is aiding it.
+
+<p align="center"><img src="docs/imgs/readme/batighor-downward.webp" alt="The downward view: the downward camera at full height with its boxes and the tracked floor features, beside the velocity, scale, distance and height plots." width="100%"></p>
+
+**Downward**: everything under the hull, the floor features the speed sensor is tracking
+and the height it is trusting.
+
+<p align="center"><img src="docs/imgs/readme/batighor-health.webp" alt="The health view: every subsystem graded, the board's and Kutum's, each row once, with warnings in amber." width="100%"></p>
+
+**Health**: every subsystem graded. Red means look now, and only errors and an armed
+vehicle get it.
+
+The rest: **mission** (the running mission's text with the line that sent the verb marked),
+**thrust**, **link**, **flow**, **calibrate**, and **weak_link** for a slow connection.
+
+</details>
+
+**Previews are bench, not water.** These pictures are the real SROT board on Kutum with the
+vision stack replaying recorded footage (forward: the 2025 gate at Mirpur with `gate_sharks`;
+downward: the 2026 bins with `bin_fire_blood`) and an invented course. Nothing here has been in
+the water on this platform. State: **RUNS TODAY** on the bench, **BUILT, NEVER FLOWN** in the
+hull. Run it yourself: [`mongla_batighor`](.claude/context/packages/mongla_batighor/README.md).
+
+---
+
 ## Asking it to do something
 
 > *"There are two ways of constructing a software design: One way is to make it so simple that
@@ -862,10 +940,10 @@ the kind of thing that goes stale — `test_doc_drift.py` fails any doc that sta
 > it's wrong."* — Richard Feynman
 
 [`measured-bars.md`](.claude/context/measured-bars.md) is the file this project is really built
-on: **148 entries, 1,190 rows of numbers**, each with the method, the conditions and the bar it had
+on: **153 entries, 1,226 rows of numbers**, each with the method, the conditions and the bar it had
 to clear. Tests read it. A constant that drifts from it fails CI.
 
-**18 of those 148 entries say in their own title that they took an earlier result back.** 10
+**18 of those 153 entries say in their own title that they took an earlier result back.** 10
 more measured an idea and concluded it should stay switched off. The retractions live in the
 same file as the results that stand, in the middle rather than in an appendix:
 

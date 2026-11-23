@@ -108,6 +108,25 @@ def heading_reference(named_value) -> Health:
     return fn('heading_ref', why)
 
 
+def imu_frame(state) -> Health:
+    """Whether the board's accel frame is proven (`SrotFC.accel_frame_state`).
+
+    Unproven, the manager publishes no `/mongla/imu` at all -- correctly, since
+    gravity in the wrong axes runs the filter away -- and the filter can say
+    only that no IMU sample came. This line says why: both hypotheses' angle
+    to the gravity the board's attitude predicts, against the bar.
+    """
+    if not state:
+        return unknown('imu_frame', 'no accel sample at rest yet')
+    if state.get('frame'):
+        return ok('imu_frame', f"accel frame proven: {state['frame']}")
+    return degraded('imu_frame', (
+        f"accel frame not proven, so /mongla/imu is withheld: sensor "
+        f"{state['e_sensor_deg']:.1f} deg, vehicle {state['e_vehicle_deg']:.1f} deg "
+        f"from the attitude's gravity (one must be under {state['agree_deg']:.0f}). "
+        f"Board mounting or ATTITUDE roll sign unverified (bead mongla_ws-a9h)"))
+
+
 def leak_sensor(leak_enabled: Optional[bool], leaking: Optional[bool]) -> Health:
     """`LEAK_EN = 0` reads DRY, and that is the trap.
 

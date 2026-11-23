@@ -15,7 +15,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 KUTUM = ROOT / 'kutum'
-SCRIPTS = sorted(KUTUM.rglob('*.sh')) + [KUTUM / 'system/systemd/set-cpu-performance']
+SCRIPTS = sorted(KUTUM.rglob('*.sh')) + [KUTUM / 'system/systemd/set-cpu-performance',
+                                         KUTUM / 'system/networkd-dispatcher/50-kutum-source-routes']
 
 
 def test_every_script_parses():
@@ -143,7 +144,9 @@ def test_setup_hands_the_doctor_result_to_verdict():
 
 # Root units that listen on nothing: each one a oneshot that sets something and
 # exits. Anything else Kutum installs is a service, and runs confined (#67).
-_ROOT_ONESHOTS = {'cpu-performance.service'}
+# Root because each edits what only root may: the CPU governors, the routing
+# policy (reply routes, kutum-source-routes); both exit at once.
+_ROOT_ONESHOTS = {'cpu-performance.service', 'kutum-source-routes.service'}
 _CONFINED = ('NoNewPrivileges=yes', 'ProtectSystem=strict', 'PrivateTmp=yes')
 
 

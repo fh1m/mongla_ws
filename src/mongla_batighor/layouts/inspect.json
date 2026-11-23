@@ -1,0 +1,32 @@
+{
+  "configById": {
+    "TopicGraph!graph": {
+      "lichtblickPanelTitle": "nodes and topics"
+    },
+    "SourceInfo!topics": {
+      "lichtblickPanelTitle": "every topic, its type and rate"
+    },
+    "RawMessages!raw": {
+      "topicPath": "/mongla/state",
+      "diffEnabled": false,
+      "expansion": "all",
+      "lichtblickPanelTitle": "one message, whole"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "column",
+    "first": "TopicGraph!graph",
+    "second": {
+      "direction": "row",
+      "first": "SourceInfo!topics",
+      "second": "RawMessages!raw",
+      "splitPercentage": 50.0
+    },
+    "splitPercentage": 58.0
+  }
+}

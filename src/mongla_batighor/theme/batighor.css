@@ -116,6 +116,8 @@ body{background:var(--mb-d0)!important}
 [data-testid="toolbar-tab"][title="Chain"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%222.5%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%2213.5%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Cpath%20d%3D%22M4%208h2.5%20M9.5%208H12%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Downward"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2.5%203.5h11%20M6%203.5v2h4v-2%20M8%205.5v5.5%20M5.5%209l2.5%202.5%202.5-2.5%20M1.5%2014h13%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Calibrate"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2212%22%20height%3D%2212%22%2F%3E%3Cpath%20d%3D%22M2%208h12M8%202v12%22%2F%3E%3Cpath%20d%3D%22M2%202h6v6H2z%20M8%208h6v6H8z%22%20fill%3D%22%23000%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Inspect"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%227%22%20cy%3D%227%22%20r%3D%224.2%22%2F%3E%3Cpath%20d%3D%22M10.2%2010.2L14%2014%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Log"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2.5%204h11%20M2.5%208h11%20M2.5%2012h7%22%2F%3E%3C%2Fsvg%3E")}
 
 /* -- every panel ---------------------------------------------------------- */
 .mb, .mb *{font-family:var(--mb-mono)!important;box-sizing:border-box}
@@ -134,6 +136,11 @@ body{background:var(--mb-d0)!important}
 .mb h3{margin:0;font-size:10px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;
   color:var(--mb-ink-3);display:flex;justify-content:space-between;gap:8px}
 .mb .row{display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap}
+/* A setting's row: value, input, Set on one line at any width. Wrapping put a
+   long value on its own line above its input, where it read as the row above's. */
+.mb .row.tune{display:grid;grid-template-columns:minmax(0,13ch) minmax(5ch,1fr) auto;gap:6px}
+.mb .row.tune > :first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mb .row.tune > input{width:100%;min-width:0;box-sizing:border-box}
 /* A header that stays while the text under it scrolls to the running line. */
 .mb .row.pin{position:sticky;top:-10px;z-index:2;background:var(--mb-d1);padding:6px 0;margin-top:-6px}
 /* A mission's text: numbered, wrapped (never sideways), the running line marked. */
@@ -150,6 +157,20 @@ body{background:var(--mb-d0)!important}
 .mb .big{font-size:24px;line-height:1.05}
 .mb .unit{font-size:10px;color:var(--mb-ink-3);margin-left:3px;letter-spacing:.06em}
 .mb .note{color:var(--mb-ink-3);font-size:11px}
+/* The Vehicle card sits in the middle of its panel, not in a corner: the
+   dial, the gauge and the readouts centred, the tables a readable width. */
+.mb .vehicle{flex:1 1 auto;display:flex;flex-direction:column;justify-content:safe center;
+  align-items:center;gap:clamp(8px,2.4cqi,16px);min-height:100%}
+.mb .vehicle > .row{justify-content:center}
+.mb .vehicle > .kv{width:min(100%,52ch)}
+/* The board lines in two columns, each value one line: a long grade is cut
+   with its full text on hover, and Health has it whole. */
+.mb .board{width:min(100%,52ch);display:grid;grid-template-columns:repeat(auto-fill,minmax(17ch,1fr));gap:4px 16px}
+.mb .board .cell{display:flex;justify-content:space-between;gap:8px;white-space:nowrap}
+.mb .board .cell > span{color:var(--mb-ink-3)}
+.mb .board .cell > b{font-weight:500}
+.mb .rule{width:min(100%,52ch);font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--mb-ink-3);border-top:1px solid var(--mb-rule);padding-top:6px}
 .mb .wide{grid-column:1/-1}
 /* The Vehicle readout grows with its tile: a dial and three numbers read
    from across the tent, not 80 px in the corner of a quarter-screen panel. */
@@ -202,11 +223,12 @@ body{background:var(--mb-d0)!important}
 .mb label{color:var(--mb-ink-2)}
 
 .mb .msg{min-height:1.45em;color:var(--mb-ink-2)}
+.mb .msg:empty{display:none}
 .mb .msg.bad{color:var(--mb-red)}
 .mb .log, .mb pre{font-size:11px;line-height:1.4;white-space:pre;overflow:auto;margin:0;
   background:var(--mb-sunk);border:1px solid var(--mb-rule);border-radius:3px;padding:6px 8px;
   color:var(--mb-ink-2)}
-.mb .log{flex:1;min-height:8em}
+.mb .log{flex:1;min-height:6em;white-space:pre-wrap;overflow-wrap:anywhere}
 .mb pre{white-space:pre-wrap;max-height:12em}
 .mb table{border-collapse:collapse;width:100%;font-size:11px}
 .mb th{font-weight:400;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mb-ink-3);text-align:left}
@@ -236,13 +258,26 @@ body{background:var(--mb-d0)!important}
 @container (min-width:440px){.mb .cams{flex-direction:row;gap:18px}}
 .mb .bar{height:4px;background:var(--mb-d3);border-radius:2px;overflow:hidden}
 .mb .bar b{display:block;height:100%;background:var(--mb-sea)}
-.mb .health{display:grid;grid-template-columns:fit-content(45%) minmax(0,1fr);gap:2px 12px}
+/* The demand's bars are the thing read on this panel: tall enough to judge by eye. */
+.mb .bar.centre{height:12px;border-radius:2px}
+.mb .bar.centre b{top:0;bottom:0}
+/* Bar and value on one line, the value right-aligned so the digits stay put. */
+.mb .demand{display:flex;align-items:center;gap:12px}
+.mb .demand .bar{flex:1 1 auto}
+.mb .demand > b{flex:none;width:6ch;text-align:right;font-weight:500}
+.mb .health{display:grid;grid-template-columns:max-content fit-content(40%) minmax(0,1fr);gap:5px 12px;align-items:baseline}
+.mb .health .lvl{font-style:normal;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  border:1px solid currentColor;border-radius:2px;padding:1px 6px;text-align:center;min-width:7ch}
+.mb .health .lvl.ok{color:var(--mb-teal)}
+.mb .health .name{color:var(--mb-ink-2)}
 /* The evidence wraps: cut with an ellipsis, the part of a row that says what
    is missing and why ("... flow fused without omega") was the part hidden. */
 .mb .health span{overflow-wrap:anywhere}
-.mb .health span:nth-child(odd){white-space:nowrap}
-/* The pool map fills what the panel has left, square metres kept square. */
-.mb svg.map{width:100%;flex:1 1 auto;min-height:220px;background:var(--mb-sunk);
+.mb .health .name{white-space:nowrap}
+/* The pool map fills what the panel has left, square metres kept square. Its
+   height is the space left, never its drawing's: poolMap shapes the drawing to
+   this box, and a box sized by its drawing would chase it. */
+.mb svg.map{width:100%;flex:1 1 0;height:0;min-height:220px;background:var(--mb-sunk);
   border:1px solid var(--mb-rule);border-radius:3px}
 /* Mongla's mark where Lichtblick's sat; the button is still the app menu. Inline,
    because the desktop app has no /theme/; test_serve_and_fetch keeps it mongla.svg. */

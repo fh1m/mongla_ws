@@ -28,6 +28,7 @@ ros2 run mongla_vision camera_node --ros-args \\
     -p source:=ros_topic -p topic:=/replay/forward/image_raw -p name:=forward
 """
 
+import math
 import os
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
 
@@ -420,7 +421,11 @@ class CameraNode(Node):
     # reopen. Everything else is read once, and a live set of it is refused
     # with the reason, because `ros2 param set` and `set_node` report success
     # for any declared name and the camera would carry on unchanged.
-    LIVE_PARAMS = ('exposure_us', 'controls')
+    LIVE_PARAMS = ('exposure_us', 'controls', 'stream_rate_hz', 'preview_rate_hz')
+    # The viewers' JPEG topics, in `_jpeg_out` order. A rate is only a period
+    # on the publisher, so it applies on any source; Batighor's helm lowers
+    # `stream` while a browser's link lags (mongla_batighor/link.py).
+    JPEG_RATES = ('stream_rate_hz', 'preview_rate_hz')
 
     def _on_set(self, params):
         from rcl_interfaces.msg import SetParametersResult
@@ -434,6 +439,20 @@ class CameraNode(Node):
                 f'{", ".join(fixed)}: read once when the camera opens -- set it '
                 f'under `nodes:` in bringup.yaml and restart'))
         new = {p.name: p.value for p in params}
+        periods = {}
+        for name in self.JPEG_RATES:
+            if name not in new:
+                continue
+            v = new.pop(name)
+            if isinstance(v, bool) or not isinstance(v, (int, float)) \
+                    or not math.isfinite(v) or v < 0:
+                return SetParametersResult(successful=False, reason=(
+                    f'{name} must be a rate in Hz, 0 for off (got {v!r})'))
+            periods[self.JPEG_RATES.index(name)] = 1.0 / v if v > 0 else None
+        if not new:
+            for i, period in periods.items():
+                self._jpeg_out[i][1] = period
+            return SetParametersResult(successful=True)
         if not hasattr(self._cam, 'set_controls'):
             return SetParametersResult(successful=False, reason=(
                 f'the {self._cam.source_kind} source cannot change camera '
@@ -450,6 +469,8 @@ class CameraNode(Node):
             return SetParametersResult(successful=False, reason=(
                 'the camera did not take ' + ', '.join(
                     f'{k}={a} (reads {b})' for k, (a, b) in wrong.items())))
+        for i, period in periods.items():
+            self._jpeg_out[i][1] = period
         return SetParametersResult(successful=True)
 
     # How long to wait after a source reports "nothing new". A source that

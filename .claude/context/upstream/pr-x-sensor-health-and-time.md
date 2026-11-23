@@ -101,8 +101,31 @@ priority of the three; we have a working path.
 
 ---
 
+## 4. A battery input with nothing wired to it (addendum 2026-11-22, not yet sent)
+
+### What we measured
+
+On the bench (USB power, nothing on GPIO36), `BATTERY_STATUS` instance 0 (PM1)
+reads a floating ADC: 1.39 to 25 V on 2026-09-22, and on 2026-11-22 a slow climb
+from a 1.391 V rest to 4.1 V and back, one sample a second (`BUGS.md` B-148,
+B-149). Each shape passed the host's statistical guard until the guard learned
+it.
+
+### What we ask for
+
+Suppress the instance, or send its voltage as unknown (`UINT16_MAX`), when the
+board is configured with nothing on that input, exactly as rev 3 suppresses
+values it cannot stand behind. The board knows its wiring; the host can only
+guess it from the numbers.
+
+### What we have already done on our side
+
+`battery_trusted` condemns an instance by median step, by jumps past 2 V, and by
+two samples under an empty cell (3.0 V) in a window; a condemned line renders
+`--`. It stays as the fallback after the board reports this.
+
 ## What we are not asking for
 
-Nothing in items 1–3 changes control behaviour, and none of it touches the
+Nothing in items 1–4 changes control behaviour, and none of it touches the
 mixer, the depth loop, or arming. We are asking the board to be as careful
 about what it *reports* as rev 3 already made it about what it *believes*.

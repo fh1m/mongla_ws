@@ -42,12 +42,14 @@ than quietly substituting random noise.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import pathlib
 import random
 import re
 import subprocess
 import sys
+import time
 
 _HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
@@ -56,6 +58,8 @@ sys.path.insert(1, str(_HERE.parent))  # tools/: shared libraries
 # The six detect-head convolutions, in the order Hailo expects: the bbox
 # regression and class branch of each scale, interleaved.
 _HEAD = re.compile(r'/cv[23]\.(\d+)/cv[23]\.\d+\.2/Conv$')
+# Calibration frames, cached across builds (calib_frames).
+_CALIB_CACHE = pathlib.Path.home() / 'hailo_work' / 'calib'
 _VIDEO = ('.mp4', '.mkv', '.mov', '.avi', '.MP4', '.MKV')
 
 
@@ -100,48 +104,192 @@ def end_nodes(onnx_path: pathlib.Path) -> list:
                                         '/cv3.' in n))
 
 
-def calib_frames(n: int, imgsz: int, seed: int = 0):
+def _keyframes(clip, imgsz: int, pick=None) -> list:
+    """The keyframes of a clip (those indexed in `pick`, or all), RGB,
+    resized to imgsz x imgsz.
+
+    Keyframes only (`-skip_frame nokey`): they decode without the frames
+    between them, so a clip costs one pass with no seeking. The exact seeks
+    this replaced decoded forward from the previous keyframe each time, and
+    1024 of them across long 1080p clips were most of a 30-minute build.
+    Still real frames from the whole clip, which is what calibration needs.
+    """
+    import numpy as np
+    # Only the picked keyframes are scaled and copied out: scaling every 1080p
+    # keyframe to keep a few was most of what was left of the cost.
+    sel = ('select=' + '+'.join(f'eq(n\\,{i})' for i in pick) + ',') if pick else ''
+    cmd = ['ffmpeg', '-v', 'error', '-skip_frame', 'nokey', '-i', str(clip),
+           '-vsync', 'vfr', '-vf', f'{sel}scale={imgsz}:{imgsz}',
+           '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']
+    try:
+        r = subprocess.run(cmd, capture_output=True, check=False, timeout=600)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f'[hailo] WARNING: {pathlib.Path(clip).name}: {type(e).__name__}')
+        return []
+    raw = r.stdout
+    if r.returncode != 0:
+        # A clip that failed part way is said, never quietly short.
+        print(f'[hailo] WARNING: {pathlib.Path(clip).name}: ffmpeg exit {r.returncode}: '
+              f'{r.stderr.decode(errors="replace").strip()[-200:]}')
+    size = imgsz * imgsz * 3
+    return [np.frombuffer(raw[i:i + size], np.uint8).reshape(imgsz, imgsz, 3)
+            for i in range(0, len(raw) - size + 1, size)]
+
+
+def _keyframe_count(clip) -> int:
+    """Keyframes in a clip, from the packet flags: read, never decoded."""
+    cmd = ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+           '-show_entries', 'packet=flags', '-of', 'csv=p=0', str(clip)]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, check=False,
+                             timeout=300).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return 0
+    return sum(1 for line in out.splitlines() if line.startswith('K'))
+
+
+def allocate(counts: list, n: int) -> list:
+    """How many frames to take from each clip: as even as the clips allow,
+    never more than a clip's own keyframes, so no frame is counted twice.
+    A clip with fewer keyframes than its share gives them all and the rest
+    is spread over the clips that have more (water-filling)."""
+    take = [0] * len(counts)
+    left, open_ = n, [i for i, c in enumerate(counts) if c > 0]
+    while left > 0 and open_:
+        share = max(1, left // len(open_))
+        for i in list(open_):
+            if left == 0:
+                break
+            k = min(share, counts[i] - take[i], left)
+            take[i] += k
+            left -= k
+            if take[i] >= counts[i]:
+                open_.remove(i)
+    return take
+
+
+def unique_clips(clips) -> list:
+    """One clip per content. The same footage filed twice (the archive holds
+    two such pairs) would take two shares of the calibration and give one set
+    of frames. Keyed by size and the first MiB, which tells clips apart."""
+    unique = {}
+    for c in clips:
+        with open(c, 'rb') as fh:
+            unique.setdefault((pathlib.Path(c).stat().st_size,
+                               hashlib.sha1(fh.read(1 << 20)).digest()), c)
+    copies = [pathlib.Path(c).name for c in clips if c not in unique.values()]
+    if copies:
+        print(f'[hailo] calibration: {len(copies)} clip(s) copy another and are '
+              f'read once: {", ".join(copies)}')
+    return sorted(unique.values())
+
+
+def held_out_frames(imgsz: int, roots=(), clips_n: int = 4, per: int = 64):
+    """Frames for the INT8 check that the calibration did not take.
+
+    Calibration takes keyframes only, so a second calibration draw would hand
+    back the same frames and the check would score the model on its own
+    calibration. These are evenly spaced frames of a few archive clips, which
+    land on a keyframe only as often as keyframes occur; that share is printed
+    as the bound on the overlap. (Matching by hash cannot work: these are
+    scaled by cv2 and the calibration by ffmpeg, so equal pictures differ.)
+    """
+    import numpy as np
+    import cv2
+    from archive_root import archive_root
+    from hailo_int8_shift import frames as clip_frames
+    roots = [pathlib.Path(r) for r in roots] or [pathlib.Path(archive_root())]
+    clips = sorted(p for r in roots for p in r.rglob('*') if p.suffix.lower() in _VIDEO)
+    random.Random(1).shuffle(clips)
+    out = []
+    for c in clips[:clips_n]:
+        cap = cv2.VideoCapture(str(c))
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        cap.release()
+        share = _keyframe_count(c) / total if total else float('nan')
+        print(f'[hailo] held out: {per} frames of {c.name}, keyframes {share:.1%} '
+              f'of its frames (the most of these calibration can have seen)')
+        out.append(clip_frames(str(c), per, imgsz))
+    return np.concatenate(out).astype('float32')
+
+
+def calib_frames(n: int, imgsz: int, seed: int = 0, roots=(), exclude=()):
     """Real frames, sampled across the whole archive rather than one clip.
 
     Drawing them from one video would calibrate on one venue's water, which is
     the same mistake as calibrating on synthetic imagery wearing a disguise.
     """
-    import cv2
     import numpy as np
     from archive_root import archive_root
 
-    root = pathlib.Path(archive_root())
-    clips = [p for p in root.rglob('*') if p.suffix in _VIDEO]
+    # Every footage root named, the archive's by default. The verify clips are
+    # left out: a frame the model was calibrated on cannot also be the check.
+    roots = [pathlib.Path(r) for r in roots] or [pathlib.Path(archive_root())]
+    root = ', '.join(str(r) for r in roots)
+    skip = {pathlib.Path(c).resolve() for c in exclude}
+    t0 = time.monotonic()
+    clips = sorted({p.resolve() for r in roots for p in r.rglob('*')
+                    if p.suffix.lower() in _VIDEO} - skip)
+    # The frames depend only on the archive, n, imgsz and seed, and sampling
+    # them (a walk of the archive, then seeks into long 1080p clips that each
+    # decode from a keyframe) cost minutes on every build. Cached beside the
+    # build products, keyed by all four, so only a changed archive pays again.
+    key = hashlib.sha1('\n'.join(f'{c}:{c.stat().st_size}' for c in clips).encode()
+                       + f'|{n}|{imgsz}|{seed}'.encode()).hexdigest()[:12]
+    cache = _CALIB_CACHE / f'calib_{n}_{imgsz}_{seed}_{key}.npy'
+    if cache.exists():
+        arr = np.load(cache)
+        print(f'[hailo] calibration: {len(arr)} cached frames ({cache.name}), '
+              f'{time.monotonic() - t0:.1f} s')
+        return arr
+    clips = unique_clips(clips)
     if not clips:
         raise SystemExit(
             f'[hailo] REFUSING: no video under {root}. INT8 scales taken from '
             f'synthetic data lose the faintest detections in real water, so '
             f'this will not substitute noise. Set MONGLA_ARCHIVE.')
     random.Random(seed).shuffle(clips)
-    out, per = [], max(1, n // min(len(clips), 40) + 1)
-    for clip in clips:
-        if len(out) >= n:
-            break
-        cap = cv2.VideoCapture(str(clip))
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        if total > 1:
-            for k in range(per):
-                cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * (k + 0.5) / per))
-                ok, img = cap.read()
-                if ok:
-                    out.append(cv2.resize(img, (imgsz, imgsz))[:, :, ::-1])
-        cap.release()
-    if len(out) < n // 2:
-        raise SystemExit(f'[hailo] REFUSING: only {len(out)} readable frames '
-                         f'of {n} requested across {len(clips)} clips.')
-    print(f'[hailo] calibration: {len(out)} frames from {len(clips)} clips '
-          f'under {root}')
+    # Each clip gives at most its own keyframes: a short clip asked for more
+    # than it holds would repeat frames while the count still read n, the
+    # quiet loss of variety that a calibration set must not have (B-61).
+    # Clips are read side by side: each is an ffprobe or ffmpeg process, so
+    # threads are enough, and six keep RAM bounded to six clips' picks.
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        counts = list(pool.map(_keyframe_count, clips))
+        # 15 % spare: a clip cut from another with `-c copy` shares its
+        # keyframes without sharing its bytes, and the repeats are dropped below.
+        take = allocate(counts, int(n * 1.15))
+        jobs = [(c, [int(cnt * (j + 0.5) / k) for j in range(k)])
+                for c, cnt, k in zip(clips, counts, take) if k]
+        picked = list(pool.map(lambda job: _keyframes(job[0], imgsz, job[1]), jobs))
+    print(f'[hailo] calibration: {sum(counts)} keyframes in {len(clips)} clips, '
+          f'counted and picked in {time.monotonic() - t0:.0f} s')
+    out, digests = [], set()
+    for keys in picked:
+        for img in keys:
+            d = hashlib.sha1(img.tobytes()).digest()
+            if d not in digests:            # a still scene repeats a keyframe
+                digests.add(d)
+                out.append(img)
+    used = sum(1 for k in take if k)
+    if len(out) > n:                   # thin the spare evenly, every clip keeps its share
+        out = [out[int(i * len(out) / n)] for i in range(n)]
+    if len(out) < n:
+        raise SystemExit(f'[hailo] REFUSING: only {len(out)} distinct frames of '
+                         f'{n} across {len(clips)} clips. Add footage; repeating '
+                         f'frames would read as {n} and calibrate on less.')
+    print(f'[hailo] calibration: {len(out)} distinct frames from {used} of '
+          f'{len(clips)} clips under {root}, sampled in {time.monotonic() - t0:.0f} s')
     # uint8, NOT float32. 1024 x 640 x 640 x 3 is 1.26 GB as uint8 and
     # 5.0 GB as float32 -- and it was that 5 GB which pushed me to cut the set
     # to 256 frames, crossing the DFC's 1024 optimisation cliff and producing
     # the corrupted HEF in B-61. The DFC casts internally, so staging narrow
     # costs nothing and removes the reason to shrink the set.
-    return np.stack(out[:n]).astype('uint8')
+    arr = np.stack(out[:n]).astype('uint8')
+    _CALIB_CACHE.mkdir(parents=True, exist_ok=True)
+    np.save(cache, arr)
+    return arr
 
 
 DFC_MIN_CALIB = 1024
@@ -254,6 +402,10 @@ def main() -> int:
     # smaller set. `--allow-reduced-optimization` exists for a deliberate
     # throwaway build and says so in the log.
     ap.add_argument('--calib-frames', type=int, default=1024)
+    ap.add_argument('--calib-root', action='append', default=[],
+                    help='a footage folder to calibrate on, repeatable (default: '
+                         'the archive). Name the current season\'s water: the '
+                         'models compiled are that season\'s')
     ap.add_argument('--allow-reduced-optimization', action='store_true',
                     help='proceed below 1024 frames; the HEF will have '
                          'corrupted scores and must not be deployed')
@@ -358,7 +510,8 @@ def main() -> int:
         print('[hailo] WARNING: REDUCED OPTIMIZATION requested. This HEF will have '
               'corrupted scores. Do not deploy it.')
 
-    frames = calib_frames(a.calib_frames, a.imgsz)
+    frames = calib_frames(a.calib_frames, a.imgsz, roots=a.calib_root,
+                          exclude=a.verify_clip)
     gpu = _gpu_visible()
     before = downgrade_reasons(frames=len(frames), gpu=gpu)
     if before and not a.allow_reduced_optimization:
@@ -380,9 +533,12 @@ def main() -> int:
     # a logger that may not propagate; read what this optimise appended.
     dfc_log = pathlib.Path.cwd() / 'hailo_sdk.client.log'
     start = dfc_log.stat().st_size if dfc_log.exists() else 0
+    t_opt = time.monotonic()
     try:
         runner.optimize(frames)
     finally:
+        print(f'[hailo] optimise: {time.monotonic() - t_opt:.0f} s '
+              f'({"GPU" if gpu else "CPU"})')
         logging.getLogger().removeHandler(keep)
     if dfc_log.exists():
         with dfc_log.open('r', errors='replace') as fh:
@@ -402,8 +558,7 @@ def main() -> int:
     import numpy as np
     from hailo_int8_shift import frames as clip_frames, int8_vs_fp
     held = (np.concatenate([clip_frames(c, 100, a.imgsz) for c in a.verify_clip])
-            if a.verify_clip else
-            calib_frames(256, a.imgsz, seed=1).astype('float32'))
+            if a.verify_clip else held_out_frames(a.imgsz, a.calib_root))
     shift = int8_vs_fp(runner, held)
     print(f'[hailo] INT8 vs float on {len(held)} held-out frames: n={shift["n"]} '
           f'median {shift["median"]:+.3f} p90 {shift["p90"]:+.3f}')

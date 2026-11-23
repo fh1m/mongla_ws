@@ -170,7 +170,8 @@ class FlowChecksMixin:
         """
         if not self._yaw_rate_buf or dt <= 0.0:
             return
-        gy = interp_rate([(a, b, 0.0) for (a, b) in self._yaw_rate_buf],
+        # One snapshot: the IMU callback appends on another thread.
+        gy = interp_rate([(a, b, 0.0) for (a, b) in list(self._yaw_rate_buf)],
                          t - dt * 0.5)
         if gy is None:
             return
@@ -270,6 +271,7 @@ class FlowChecksMixin:
             var += (speed * getattr(self, '_floor_sigma_m', 0.0) / float(h)) ** 2
         pr, rr = getattr(self, '_last_rates', (0.0, 0.0))
         for rate, gain in ((pr, self._gy), (rr, self._gx)):
-            residual = 1.0 if gain == 0.0 else FLOW_ROT_RESIDUAL_CALIBRATED
+            fitted = gain != 0.0 and getattr(self, '_gains_fitted', True)
+            residual = FLOW_ROT_RESIDUAL_CALIBRATED if fitted else 1.0
             var += (residual * float(h) * float(rate)) ** 2
         return var

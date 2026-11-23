@@ -14,6 +14,9 @@
 const RUNGS = ["detection", "held", "follow", "anchor", "lost"];
 const RUNG_COLOUR = { detection: "var(--mb-red)", held: "var(--mb-amber)", follow: "var(--mb-glass)", anchor: "var(--mb-violet)", lost: "var(--mb-ink-3)" };
 const LEVEL = ["ok", "warn", "err", "stale"];
+// What each level is called on screen: STALE in /diagnostics means the
+// manager could not tell, which an operator reads as "unknown".
+const LEVEL_WORD = { ok: "ok", warn: "warn", err: "fail", stale: "unknown" };
 const REDRAW_MS = 100;
 const MISSION_ALIVE_S = 1.5;  // the runner beats at 2 Hz; silent this long is no mission (helm.MISSION_ALIVE_S)
 const TRACK_S = 120;          // the navigation plan view keeps two minutes of track
@@ -29,6 +32,10 @@ const ageS = (t) => (t ? (Date.now() - t) / 1000 : Infinity);
 // late keeps its own age (see LAST in makePanel).
 let HEARD = 0;
 const heard = () => HEARD || Date.now();
+// The bridge's own time for the message being folded (Lichtblick's
+// receiveTime: when Kutum's bridge took it), or null.
+let SENT = null;
+const sent = () => SENT;
 
 function svg(tag, attrs, ...kids) {
   const e = document.createElementNS(SVG, tag);
@@ -81,7 +88,7 @@ function depthGauge(depthBelow, floorM) {
 function centreBar(v) {
   const ok = fin(v);
   const w = ok ? Math.min(1, Math.abs(v)) * 50 : 0;
-  return el("div", { class: "bar", style: "position:relative" },
+  return el("div", { class: "bar centre", style: "position:relative" },
     el("b", { style: `position:absolute;${v < 0 ? "right" : "left"}:50%;width:${w}%;${ok ? "" : "display:none"}` }),
     el("i", { style: "position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--mb-ink-3)" }));
 }
@@ -150,12 +157,23 @@ function poolMap(course, pose, track, fixes, target, opts) {
   const span = Math.max(n1 - n0, e1 - e0, 4);
   const pad = span * 0.08;
   const cn = (n0 + n1) / 2, ce = (e0 + e1) / 2;
-  n0 = cn - span / 2 - pad; n1 = cn + span / 2 + pad; e0 = ce - span / 2 - pad; e1 = ce + span / 2 + pad;
+  // `opts.px`, the drawing's size on screen: the map takes the panel's shape
+  // (a square pool drawing in a wide panel left two thirds of it black) and
+  // `u` is one screen pixel, so a name is 12 px at any panel size; at half
+  // height the names were 7 px (Kutum, 2026-11-23). Without it, a square
+  // drawn as if 300 px wide.
+  const px = O.px && O.px.w > 0 && O.px.h > 0 ? O.px : null;
+  const m = px ? Math.max((span + 2 * pad) / px.w, (span + 2 * pad) / px.h) : (span + 2 * pad) / 300;
+  const hw = px ? (m * px.w) / 2 : span / 2 + pad, hh = px ? (m * px.h) / 2 : span / 2 + pad;
+  n0 = cn - hh; n1 = cn + hh; e0 = ce - hw; e1 = ce + hw;
   const W = e1 - e0;
   // SVG in metres: east right, north up (the y axis flipped by drawing at -x).
   const X = (p) => p.y, Y = (p) => -p.x;
-  const u = W / 300;                      // one "pixel" of a 300 px wide map, in metres
-  const step = W > 40 ? 5 : W > 12 ? 2 : W > 5 ? 1 : 0.5;
+  const u = m;                            // one screen pixel, in metres
+  // The grid's step from what is drawn, not the panel: a wide panel drew
+  // 5 m squares on a 9 m pool (2026-11-23).
+  const drawn = span + 2 * pad;
+  const step = drawn > 40 ? 5 : drawn > 12 ? 2 : drawn > 5 ? 1 : 0.5;
   const kids = [];
   for (let g = Math.ceil(e0 / step) * step; g <= e1; g += step) kids.push(svg("line", { x1: g, y1: -n1, x2: g, y2: -n0, stroke: "var(--mb-rule)", "stroke-width": u }));
   for (let g = Math.ceil(n0 / step) * step; g <= n1; g += step) kids.push(svg("line", { x1: e0, y1: -g, x2: e1, y2: -g, stroke: "var(--mb-rule)", "stroke-width": u }));
@@ -166,9 +184,9 @@ function poolMap(course, pose, track, fixes, target, opts) {
     kids.push(svg("circle", { cx: y, cy: -x, r: 2 * u, fill: "var(--mb-teal)" }));
     // Left of the dot: prop names are written to the right of theirs, and a
     // sounding beside a prop read as one label (bench course, 2026-11-21).
-    kids.push(svg("text", { x: y - 4 * u, y: -x + 3 * u, "font-size": 8 * u, fill: "var(--mb-teal)", "text-anchor": "end", ...HALO(u) }, `${num(d, 2)} m`));
+    kids.push(svg("text", { x: y - 5 * u, y: -x + 4 * u, "font-size": 11 * u, fill: "var(--mb-teal)", "text-anchor": "end", ...HALO(u) }, `${num(d, 2)} m`));
   }
-  const text = (x, y, s, fill, anchor) => svg("text", { x, y, "font-size": 9 * u, fill, "text-anchor": anchor || "start", ...HALO(u) }, s);
+  const text = (x, y, s, fill, anchor) => svg("text", { x, y, "font-size": 12 * u, fill, "text-anchor": anchor || "start", ...HALO(u) }, s);
   for (const p of props) {
     const ink = p.measured ? "var(--mb-ink)" : "var(--mb-amber)";
     const dash = p.measured ? "" : `${3 * u},${2 * u}`;
@@ -293,7 +311,7 @@ function drawMap(s, forLocalization) {
     const ft = s.flow && s.flow.twist && s.flow.twist.twist && s.flow.twist.twist.linear;
     if (ft) vel.push({ ...turn(ft.x, ft.y), ink: "var(--mb-teal)" });
   }
-  const map = poolMap(c, pose, s.track || [], s.fixes || [], target, { rays: forLocalization, vel });
+  const map = poolMap(c, pose, s.track || [], s.fixes || [], target, { rays: forLocalization, vel, px: s.mapPx });
   out.push(map || el("div", { class: "note" }, "nothing placed yet: survey the pool (course_survey --corner, --prop, --floor)"));
   const un = c.unplaced || [];
   const where = pose ? `${num(pose.x, 2)}, ${num(pose.y, 2)} m  heading ${num(fin(pose.yaw) ? (pose.yaw * 180) / Math.PI : NaN, 0)} deg` : "--";
@@ -383,9 +401,15 @@ function healthRows(rows, filter) {
   const shown = rows.filter((r) => !key || r.name.includes(key) !== not)
     .sort((a, b) => (b.level - a.level) || a.name.localeCompare(b.name));
   return shown.length
-    ? el("div", { class: "health" }, ...shown.flatMap((r) => [
-      el("span", { class: LEVEL[r.level] || "stale" }, r.name.replace(/^mongla: /, "")),
-      el("span", { class: r.level ? LEVEL[r.level] : "", title: r.message }, r.message)]))
+    // The level in words in its own column: colour alone left the six
+    // unknown rows looking exactly like the good ones (2026-11-23).
+    ? el("div", { class: "health" }, ...shown.flatMap((r) => {
+      const lvl = LEVEL[Math.min(r.level, 3)] || "stale";
+      return [
+        el("i", { class: `lvl ${lvl}` }, LEVEL_WORD[lvl]),
+        el("span", { class: "name" }, r.name.replace(/^mongla: /, "")),
+        el("span", { class: r.level ? lvl : "", title: r.message }, r.message)];
+    }))
     : el("div", { class: "note" }, "no /diagnostics rows yet: the manager grades health once it runs");
 }
 
@@ -398,6 +422,96 @@ function foldDiagnostics(s, m) {
   }
 }
 
+// The Vehicle card's content, centred in its panel by `.vehicle`. Under the
+// state, the board lines an operator checks before arming, graded by the
+// manager (/diagnostics): absent means not graded yet, never fine.
+const BOARD_LINES = [["link", "board_link"], ["leak", "leak"], ["kill line", "thruster_power"],
+  ["barometer", "barometer"], ["heading ref", "heading_ref"], ["safety latch", "safety_latch"]];
+
+function vehicleBody(s, v, h, below) {
+  // The manager names each row "mongla: <line>".
+  const graded = (key) => (s.health || []).find((r) => r.name === key || r.name.endsWith(`: ${key}`));
+  const board = BOARD_LINES.map(([label, key]) => {
+    const r = graded(key);
+    if (!r) return [label, "--", "stale", "not graded yet"];
+    const lvl = LEVEL[Math.min(r.level, 3)];
+    // A good line says "ok"; only a line with something to say spends the room.
+    // One word a line, the manager's sentence on hover (Health has it whole).
+    const word = LEVEL_WORD[lvl];
+    return [label, word, lvl === "ok" ? "good" : lvl, r.message];
+  });
+  return [
+    el("div", { class: "row" },
+      el("span", { class: v.armed ? "armed" : "ok" }, v.armed ? "ARMED" : "disarmed"),
+      el("span", {}, v.mode || "--"),
+      h.mission && el("span", { class: "live" }, `mission ${h.mission}`)),
+    el("div", { class: "row gauges" },
+      compass(v.yaw_deg), depthGauge(below, 3),
+      el("div", { class: "readouts" },
+        el("span", { class: "big" }, num(below, 2), el("span", { class: "unit" }, "m deep")),
+        el("span", { class: "big" }, num(v.yaw_deg, 0), el("span", { class: "unit" }, "deg")),
+        el("span", { class: "big" }, num(v.battery_voltage, 1), el("span", { class: "unit" }, "V")))),
+    kv(ageS(s.aliveAt) < MISSION_ALIVE_S ? ["mission", `running ${s.missionName || ""}`, "live"] : ["mission", "none"],
+      ["pilot", h.pilot || "nobody"], ["state age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 2 ? "warn" : ""],
+      // Silence is "no order", never a default (node_vision._publish_flare_order).
+      ["flare order", s.flare ? (s.flare.colours || []).join("-") : "none latched", s.flare ? "live" : ""]),
+    el("div", { class: "rule" }, "board"),
+    // One cell per line, label and word together: cells wrap whole, so a
+    // narrow card shows fewer per row and never cuts a word.
+    el("div", { class: "board" }, ...board.map(([k, val, cls, full]) =>
+      el("span", { class: "cell", title: full }, el("span", {}, k), el("b", { class: cls || "" }, val)))),
+  ];
+}
+
+// How late this screen is: arrival here minus the time Kutum's bridge took the
+// vehicle state (Lichtblick's receiveTime; the state's header stamp only when
+// there is none). The header is the board's capture time, which is data age,
+// not this screen's; on 2026-11-23 the strip read a steady 0.56 s from it
+// while a raw socket in the same page read 17 ms. foxglove_bridge
+// sends a client its messages in arrival order; when the pictures outrun the
+// link, every message waits behind them, each still arriving, each seconds
+// old, so a gap between arrivals cannot see it (2026-11-23). Arrival minus
+// stamp is that wait plus the two clocks' offset; the least of it over the
+// last minute is the offset plus the link's own latency, so the difference
+// is the queue. A lag that lasts longer than the window becomes the new
+// floor and reads 0: a minute is longer than any queue the bridge holds.
+// Exported for the test.
+const LAG_WINDOW_MS = 60000;
+function noteLag(s, at, stamp) {
+  if (!stamp || !fin(stamp.sec)) return;
+  const off = at - (stamp.sec * 1000 + (stamp.nanosec ?? stamp.nsec ?? 0) / 1e6);
+  if (!fin(off)) return;
+  const w = (s.lagWin = (s.lagWin || []).filter(([t]) => at - t <= LAG_WINDOW_MS));
+  w.push([at, off]);
+  let least = Infinity;
+  for (const [, o] of w) least = Math.min(least, o);
+  s.lag = (off - least) / 1000;
+}
+
+// When a screen reports its lag to the helm: every 2 s, and not in its first
+// 15 s, while a page that has just loaded lags as every panel mounts; one new
+// screen must not cut every screen's video for the half minute it takes to
+// climb back. Exported for the test.
+const REPORT_MS = 2000, WARM_MS = 15000;
+// This page's own short id, so the helm's log and every strip can say which
+// screen cut the shared video; the operator closes that one.
+const SCREEN = Math.floor(Math.random() * 0x10000).toString(16).padStart(4, "0");
+// The shared video's scale, and which screen cut it: "this screen" when it
+// was this one, so the operator knows which to close.
+function videoWords(scale, by, me = SCREEN) {
+  if (!fin(scale)) return "video --";
+  if (scale >= 1 || !by) return `video x${scale}`;
+  return `video x${scale} set by ${by === me ? "this screen" : `screen ${by}`}`;
+}
+
+function shouldReport(s, now) {
+  if (!fin(s.lag)) return false;
+  if (!fin(s.mountAt)) s.mountAt = now;
+  if (now - s.mountAt < WARM_MS || now - (s.lagSent || -Infinity) < REPORT_MS) return false;
+  s.lagSent = now;
+  return true;
+}
+
 // -- the table -----------------------------------------------------------
 
 // The status strip's cells and the console's tab marks, from one fold. Pure:
@@ -407,7 +521,12 @@ function statusOf(s, now) {
   const age = (t) => (t ? (now - t) / 1000 : Infinity);
   const v = s.v, cells = [], tabs = {};
   const fresh = v && age(s.vAt) < 2;
-  cells.push(["vehicle", !v ? "--" : v.armed ? "ARMED" : "disarmed", !fresh ? "stale" : v.armed ? "armed" : "ok"]);
+  // Gone quiet: the last word stays, with its age, as a warning. A starved
+  // link (pictures filling a slow deck connection) showed a calm "disarmed"
+  // while nothing had arrived for seconds (2026-11-23).
+  const armedWord = !v ? "--" : v.armed ? "ARMED" : "disarmed";
+  cells.push(["vehicle", v && !fresh ? `${armedWord}  ${num(age(s.vAt), 1)} s old` : armedWord,
+    !v ? "stale" : !fresh ? "warn" : v.armed ? "armed" : "ok"]);
   cells.push(["mode", v ? v.mode || "--" : "--", ""]);
   cells.push(["depth", v && fin(v.depth_m) ? `${num(-v.depth_m, 2)} m` : "--", ""]);
   cells.push(["heading", v ? `${num(v.yaw_deg, 0)} deg` : "--", ""]);
@@ -434,13 +553,17 @@ function statusOf(s, now) {
   cells.push(["health", worst < 0 ? "--" : said || "all ok", worst < 0 ? "stale" : LEVEL[worst]]);
   const l = s.link && age(s.linkAt) < 3 ? s.link : null;
   cells.push(["link", l ? `${num(100 * l.bytes_per_s / (l.capacity_bytes_per_s || NaN), 0)} %  drops ${num(l.board_drop_pct, 1)} %` : "--", !l ? "stale" : l.board_drop_pct > 1 ? "warn" : "ok"]);
+  // This screen's link to Kutum, apart from the board's line above: the lag
+  // and the scale the helm put the viewers' video at for it (link.py).
+  const lagLvl = !fin(s.lag) ? "stale" : s.lag > 2 ? "err" : s.lag > 0.5 ? "warn" : "ok";
+  cells.push(["to kutum", fin(s.lag) ? `lag ${num(s.lag, 2)} s  ${videoWords(s.video, s.videoBy)}` : "--", lagLvl]);
   tabs.Cockpit = v && v.armed ? "live" : "";
   tabs.Thrust = v && v.armed ? "live" : "";
   tabs.Mission = running ? "live" : "";
   tabs.Vision = held.length ? "live" : "";
   tabs.Map = tabs.Localization = !loc ? "" : anchored ? "ok" : loc.usable ? "" : "warn";
   tabs.Health = worst < 0 ? "" : LEVEL[Math.min(worst, 3)] === "ok" ? "ok" : LEVEL[Math.min(worst, 3)];
-  tabs.Link = !l ? "" : l.board_drop_pct > 1 ? "warn" : "";
+  tabs.Link = lagLvl === "err" || lagLvl === "warn" ? lagLvl : !l ? "" : l.board_drop_pct > 1 ? "warn" : "";
   return { cells, tabs };
 }
 
@@ -451,9 +574,11 @@ const INSTRUMENTS = {
     title: "Status",
     kind: "status",
     topics: ["/mongla/state", "/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics",
-      "/mongla/localization/state", "/mongla/board_link", ...CAMERAS.map(lockTopic)],
+      "/mongla/localization/state", "/mongla/board_link", "/mongla/batighor/helm_state",
+      ...CAMERAS.map(lockTopic)],
     fold(s, topic, m) {
-      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); }
+      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteLag(s, heard(), sent() || (m.header && m.header.stamp)); }
+      else if (topic === "/mongla/batighor/helm_state") { try { const h = JSON.parse(m.data); s.video = h.video; s.videoBy = h.video_by || ""; } catch { /* keep */ } }
       else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
       else if (topic === "/mongla/mission/task") { try { s.task = JSON.parse(m.data); } catch { /* keep */ } }
       else if (topic === "/mongla/doing") { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
@@ -467,6 +592,13 @@ const INSTRUMENTS = {
     },
     draw(s) {
       const { cells, tabs } = statusOf(s, Date.now());
+      // Every 2 s, this screen's lag to the helm, which sets the viewers'
+      // video for the slowest screen (link.py). Through any mounted panel;
+      // no helm, no report, and nothing else depends on it.
+      if (typeof callAny === "function" && shouldReport(s, Date.now())) {
+        callAny("/mongla/batighor/helm", { who: "", op: "link", cmd: "", mission: "", confirms: [],
+          fields_json: JSON.stringify({ lag_s: Math.round(s.lag * 1000) / 1000, screen: SCREEN }) }).catch(() => { /* no helm */ });
+      }
       if (typeof document !== "undefined" && document.querySelectorAll) {
         for (const tab of document.querySelectorAll('[data-testid="toolbar-tab"]')) {
           const lvl = tabs[tab.getAttribute("title")] || "";
@@ -479,9 +611,11 @@ const INSTRUMENTS = {
 
   Vehicle: {
     title: "Vehicle",
-    topics: ["/mongla/state", "/mongla/batighor/helm_state", "/mongla/flare_order", "/mongla/mission_alive"],
+    topics: ["/mongla/state", "/mongla/batighor/helm_state", "/mongla/flare_order", "/mongla/mission_alive",
+      "/diagnostics"],
     fold(s, topic, m) {
       if (topic === "/mongla/state") { s.v = m; s.at = heard(); }
+      else if (topic === "/diagnostics") foldDiagnostics(s, m);
       // The runner's 2 Hz beat, carrying its name.
       else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
       else if (topic === "/mongla/flare_order") { try { s.flare = JSON.parse(m.data); } catch { /* keep */ } }
@@ -491,25 +625,9 @@ const INSTRUMENTS = {
       const v = s.v, h = s.helm || {};
       if (!v) return [el("div", { class: "note" }, "no /mongla/state: is the manager running?")];
       const below = fin(v.depth_m) ? -v.depth_m : NaN;
-      return [
-        el("div", { class: "row" },
-          el("span", { class: v.armed ? "armed" : "ok" }, v.armed ? "ARMED" : "disarmed"),
-          el("span", {}, v.mode || "--"),
-          h.mission && el("span", { class: "live" }, `mission ${h.mission}`)),
-        el("div", { class: "row gauges" },
-          compass(v.yaw_deg), depthGauge(below, 3),
-          el("div", { class: "readouts" },
-            el("span", { class: "big" }, num(below, 2), el("span", { class: "unit" }, "m deep")),
-            el("span", { class: "big" }, num(v.yaw_deg, 0), el("span", { class: "unit" }, "deg")),
-            el("span", { class: "big" }, num(v.battery_voltage, 1), el("span", { class: "unit" }, "V")))),
-        kv(ageS(s.aliveAt) < MISSION_ALIVE_S ? ["mission", `running ${s.missionName || ""}`, "live"] : ["mission", "none"],
-          ["pilot", h.pilot || "nobody"], ["state age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 2 ? "warn" : ""],
-          // Silence is "no order", never a default (node_vision._publish_flare_order).
-          ["flare order", s.flare ? (s.flare.colours || []).join("-") : "none latched", s.flare ? "live" : ""]),
-      ];
+      return [el("div", { class: "vehicle" }, ...vehicleBody(s, v, h, below))];
     },
   },
-
   Vision: {
     title: "Vision",
     topics: [...CAMERAS.flatMap((c) => [lockTopic(c), seeingTopic(c), modelTopic(c)]), "/mongla/vision/active_camera", STAGES_TOPIC],
@@ -691,7 +809,8 @@ const INSTRUMENTS = {
       const rpm = s.rpm || [];
       return [
         el("div", { class: "note" }, "the demand sent to the board, -1 to 1 (NaN: a board primitive owns it)"),
-        kv(["surge", el("span", {}, centreBar(d.x), num(d.x, 2))], ["sway", el("span", {}, centreBar(d.y), num(d.y, 2))]),
+        kv(...[["surge", d.x], ["sway", d.y]].map(([k, x]) =>
+          [k, el("span", { class: "demand" }, centreBar(x), el("b", {}, num(x, 2)))])),
         el("div", { class: "note" }, rpm.length
           ? `ESC rpm, as each ESC reports it (scale: ${num(s.peak, 0)} rpm)`
           : "no ESC rpm: the board has not announced its ESCs (none is shown as zero)"),
@@ -787,9 +906,10 @@ const INSTRUMENTS = {
 // at their own arrival times, so an old one reads as old.
 const LAST = new Map();
 
-function foldAt(spec, s, topic, m, at) {
+function foldAt(spec, s, topic, m, at, rx) {
   HEARD = at;
-  try { spec.fold(s, topic, m); } finally { HEARD = 0; }
+  SENT = rx || null;
+  try { spec.fold(s, topic, m); } finally { HEARD = 0; SENT = null; }
 }
 
 function makePanel(spec) {
@@ -804,20 +924,26 @@ function makePanel(spec) {
     root.append(box);
     for (const topic of spec.topics) {
       const last = LAST.get(topic);
-      if (last) foldAt(spec, s, topic, last.m, last.at);
+      if (last) foldAt(spec, s, topic, last.m, last.at, last.rx);
     }
     context.subscribe(spec.topics.map((topic) => ({ topic })));
     context.watch("currentFrame");
     context.onRender = (renderState, done) => {
       for (const ev of renderState.currentFrame || []) {
         const at = Date.now();
-        LAST.set(ev.topic, { m: ev.message, at });
-        foldAt(spec, s, ev.topic, ev.message, at);
+        LAST.set(ev.topic, { m: ev.message, at, rx: ev.receiveTime });
+        foldAt(spec, s, ev.topic, ev.message, at, ev.receiveTime);
         dirty = true;
       }
       done();
     };
-    const draw = () => box.replaceChildren(...spec.draw(s).filter(Boolean));
+    const draw = () => {
+      // A drawing that fits its panel needs the panel's size: the map's last
+      // box, read before it is replaced (one redraw late on a resize).
+      const was = box.querySelector("svg.map");
+      if (was) { const r = was.getBoundingClientRect(); s.mapPx = { w: r.width, h: r.height }; }
+      box.replaceChildren(...spec.draw(s).filter(Boolean));
+    };
     // Ages move with no message, and a silent node is what an operator must see.
     const tick = setInterval(() => { dirty = true; }, 1000);
     let raf = 0;
@@ -945,6 +1071,9 @@ module.exports = {
   poolMap,
   drawMap,
   statusOf,
+  noteLag,
+  shouldReport,
+  videoWords,
   layoutUpdates,
   placeByStart,
   makePanel,

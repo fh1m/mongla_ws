@@ -21,6 +21,10 @@ typed. The rules of the token are `seat.py`; this node adds the vehicle:
     the latched `/mongla/vision/active_camera`, the other detector paused.
     The bridge gives browsers no parameter access of their own
     (`bringup.launch.py` BRIDGE_LIMITS), so these are the only way;
+  * `link` takes one browser's queueing lag and sets the cameras' viewer
+    stream by `link.py`'s policy: halved while any browser lags, stepped back
+    after a calm spell. Anyone, named or not: it drives nothing, and the
+    pictures are what starve the vehicle's state on a slow link;
   * `calibrate` passes one op to a running calibration
     (`mongla_vision/calibration/calibrate_node.py`), by the same rule as
     `tune`: any named operator, never during a mission.
@@ -54,6 +58,7 @@ from rcl_interfaces.msg import ParameterType, ParameterValue
 from rcl_interfaces.srv import GetParameters, SetParameters
 from std_msgs.msg import String
 
+from mongla_batighor.link import StreamGovernor
 from mongla_batighor.seat import CAMERAS, TUNABLE, Seat, Verdict
 from mongla_interfaces.action import Move
 from mongla_interfaces.srv import Helm
@@ -148,6 +153,13 @@ def build_goal(cmd: str, fields_json: str):
 
 LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
+# A viewer opened after the events (every fresh browser) would show an empty log
+# card while helm.log held days of them. foxglove_bridge hands a new subscriber
+# ONE latched message, so the history travels as one: the last HISTORY_LINES
+# lines as a JSON array on LOG_TAIL, re-latched on every entry.
+HISTORY_LINES = 200
+LOG_TAIL = '/mongla/batighor/log_tail'
+
 class HelmNode(Node):
     def __init__(self, log_path=None):
         super().__init__('batighor_helm')
@@ -162,6 +174,9 @@ class HelmNode(Node):
         self.pub_state = self.create_publisher(
             String, '/mongla/batighor/helm_state', LATCHED)
         self.pub_log = self.create_publisher(String, '/mongla/batighor/log', 50)
+        self.pub_tail = self.create_publisher(String, LOG_TAIL, LATCHED)
+        self._tail = self._read_tail()
+        self.pub_tail.publish(String(data=json.dumps(self._tail)))
         self.create_subscription(String, '/mongla/mission_alive',
                                  self._on_mission_alive, 10)
         self.create_service(Helm, '/mongla/batighor/helm', self._on_request)
@@ -180,6 +195,10 @@ class HelmNode(Node):
                                  lambda m: setattr(self, 'camera', m.data), LATCHED)
         self.create_timer(1.0, self._poll)
         self._calibration = self.create_client(Helm, CALIBRATION_OP)
+        # The viewers' video (link.py): each camera node found by who
+        # publishes its stream, its own rate read once as the top.
+        self.link = StreamGovernor()
+        self._stream = {}               # node path -> {'get', 'set', 'top'}
 
     # -- the record ---------------------------------------------------
     def _log(self, **entry):
@@ -188,6 +207,14 @@ class HelmNode(Node):
         self.pub_log.publish(String(data=line))
         with open(self.log_path, 'a') as f:
             f.write(line + '\n')
+        self._tail = (self._tail + [line])[-HISTORY_LINES:]
+        self.pub_tail.publish(String(data=json.dumps(self._tail)))
+
+    def _read_tail(self):
+        try:
+            return self.log_path.read_text().splitlines()[-HISTORY_LINES:]
+        except OSError:
+            return []
 
     def _flush_seat(self):
         for what in self.seat.events:
@@ -211,6 +238,8 @@ class HelmNode(Node):
             'missions': self.missions,
             'camera': self.camera,
             'tuning': self.tuning,
+            'video': self.link.scale,
+            'video_by': self.link.by,
         }, sort_keys=True)
         if force or state != self._last_state:
             self._last_state = state
@@ -240,10 +269,14 @@ class HelmNode(Node):
             v = self._camera(who, req.cmd)
         elif op == 'calibrate':
             v = self._calibrate(who, req.cmd, req.fields_json)
+        elif op == 'link':
+            v = self._link(req.fields_json)
         else:
             v = Verdict(False, f'unknown op {op!r}')
         res.ok, res.message = v.ok, v.message
-        if op != 'heartbeat':
+        # A beat and a lag report come every second or two from every browser;
+        # only what they change is logged.
+        if op not in ('heartbeat', 'link'):
             self._log(operator=who, op=op, cmd=req.cmd, fields=req.fields_json,
                       mission=req.mission, confirms=list(req.confirms),
                       ok=v.ok, message=v.message)
@@ -327,6 +360,11 @@ class HelmNode(Node):
 
     # -- the detectors -------------------------------------------------
     def _poll(self):
+        # A camera that respawned, or joined, while the video is scaled down
+        # comes up at its launch rate: say the scaled one again, quietly.
+        # (A respawned node keeps the top read before, which is its own.)
+        if self.link.scale < 1.0:
+            self._apply_stream(quiet=True)
         for cam, cli in self._get.items():
             if not cli.service_is_ready():
                 self.tuning.pop(cam, None)
@@ -385,6 +423,62 @@ class HelmNode(Node):
                 self._set_param(who, other, 'paused', True)
         self._set_param(who, cam, 'paused', False)
         return Verdict(True, f'{cam} is the live camera')
+
+    # -- the viewers' video -------------------------------------------
+    def _link(self, fields_json):
+        try:
+            got = json.loads(fields_json or '{}')
+            lag, screen = got.get('lag_s'), got.get('screen')
+        except (ValueError, AttributeError):
+            lag, screen = None, None
+        # A page's own short id; cleaned, since anyone may report.
+        screen = re.sub(r'[^0-9a-z]', '', str(screen or '').lower())[:12] or 'unnamed'
+        if isinstance(lag, bool) or not isinstance(lag, (int, float)) \
+                or not math.isfinite(lag) or lag < 0:
+            return Verdict(False, 'link takes {"lag_s": seconds}')
+        scale = self.link.report(float(lag), time.monotonic(), screen)
+        if scale is not None:
+            self._log(event=f'viewer video at x{scale:g} of each camera\'s rate: '
+                            f'screen {screen} reported {lag:.1f} s of lag'
+                            + (' (close it if it is not needed)' if self.link.by == screen and scale < 1 else ''))
+            self._apply_stream()
+        return Verdict(True, f'video x{self.link.scale:g}')
+
+    def _stream_nodes(self):
+        for cam in CAMERAS:
+            for info in self.get_publishers_info_by_topic(f'/mongla/vision/{cam}/stream/compressed'):
+                ns = info.node_namespace.rstrip('/')
+                yield f'{ns}/{info.node_name}'
+
+    def _apply_stream(self, quiet=False):
+        for path in self._stream_nodes():
+            s = self._stream.get(path)
+            if s is None:
+                s = self._stream[path] = {
+                    'get': self.create_client(GetParameters, f'{path}/get_parameters'),
+                    'set': self.create_client(SetParameters, f'{path}/set_parameters'),
+                    'top': None}
+            if s['top'] is None:
+                fut = s['get'].call_async(GetParameters.Request(names=['stream_rate_hz']))
+                fut.add_done_callback(lambda f, path=path: self._stream_top(path, f, quiet))
+            else:
+                self._stream_rate(path, quiet)
+
+    def _stream_top(self, path, fut, quiet=False):
+        res = fut.result()
+        top = param_value(res.values[0]) if res is not None and res.values else None
+        if not isinstance(top, (int, float)) or isinstance(top, bool) or top <= 0:
+            self._log(event=f'{path} has no viewer stream rate to set')
+            return
+        self._stream[path]['top'] = float(top)
+        self._stream_rate(path, quiet)
+
+    def _stream_rate(self, path, quiet=False):
+        s = self._stream[path]
+        hz = round(self.link.rate(s['top']), 2)
+        fut = s['set'].call_async(SetParameters.Request(parameters=[param_msg('stream_rate_hz', hz)]))
+        if not quiet:
+            fut.add_done_callback(lambda f: self._was_set('helm', path, 'stream_rate_hz', hz, f))
 
     # -- a calibration ------------------------------------------------
     def _calibrate(self, who, cal_op, fields_json):

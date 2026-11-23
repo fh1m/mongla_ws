@@ -1,0 +1,8 @@
+# Model weights live in Git LFS: the trained .pt, its .onnx export and the
+# .hef compiled for the Hailo-8. Only this folder. Nothing under docs/ may be
+# LFS: GitHub Pages serves an LFS file as its pointer text, so the site would
+# show 130 bytes of text where a picture belongs
+# (test/test_lfs_holds_only_the_weights.py).
+src/mongla_vision/models/*.pt filter=lfs diff=lfs merge=lfs -text
+src/mongla_vision/models/*.onnx filter=lfs diff=lfs merge=lfs -text
+src/mongla_vision/models/*.hef filter=lfs diff=lfs merge=lfs -text

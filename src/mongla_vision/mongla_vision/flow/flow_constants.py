@@ -140,23 +140,35 @@ FLOW_SCALE_SIGMA_FRAC = 0.036
 FLOW_UNCALIBRATED_SCALE_SIGMA_FRAC = 0.0308
 
 
-# The camera<->gyro offset the online estimator STARTS from. Measured on the
-# vehicle's own downward camera and SROT board, three 60 s hand-wobble runs:
-# -11.3 ms, sd 0.84 ms (measured-bars, 2026-10-03). It was 0.0, so every run
-# began 11 ms wrong and stayed so until enough rotation arrived for a fit --
+# The camera<->gyro offset the online estimator STARTS from: -13.4 ms, in the
+# flight mode (640x360, about 200 fps), the downward camera rigid on the SROT
+# board, windows 0.02 ms apart (measured-bars 108). The offset depends on the
+# camera mode, so a value measured in another mode is not this one. A start of
+# 0 would leave every run 13 ms wrong until enough rotation arrived for a fit,
 # and on a level transit that may be never. Negative: the board's ATTITUDE
 # rates are stamped AFTER the motion they describe. The estimator still runs
 # and slews from here.
-FLOW_TD_MEASURED_S = -0.0113
+FLOW_TD_MEASURED_S = -0.0134
 
 
 FLOW_ROT_RESIDUAL_CALIBRATED = 0.10
 
 
-_GYRO_GAIN_X_DEFAULT = 0.0
+# De-rotation gains, fitted on the rigid board-and-camera rig (measured-bars
+# 107): 98.5 % of a taped 30 cm slide against 63 % with rotation left in. The
+# gain is -S, and S depends on how the camera is mounted and where the hull
+# pivots, so these belong to the RIG. The hull's own fit (bead po7.13)
+# replaces them before water; until then the node says so at start-up. On a
+# mount whose coupling has the other sign they DOUBLE the error (on the old
+# mount -1.0 was the worst value measured), which is why the warning exists.
+_GYRO_GAIN_X_DEFAULT = -1.102
 
 
-_GYRO_GAIN_Y_DEFAULT = 0.0
+_GYRO_GAIN_Y_DEFAULT = -1.024
+
+# Where the defaults above were fitted. Logged by the node until a hull fit
+# replaces both the gains and this line.
+_GYRO_GAIN_FITTED_ON = 'the bench rig (measured-bars 107), not the hull: re-fit on the hull (po7.13)'
 
 
 # The width the `focal_air_px` / `focal_water_px` parameters are stated for --

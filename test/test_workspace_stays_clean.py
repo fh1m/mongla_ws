@@ -27,7 +27,7 @@ TOP_LEVEL = {
     'docs', '.claude', 'CLAUDE.md', 'README.md', 'AUTHORS.md', 'CITATION.cff',
     'LICENSE', 'SECURITY.md',
     # repository plumbing
-    '.github', '.gitignore', '.beads', '.vscode',
+    '.github', '.gitignore', '.gitattributes', '.beads', '.vscode',
 }
 
 # Generated, cached, captured or left behind by an editor or a merge.

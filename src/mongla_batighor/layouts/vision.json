@@ -36,10 +36,12 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 190,
+      "sidebarDimension": 140,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
+      "minYValue": 0,
+      "maxYValue": 1.05,
       "lichtblickPanelTitle": "lock authority"
     },
     "mongla.batighor.Detectors!detectors": {},
@@ -53,7 +55,7 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 190,
+      "sidebarDimension": 128,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
@@ -74,7 +76,7 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 190,
+      "sidebarDimension": 174,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
@@ -100,7 +102,7 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 190,
+      "sidebarDimension": 140,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
@@ -128,7 +130,7 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 190,
+      "sidebarDimension": 163,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
@@ -204,7 +206,7 @@
           },
           "splitPercentage": 33.3
         },
-        "splitPercentage": 53.8
+        "splitPercentage": 35.7
       },
       "splitPercentage": 50.0
     },

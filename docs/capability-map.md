@@ -14,6 +14,7 @@ date — and a **state**. The states are not blurred:
 | state | meaning |
 |---|---|
 | **WATER** | verified with the vehicle in water |
+| **RIG** | rig tested: verified on the vehicle's own electronics (the SROT board, Kutum and its cameras) fixed together and moved by hand against a truth such as a tape, the last step before water |
 | **BENCH** | verified on the bench, on real recorded footage, or against the live board |
 | **BUILT** | implemented and covered by tests, never flown |
 | **BLOCKED** | waiting on hardware or on a firmware merge |
@@ -30,7 +31,7 @@ the bottom, and **no row in this document is yet** — this platform has not bee
   /* This page counts itself. Every table row below whose last cell carries a
      state is tallied, so the bar can never disagree with the tables -- there is
      no second copy of the numbers to drift. */
-  var states = [['WATER','water'],['BENCH','bench'],['BUILT','built'],['BLOCKED','blocked']];
+  var states = [['WATER','water'],['RIG','rig'],['BENCH','bench'],['BUILT','built'],['BLOCKED','blocked']];
   function run(){
     var n = {}, total = 0;
     document.querySelectorAll('main table tbody tr').forEach(function(tr){
@@ -64,7 +65,8 @@ and why the split exists.
 |---|---|---|---|
 | Inner control loop | **500 Hz**, our source, on a core reserved for it | fw `include/config.h` (`CONTROL_LOOP_HZ 500`), core pinning in `src/main.cpp` | BENCH |
 | Attitude and heading hold | ours: angle → rate → torque, with gains we can change | fw `src/control/attitude.*`, `task_control_loop.cpp` | BENCH |
-| Heading stability at rest | drift **< 0.01 °/min**, peak-to-peak **< 0.08° over 8 min** | `measured-bars.md` (srot heading, 2026-09-07, at rest) | BENCH |
+| Heading stability at rest | drift **+0.001 °/min**, span **0.064° over 10 min**, the SROT board on Kutum under this stack | `measured-bars.md` §106 (2026-11-22); earlier §27 at rest | RIG |
+| Heading under motion | yawed freely by hand for 9.4 min, the board's heading returns to one wall edge within **3.5° rms** (worst 6.5°), scatter not drift; image-rotation yaw scored 46° and is not fused | `measured-bars.md` §109; `tools/bench/yaw_returns.py` | RIG |
 | Thruster mixing | the board mixes for vectored-8, the old Dubomini matrix, and we can read it. The Mongla hull has five thrusters in the CAD and seven when finished (see `vehicle-spec.md`); a geometry-driven mixer is open as srot-control-board#39 | fw `src/control/mixer.h`, `docs/THRUSTER_MAP.md` | BENCH |
 | Saturation behaviour | the whole demand scales together so the *shape* of the move survives; the host also fits the demand yaw-first before sending | fw `mixer.h`; host `mongla_control/allocation.py` | BUILT |
 | Flight modes | **eleven**, including two tuning modes and a pattern runner | fw `include/state_types.h` | BENCH |
@@ -130,7 +132,8 @@ IMU, the depth sensor and the downward camera. Without it, a distance move is a 
 
 | Capability | How it works | Evidence | State |
 |---|---|---|---|
-| Velocity over the floor | optical flow from the downward camera, with rotation removed before scaling | `mongla_vision/flow/flow_node.py`; `measured-bars.md` §10 | BENCH |
+| Velocity over the floor | optical flow from the downward camera, with rotation removed before scaling: on a rigid board-and-camera rig, **98.5 %** of a taped 30 cm slide with gains fitted on that rig, against 63 % with rotation left in; the rig's gains ship as the default and the hull re-fits them before water | `mongla_vision/flow/flow_node.py`; `measured-bars.md` §10, §107 | RIG |
+| Camera-to-IMU time offset | the image's rotation correlated with the board's gyro, in the flight mode: **−13.4 ms**, two 15 s windows within 0.02 ms; flow starts from it | `tools/bench/td_measure.py`; `measured-bars.md` §108 | RIG |
 | Distance accuracy | three 30 cm slides: worst error **1.09 cm (3.6 %)**; recovered height 0.72 / 0.69 / 0.70 m against a 0.72 m tape | `measured-bars.md` §13 | BENCH |
 | Refusing to guess | 727 static intervals produced **zero** velocity reports: an unmeasurable interval is never published as "0 m/s" | `measured-bars.md` §10 | BENCH |
 | Height above the floor | from a single pixel on a known plane | `mongla_localization/floor_plane.py` | BUILT |

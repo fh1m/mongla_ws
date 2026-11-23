@@ -170,6 +170,11 @@ is how `recommend()` happened.
 - [104. THE XFEAT ANCHOR costs each composed detector a third of its rate (2026-11-21)](#104-the-xfeat-anchor-costs-each-composed-detector-a-third-of-its-rate-2026-11-21)
 - [105. A TAB SWITCH IN THE DESKTOP APP blocked the page for seconds; Vulkan ends it (2026-11-21)](#105-a-tab-switch-in-the-desktop-app-blocked-the-page-for-seconds-vulkan-ends-it-2026-11-21)
 - [106. THE BOARD'S YAW AT REST drifts 0.001 deg/min over ten minutes (2026-11-22)](#106-the-boards-yaw-at-rest-drifts-0001-degmin-over-ten-minutes-2026-11-22)
+- [107. DE-ROTATION, FITTED ON A RIGID RIG: 98.5 % of a taped slide, against 63 % off (2026-11-22)](#107-de-rotation-fitted-on-a-rigid-rig-985--of-a-taped-slide-against-63--off-2026-11-22)
+- [108. THE CAMERA-TO-GYRO OFFSET IN THE FLIGHT MODE: td = -13.4 ms (2026-11-22)](#108-the-camera-to-gyro-offset-in-the-flight-mode-td---134-ms-2026-11-22)
+- [109. THE BOARD'S HEADING UNDER HAND MOTION: 3.5 deg rms AT NINE RETURNS (2026-11-22)](#109-the-boards-heading-under-hand-motion-35-deg-rms-at-nine-returns-2026-11-22)
+- [110. ONE HAILO COMPILE, TIMED: 53.8 min, OF WHICH THE GPU OPTIMISE IS 24.5 (2026-11-22)](#110-one-hailo-compile-timed-538-min-of-which-the-gpu-optimise-is-245-2026-11-22)
+- [111. COLOUR IN THE DETECTOR BEATS A HUE READER AFTER IT: AP50 0.237 AGAINST 0.179 (2026-11-23)](#111-colour-in-the-detector-beats-a-hue-reader-after-it-ap50-0237-against-0179-2026-11-23)
 <!-- contents:end -->
 
 ---
@@ -9277,3 +9282,165 @@ minutes. That is not the heading error that remains in the AQUALOC replay (bead 
 75-177 deg), which comes from motion; the hand-yawed half against a heading truth
 decides it. Not checked here: drift under rotation, with thrusters' magnetic fields, or in
 water.
+
+## 107. DE-ROTATION, FITTED ON A RIGID RIG: 98.5 % of a taped slide, against 63 % off (2026-11-22)
+
+The SROT board (rev 14) on Kutum's USB with the Sonix downward camera taped rigidly to its
+back (image top away from the USB connector), held by hand 0.445 m (tape) over a floor in
+air. The board's gyro (`/mongla/imu_rates`, 50 Hz) against the camera at 640x360.
+
+**Method.** `tools/bench/flow_derot_calibrate.py` on a tilt about the lens, 30 s per axis,
+k-fold held-out slope. Then `tools/bench/flow_derot_ab.py --lateral` on three 30 cm slides
+along a ruler: every arm is a flow node on the same frames, so arms differ only by gain.
+Height is a stand-in (`pool_depth_m` 0.445 with depth 0: no barometer is fitted).
+
+**Bar, from the tool, before the slides:** a gain that fits better ships only if it reads
+nearer the tape than the shipped value on every slide.
+
+| fit | coupling S | gain | R2 | held-out rms | predicting zero |
+|---|---|---|---|---|---|
+| roll | +1.102 | -1.102 | 0.952 | 6.44 px | 29.43 px |
+| pitch | +1.024 | -1.024 | 0.823 | 14.83 px | 36.42 px |
+
+| arm, 30 cm truth | slide 1 | slide 2 | slide 3 | median | intervals used |
+|---|---|---|---|---|---|
+| shipped, gains 0 | 61.7 % | 75.6 % | 63.0 % | 63.0 % | 10-22 of 70-136 |
+| fitted, -1.102 / -1.024 | 96.4 % | 98.5 % | 99.6 % | 98.5 % | 44-47 of 113-168 |
+| old lens rig, +1.058 / +0.830 | 109.6 % | 108.2 % | 108.7 % | 108.7 % | 46-50 of 112-167 |
+
+**Result.** PASS on this rig: the fitted gains read nearest the tape on all three slides,
+with a spread (28.9-29.9 cm) far inside the arms' separation. Off, flow refuses most
+intervals as rotation-dominated and loses a third of the travel; the old rig's gains,
+opposite in sign, read 9 % long. The sign flip is the mount: S is a property of how the
+camera sits on the IMU (section 12 said so), so these numbers do not carry to the hull.
+The shipped default stays 0 until the hull's own fit passes this same A/B (bead po7.13).
+
+**Changed the same night, by the owner's decision:** the fitted pair ships as the default
+(`_GYRO_GAIN_X_DEFAULT` / `_Y`), because the hull will be re-fitted before any water run. Two
+guards hold the gap: the flow node warns at start-up that the gains are the rig's, and the
+published sigma keeps the full uncorrected rotation term for them (only gains set for the
+mount earn the 0.10 residual), so a hull whose coupling differs is not reported as corrected.
+Not covered: water, the hull's pivot, slides along the other axis.
+
+## 108. THE CAMERA-TO-GYRO OFFSET IN THE FLIGHT MODE: td = -13.4 ms (2026-11-22)
+
+The rig of section 107 (Sonix downward camera taped to the SROT board, rev 14, on Kutum),
+twisted by hand about the optical axis at changing speed, 45 s per run, 0.445 m over the
+floor. `tools/bench/td_measure.py` correlates the image's planar-fit yaw against all three
+gyro axes; its `--self-test` recovered +23.0 / -11.0 / +4.0 ms injected offsets to within
+0.3 ms and refused a steady turn before the run.
+
+**Bar, from the tool, before the run:** every 15 s window at or above quality 0.5, and the
+windows within 2.0 ms of each other.
+
+| camera mode | td, whole run | quality | 15 s windows | spread | verdict |
+|---|---|---|---|---|---|
+| 1280x720 @ 60 (the tool's old fixed mode) | -11.43 ms | 0.77 | -11.90 / -10.87 | 1.03 ms | MEASURED |
+| **640x360 @ about 200 fps (the flight mode)** | **-13.38 ms** | 0.90 | -13.36 / -13.34 | 0.02 ms | **MEASURED** |
+
+**Result.** td = **-13.4 ms** in the flight mode, image yaw on gyro z with sign -, as on
+2026-10-03. The two modes differ by 2 ms, so the offset belongs to the camera mode and a
+value from another mode is not a substitute: the October entry (-11.3 ms, 1280x720,
+which did not clear its own bar) is replaced as the flow node's starting value
+(`FLOW_TD_MEASURED_S`). `td_measure.py` now records in the flight mode by default
+(`--mode`). 13.4 ms is nearly three frames at 210 fps, so it is fed, never ignored.
+Not covered: water, the hull's own mount, a change of the camera's exposure mode.
+
+## 109. THE BOARD'S HEADING UNDER HAND MOTION: 3.5 deg rms AT NINE RETURNS (2026-11-22)
+
+The rig of section 107 (SROT board rev 14 with the downward camera, on Kutum, manager running,
+vision off), yawed freely by hand for 9.4 minutes: lifted to knee height, turned left and right
+in full turns at any speed, and returned again and again to rest flush against one wall edge.
+The truth is that edge: every rest has the same true heading, so any change in the board's yaw
+between rests is error. Rests are found from the board's own gyro (every axis under 0.03 rad/s
+for 4 s), not from the operator. `tools/bench/yaw_returns.py`, whose `--self-test` recovered a
+chosen 2.0 deg/min drift and a chosen image bias and refused a run with no rests.
+
+**Bar, from bead 5ag.9, before the run:** the board's yaw drift in deg/min recorded; image-rotation
+yaw fused only if it cuts the heading error at the rests by at least half against the board's.
+
+| rest | t (s) | board yaw error (deg) | image yaw error (deg) |
+|---|---|---|---|
+| 1 (reference) | 0 | 0 | 0 |
+| 2 | 43 | +6.48 | +35.3 |
+| 3 | 79 | +0.22 | +26.4 |
+| 4 | 113 | -0.36 | +7.7 |
+| 5 | 201 | -2.43 | -33.5 |
+| 6 | 272 | -2.40 | -41.0 |
+| 7 | 285 | +1.43 | -59.2 |
+| 8 | 365 | +1.42 | -62.3 |
+| 9 | 393 | -6.33 | -69.3 |
+| **rms** | | **3.50** | **46.1** |
+
+**Result.** The board's heading returns to the edge within **3.5 deg rms, worst 6.5 deg**, and the
+error changes sign from rest to rest: it is scatter, not a drift (the line fit, -0.76 deg/min, is
+carried by the last rest alone; at rest the same board drifts 0.001 deg/min, section 106). The
+scatter includes how flush a hand sets the rig against a wall, so 3.5 deg is an upper bound on
+the AHRS's own error. **Image-rotation yaw is not fused:** 46 deg rms, thirteen times the board's
+error, against a bar that asked for half. Its integration loses every frame the planar fit
+refuses, and hand turns lifted off the floor refuse often, so the method needs a steady view of
+the floor that a hull at depth has and this rig did not. Not covered: water, a hull with
+thrusters running (their currents near the magnetometer), turns at the hull's own rates.
+
+## 110. ONE HAILO COMPILE, TIMED: 53.8 min, OF WHICH THE GPU OPTIMISE IS 24.5 (2026-11-22)
+
+`octagon` (YOLOv8n, 4 classes: sos, rescue, survey, repair) compiled for the Hailo-8 on the dev
+box: DFC 3.34.0, RTX 2060 (6 GiB) named by `hailo_compile.sh`, nothing else on the GPU, under
+`/usr/bin/time -v` (`mongla_data/hailo_logs/octagon_2026-11-22e.*`). Competition speed rule:
+every step timed.
+
+| step | time | note |
+|---|---|---|
+| calibration set, first draw | 178 s | 1024 distinct keyframes from 37 clips (2 duplicate clips read once); was over 23 min with seeking reads |
+| calibration set, cached | 3.5 s | the same 1024 frames from `~/hailo_work/calib/`, keyed on clips, size and seed |
+| optimise (fine-tune), GPU | 1467 s | the largest single step |
+| parse, INT8 check, allocate and compile | about 1760 s | by difference from the wall clock; the allocator is most of it |
+| **total** | **53 min 50 s** | peak RSS 4.4 GB |
+
+**INT8 against float, 100 held-out frames of a clip the calibration excluded (86 with a match):**
+median shift **+0.077** of confidence, p90 +0.099. The bar is `MAX_INT8_SHIFT = 0.10` on the median
+(`hailo_compile.py`), so this **passes with little room**; a model whose shift climbs past it is
+refused. The HEF runs as **3 contexts** on the chip (`hailortcli parse-hef`), so its rate on
+Kutum is measured before it is quoted, not assumed from the single-context models. Not covered:
+`compiler_optimization_level=max`, which the DFC suggests and which lengthens the compile; it
+is a candidate only with its own timing and a rate gain measured on Kutum.
+
+**The max level, tried (2026-11-22, `mongla_data/hailo_logs/octagon_max_2026-11-22.log`).** The
+same `octagon_optimized.har` (weights untouched) allocated again with
+`performance_param(compiler_optimization_level=max)`. One context failed ("recoverable single
+context error"); two contexts were partitioned and then failed to map, by timeout, at 100, 90,
+80 and 70 % utilisation; it settled on **3 contexts again**, in **6 h 35 min** of wall clock against
+about 29 min for the allocation at the default level. So the max level does not drop a context
+for this network on a Hailo-8. Its partition may still differ; the HEF
+(`hailo_work/octagon_max.hef`) is adopted only if `hailortcli run` on Kutum, chip otherwise
+idle, beats the default HEF's rate. Not yet measured.
+
+## 111. COLOUR IN THE DETECTOR BEATS A HUE READER AFTER IT: AP50 0.237 AGAINST 0.179 (2026-11-23)
+
+The bar was written before either model trained (`mongla_data/holdout/colour_ab/BAR.md`,
+2026-11-22). Two arms, same data and settings (YOLOv8n from COCO, 20 epochs, imgsz 640, batch 16,
+seed 0), scored on one held-out team's 183 test images that neither saw:
+A, one detector whose classes carry the colour (gate, flare red/yellow/blue/orange, drum
+red/blue, ball); B, a gate/flare/drum detector whose flare and drum boxes are coloured by a hue
+reader learned from A's training boxes (7325 samples). One AP50 routine scores both against the
+same fine labels (`tools/studies/colour_ab.py`); its self-test passed first.
+
+| class | ground truth | A, colour in the detector | B, hue reader after |
+|---|---|---|---|
+| gate | 73 | 0.479 | 0.494 |
+| flare_red | 42 | 0.159 | 0.218 |
+| flare_yellow | 64 | 0.304 | 0.197 |
+| flare_blue | 18 | 0.162 | 0.036 |
+| flare_orange | 38 | 0.002 | 0.000 |
+| drum_red | 197 | 0.248 | 0.111 |
+| drum_blue | 74 | 0.301 | 0.194 |
+| **mean of the 7 shared** | | **0.237** | **0.179** |
+
+Bar: a win needs a margin of 0.02. **A wins by 0.058.** The secondary condition holds: on 160 empty-water
+frames of our own, A raises 1.14 boxes per frame at confidence 0.25 against the coarse detector's
+1.81, inside the 1.5x allowance. Ball (A only): 0.040 on 33.
+
+What it does not show: the absolute numbers are low because the held-out team's pool, camera
+and props differ from every training team's, which is the condition the bar was written for
+(transfer, not fit). Orange flares are not found by either arm. Decision: a model for props told
+apart by colour carries the colour in its class names, and no hue reader is built.

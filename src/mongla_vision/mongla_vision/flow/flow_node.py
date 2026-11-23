@@ -71,6 +71,8 @@ from mongla_vision.flow.flow_math import (
     DistanceAccumulator,
     HeightFromDivergence,
 )
+from .flow_constants import (_GYRO_GAIN_FITTED_ON, _GYRO_GAIN_X_DEFAULT,
+                             _GYRO_GAIN_Y_DEFAULT)
 from .flow_setup import FlowSetupMixin
 from .flow_checks import FlowChecksMixin
 from .flow_floor import FlowFloorMixin
@@ -109,6 +111,13 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         # 2 px forward-backward gate).
         self._gx = float(self.get_parameter('gyro_gain_x').value)
         self._gy = float(self.get_parameter('gyro_gain_y').value)
+        # Only gains fitted on THIS mount earn the calibrated residual in the
+        # published sigma; the rig's defaults on an unfitted hull do not.
+        self._gains_fitted = (self._gx, self._gy) != (_GYRO_GAIN_X_DEFAULT, _GYRO_GAIN_Y_DEFAULT)
+        if not self._gains_fitted:
+            self.get_logger().warning(
+                f'[FLOW ] de-rotation gains {self._gx:+.3f}/{self._gy:+.3f} were '
+                f'fitted on {_GYRO_GAIN_FITTED_ON}')
         self._rot_max = float(self.get_parameter('rot_fraction_max').value)
         self._min_flow = float(self.get_parameter('min_net_flow_px').value)
         self._max_disp = float(self.get_parameter('max_dispersion_ratio').value)
