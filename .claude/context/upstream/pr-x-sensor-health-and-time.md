@@ -101,7 +101,7 @@ priority of the three; we have a working path.
 
 ---
 
-## 4. A battery input with nothing wired to it (addendum 2026-11-22, not yet sent)
+## 4. A battery input with nothing wired to it (addendum 2026-11-22, sent 2026-11-23 as a comment on #76)
 
 ### What we measured
 
