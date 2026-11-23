@@ -102,8 +102,10 @@ may refuse a frame), `flow_floor.py` (tile-grid heading and lane lines), `flow_p
 loads, was taken dry, names this camera or its `profile` in `applies_to`, and has the frames'
 aspect ratio. With no `calibration` path it binds one from `profile`, as `camera_node` does.
 `allow_uncalibrated:=true` runs on the focal parameters anyway with a wider sigma, and the
-latched `flow_calibration` topic says which state it is in; localization reports
-`aided (flow uncalibrated)` from it (B-106).
+latched `flow_calibration` topic says which state it is in (`uncalibrated: <why>`, the file
+named by its basename; the whole path is in the node's log); localization reports
+`aided (flow uncalibrated)` from it (B-106), and Batighor's Localization card shows the
+reason whole, as **flow scale**.
 
 `detector_node` likewise: `detector_node.py` (the inference loop and its recovery),
 `detector_setup.py` (parameters, model loading, live changes), `detector_frames.py` (mailbox

@@ -4,6 +4,7 @@ Everything here runs before or beside the per-frame pipeline: it decides what th
 node knows about its camera and the hull, never what the floor is doing.
 """
 import math
+import os
 import time
 import numpy as np
 from sensor_msgs.msg import Image
@@ -211,11 +212,17 @@ class FlowSetupMixin:
         return ''
 
     def _publish_calibration_state(self) -> None:
-        """Latched: 'calibrated', or 'uncalibrated: <why>'. Read by localization."""
+        """Latched: 'calibrated', or 'uncalibrated: <why>'. Read by localization.
+
+        The file is named by its basename: an operator reads this on a panel a
+        few hundred pixels wide, and the whole path is in the node's log.
+        """
         pub = getattr(self, '_pub_cal', None)
         if pub is not None:
-            pub.publish(String(data='calibrated' if not self._cal_problem
-                               else f'uncalibrated: {self._cal_problem}'))
+            why = self._cal_problem
+            if why and self._cal_path:
+                why = why.replace(repr(self._cal_path), repr(os.path.basename(self._cal_path)))
+            pub.publish(String(data='calibrated' if not why else f'uncalibrated: {why}'))
 
     # ── capture -> mailbox (callback thread, must never block) ──────────────
     def _load_intrinsics(self, width: int, height: int) -> None:
