@@ -325,6 +325,11 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
         t = getattr(self, '_thread', None)
         if t is not None and t is not threading.current_thread():
             t.join(2.0)
+        # The anchor worker may be mid-locate on the Hailo: let that one
+        # finish, start nothing after it.
+        ex = getattr(self, '_anchor_exec', None)
+        if ex is not None:
+            ex.shutdown(wait=True, cancel_futures=True)
         return super().destroy_node()
 
 

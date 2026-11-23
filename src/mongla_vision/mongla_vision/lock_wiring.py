@@ -199,6 +199,15 @@ class LockWiringMixin:
         self._anchor_enrol_next = 0.0
         self._anchor_pose = None
         self._anchor_next = 0.0
+        # The anchor's enrol and locate run on one worker thread, so a ~110 ms
+        # locate no longer holds up the tick that publishes /lock (bead a2c).
+        # `_bank_lock` is held while the bank works; the place look takes it
+        # too. `_anchor_gray` is the frame the last finished locate fitted.
+        self._anchor_exec = None
+        self._anchor_job = None
+        self._bank_lock = threading.Lock()
+        self._anchor_gray = None
+        self._anchor_locate_t = float('-inf')
         self._anchor_period = 1.0 / max(
             float(self.get_parameter('anchor_hz').value), 0.5)
         # Read it, or the parameter is decoration -- the "declared and unread"

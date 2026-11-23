@@ -90,6 +90,13 @@ IMU, state, odometry and floor-height callbacks, each with its freshness check),
 health log). To find where a `self._x` is defined, grep them together:
 `grep -n "def _x" lock_*.py`.
 
+The anchor rung's bank work (enrol and locate, ~110 ms a locate on the Pi) runs on one worker
+thread beside the ladder, so the follower and the detection publish while it works. It enrols on
+every confident detection as before, and locates at `anchor_hz` whenever the detection is weak,
+held or gone; while a fresh accepted detection holds the target it locates once a second, to keep
+its trend and health warm. The place look shares the bank and skips a frame while the worker holds
+it, counted as `bank busy` (bead a2c).
+
 Under `vision_pi`, flow runs inside the vision process beside the downward camera and takes its
 frames by reference (`direct_feed`, measured-bars section 89); `vision` and `vision_dual` still
 start it as `flow_node` on the topic. It is split the same way, under `flow/`: `flow_node.py` (the per-frame pipeline),
