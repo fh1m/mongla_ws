@@ -184,7 +184,9 @@ class WebcamCamera(Camera):
         # OpenCV gives no buffer timestamp on every backend, so the meta below
         # stamps when the read returns, after the decode. The vehicle's
         # sources are the V4L2 mailbox, which carries the kernel's stamp.
-        ok, frame = self._cap.read()
+        # Closed (a reopen that failed keeps this object): nothing, not a raise
+        # that kills the capture thread before the reopen policy can act.
+        ok, frame = self._cap.read() if self._cap is not None else (False, None)
         meta = FrameMeta(
             frame_index=self._idx,
             width=self._actual_w,
@@ -202,7 +204,8 @@ class WebcamCamera(Camera):
         return frame, meta
 
     def is_healthy(self) -> bool:
-        return (self._cap.isOpened()
+        return (self._cap is not None
+                and self._cap.isOpened()
                 and self._consec_fail < 30
                 and (time.monotonic() - self._last_ok) < 2.0)
 
