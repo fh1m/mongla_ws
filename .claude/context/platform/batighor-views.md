@@ -42,7 +42,8 @@ vehicle's numbers and attitude over the Vision panel and the lock authority it h
   Request, Give, Release), arming behind two ticks, every verb with its own fields,
   missions, and the log: every press at the helm (the last 200 lines, kept on Kutum and
   sent whole to a browser that joins late) merged by time with every node's warnings and
-  errors from `/rosout`. The live camera and the detectors' settings are the
+  errors from `/rosout` (a node that repeats itself, digits aside, keeps one line with a
+  count, `(x12)`). The live camera and the detectors' settings are the
   **Detectors** panel, on the Vision and Downward views: together they needed
   1042 px and showed a third of it.
 - **Vehicle**: armed and mode, a compass, a depth gauge, the numbers, the mission

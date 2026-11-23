@@ -326,7 +326,6 @@ function initPanel(context, kind = "ControlCenter") {
       log.textContent = text;
       if (stuck) log.scrollTop = log.scrollHeight;
     }
-    log.scrollTop = log.scrollHeight;
   }
 
   // Two records, one card, in time order: the helm's (who asked for what,
@@ -351,7 +350,9 @@ function initPanel(context, kind = "ControlCenter") {
   const LEVEL_NAME = { 30: "WARNING", 40: "ERROR", 50: "FATAL" };
   function nodeLine(m) {
     const t = (m.stamp?.sec ?? 0) + (m.stamp?.nanosec ?? 0) / 1e9;
-    return { t, text: `${clock(t)}  ${LEVEL_NAME[m.level] || m.level} ${m.name}: ${m.msg}` };
+    const head = `${LEVEL_NAME[m.level] || m.level} ${m.name}`;
+    return { t, key: `${head}: ${m.msg}`,
+      text: `${clock(t)}  ${head}: ${m.msg}` };
   }
 
   function merge() {
@@ -373,7 +374,7 @@ function initPanel(context, kind = "ControlCenter") {
         } catch { /* keep the last */ }
       } else if (ev.topic === ROSOUT) {
         if (ev.message.level >= 30) {
-          nodeLog.push(nodeLine(ev.message));
+          foldNodeLog(nodeLog, nodeLine(ev.message));
           if (nodeLog.length > 200) nodeLog.splice(0, nodeLog.length - 200);
           merge();
         }
@@ -389,7 +390,19 @@ function initPanel(context, kind = "ControlCenter") {
   draw();
 }
 
+// A node that says the same thing every second (the lock's "camera looks
+// degraded", Kutum 2026-11-23) filled the whole card. A repeat, digits aside,
+// replaces its earlier line: the newest text, with how many times it came.
+function foldNodeLog(list, e) {
+  const key = String(e.key).replace(/[0-9.]+/g, "#");
+  const i = list.findIndex((x) => x.key === key);
+  const n = i < 0 ? 1 : list[i].n + 1;
+  if (i >= 0) list.splice(i, 1);
+  list.push({ ...e, key, n, text: n > 1 ? `${e.text}  (x${n})` : e.text });
+}
+
 module.exports = {
+  foldNodeLog,
   activate(extensionContext) {
     for (const name of Object.keys(PARTS)) {
       extensionContext.registerPanel({ name, initPanel: (context) => initPanel(context, name) });
