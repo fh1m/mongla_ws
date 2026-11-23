@@ -23,6 +23,8 @@ KUTUM="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # One version for the driver, the firmware, the runtime and the Python
 # bindings. They must match exactly; the doctor fails a machine where they do not.
 HAILORT_V=4.24.0
+# Timers the vehicle never runs (the doctor reads the same list).
+QUIET_TIMERS='fwupd-refresh.timer'
 # Wi-Fi regulatory domain (ISO 3166). Bangladesh; change it where the vehicle goes.
 KUTUM_WIFI_COUNTRY="${KUTUM_WIFI_COUNTRY:-BD}"
 say() { printf '\n== %s\n' "$*"; }
@@ -175,6 +177,12 @@ if [ "${1:-}" = "--system" ]; then
   done
   systemctl daemon-reload
   systemctl reset-failed
+  # A firmware check that polls the internet has no place mid-run on a 4-core
+  # vehicle at ~88 % busy: fwupd took 46 % of a core a minute after this timer
+  # fired on the bench (bead 0yp). Masked, not removed; `unmask` restores it.
+  for unit in $QUIET_TIMERS; do
+    systemctl mask --now "$unit" >/dev/null 2>&1 || true
+  done
 
   say "6/8  network: Wi-Fi on boot, and kutum.local on every interface"
   # The name avahi publishes is the hostname. cloud-init would put back the
