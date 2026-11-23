@@ -238,9 +238,11 @@ def cockpit(v: View):
     target now and which stages run. The lock's history is in `vision`."""
     return row((CAMERA_COLUMN, _cameras(v)),
                (30, v('control', instrument('ControlCenter'))),
-               (33, col((10, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
+               # The Vehicle card carries the board's six lines under its gauges;
+               # at 10 of 21 its last row was cut (Kutum, 2026-11-23).
+               (33, col((11, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
                         (7, v('vision', instrument('Vision'))),
-                        (4, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS),
+                        (3, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS),
                                              y=(0, 1.05)))))))
 
 
