@@ -170,7 +170,8 @@ class FlowChecksMixin:
         """
         if not self._yaw_rate_buf or dt <= 0.0:
             return
-        gy = interp_rate([(a, b, 0.0) for (a, b) in self._yaw_rate_buf],
+        # One snapshot: the IMU callback appends on another thread.
+        gy = interp_rate([(a, b, 0.0) for (a, b) in list(self._yaw_rate_buf)],
                          t - dt * 0.5)
         if gy is None:
             return

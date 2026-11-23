@@ -361,10 +361,14 @@ class TimeOffset:
         """
         if len(self._img) < 20 or len(self._gyro) < 40:
             return None
-        it = np.fromiter((p[0] for p in self._img), float, len(self._img))
-        iv = np.fromiter((p[1] for p in self._img), float, len(self._img))
-        gt = np.fromiter((p[0] for p in self._gyro), float, len(self._gyro))
-        gv = np.fromiter((p[1] for p in self._gyro), float, len(self._gyro))
+        # One snapshot of each: the callbacks append on another thread, and
+        # a generator over the live deque raised 'deque mutated during
+        # iteration' on Kutum (2026-11-23).
+        img, gyro = list(self._img), list(self._gyro)
+        it = np.fromiter((p[0] for p in img), float, len(img))
+        iv = np.fromiter((p[1] for p in img), float, len(img))
+        gt = np.fromiter((p[0] for p in gyro), float, len(gyro))
+        gv = np.fromiter((p[1] for p in gyro), float, len(gyro))
 
         # Excitation gate. Constant (or absent) rotation is degenerate: the
         # correlation of two flat signals peaks wherever noise says, and the
