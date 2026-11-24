@@ -38,6 +38,13 @@ TRAILER = re.compile(
 # subject line may name them. Only trailers and identity fields claim authorship.
 
 
+# Every ref that can reach GitHub: branches, tags and what the remotes hold.
+# Not `--all`, which also walks refs/notes: authorship notes are a local
+# debugging record (owner ruling 2026-11-24) that the pre-push hook keeps on
+# this machine, and their own commits are the recording tool's.
+PUBLISHED = ("--branches", "--tags", "--remotes")
+
+
 def _git(*args: str) -> str:
     return subprocess.run(
         ["git", *args], capture_output=True, text=True, check=True
@@ -59,7 +66,7 @@ pytestmark = pytest.mark.skipif(
 
 def test_no_agent_appears_as_author_or_committer():
     """Every commit on every branch was authored and committed by a person."""
-    lines = _git("log", "--all", "--format=%H%x00%an <%ae>%x00%cn <%ce>").splitlines()
+    lines = _git("log", *PUBLISHED, "--format=%H%x00%an <%ae>%x00%cn <%ce>").splitlines()
     offenders = [
         (sha, author, committer)
         for sha, author, committer in (ln.split("\0") for ln in lines if ln)
@@ -81,15 +88,35 @@ MARKS = re.compile(r"claude\.ai/code/|^[ \t]*made-with:|generated with \[?claude
 
 
 def test_no_commit_message_carries_an_assistant_mark():
-    hits = [ln for ln in _git("log", "--all", "--format=%h %B").splitlines()
+    hits = [ln for ln in _git("log", *PUBLISHED, "--format=%h %B").splitlines()
             if MARKS.search(ln)]
     assert not hits, f"{len(hits)} line(s) carry an assistant mark. First: {hits[0]!r}"
 
 
-def test_no_attribution_notes_ref():
-    """An attribution tool stores its records as git notes; none are kept here."""
+def _push_refuses_notes(hooks_dir: pathlib.Path) -> bool:
+    hook = hooks_dir / "pre-push"
+    return hook.is_file() and "refs/notes/" in hook.read_text(errors="ignore")
+
+
+def _hooks_dir() -> pathlib.Path:
+    top = pathlib.Path(_git("rev-parse", "--show-toplevel").strip())
+    try:
+        path = _git("config", "core.hooksPath").strip()
+    except subprocess.CalledProcessError:
+        return pathlib.Path(_git("rev-parse", "--git-path", "hooks").strip())
+    return (top / path) if not pathlib.Path(path).is_absolute() else pathlib.Path(path)
+
+
+def test_notes_kept_here_cannot_be_pushed(tmp_path):
+    """Notes may live on this machine only while the push refuses them: the
+    repository is public, and on 2026-11-24 490 notes commits had to be
+    rewritten out of it. A clone with notes and no such hook fails here."""
+    assert not _push_refuses_notes(tmp_path)          # no hook: refused
     refs = _git("for-each-ref", "--format=%(refname)", "refs/notes").split()
-    assert not refs, f"notes refs present: {refs}"
+    if refs:
+        assert _push_refuses_notes(_hooks_dir()), (
+            f"{refs} are here and {_hooks_dir()}/pre-push does not refuse refs/notes/*; "
+            f"run `git config core.hooksPath .beads/hooks`")
 
 
 def test_no_agent_is_credited_as_co_author():
@@ -100,7 +127,7 @@ def test_no_agent_is_credited_as_co_author():
     """
     offenders = [
         who
-        for who in TRAILER.findall(_git("log", "--all", "--format=%B"))
+        for who in TRAILER.findall(_git("log", *PUBLISHED, "--format=%B"))
         if AGENTS.search(who)
     ]
     assert not offenders, (
