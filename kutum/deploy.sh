@@ -83,6 +83,20 @@ if [[ "$MODE" == "--rollback" ]]; then
   exit $?
 fi
 
+# A calibration solved or applied on the vehicle is written into the live
+# release (calibrate_node installs into the source tree), and the release this
+# deploy stages has only the committed files, so the vehicle's would be
+# replaced without a word and the cameras would come up on the old lens.
+CAL=src/mongla_vision/config/calibration
+LIVE_REAL="$(r 'readlink -f ~/mongla_ws 2>/dev/null || true')"
+if [[ -n "$LIVE_REAL" ]]; then
+  on_vehicle="$(r "cd '$LIVE_REAL/$CAL' 2>/dev/null && sha1sum -- *.json 2>/dev/null" || true)"
+  here="$(cd "$REPO_ROOT/$CAL" && sha1sum -- *.json)"
+  only="$(comm -23 <(sort <<<"$on_vehicle") <(sort <<<"$here") | awk '{print $2}' | tr '\n' ' ')"
+  [[ -z "${only// /}" ]] || die "the vehicle holds calibration(s) this tree does not: $only-- copy them here (scp $TARGET:mongla_ws/$CAL/<file> $CAL/), commit them, and rerun"
+  ok "no calibration exists only on the vehicle"
+fi
+
 # --------------------------------------------------------------------------- #
 say "3. Stage a new release beside the live one"
 
@@ -98,7 +112,6 @@ REL="mongla/releases/$ID"
 # Unchanged files are hard links to the active release, so a release costs
 # what changed, not 150 MB. rsync replaces a file by renaming a new copy into
 # place, so a link is never written through into the release it came from.
-LIVE_REAL="$(r 'readlink -f ~/mongla_ws 2>/dev/null || true')"
 LINK=()
 [[ -n "$LIVE_REAL" ]] && r test -d "$LIVE_REAL/src" && LINK=(--link-dest="$LIVE_REAL/")
 r mkdir -p "$REL"

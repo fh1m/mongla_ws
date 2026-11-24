@@ -217,6 +217,11 @@ we measure **HFOV 73.1°**.
 ## 8. THE LIBRARY: every calibration is kept, and re-appliable
 
 `src/mongla_vision/config/calibration/` is the vehicle's permanent store.
+**Warning: on Kutum that folder belongs to the live release.** A calibration
+solved or applied there is written into `~/mongla/releases/<id>/`, and the next
+release is built from the dev box. `kutum/deploy.sh` therefore refuses while
+the vehicle holds a calibration this tree does not; copy it back and commit it
+first.
 Every calibration this project has produced lives there, ships with the
 package, and is listed in Batighor's **Calibrate** panel with the
 fields an operator actually picks by — medium, resolution, fx, view count,

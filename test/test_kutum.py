@@ -236,3 +236,36 @@ def test_the_vehicle_masks_the_timers_it_never_runs_and_the_doctor_checks_them()
     assert 'for unit in $QUIET_TIMERS' in setup
     doctor = (KUTUM / 'doctor.sh').read_text()
     assert "s/^QUIET_TIMERS=" in doctor and '"$KUTUM/setup.sh"' in doctor
+
+
+def _calibration_gate(tmp_path, vehicle, here):
+    """Run deploy.sh's calibration gate with the vehicle simulated on disk."""
+    text = (ROOT / 'kutum' / 'deploy.sh').read_text()
+    gate = text[text.index('CAL=src/mongla_vision'):]
+    gate = gate[:gate.index('\nfi\n') + 4]
+    cal = 'src/mongla_vision/config/calibration'
+    for root, files in (('vehicle', vehicle), ('repo', here)):
+        (tmp_path / root / cal).mkdir(parents=True)
+        for name, body in files.items():
+            (tmp_path / root / cal / name).write_text(body)
+    (tmp_path / 'home').mkdir()
+    (tmp_path / 'home' / 'mongla_ws').symlink_to(tmp_path / 'vehicle')
+    script = ('set -euo pipefail\nr() { bash -c "$*"; }\n'
+              'die() { echo "DIE $*"; exit 3; }\nok() { echo "OK $*"; }\n'
+              f'REPO_ROOT={tmp_path / "repo"}\nTARGET=fh1m@kutum.local\n' + gate)
+    return subprocess.run(['/bin/bash', '-c', script], capture_output=True, text=True,
+                          env={'HOME': str(tmp_path / 'home'), 'PATH': '/usr/bin:/bin'})
+
+
+def test_deploy_refuses_to_replace_a_calibration_only_the_vehicle_holds(tmp_path):
+    # calibrate_node installs into the live release; the new release would
+    # carry only the committed file and the camera would fly the old lens.
+    r = _calibration_gate(tmp_path, {'pi_downward_1280x720.json': 'solved on the vehicle'},
+                          {'pi_downward_1280x720.json': 'committed'})
+    assert r.returncode == 3 and 'pi_downward_1280x720.json' in r.stdout, r.stdout + r.stderr
+
+
+def test_deploy_passes_when_the_vehicle_holds_only_what_is_committed(tmp_path):
+    same = {'pi_downward_1280x720.json': 'committed', 'pi_forward_1280x720.json': 'f'}
+    r = _calibration_gate(tmp_path, same, {**same, 'new.json': 'only here'})
+    assert r.returncode == 0 and 'OK no calibration' in r.stdout, r.stdout + r.stderr
