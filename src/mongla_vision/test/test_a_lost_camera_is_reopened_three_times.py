@@ -7,6 +7,7 @@ the node actually did, not what the policy says it would.
 """
 from __future__ import annotations
 
+import threading
 import types
 
 from mongla_runtime.launch_respawn import MAX_RESTARTS
@@ -112,7 +113,9 @@ class _Log:
 def _node(first: _Source, build):
     log = _Log()
     node = types.SimpleNamespace(_cam=first, _cam_name='downward',
-                                 _build_camera=build, get_logger=lambda: log)
+                                 _build_camera=build, get_logger=lambda: log,
+                                 _cam_lock=threading.Lock())
+    node._reopen = lambda kind: camera_node.CameraNode._reopen(node, kind)
     return node, log
 
 
