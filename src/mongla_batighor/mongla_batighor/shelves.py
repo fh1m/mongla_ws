@@ -7,8 +7,9 @@ shell on Kutum. Batighor serves them as text, and nothing else:
 * only the shelves named here, each a directory on Kutum;
 * a path is resolved and must stay inside its shelf, so `..` and a symlink
   out of it are refused;
-* no name starting with `.` anywhere in the path (keys, caches, editors'
-  swap files), only text suffixes, and at most MAX_BYTES a file;
+* no name starting with `.` or `__` anywhere in the path (keys, caches,
+  editors' swap files, the package's `__init__.py`), only text suffixes,
+  and at most MAX_BYTES a file;
 * nothing is ever written: the server refuses every method but GET.
 
 Batighor binds every interface with no login (owner ruling, bead
@@ -46,7 +47,9 @@ MAX_DEPTH = 5
 
 
 def _visible(rel: Path) -> bool:
-    return bool(rel.parts) and not any(p.startswith('.') for p in rel.parts) \
+    # `__init__.py` and `__pycache__` are the package's plumbing, not a file
+    # an operator reads.
+    return bool(rel.parts) and not any(p.startswith(('.', '__')) for p in rel.parts) \
         and rel.suffix.lower() in TEXT
 
 
