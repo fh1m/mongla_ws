@@ -259,6 +259,10 @@ class FlowFrameMixin:
             return
 
         status, n_used = self._drop_inconsistent_tracks(track, nxt, status, n_used)
+        # The median again, over what SURVIVED: the one above includes the
+        # points forward-backward just rejected, and the median fallback below
+        # would publish it. Too few survivors is no flow at all.
+        flow = robust_flow(self._anchor_pts, nxt, status, min_tracks=_MIN_TRACKS)
         if self._caustics_fooled_us(gray, t, track, nxt, status):
             return
 
@@ -304,7 +308,9 @@ class FlowFrameMixin:
         self._read_the_floor(gray, t)
         self._publish_tracks(nxt, status, t)
         self._anchor(gray, t)
-        if dt > 0.0:
+        if flow is None:
+            self._refuse(f'too few tracks survived forward-backward ({n_used})')
+        elif dt > 0.0:
             self._evaluate(flow, disp, dt, t, n_used)
         else:
             self._refuse('non-positive baseline')

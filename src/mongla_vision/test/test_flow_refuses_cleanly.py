@@ -88,3 +88,16 @@ def test_every_refusal_stops_the_tick():
         f'flow_node.py: _refuse() at line(s) {bad} is not followed by '
         f'return/continue/break -- the tick would carry on and publish a '
         f'velocity built from the state it just refused')
+
+
+def test_the_flow_is_taken_over_the_points_forward_backward_kept():
+    """The median was taken before forward-backward rejection and kept when
+    the planar fit refused, so a velocity was published from points that
+    failed the check (audit 2026-11-24). A median after the rejection, and a
+    refusal when it is None, is the structure that prevents it."""
+    src = (_NODE.parent / 'flow_frame.py').read_text()
+    body = src[src.index('def _process'):]
+    body = body[:body.index('\n    def ', 10)]
+    drop = body.index('_drop_inconsistent_tracks(')
+    assert 'robust_flow(' in body[drop:], 'no median over the survivors'
+    assert 'too few tracks survived forward-backward' in body[drop:]

@@ -145,7 +145,8 @@ def interp_rate(buffer: Sequence[Tuple[float, float, float]],
     `buffer` is a time-ordered sequence of (stamp_s, pitch_rate, roll_rate).
     Rotation-comp is ~1:1 with the signal, so "latest sample" is wrong at 20-50
     Hz async -- linearly interpolate to the flow frame-pair midpoint instead.
-    Returns None on an empty buffer; clamps to the ends outside the range.
+    Returns None on an empty buffer, or when the interval ends more than
+    MAX_RATE_HOLD_S after the newest sample; clamps to the ends otherwise.
     """
     if not buffer:
         return None
@@ -371,6 +372,11 @@ def solve_planar_motion(prev_pts, next_pts, status, dt: float, *,
                         n_inliers=inliers, n_points=n, residual_px=resid)
 
 
+# How far past the newest gyro sample an interval may end and still be read:
+# a few periods of the 50 Hz IMU, plus its transport. Past it the gyro stalled.
+MAX_RATE_HOLD_S = 0.1
+
+
 def integrate_rate(buffer: Sequence[Tuple[float, float, float]],
                    t0: float, t1: float) -> Optional[Tuple[float, float]]:
     """Mean (pitch_rate, roll_rate) over [t0, t1], trapezoidally integrated.
@@ -390,6 +396,10 @@ def integrate_rate(buffer: Sequence[Tuple[float, float, float]],
     Returns None on an empty buffer; clamps to the ends outside the range.
     """
     if not buffer:
+        return None
+    # Stale: the interval ends well after the newest sample, so its rate
+    # would be the last one held. A stalled IMU is no gyro, not a constant one.
+    if t1 - max(s[0] for s in buffer) > MAX_RATE_HOLD_S:
         return None
     if t1 <= t0:
         return interp_rate(buffer, t0)

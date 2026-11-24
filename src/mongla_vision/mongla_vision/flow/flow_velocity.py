@@ -158,6 +158,12 @@ def flow_velocity(dx_px: float, dy_px: float, dt: float, *,
         # plot, and it would be integrated by whatever consumes this.
         return FlowVelocity(ok=False, reason='no height/range')
 
+    # Every comparison below is False on NaN, so a NaN flow or rate reached
+    # the end and came out ok=True with a NaN velocity.
+    if not all(math.isfinite(float(v)) for v in (dx_px, dy_px, roll_rate, pitch_rate)):
+        return FlowVelocity(ok=False, height_m=height_m,
+                            reason='a flow or gyro rate is not a number')
+
     # Rotation-induced shift over the SAME interval. Range-independent, which
     # is why it is removed here rather than after the scaling.
     rot_x = f_px * roll_rate * dt
