@@ -1,0 +1,58 @@
+{
+  "configById": {
+    "mongla.batighor.ControlCenter!control": {},
+    "Teleop!pad": {
+      "topic": "/mongla/batighor/teleop",
+      "publishRate": 4,
+      "upButton": {
+        "field": "linear-x",
+        "value": 1
+      },
+      "downButton": {
+        "field": "linear-x",
+        "value": -1
+      },
+      "leftButton": {
+        "field": "angular-z",
+        "value": 1
+      },
+      "rightButton": {
+        "field": "angular-z",
+        "value": -1
+      },
+      "lichtblickPanelTitle": "pad: one short step per press, seated pilot only"
+    },
+    "CallService!raw_helm": {
+      "serviceName": "/mongla/batighor/helm",
+      "requestPayload": "{\n \"who\": \"button\",\n \"op\": \"command\",\n \"cmd\": \"stop\",\n \"fields_json\": \"\",\n \"mission\": \"\",\n \"confirms\": []\n}",
+      "layout": "vertical",
+      "buttonText": "STOP",
+      "buttonTooltip": "any helm request, typed as JSON",
+      "buttonColor": "#f88701",
+      "lichtblickPanelTitle": "helm request, typed whole"
+    }
+  },
+  "globalVariables": {
+    "track": 0
+  },
+  "userNodes": {
+    "mongla-detections-per-frame": {
+      "name": "detections per frame",
+      "sourceCode": "import { Input } from \"./types\";\n\n// How many boxes each camera's detector gave on its latest frame: a count\n// that drops to zero while the picture runs is a detector that lost the target.\nexport const inputs = [\"/mongla/vision/forward/detections\", \"/mongla/vision/downward/detections\"];\nexport const output = \"/studio_script/mongla_detections_per_frame\";\n\nconst last = { forward: 0, downward: 0 };\n\nexport default function script(\n  event: Input<\"/mongla/vision/forward/detections\"> | Input<\"/mongla/vision/downward/detections\">,\n): { forward: number; downward: number } {\n  const cam = event.topic.includes(\"/forward/\") ? \"forward\" : \"downward\";\n  last[cam] = event.message.detections.length;\n  return { ...last };\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "mongla.batighor.ControlCenter!control",
+    "second": {
+      "direction": "column",
+      "first": "Teleop!pad",
+      "second": "CallService!raw_helm",
+      "splitPercentage": 62.5
+    },
+    "splitPercentage": 50.0
+  }
+}

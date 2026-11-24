@@ -31,6 +31,20 @@ const lockTopic = (c) => `/mongla/vision/${c}/lock`;
 const hudTopic = (c) => `/mongla/vision/${c}/hud`;
 const seeingTopic = (c) => `/mongla/vision/${c}/seeing`;
 const modelTopic = (c) => `/mongla/vision/${c}/vision_info`;
+// What the running model can emit and what the mission filters for, both
+// latched by the detector (detector_publish.py, detector_node.py).
+const classesTopic = (c) => `/mongla/vision/${c}/model_classes`;
+const filterTopic = (c) => `/mongla/vision/${c}/classes_filter`;
+const names = (s) => String(s == null ? "" : s).split(",").map((x) => x.trim()).filter(Boolean);
+
+// A filter naming a class the model never emits is a mission steering on
+// nothing: the detector logs it and reports an empty frame, every frame
+// (CLAUDE.md, the models are development harnesses). Pure; exported.
+function classesOf(emits, filter) {
+  if (emits == null) return null;
+  const e = names(emits), f = names(filter);
+  return { emits: e, filter: f, missing: f.filter((x) => !e.includes(x)) };
+}
 const STAGES_TOPIC = "/mongla/batighor/stages";     // overlay.py, once a second
 const ageS = (t) => (t ? (Date.now() - t) / 1000 : Infinity);
 // When the message being folded arrived. A fold stamps what it keeps with
@@ -1118,9 +1132,11 @@ const INSTRUMENTS = {
   },
   Vision: {
     title: "Vision",
-    topics: [...CAMERAS.flatMap((c) => [lockTopic(c), seeingTopic(c), modelTopic(c)]), "/mongla/vision/active_camera", STAGES_TOPIC],
+    topics: [...CAMERAS.flatMap((c) => [lockTopic(c), seeingTopic(c), modelTopic(c), classesTopic(c), filterTopic(c)]),
+      "/mongla/vision/active_camera", STAGES_TOPIC],
     fold(s, topic, m) {
       s.lock = s.lock || {}; s.lockAt = s.lockAt || {}; s.seeing = s.seeing || {}; s.model = s.model || {};
+      s.emits = s.emits || {}; s.filter = s.filter || {};
       if (topic === "/mongla/vision/active_camera") { s.active = m.data; return; }
       if (topic === STAGES_TOPIC) { try { s.stages = JSON.parse(m.data); s.stagesAt = heard(); } catch { /* keep */ } return; }
       for (const c of CAMERAS) {
@@ -1129,6 +1145,8 @@ const INSTRUMENTS = {
         // The detector's own word for which model runs (latched), with its epoch:
         // a mission's model switch shows as the epoch moving.
         if (topic === modelTopic(c)) s.model[c] = `${m.database_location || "--"}  epoch ${m.database_version}`;
+        if (topic === classesTopic(c)) s.emits[c] = m.data;
+        if (topic === filterTopic(c)) s.filter[c] = m.data;
       }
     },
     draw(s) {
@@ -1151,6 +1169,13 @@ const INSTRUMENTS = {
         cam.push(el("div", { class: "bar" }, el("b", { style: `width:${stale || !fin(authority) ? 0 : 100 * Math.min(1, authority)}%;background:${RUNG_COLOUR[rung] || "var(--mb-sea)"}` })));
         const notes = [(s.model || {})[c] && `model ${s.model[c]}`, (s.seeing || {})[c] && `seeing ${s.seeing[c]}`].filter(Boolean);
         if (notes.length) cam.push(el("div", { class: "note" }, notes.join("   ")));
+        const k = classesOf((s.emits || {})[c], (s.filter || {})[c]);
+        if (k) {
+          cam.push(el("div", { class: "note" }, `emits ${k.emits.join(", ") || "nothing: no model loaded"}`));
+          cam.push(el("div", { class: k.missing.length ? "err" : "note" },
+            k.missing.length ? `filter names ${k.missing.join(", ")}: this model never emits it`
+              : `filter ${k.filter.join(", ") || "none, every class"}`));
+        }
         // What runs on this camera; an off stage carries the switch that turns
         // it on. The overlay node counts publishers: a topic the graph lists
         // is not a stage that runs (a subscriber alone lists it too).
@@ -1643,7 +1668,7 @@ async function syncLayouts() {
 
 module.exports = {
   healthNow, managerHeard, vitalsOf, signalBars, WATCH_CELLS, captionOf, foldCaption, fitText, NAV_WHY_CHARS,
-  attitudeOf, depthRate, vitalsSvg, chainBoxes, chainSvg,
+  attitudeOf, depthRate, vitalsSvg, chainBoxes, chainSvg, classesOf,
   activate(extensionContext) {
     syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {

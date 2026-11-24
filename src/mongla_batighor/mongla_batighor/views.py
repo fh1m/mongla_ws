@@ -346,6 +346,18 @@ def _ladder_lines() -> list:
 CAMERA_COLUMN = 37
 
 
+def _pose(v: View, cam: str):
+    """One camera's target pose: the fused range beside the bearing from both
+    solvers. The tight solve (`target_pose`) and the near one
+    (`target_pose_near`, its reprojection gate opened for a board that fills
+    the frame) are drawn together, never merged: where they disagree is the
+    evidence (vision_pi.launch.py, solver_near)."""
+    c = f'{V}/{cam}'
+    return row(v('target_range', plot(series(f'{c}/target_pose_fused.range_m', 'range m'))),
+               v('pose', plot(series(f'{c}/target_pose.bearing_deg', 'bearing deg'),
+                              series(f'{c}/target_pose_near.bearing_deg', 'near deg'))))
+
+
 def _cameras(v: View, *, synced: bool = False):
     extra = {'downward': ['flow_annotations', 'floor_annotations']}
     return col(*(seen(v, c, c, camera(c, *extra.get(c, []), synced=synced)) for c in CAMERAS))
@@ -390,11 +402,13 @@ def vision(v: View):
         (5, v('detectors', instrument('Detectors'))),
         (3, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
                 v('pose', plot(series(f'{fwd}/target_pose.bearing_deg', 'bearing deg'),
+                               series(f'{fwd}/target_pose_near.bearing_deg', 'near deg'),
                                series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),
         (3, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'rotation'),
                              series(f'{dwn}/anchor_decomposition.vector.y', 'scale')))),
         (3, v('align', align('align x px', 'align y px',
-                             series(f'{fwd}/target_pose.reproj_px', 'reproj px')))))
+                             series(f'{fwd}/target_pose.reproj_px', 'reproj px'),
+                             series(f'{fwd}/target_pose_near.reproj_px', 'near px')))))
     right = row(now, numbers)
     return row((CAMERA_COLUMN, col(*(seen(v, c, c, camera(c, synced=True)) for c in CAMERAS))),
                (100 - CAMERA_COLUMN, right))
@@ -427,7 +441,13 @@ def flow(v: View):
             # ~160, and on one axis it flattened them onto the floor.
             (3, v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
                                   series(f'{d}/distance_debug.data[1]', 'height m', True),
-                                  series(f'{d}/floor_height.range', 'floor m')))))))
+                                  series(f'{d}/floor_height.range', 'floor m')))),
+            # What flow subtracts as rotation: the board's ATTITUDE rates on
+            # its own clock (node_telemetry.py), x pitch, y roll, z yaw. A
+            # turn that leaks into the speed above shows here first.
+            (3, v('derotation', plot(series('/mongla/imu_rates.vector.x', 'pitch rad/s'),
+                                     series('/mongla/imu_rates.vector.y', 'roll rad/s'),
+                                     series('/mongla/imu_rates.vector.z', 'yaw rad/s')))))))
 
 def localization(v: View):
     """Navigation: where the filter puts the vehicle on the pool, and why.
@@ -566,6 +586,7 @@ def downward(v: View):
                                    series(f'{V}/active_camera.data', 'live camera', True)))),
             (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor m'),
                                 series('/mongla/state.depth_m', 'depth m')))),
+            (3, _pose(v, 'downward')),
             (3, v('anchor', plot(series(f'{d}/anchor_decomposition.vector.x', 'rotation'),
                                  series(f'{d}/anchor_decomposition.vector.y', 'scale')))))))
 
@@ -583,7 +604,9 @@ def forward(v: View):
             (3, v('vision', instrument('Vision'))),
             (4, v('ladder', states(series(f'{f}/lock{RUNG}.class_id', 'forward rung'),
                                    series(f'{V}/active_camera.data', 'live camera', True)))),
-            (3, v('target_range', plot(series(f'{f}/target_pose_fused.range_m', 'range m')))),
+            (3, _pose(v, 'forward')),
+            (3, v('anchor', plot(series(f'{f}/anchor_decomposition.vector.x', 'rotation'),
+                                 series(f'{f}/anchor_decomposition.vector.y', 'scale')))),
             (4, v('dets', table(f'{f}/detections.detections'))))))
 
 
@@ -740,9 +763,6 @@ def log_(v: View):
 NOT_SHOWN = {
     'image_raw': 'the raw frame; every view shows the same frame as stream/compressed',
     'image_debug': "the detector's own drawn frame; the browser draws over the camera's JPEG",
-    'classes_filter': "the allowlist; the Control Center shows it (helm_state, detector settings)",
-    'model_classes': 'what the model can emit, for the mission DSL to check a course against',
-    'imu_rates': 'the body rates again at the board rate, for the filter; /mongla/imu is plotted',
     'distance_control': 'a command to the flow distance bracket, not an observation',
     'video_seek_frame': "a replay command from the display node",
     'video_seek_rel': "a replay command from the display node",

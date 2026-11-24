@@ -69,6 +69,11 @@
           "enabled": true
         },
         {
+          "value": "/mongla/vision/forward/target_pose_near.bearing_deg",
+          "label": "near deg",
+          "enabled": true
+        },
+        {
           "value": "/mongla/vision/forward/target_pose_fused.yaw_deg",
           "label": "yaw deg",
           "enabled": true
@@ -120,6 +125,11 @@
         {
           "value": "/mongla/vision/forward/target_pose.reproj_px",
           "label": "reproj px",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_near.reproj_px",
+          "label": "near px",
           "enabled": true
         }
       ],

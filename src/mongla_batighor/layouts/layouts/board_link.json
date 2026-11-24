@@ -1,0 +1,70 @@
+{
+  "configById": {
+    "Plot!bytes": {
+      "paths": [
+        {
+          "value": "/mongla/board_link.bytes_per_s",
+          "label": "bytes/s",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/board_link.capacity_bytes_per_s",
+          "label": "capacity",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 140,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "bytes per second"
+    },
+    "Plot!drops": {
+      "paths": [
+        {
+          "value": "/mongla/board_link.board_drop_pct",
+          "label": "drop %",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/board_link.board_errors",
+          "label": "errors",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 117,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "board drops"
+    },
+    "mongla.batighor.Link!link": {}
+  },
+  "globalVariables": {
+    "track": 0
+  },
+  "userNodes": {
+    "mongla-detections-per-frame": {
+      "name": "detections per frame",
+      "sourceCode": "import { Input } from \"./types\";\n\n// How many boxes each camera's detector gave on its latest frame: a count\n// that drops to zero while the picture runs is a detector that lost the target.\nexport const inputs = [\"/mongla/vision/forward/detections\", \"/mongla/vision/downward/detections\"];\nexport const output = \"/studio_script/mongla_detections_per_frame\";\n\nconst last = { forward: 0, downward: 0 };\n\nexport default function script(\n  event: Input<\"/mongla/vision/forward/detections\"> | Input<\"/mongla/vision/downward/detections\">,\n): { forward: number; downward: number } {\n  const cam = event.topic.includes(\"/forward/\") ? \"forward\" : \"downward\";\n  last[cam] = event.message.detections.length;\n  return { ...last };\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "Plot!bytes",
+      "second": "Plot!drops",
+      "splitPercentage": 50.0
+    },
+    "second": "mongla.batighor.Link!link",
+    "splitPercentage": 55.0
+  }
+}

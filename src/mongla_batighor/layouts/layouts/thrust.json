@@ -1,0 +1,96 @@
+{
+  "configById": {
+    "mongla.batighor.Thrust!thrust": {},
+    "Plot!demand": {
+      "paths": [
+        {
+          "value": "/mongla/demand.vector.x",
+          "label": "surge",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/demand.vector.y",
+          "label": "sway",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 112,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "demand"
+    },
+    "Plot!power": {
+      "paths": [
+        {
+          "value": "/mongla/thruster_pack.voltage",
+          "label": "thrusters V",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 174,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "battery"
+    },
+    "Plot!rates": {
+      "paths": [
+        {
+          "value": "/mongla/imu.angular_velocity.x",
+          "label": "roll rate",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu.angular_velocity.y",
+          "label": "pitch rate",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu.angular_velocity.z",
+          "label": "yaw rate",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 163,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "body rates"
+    }
+  },
+  "globalVariables": {
+    "track": 0
+  },
+  "userNodes": {
+    "mongla-detections-per-frame": {
+      "name": "detections per frame",
+      "sourceCode": "import { Input } from \"./types\";\n\n// How many boxes each camera's detector gave on its latest frame: a count\n// that drops to zero while the picture runs is a detector that lost the target.\nexport const inputs = [\"/mongla/vision/forward/detections\", \"/mongla/vision/downward/detections\"];\nexport const output = \"/studio_script/mongla_detections_per_frame\";\n\nconst last = { forward: 0, downward: 0 };\n\nexport default function script(\n  event: Input<\"/mongla/vision/forward/detections\"> | Input<\"/mongla/vision/downward/detections\">,\n): { forward: number; downward: number } {\n  const cam = event.topic.includes(\"/forward/\") ? \"forward\" : \"downward\";\n  last[cam] = event.message.detections.length;\n  return { ...last };\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "mongla.batighor.Thrust!thrust",
+      "second": "Plot!demand",
+      "splitPercentage": 40.0
+    },
+    "second": {
+      "direction": "column",
+      "first": "Plot!power",
+      "second": "Plot!rates",
+      "splitPercentage": 50.0
+    },
+    "splitPercentage": 50.0
+  }
+}

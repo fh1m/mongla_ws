@@ -192,3 +192,15 @@ process.stdout.write(JSON.stringify(b.map((x) => [x.key, x.state, x.hz, x.p50, x
                    ['track:forward', 'silent', None, None, ''],
                    ['lock:forward', 'live', None, 40, ''],
                    ['mixer', 'absent', None, None, 'upstream B: saturation']]
+
+
+@NEEDS_NODE
+def test_a_filter_naming_a_class_the_model_never_emits_is_said_so():
+    """The silent failure the models' rule warns of: a mission filtering for
+    a class the loaded model does not emit gets an empty frame, every frame."""
+    out = _run(r'''
+const ok = X.classesOf("blood,fire,gate", "gate");
+const bad = X.classesOf("blood,fire", " gate , fire");
+const all = X.classesOf("gate", "");
+process.stdout.write(JSON.stringify([ok.missing, bad.missing, all.filter, X.classesOf(undefined, "gate")]));''')
+    assert out == [[], ['gate'], [], None]
