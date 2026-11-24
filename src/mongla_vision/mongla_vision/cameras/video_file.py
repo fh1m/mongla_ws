@@ -62,9 +62,12 @@ class VideoFileCamera(Camera):
                 f"Check the file path and that OpenCV was built with ffmpeg support.")
 
         self._cap = cap
-        file_w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or 640)
-        file_h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480)
-        file_fps = float(cap.get(cv2.CAP_PROP_FPS)        or 30.0)
+        # Unknown is 0 / NaN, not 640x480 at 30 (vl_7 M10); playback paces at
+        # 30 when the file says nothing, and the log says so.
+        file_w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or 0)
+        file_h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        self._file_fps = float(cap.get(cv2.CAP_PROP_FPS) or float('nan'))
+        file_fps = self._file_fps if self._file_fps == self._file_fps else 30.0
 
         self._actual_w   = int(width)  if width  else file_w
         self._actual_h   = int(height) if height else file_h
@@ -74,7 +77,8 @@ class VideoFileCamera(Camera):
         if self._log:
             self._log.info(
                 f'[CAM  ] video_file {path!r} opened: '
-                f'{self._actual_w}x{self._actual_h}@{self._actual_fps:.1f} '
+                f'{self._actual_w or "?"}x{self._actual_h or "?"}@{self._actual_fps:.1f}'
+                f'{"" if self._file_fps == self._file_fps or fps else " (file fps unknown)"} '
                 f'frames={self._total_frames}  loop={self._loop}')
 
         self._idx         = 0
@@ -112,7 +116,9 @@ class VideoFileCamera(Camera):
         with self._lock:
             if not self._cap or not self._cap.isOpened():
                 return
-            delta  = int(seconds * self._actual_fps)
+            # Seconds of the FILE, not of the playback-rate override (M11).
+            rate   = self._file_fps if self._file_fps == self._file_fps else self._actual_fps
+            delta  = int(seconds * rate)
             cur    = int(self._cap.get(cv2.CAP_PROP_POS_FRAMES))
             hi     = max(0, self._total_frames - 1) if self._total_frames else cur + abs(delta)
             target = max(0, min(hi, cur + delta))

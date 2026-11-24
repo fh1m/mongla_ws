@@ -88,9 +88,11 @@ class WebcamCamera(Camera):
         self._set_exposure(exposure_us, brightness, max_blur_px, f_px,
                            max_rate_rad_s)
 
-        self._actual_w   = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or width)
-        self._actual_h   = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or height)
-        self._actual_fps = float(self._cap.get(cv2.CAP_PROP_FPS)        or fps)
+        # What the driver says, or unknown: never the request standing in for
+        # it (vl_7 M8). An unknown size is taken from the first frame.
+        self._actual_w   = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or 0)
+        self._actual_h   = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        self._actual_fps = float(self._cap.get(cv2.CAP_PROP_FPS) or float('nan'))
         fourcc_int = int(self._cap.get(cv2.CAP_PROP_FOURCC))
         fourcc_str = ''.join(chr((fourcc_int >> 8 * i) & 0xFF) for i in range(4))
 
@@ -198,6 +200,8 @@ class WebcamCamera(Camera):
             return None, meta
 
         self._consec_fail = 0
+        if not self._actual_w:            # the driver did not say; the frame does
+            self._actual_h, self._actual_w = frame.shape[:2]
         self._last_ok     = meta.stamp_monotonic
         self._idx        += 1
         meta.fresh        = True
