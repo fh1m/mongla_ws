@@ -11,7 +11,9 @@ For each camera this turns into `foxglove_msgs/ImageAnnotations` on
   * the lock, coloured by the rung of the ladder holding it, labelled with
     what it holds and its authority;
   * the targets' contours;
-  * the anchor's matched features (its learned points), while it runs.
+  * the anchor's matched features (its learned points), while it runs;
+  * a fading trail behind every track and the lock (`Trails`), and the aim:
+    the image centre joined to the lock with the pixel error it shows.
 
 The flow node's tracked pairs go to `<cam>/flow_annotations` (a segment from
 where each point was on the anchor frame to where it is now), what it read off
@@ -248,13 +250,54 @@ def hud(cam, model, size, arrivals, latency_s, silent_s=None, paused=UNREAD):
     return [first, f'detector {rate}  {late} behind the frame']
 
 
+# How long a trail is remembered: about two seconds of a target's path at the
+# detector's rate, enough to read a drift or a swing, short enough that the
+# picture does not fill with the past.
+TRAIL_S = 2.0
+TRAIL_POINTS = 60
+AIM = (GLASS, 1.5)
+
+
+class Trails:
+    """Where each track and the lock have been, as fading polylines.
+
+    Keyed by track id (or 'lock'); a key not seen for TRAIL_S is forgotten.
+    Pure bookkeeping, so the node and a test drive it the same way."""
+
+    def __init__(self, keep_s: float = TRAIL_S, points: int = TRAIL_POINTS):
+        self.keep_s, self.points, self.paths = keep_s, points, {}
+
+    def note(self, key, x: float, y: float, now: float, rgba) -> None:
+        path = self.paths.setdefault(key, [deque(maxlen=self.points), rgba])
+        path[0].append((now, x, y))
+        path[1] = rgba
+
+    def lines(self, now: float):
+        """[(points, rgba)] for every path with two or more fresh points."""
+        out = []
+        for key in list(self.paths):
+            pts, rgba = self.paths[key]
+            while pts and now - pts[0][0] > self.keep_s:
+                pts.popleft()
+            if not pts:
+                del self.paths[key]
+            elif len(pts) >= 2:
+                out.append(([(x, y) for _, x, y in pts], rgba))
+        return out
+
+
+def _centre(b):
+    return (b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5
+
+
 def _corners(b):
     x1, y1, x2, y2 = b[:4]
     return ((x1, y1), (x2, y1), (x2, y2), (x1, y2))
 
 
 def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
-             contours=None, features=None, size=None, hud=(), alarm=False) -> ImageAnnotations:
+             contours=None, features=None, size=None, hud=(), alarm=False,
+             trails=()) -> ImageAnnotations:
     """One frame's annotations: everything the vision stack holds, each as itself.
 
     Nothing is left off; each thing says what it is. A detection is drawn in
@@ -270,8 +313,16 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     own pixels, which is what the detector publishes, so they land on the
     picture with no scaling. `features` (the anchor's matched points) are in
     the matcher's pixels and are scaled by `size`, the camera's (width, height).
+    `trails`: [(points, rgba)] from `Trails.lines`, drawn under everything.
+    With a lock and a known size, the image centre is crossed and joined to
+    the lock's centre, labelled with the pixel error an alignment closes.
     """
     out = ImageAnnotations(timestamp=stamp)
+    for pts, rgba in trails:
+        out.points.append(PointsAnnotation(
+            timestamp=stamp, type=PointsAnnotation.LINE_STRIP,
+            points=[Point2(x=x, y=y) for x, y in pts],
+            outline_color=_color(rgba[:3] + (0.6,)), thickness=2.0))
     labels = _Labels(stamp, size)
     # Bottom left, under the labels a box near the top carries; top left
     # until the camera has said its size. Placed first so no label covers it.
@@ -363,6 +414,18 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
             x1, y1, x2, y2, label, _ = _box(det)
             out.points.append(_loop(stamp, _corners((x1, y1, x2, y2)),
                                     RUNG.get(label, LOCK[0]), LOCK[1]))
+        if size and lock.detections:
+            cx, cy = size[0] * 0.5, size[1] * 0.5
+            lx, ly = _centre(_box(lock.detections[0]))
+            rgba, th = AIM
+            out.points.append(PointsAnnotation(
+                timestamp=stamp, type=PointsAnnotation.LINE_LIST, outline_color=_color(rgba),
+                thickness=th, points=[Point2(x=cx - 14, y=cy), Point2(x=cx + 14, y=cy),
+                                      Point2(x=cx, y=cy - 14), Point2(x=cx, y=cy + 14),
+                                      Point2(x=cx, y=cy), Point2(x=lx, y=ly)]))
+            texts.append(labels.place([(cx + 8, cy + LABEL_PX + 8), (cx + 8, cy - 8)],
+                                      f'err {lx - cx:+.0f} {ly - cy:+.0f} px', rgba,
+                                      LABEL_PX * 0.8))
     out.texts.extend(texts + hud_texts)
     return out
 
@@ -644,8 +707,9 @@ def main(args=None):
                 latest = dict.fromkeys(LAYERS)
                 latest['arrivals'] = deque(maxlen=RATE_WINDOW)
                 pub = self.create_publisher(ImageAnnotations, f'{ns}/annotations', 5)
+                trails = Trails()
 
-                def draw(latest=latest, pub=pub, cam=cam):
+                def draw(latest=latest, pub=pub, cam=cam, trails=trails):
                     det = latest['detections']
                     if det is None:
                         return
@@ -656,6 +720,15 @@ def main(args=None):
                     # detection, offset by the motion between them.
                     lines = hud(cam, latest['model'], latest['size'], latest['arrivals'],
                                 latest['latency'])
+                    now = time.monotonic()
+                    trks = latest['tracks'] if same_frame(latest['tracks'], stamp) else None
+                    for d in (trks.detections if trks else []):
+                        if d.id:
+                            b = _box(d)
+                            trails.note(d.id, *_centre(b), now, class_colour(b[4]))
+                    for d in (latest['lock'].detections if latest['lock'] else [])[:1]:
+                        b = _box(d)
+                        trails.note('lock', *_centre(b), now, RUNG.get(b[4], LOCK[0]))
                     pub.publish(annotate(
                         stamp, det,
                         latest['tracks'] if same_frame(latest['tracks'], stamp) else None,
@@ -663,7 +736,7 @@ def main(args=None):
                         latest['candidates'] if same_frame(latest['candidates'], stamp) else None,
                         latest['contours'] if same_frame(latest['contours'], stamp) else None,
                         feats if fresh(feats, stamp, FEATURES_MAX_AGE_S) else None,
-                        latest['size'], lines))
+                        latest['size'], lines, trails=trails.lines(now)))
 
                 def on_detections(msg, latest=latest, draw=draw):
                     latest['detections'] = msg
