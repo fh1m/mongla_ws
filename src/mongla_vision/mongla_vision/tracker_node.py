@@ -68,7 +68,8 @@ def _build_tracker(tracker_type, *, track_buffer, min_hits,
         return ByteTrackWrapper(
             track_buffer=track_buffer, min_hits=min_hits,
             iou_threshold=iou_threshold,
-            track_activation_threshold=track_activation_threshold)
+            track_activation_threshold=track_activation_threshold,
+            detector_conf=detector_conf)
     try:
         return RoboflowTracker(
             tracker_type=ttype, track_buffer=track_buffer,
@@ -83,7 +84,8 @@ def _build_tracker(tracker_type, *, track_buffer, min_hits,
         return ByteTrackWrapper(
             track_buffer=track_buffer, min_hits=min_hits,
             iou_threshold=iou_threshold,
-            track_activation_threshold=track_activation_threshold)
+            track_activation_threshold=track_activation_threshold,
+            detector_conf=detector_conf)
 
 
 def capture_time(header) -> float:
