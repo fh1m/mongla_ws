@@ -48,7 +48,7 @@ import cv2
 import rclpy
 from rclpy.node import Node
 
-from mongla_vision.tracking.lock_state import Rung, arbitrate, live_window
+from mongla_vision.tracking.lock_state import LockState, Rung, arbitrate, live_window
 from .lock_setup import LockSetupMixin
 from .lock_wiring import LockWiringMixin
 from .lock_inputs import LockInputsMixin
@@ -156,6 +156,12 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
                         f'[LOCK ] ladder fault #{faults} (thread kept alive): '
                         f'{type(exc).__name__}: {exc}. The lock reports NOT LOCKED '
                         f'while this persists, which consumers already handle.')
+                # Say NOT LOCKED on the wire: without this the last state
+                # published, LOCKED included, stood while the ladder faulted.
+                try:
+                    self._publish(LockState(), getattr(self, '_header', None))
+                except Exception:   # noqa: BLE001 -- the fault path must not raise
+                    pass
                 time.sleep(0.05)
 
     # ── one tick of the ladder, stage by stage ─────────────────────────────
