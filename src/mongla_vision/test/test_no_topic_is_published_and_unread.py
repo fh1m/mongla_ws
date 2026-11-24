@@ -41,6 +41,10 @@ PUBLISHED_UNREAD = {
     '/mongla/esc_rpm':
         'operator telemetry. 958/958 frames read exactly 0 with nothing '
         'attached, so it is watched by a human rather than acted on.',
+    '/mongla/safety':
+        'operator telemetry: leak, kill and the barometer as tri-states '
+        '(node_telemetry.safety_of). Read by Batighor (the Vehicle tab\'s '
+        'Indicator lamps), watched by a human.',
     '/mongla/thruster_pack':
         'operator telemetry: PM2, the thruster pack. Read by Batighor (the '
         'Thrust panel and the Thrust and Health plots), watched by a human.',
@@ -122,6 +126,9 @@ PUBLISHED_UNREAD = {
 
 # Subscribed with no in-graph publisher -> what actually feeds it.
 SUBSCRIBED_UNFED = {
+    '/mongla/batighor/teleop':
+        'published by a browser: Lichtblick\'s Teleop panel, through the '
+        'bridge\'s client_topic_whitelist (batighor.launch.py); helm.py reads it.',
     '/target_pose':
         'published by `pnp_node`, whose topic name is built with a variant '
         'suffix the scanner cannot resolve. Real, and launched.',
