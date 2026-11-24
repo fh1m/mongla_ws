@@ -40,16 +40,13 @@
       "followTf": "mongla",
       "followMode": "follow-position",
       "topics": {
-        "/mongla/odom": {
-          "visible": true
-        },
         "/mongla/batighor/scene": {
           "visible": true
         }
       },
       "scene": {
         "backgroundColor": "#05070c",
-        "labelScaleFactor": 0.3,
+        "labelScaleFactor": 1.0,
         "transforms": {
           "showLabel": false,
           "enablePreloading": true
@@ -178,16 +175,13 @@
       "followTf": "mongla",
       "followMode": "follow-position",
       "topics": {
-        "/mongla/odom": {
-          "visible": true
-        },
         "/mongla/batighor/scene": {
           "visible": true
         }
       },
       "scene": {
         "backgroundColor": "#05070c",
-        "labelScaleFactor": 0.3,
+        "labelScaleFactor": 1.0,
         "transforms": {
           "showLabel": false,
           "enablePreloading": true

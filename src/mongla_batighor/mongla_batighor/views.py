@@ -167,13 +167,18 @@ POOL_VIEW_M = 6.0
 
 def _scene() -> dict:
     return {'followTf': 'mongla', 'followMode': 'follow-position',
-            # The odometry, the track and the demand as an arrow on the hull (overlay.py).
-            'topics': {'/mongla/odom': {'visible': True},
-                       '/mongla/batighor/scene': {'visible': True}},
+            # The track and the demand as an arrow on the hull (overlay.py).
+            # Not /mongla/odom: the hull is placed by the same pose through
+            # /tf, and the odometry's metre-long arrow ran off the panel as
+            # a stray line (Chrome, 2026-11-25).
+            'topics': {'/mongla/batighor/scene': {'visible': True}},
             # The hull says where the body is; seven frame names drawn
             # on one point say nothing. Preloading acts on a recording
             # only, and the panel alerts without it once /tf exists.
-            'scene': {'backgroundColor': '#05070c', 'labelScaleFactor': 0.3,
+            # labelScaleFactor 1: a text's font_size is its size on screen.
+            # At 0.3 the demand's 22 px caption drew at about 6 px and the
+            # pool's 14 px names at about 4 px, unreadable (Chrome, 2026-11-25).
+            'scene': {'backgroundColor': '#05070c', 'labelScaleFactor': 1.0,
                       'transforms': {'showLabel': False, 'enablePreloading': True}},
             # From behind and above, the way a pilot looks at a
             # vehicle. At 2.2 m a 45-degree view of a wide panel is
