@@ -45,17 +45,22 @@ setInterval(beat, 1000);
 // helm, a verb, a mission, the log), and Detectors chooses the live camera
 // and tunes the detectors. As one panel it needed 1042 px and showed a
 // third of it, ARM and SEND below the fold (Cockpit, 2026-11-22).
+// Keys: the emergency keys alone, tall, for the ScreenPad: the touchscreen
+// under the operator's hands, where a key is a thumb's reach away.
 const PARTS = {
   ControlCenter: ["safe", "helm", "command", "mission", "log"],
   Detectors: ["detectors"],
+  Keys: ["safe"],
+  // The main screen's half when the keys are on the screen under it (Vitals).
+  Command: ["helm", "command", "mission", "log"],
 };
 
-const TITLE = { ControlCenter: "Control Center", Detectors: "Detectors" };
+const TITLE = { ControlCenter: "Control Center", Detectors: "Detectors", Keys: "Keys", Command: "Command" };
 
 function initPanel(context, kind = "ControlCenter") {
   const parts = PARTS[kind];
   if (typeof context.setDefaultPanelTitle === "function") context.setDefaultPanelTitle(TITLE[kind]);
-  const box = mount(context);
+  const box = mount(context, kind === "Keys" ? "pad" : undefined);
 
   let helm = {};
   let vehicle = null, vehicleAt = 0;

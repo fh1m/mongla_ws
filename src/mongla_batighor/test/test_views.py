@@ -9,14 +9,14 @@ from mongla_batighor.seat import CAMERAS
 
 
 def test_every_committed_layout_is_what_the_table_generates():
-    for name in [views.CONSOLE, *views.VIEWS]:
+    for name in [*views.CONSOLES, *views.VIEWS]:
         path = views.LAYOUTS / f'{views.FILE.get(name, name)}.json'
         assert path.read_text() == views.render(name), \
             f'{path.name} is stale: ros2 run mongla_batighor views --write'
 
 
 def test_no_layout_is_made_by_hand():
-    made = {views.CONSOLE} | {views.FILE.get(n, n) for n in views.VIEWS}
+    made = set(views.CONSOLES) | {views.FILE.get(n, n) for n in views.VIEWS}
     assert {p.stem for p in views.LAYOUTS.glob('*.json')} == made
 
 
@@ -157,6 +157,26 @@ def test_every_plot_says_what_it_is_and_its_legend_fits():
                     assert len(p.get('label', '')) <= views.LABEL_CHARS, (name, k, p['label'])
 
 
+def _console_tabs():
+    """(the console's layout, one of its tabs), for every console."""
+    for data in map(views.build, views.CONSOLES):
+        for tab in data['configById']['Tab!console']['tabs']:
+            yield data, tab
+
+
+def test_the_pilot_console_starts_on_pilot_and_repeats_nothing_vitals_shows():
+    """The main screen beside Vitals: the tab bar is the index, Pilot first;
+    no Cockpit tab and no status strip, which carry the keys and the state
+    Vitals already shows (seen twice on two screens, 2026-11-24)."""
+    data = views.build(views.PILOT_CONSOLE)
+    tabs = [t['title'] for t in data['configById']['Tab!console']['tabs']]
+    assert tabs[0] == 'Pilot' and 'Cockpit' not in tabs
+    assert set(tabs) == {t for _, t in views.TABS if t != 'Cockpit'} | {'Pilot'}
+    assert data['layout'] == 'Tab!console'
+    placed = json.dumps(data['configById']['Tab!console']['tabs'][0])
+    assert 'ControlCenter!' not in placed and 'Vehicle!' not in placed and 'Keys!' not in placed
+
+
 def test_the_console_holds_every_view_as_a_tab_with_its_own_panels():
     """One layout, a tab per view, built by the same functions: every panel a
     view places is in its tab, under an id no other tab uses."""
@@ -193,8 +213,7 @@ def test_every_state_row_is_visible_without_scrolling():
     """The Vision tab's lock ladder had seven rows in ~150 px: the forward
     camera's two showed and the downward camera's were below the fold. The
     Localization tab's aiding strip showed one row of five."""
-    data = views.build(views.CONSOLE)
-    for tab in data['configById']['Tab!console']['tabs']:
+    for data, tab in _console_tabs():
         for pid, h in _heights(tab['layout'], TAB_BODY_PX, {}).items():
             if pid.startswith('StateTransitions!'):
                 rows = len(data['configById'][pid]['paths'])
@@ -203,7 +222,7 @@ def test_every_state_row_is_visible_without_scrolling():
 
 
 def _all_configs():
-    for name in [views.CONSOLE, *views.VIEWS]:
+    for name in [*views.CONSOLES, *views.VIEWS]:
         yield from ((name, k, c) for k, c in views.build(name)['configById'].items())
 
 
@@ -291,8 +310,7 @@ def test_a_camera_picture_fills_its_panel():
     890 px wide: four tenths of the screen was black (2026-11-22). A camera
     panel is sized to its picture; the calibration's cameras vary and are left
     out."""
-    data = views.build(views.CONSOLE)
-    for tab in data['configById']['Tab!console']['tabs']:
+    for data, tab in _console_tabs():
         if tab['title'] == 'Calibrate':
             continue
         for pid, (w, h) in _boxes(tab['layout'], TAB_BODY_W_PX, TAB_BODY_PX, {}).items():
@@ -306,9 +324,8 @@ def test_a_camera_picture_fills_its_panel():
 def test_the_control_center_shows_every_key_without_scrolling():
     """ARM and SEND were below the fold of a 320 px Control Center; a key that
     needs a scroll first is not there when it is wanted."""
-    data = views.build(views.CONSOLE)
     seen = 0
-    for tab in data['configById']['Tab!console']['tabs']:
+    for data, tab in _console_tabs():
         for pid, (_, h) in _boxes(tab['layout'], TAB_BODY_W_PX, TAB_BODY_PX, {}).items():
             if pid.startswith(views.PANEL + 'ControlCenter!'):
                 seen += 1
@@ -321,7 +338,7 @@ def test_every_tab_carries_its_glyph():
     Downward, the tab showed a blank square (desktop app, 2026-11-22)."""
     css = (Path(views.__file__).resolve().parents[1] / 'theme' / 'batighor.css').read_text()
     keyed = set(re.findall(r'\[data-testid="toolbar-tab"\]\[title="([^"]+)"\]\{--mb-glyph', css))
-    titles = {t for _, t in views.TABS}
+    titles = {t for tabs in views.CONSOLES.values() for _, t in tabs}
     assert titles <= keyed, titles - keyed
     assert keyed <= titles, f'a glyph for no tab: {keyed - titles}'
 

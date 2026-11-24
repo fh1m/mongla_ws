@@ -27,6 +27,18 @@ The rules every view keeps:
 - **The picture and its boxes are the same frame.** The camera's own JPEG, with the
   annotations drawn by the browser from the frame they were computed on.
 
+## Two screens: Pilot above, Vitals below
+
+On a laptop with a second screen under its panel (the Zenbook Duo's ScreenPad), the desktop
+app opens two windows by itself (`tools/pool/batighor_desktop.py`, `--one-screen` for one).
+Above, the **pilot** console: the tab bar is the index to every view, and its first tab,
+Pilot, gives the pictures the screen: both cameras side by side across the top, and under
+them what holds the target, the hull and the pool with Mongla on it. Below, **Vitals**: the
+three keys, and the vehicle drawn to be read from the corner of an eye, depth, heading,
+thrust, ESCs, arming, mode, packs, position and the board's lines, beside the map and the
+hull. Nothing is on both screens: the keys and the vehicle's state live below, so the
+pilot console has no Cockpit tab and no status strip.
+
 ## The cockpit (`mongla_layout`)
 
 ![The cockpit: the forward camera on the gate with its box and a track, the downward camera on the bins with the flow node's tracked points, the Control Center with STOP, SURFACE and DISARM, the Vehicle gauges, the hull in 3D, and the Vision panel with each camera's lock ladder and perception stages.](../../../docs/imgs/batighor/mongla_layout.webp)
