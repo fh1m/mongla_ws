@@ -136,7 +136,7 @@ def test_no_plot_mixes_units():
     """A plot has one axis. Depth (-0.5 m) beside the battery (12.4 V) drew
     depth as a flat line at the floor (board_health, desktop app 2026-11-12);
     the pose plot did the same with metres, degrees and pixels."""
-    unit = re.compile(r'(?<![\w/])(m/s|m|V|deg|px|Hz|%|rpm|bytes/s)(?![\w/])')
+    unit = re.compile(r'(?<![\w/])(m/s|m|V|deg|rad|ratio|px|Hz|%|rpm|bytes/s)(?![\w/])')
     for name in views.VIEWS:
         for k, c in views.build(name)['configById'].items():
             if k.startswith('Plot!'):

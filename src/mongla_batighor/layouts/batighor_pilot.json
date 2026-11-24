@@ -459,22 +459,33 @@
       "paths": [
         {
           "value": "/mongla/vision/downward/anchor_decomposition.vector.x",
-          "label": "rotation",
-          "enabled": true
-        },
-        {
-          "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
-          "label": "scale",
+          "label": "rotation rad",
           "enabled": true
         }
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 140,
+      "sidebarDimension": 186,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "anchor (XFeat)"
+      "lichtblickPanelTitle": "anchor rotation (XFeat)"
+    },
+    "Plot!vision.anchor_scale": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
+          "label": "scale ratio",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 174,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "anchor scale, over 1 is closer"
     },
     "Plot!vision.align": {
       "paths": [
@@ -1131,7 +1142,12 @@
                   },
                   "second": {
                     "direction": "column",
-                    "first": "Plot!vision.anchor",
+                    "first": {
+                      "direction": "row",
+                      "first": "Plot!vision.anchor",
+                      "second": "Plot!vision.anchor_scale",
+                      "splitPercentage": 50.0
+                    },
                     "second": "Plot!vision.align",
                     "splitPercentage": 50.0
                   },

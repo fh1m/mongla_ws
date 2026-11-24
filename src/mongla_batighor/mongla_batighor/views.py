@@ -52,7 +52,8 @@ TITLES = {'fwd': 'forward camera', 'dets': "this frame's detections",
           'track_xy': 'the chosen track, centre px', 'per_frame': 'detections per frame',
           'raw_helm': 'helm request, typed whole', 'scripts': 'user scripts', 'pad': 'pad: one short step per press, seated pilot only',
           'baro': 'baro', 'target_range': 'target range',
-          'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'anchor (XFeat)',
+          'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'anchor rotation (XFeat)',
+          'anchor_scale': 'anchor scale, over 1 is closer',
           'align': 'pixel error', 'ladder': 'lock ladder', 'calibration': 'velocity scale',
           'quality': 'flow quality and heights', 'vel': 'velocity',
           'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates, rad/s',
@@ -358,6 +359,15 @@ def _pose(v: View, cam: str):
                               series(f'{c}/target_pose_near.bearing_deg', 'near deg'))))
 
 
+def _anchor(v: View, cam: str):
+    """The anchor's in-plane rotation (radians) and its scale against
+    enrolment (a ratio, over 1 is closer): one plot each, since on one axis
+    the ratio near 1 flattened the rotation (audit batighor_7 F2)."""
+    a = f'{V}/{cam}/anchor_decomposition.vector'
+    return row(v('anchor', plot(series(f'{a}.x', 'rotation rad'))),
+               v('anchor_scale', plot(series(f'{a}.y', 'scale ratio'))))
+
+
 def _cameras(v: View, *, synced: bool = False):
     extra = {'downward': ['flow_annotations', 'floor_annotations']}
     return col(*(seen(v, c, c, camera(c, *extra.get(c, []), synced=synced)) for c in CAMERAS))
@@ -407,8 +417,7 @@ def vision(v: View):
                 v('pose', plot(series(f'{fwd}/target_pose.bearing_deg', 'bearing deg'),
                                series(f'{fwd}/target_pose_near.bearing_deg', 'near deg'),
                                series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),
-        (3, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'rotation'),
-                             series(f'{dwn}/anchor_decomposition.vector.y', 'scale')))),
+        (3, _anchor(v, 'downward')),
         (3, v('align', align('align x px', 'align y px',
                              series(f'{fwd}/target_pose.reproj_px', 'reproj px'),
                              series(f'{fwd}/target_pose_near.reproj_px', 'near px')))))
@@ -591,8 +600,7 @@ def downward(v: View):
             (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor (tile)'),
                                 series('/mongla/state.depth_m', 'depth m')))),
             (3, _pose(v, 'downward')),
-            (3, v('anchor', plot(series(f'{d}/anchor_decomposition.vector.x', 'rotation'),
-                                 series(f'{d}/anchor_decomposition.vector.y', 'scale')))))))
+            (3, _anchor(v, 'downward')))))
 
 
 def forward(v: View):
@@ -609,8 +617,7 @@ def forward(v: View):
             (4, v('ladder', states(series(f'{f}/lock{RUNG}.class_id', 'forward rung'),
                                    series(f'{V}/active_camera.data', 'live camera', True)))),
             (3, _pose(v, 'forward')),
-            (3, v('anchor', plot(series(f'{f}/anchor_decomposition.vector.x', 'rotation'),
-                                 series(f'{f}/anchor_decomposition.vector.y', 'scale')))),
+            (3, _anchor(v, 'forward')),
             (4, v('dets', table(f'{f}/detections.detections'))))))
 
 
