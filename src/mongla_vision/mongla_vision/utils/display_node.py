@@ -444,15 +444,22 @@ def main(args=None):
     rclpy.init(args=args)
     node = VisionDisplayNode()
     from mongla_runtime.params_file import refuse_unknown
-    refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
+    try:
+        refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
+    except Exception:
+        node.stop_pipeline()       # or the camera and detector it spawned live on
+        raise
 
     from rclpy.executors import ExternalShutdownException
 
     def _spin_target(n):
         try:
             rclpy.spin(n)
-        except (ExternalShutdownException, Exception):
+        except ExternalShutdownException:
             pass
+        except Exception as exc:
+            # The HUD would keep drawing its last frame with nothing said.
+            n.get_logger().error(f'[DISP ] spin thread stopped: {exc!r}')
 
     spin_thread = threading.Thread(target=_spin_target, args=(node,), daemon=True)
     spin_thread.start()

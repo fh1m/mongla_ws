@@ -80,6 +80,11 @@ def main(argv=None):
     goal.kp_yaw       = float(args.kp_yaw)
     # No fallback from a raw goal -> hold through brief losses for the run.
     goal.hold_through_loss = True
+    # Named, so a 0 the operator typed (gain 0: a no-thrust smoke test) runs
+    # as 0 and not as the verb's default (Move.action `set_fields`).
+    goal.set_fields = ['camera', 'target_class', 'axes', 'offset_yaw', 'err_px',
+                       'duration', 'gain', 'hold_through_loss'] + (
+                          ['kp_yaw'] if args.kp_yaw else [])
 
     print(f'[VTHR ] sending vision_align (yaw)  camera={args.camera}  '
           f'class={args.target_class}  duration={args.duration:.1f}s  '
@@ -87,15 +92,27 @@ def main(argv=None):
     print('[VTHR ] armed? `ros2 topic echo /mongla/esc_rpm` shows the thrusters respond')
 
     send_future = client.send_goal_async(goal)
-    rclpy.spin_until_future_complete(node, send_future)
+    rclpy.spin_until_future_complete(node, send_future, timeout_sec=args.connect_timeout)
     handle = send_future.result()
+    if handle is None:
+        print('[VTHR ] FAIL: no answer to the goal within '
+              f'{args.connect_timeout:.0f}s')
+        node.destroy_node(); rclpy.shutdown(); sys.exit(1)
     if not handle.accepted:
         print('[VTHR ] FAIL: action server REJECTED the goal '
               '(another command running?)')
         node.destroy_node(); rclpy.shutdown(); sys.exit(1)
 
     result_future = handle.get_result_async()
-    rclpy.spin_until_future_complete(node, result_future)
+    # The verb ends itself at `duration`; past that plus a margin the server
+    # has stalled, and a check that never returns says nothing.
+    rclpy.spin_until_future_complete(node, result_future,
+                                     timeout_sec=args.duration + args.connect_timeout)
+    if result_future.result() is None:
+        print(f'[VTHR ] FAIL: no result {args.duration + args.connect_timeout:.0f}s '
+              'after sending; cancelling the goal')
+        handle.cancel_goal_async()
+        node.destroy_node(); rclpy.shutdown(); sys.exit(1)
     result = result_future.result().result
 
     code = int(round(result.final_value))
