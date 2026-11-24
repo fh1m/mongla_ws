@@ -278,8 +278,7 @@ def vision(v: View):
                 v('pose', plot(series(f'{fwd}/target_pose.bearing_deg', 'bearing deg'),
                                series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),
         (3, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'rotation'),
-                             series(f'{dwn}/anchor_decomposition.vector.y', 'scale'),
-                             series(f'{dwn}/anchor_decomposition.vector.z', 'range m')))),
+                             series(f'{dwn}/anchor_decomposition.vector.y', 'scale')))),
         (3, v('align', align('align x px', 'align y px',
                              series(f'{fwd}/target_pose.reproj_px', 'reproj px')))))
     right = row(now, numbers)
