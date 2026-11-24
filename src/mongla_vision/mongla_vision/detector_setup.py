@@ -439,6 +439,11 @@ class DetectorSetupMixin:
                 key = self._resolve_model_key(name)
                 self._det = self._registry[key]
                 self._active_name = key
+                # The class filter belongs to "the" model: a live `classes`
+                # set must survive the switch, as conf and max_det do, or
+                # the classes the operator excluded come back (vl_10 F12).
+                if self._det is not None:
+                    self._det.update_allowlist(self._pending_allowlist)
                 self._set_extra(extra_names)
                 self._publish_vision_info()
                 self._publish_model_classes()
