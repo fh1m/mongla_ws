@@ -28,10 +28,11 @@ def _thruster_v(fc) -> float:
 
 def safety_of(fc):
     """(leak, kill, baro, baro_text) off the board's decoded telemetry, each a
-    MonglaState SAFETY_* tri-state; UNKNOWN wherever the board has not said."""
+    MonglaSafety SAFETY_* tri-state; UNKNOWN wherever the board has not said."""
     from mongla_control.fc.srot_protocol import baro_health_text
     tel = getattr(fc, 'telemetry', lambda: None)()
-    u, c, x = MonglaState.SAFETY_UNKNOWN, MonglaState.SAFETY_CLEAR, MonglaState.SAFETY_TRIPPED
+    from mongla_interfaces.msg import MonglaSafety
+    u, c, x = MonglaSafety.SAFETY_UNKNOWN, MonglaSafety.SAFETY_CLEAR, MonglaSafety.SAFETY_TRIPPED
 
     def tri(v):
         return u if v is None else (x if v else c)
@@ -90,9 +91,6 @@ class TelemetryMixin:
         msg.yaw_deg         = float(yaw_deg) if yaw_deg is not None else math.nan
         msg.depth_m         = float(attitude['depth'])
         msg.battery_voltage = self._fast_batt_v
-        safety = getattr(self, '_fast_safety', None)
-        if safety is not None:
-            msg.leak, msg.kill_switch, msg.baro, msg.baro_text = safety
         self.state_publisher.publish(msg)
 
     def _publish_demand(self):
@@ -573,7 +571,7 @@ class TelemetryMixin:
             f'out {self._tel(tel.depth_out, "{:+.2f}")} | '
             f'WTEMP {self._tel(tel.water_temp_c, "{:.1f}", "C")} | '
             f'MAGACC {self._tel(tel.mag_accuracy, "{:.0f}")} | '
-            f'LEAK {"WET" if tel.leak else "dry"} | '
+            f'LEAK {"--" if tel.leak is None else ("WET" if tel.leak else "dry")} | '
             f'KILL {_kill_text(tel.kill_switch)}')
         self.get_logger().info(f'[SROT ] RPM  {rpm}')
         if tel.esc_temp_c:
@@ -654,8 +652,6 @@ class TelemetryMixin:
         if attitude is None and battery is None:
             return
         msg = MonglaState()
-        self._fast_safety = safety_of(self.fc)
-        msg.leak, msg.kill_switch, msg.baro, msg.baro_text = self._fast_safety
         msg.header.stamp    = self._state_stamp()
         msg.header.frame_id = _BODY_FRAME
         msg.armed           = bool(armed)
@@ -674,3 +670,8 @@ class TelemetryMixin:
         pack.percentage = pack.temperature = math.nan
         pack.present = math.isfinite(pack.voltage)
         self.thruster_pack_publisher.publish(pack)
+        from mongla_interfaces.msg import MonglaSafety
+        safety = MonglaSafety()
+        safety.header = msg.header
+        safety.leak, safety.kill_switch, safety.baro, safety.baro_text = safety_of(self.fc)
+        self.safety_publisher.publish(safety)

@@ -49,6 +49,16 @@ string  mode              # the board's mode name, or '' if unknown
 float32 yaw_deg           # NaN when there is no fresh attitude
 float32 depth_m           # negative below the surface; NaN when absent
 float32 battery_voltage   # NaN when absent
+```
+
+### Topic: `/mongla/safety`
+
+`mongla_interfaces/msg/MonglaSafety`, published with each `/mongla/state` under the same
+header: the board's leak, kill and barometer states, decoded once (`node_telemetry.safety_of`).
+Their own topic because a field added to `MonglaState` breaks every earlier bag.
+
+```msg
+std_msgs/Header header
 int8    leak              # SAFETY_UNKNOWN 0 / SAFETY_CLEAR 1 / SAFETY_TRIPPED 2
 int8    kill_switch       # UNKNOWN with no second-board link (the firmware sends 0 then)
 int8    baro              # CLEAR = fault code 0; TRIPPED = any other code

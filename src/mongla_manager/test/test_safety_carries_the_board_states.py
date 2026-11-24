@@ -1,4 +1,4 @@
-"""Leak, kill and the barometer on /mongla/state, decoded once, tri-state.
+"""Leak, kill and the barometer on /mongla/safety, decoded once, tri-state.
 
 A lamp that read the board's raw channels said "baro ok" over a code of 3
 (not initialised) and "kill clear" over a lost second-board link, where the
@@ -6,10 +6,10 @@ firmware sends 0 on purpose (2026-11-24)."""
 import math
 from types import SimpleNamespace
 
-from mongla_interfaces.msg import MonglaState
+from mongla_interfaces.msg import MonglaSafety
 from mongla_manager import node_telemetry
 
-U, C, X = MonglaState.SAFETY_UNKNOWN, MonglaState.SAFETY_CLEAR, MonglaState.SAFETY_TRIPPED
+U, C, X = MonglaSafety.SAFETY_UNKNOWN, MonglaSafety.SAFETY_CLEAR, MonglaSafety.SAFETY_TRIPPED
 
 
 def _safety(**tel):
@@ -17,7 +17,7 @@ def _safety(**tel):
 
 
 def test_a_default_message_reads_unknown_never_clear():
-    m = MonglaState()
+    m = MonglaSafety()
     assert (m.leak, m.kill_switch, m.baro) == (U, U, U)
 
 
