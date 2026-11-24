@@ -142,7 +142,8 @@ pilot lost the helm 3 s later and the helm stopped their verb.
 
 `batighor`, the desktop app's default, is every view in one window: a status strip across the
 top and one tab per view below it (`views.CONSOLE`, `build('batighor')`). Only the open tab's
-panels mount, so eighteen views cost what one does. Each tab has its own glyph (`theme/batighor.css`).
+panels mount, so fourteen tabs cost what one does (one per aspect, none repeating another:
+`test_views.py`; the views left out stay layouts of their own in the layout menu). Each tab has its own glyph (`theme/batighor.css`).
 
 The strip is the `Status` instrument (`statusOf`): vehicle, mode, depth, heading, battery,
 mission, the verb running, each camera's lock rung, navigation, health and link. Health counts
@@ -317,5 +318,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `pin.py` | The Lichtblick build Batighor serves: one pinned version, one hash. |
 | `seat.py` | Who is the pilot: Batighor's token, as rules with no ROS in them. |
 | `serve.py` | Serve Lichtblick and our layouts to every operator's browser. |
+| `shelves.py` | The vehicle's own files, read only: the missions and the deck. |
 | `views.py` | Every Batighor view, from one table: `layouts/*.json` are generated here. |
 <!-- modules:end -->

@@ -1364,6 +1364,15 @@ const INSTRUMENTS = {
 
   // The plan beside the map: the mission's file as the runner published it,
   // and the line of it that sent the verb running now (mission.MissionText).
+  Files: {
+    title: "Files",
+    kind: "files",
+    topics: [],
+    head: () => filesPanel(),
+    fold() {},
+    draw: () => [],
+  },
+
   MissionText: {
     title: "Mission text",
     topics: ["/mongla/mission/source", "/mongla/mission/line", "/mongla/mission_alive"],
@@ -1638,16 +1647,60 @@ function layoutUpdates(records, served, now) {
 
 const idb = (req) => new Promise((ok, no) => { req.onsuccess = () => ok(req.result); req.onerror = () => no(req.error); });
 
-async function syncLayouts() {
-  if (typeof location === "undefined" || location.protocol !== "file:" || typeof indexedDB === "undefined") return;
-  const KEY = "mongla.batighor.layoutSync";
-  // Kutum is whoever the app last connected to; Batighor serves on 8000 there.
+// Batighor's own address: the page's origin in a browser (Kutum serves it),
+// and in the desktop app whoever it last connected to, on 8000 there.
+async function kutumBase() {
+  if (typeof location !== "undefined" && /^https?:$/.test(location.protocol)) return location.origin;
+  if (typeof indexedDB === "undefined") return null;
   const recents = await idb(indexedDB.open("lichtblick-recents"));
   const list = (await idb(recents.transaction("recents").objectStore("recents").getAll())).flat();
   recents.close();
   const url = list.map((x) => x && x.extra && x.extra.url).find((u) => typeof u === "string" && u.startsWith("ws"));
-  if (!url) return;
-  const base = `http://${new URL(url).hostname}:8000/layouts/`;
+  return url ? `http://${new URL(url).hostname}:8000` : null;
+}
+
+// The Files panel: the missions and the deck on Kutum, read only
+// (shelves.py). Built once in `head`, so a click is never lost to a redraw.
+function filesPanel() {
+  const list = el("div", { class: "files-list" });
+  const view = el("pre", { class: "files-view" }, "pick a file");
+  const title = el("div", { class: "files-title note" }, "");
+  let base = null, picked = null;
+  const show = async (shelf, path) => {
+    picked = `${shelf}/${path}`;
+    title.textContent = `${shelf}/${path}  (read only)`;
+    for (const b of list.querySelectorAll("button")) b.classList.toggle("on", b.dataset.key === picked);
+    try {
+      const r = await fetch(`${base}/files/${encodeURIComponent(shelf)}/${path.split("/").map(encodeURIComponent).join("/")}`, { cache: "no-store" });
+      view.textContent = r.ok ? await r.text() : `not shown: ${(await r.text()).trim()}`;
+    } catch (e) { view.textContent = `Kutum did not answer: ${e}`; }
+  };
+  const load = async () => {
+    base = base || await kutumBase().catch(() => null);
+    if (!base) { list.replaceChildren(el("div", { class: "note" }, "no Kutum to ask: connect first")); return; }
+    try {
+      const shelves = await (await fetch(`${base}/files/index.json`, { cache: "no-store" })).json();
+      list.replaceChildren(...Object.entries(shelves).flatMap(([shelf, files]) => [
+        el("div", { class: "lbl" }, `${shelf} (${files.length})`),
+        ...(files.length ? files.map((f) => el("button", { class: `file${`${shelf}/${f.path}` === picked ? " on" : ""}`,
+          "data-key": `${shelf}/${f.path}`, title: `${num(f.size / 1024, 1)} KB, ${new Date(f.mtime * 1000).toLocaleString()}`,
+          onclick: () => show(shelf, f.path) }, f.path))
+          : [el("div", { class: "note" }, "empty or not on this machine")]),
+      ]));
+    } catch (e) { list.replaceChildren(el("div", { class: "note" }, `Kutum did not answer: ${e}`)); }
+  };
+  load();
+  return el("div", { class: "files" },
+    el("div", { class: "files-side" }, el("button", { class: "file refresh", onclick: () => { load(); if (picked) show(...picked.split(/\/(.*)/s, 2)); } }, "refresh"), list),
+    el("div", { class: "files-main" }, title, view));
+}
+
+async function syncLayouts() {
+  if (typeof location === "undefined" || location.protocol !== "file:" || typeof indexedDB === "undefined") return;
+  const KEY = "mongla.batighor.layoutSync";
+  const kutum = await kutumBase();
+  if (!kutum) return;
+  const base = `${kutum}/layouts/`;
   const names = await (await fetch(base + "index.json", { cache: "no-store" })).json();
   const served = {};
   for (const n of names) served[n] = await (await fetch(`${base}${encodeURIComponent(n)}.json`, { cache: "no-store" })).json();

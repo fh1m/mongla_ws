@@ -711,6 +711,14 @@ def inspect(v: View):
                                                        'expansion': 'all'}))))))
 
 
+def files(v: View):
+    """The missions and the deck as Kutum holds them, read only (shelves.py):
+    what a run will execute and start with, without a shell on the vehicle.
+    Beside it, the mission running now, line by line."""
+    return row((64, v('files', instrument('Files'))),
+               (36, v('text', instrument('MissionText'))))
+
+
 def log_(v: View):
     """What every node says, newest last: the ROS log at info and above, beside
     the helm's own record of who asked for what (its keys and verbs are the
@@ -738,7 +746,7 @@ VIEWS = {f.__name__.rstrip('_'): f for f in (cockpit, mission, map_, vision, flo
                                              thrust, board_health, board_link, chain,
                                              forward, downward, vehicle, tune, helm,
                                              calibrate, weak_link, inspect, log_,
-                                             pilot, vitals, command)}
+                                             pilot, vitals, command, files)}
 FILE = {'cockpit': 'mongla_layout'}            # the default keeps the name links use
 
 # The console: every view as a tab of one layout, in the order a run is read.
@@ -754,7 +762,8 @@ CONSOLE = 'batighor'
 TABS = [('cockpit', 'Cockpit'), ('mission', 'Mission'), ('helm', 'Helm'),
         ('localization', 'Navigation'), ('vision', 'Vision'), ('flow', 'Flow'),
         ('thrust', 'Thrust'), ('board_health', 'Health'), ('board_link', 'Link'),
-        ('log', 'Log'), ('tune', 'Tune'), ('calibrate', 'Calibrate'), ('inspect', 'Inspect')]
+        ('log', 'Log'), ('files', 'Files'), ('tune', 'Tune'), ('calibrate', 'Calibrate'),
+        ('inspect', 'Inspect')]
 # The same console for the main screen when Vitals has the screen under it:
 # Pilot first, and no Cockpit tab and no status strip, since the keys and the
 # vehicle's state are on Vitals already. The tab bar stays: it is the index

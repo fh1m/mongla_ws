@@ -224,8 +224,10 @@ def test_every_instrument_reads_only_topics_that_exist_and_small_ones():
                     if '/test/' not in str(p))
     table = _instruments()
     assert set(table) >= {'Vehicle', 'Vision', 'Navigation', 'Thrust', 'Link', 'Health', 'Kutum'}
+    # Files reads Kutum's shelves over HTTP (shelves.py), not a topic.
+    over_http = {'Files'}
     for name, topics in table.items():
-        assert topics, name
+        assert bool(topics) != (name in over_http), name
         for topic in topics:
             leaf = topic.rsplit('/', 1)[-1]
             # An action's feedback topic is published by its server, which is

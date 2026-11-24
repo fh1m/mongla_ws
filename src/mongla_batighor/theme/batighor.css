@@ -178,6 +178,7 @@ body:has(.mb.vitals) .LichtblickPanelRoot-root > div > header{display:none!impor
 [data-testid="toolbar-tab"][title="Tune"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%202.5v11%20M8%202.5v11%20M12%202.5v11%22%2F%3E%3Cpath%20d%3D%22M2.5%205h3%20M6.5%2010h3%20M10.5%207h3%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Calibrate"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2212%22%20height%3D%2212%22%2F%3E%3Cpath%20d%3D%22M2%208h12M8%202v12%22%2F%3E%3Cpath%20d%3D%22M2%202h6v6H2z%20M8%208h6v6H8z%22%20fill%3D%22%23000%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Inspect"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%227%22%20cy%3D%227%22%20r%3D%224.2%22%2F%3E%3Cpath%20d%3D%22M10.2%2010.2L14%2014%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Files"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%202h5.5L12.5%205v9h-8.5z%20M9.5%202v3h3%20M6.5%208.5h4%20M6.5%2011h4%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Log"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2.5%204h11%20M2.5%208h11%20M2.5%2012h7%22%2F%3E%3C%2Fsvg%3E")}
 
 /* -- every panel ---------------------------------------------------------- */
@@ -413,3 +414,15 @@ svg.vitals .alarm{animation:mb-breathe 1.2s ease-in-out infinite}
 @keyframes mb-spin{to{transform:rotate(360deg)}}
 @keyframes mb-breathe{50%{opacity:.25}}
 @media (prefers-reduced-motion: reduce){svg.vitals *{animation:none!important}}
+
+/* Files: the missions and the deck, read only. The list beside the text. */
+.mb.files .files{display:grid;grid-template-columns:minmax(160px,28%) 1fr;gap:8px;height:100%;min-height:0}
+.mb.files .files-side{overflow:auto;display:flex;flex-direction:column;gap:2px}
+.mb.files .files-side .lbl{margin-top:8px;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--mb-ink-3)}
+.mb.files button.file{all:unset;cursor:pointer;font-family:var(--mb-mono);font-size:11px;padding:2px 6px;border-radius:3px;
+  color:var(--mb-ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mb.files button.file:hover{background:var(--mb-d3)} .mb.files button.file.on{background:var(--mb-d3);color:var(--mb-sea)}
+.mb.files button.refresh{color:var(--mb-sea);border:1px solid var(--mb-rule);text-align:center}
+.mb.files .files-main{display:flex;flex-direction:column;min-height:0}
+.mb.files pre.files-view{flex:1;max-height:none;white-space:pre;tab-size:4}
+.mb.files .body:empty{display:none}
