@@ -603,6 +603,65 @@ function statusOf(s, now) {
   return { cells, tabs };
 }
 
+// The stage graph as one SVG. Pure layout from the JSON, so a test can run it.
+const GRAPH_W = 1200, GRAPH_BOX_H = 20, GRAPH_GAP = 8, GRAPH_TOP = 22;
+function graphLayout(g) {
+  const cols = g.columns || [];
+  const colW = GRAPH_W / Math.max(1, cols.length);
+  const boxW = colW * 0.78;
+  const at = {};
+  cols.forEach((c, i) => c.nodes.forEach((n, j) => {
+    at[n] = { x: i * colW + (colW - boxW) / 2, y: GRAPH_TOP + j * (GRAPH_BOX_H + GRAPH_GAP), w: boxW, col: i };
+  }));
+  const rows = Math.max(1, ...cols.map((c) => c.nodes.length));
+  // The longest name fits its box: a monospace glyph is ~0.62 em wide.
+  const longest = Math.max(8, ...Object.keys(at).map((n) => graphName(n).length));
+  const font = Math.min(11, (boxW - 10) / (0.62 * longest));
+  return { cols, colW, boxW, at, font, h: GRAPH_TOP + rows * (GRAPH_BOX_H + GRAPH_GAP) + 4 };
+}
+// Our names fit in 22 characters; a longer one (the ros2 CLI daemon carries
+// a hash) is cut, whole in its tooltip, rather than shrinking every label.
+const GRAPH_NAME_MAX = 22;
+const graphName = (n) => {
+  const s = n.replace(/^\//, "").replace(/^mongla_/, "");
+  return s.length > GRAPH_NAME_MAX ? s.slice(0, GRAPH_NAME_MAX - 1) + "\u2026" : s;
+};
+const STAGE_INK = ["--mb-glass", "--mb-sea", "--mb-teal", "--mb-violet", "--mb-amber", "--mb-teal", "--mb-sea", "--mb-red", "--mb-ink-3", "--mb-ink-3"];
+function graphSvg(g) {
+  const L = graphLayout(g);
+  const kids = L.cols.map((c, i) => svg("text", { x: i * L.colW + L.colW / 2, y: 12, "text-anchor": "middle",
+    "font-size": 10, fill: "var(--mb-ink-3)", "letter-spacing": "0.12em" }, c.stage.toUpperCase()));
+  for (const e of g.edges || []) {
+    const a = L.at[e.from], b = L.at[e.to];
+    if (!a || !b) continue;
+    const ink = `var(${STAGE_INK[a.col % STAGE_INK.length]})`;
+    // Batighor and the bridge read nearly everything for a person; drawn
+    // like the pipeline's own edges they buried it, so they are faint.
+    const watch = L.cols[b.col] && L.cols[b.col].stage === "batighor";
+    const y1 = a.y + GRAPH_BOX_H / 2, y2 = b.y + GRAPH_BOX_H / 2;
+    // Forward edges leave the right side; an edge to an earlier or the same
+    // column leaves the left side and bows out, so it never crosses a box.
+    const fwd = b.col > a.col;
+    const x1 = fwd ? a.x + a.w : a.x, x2 = fwd ? b.x : b.x;
+    const bow = fwd ? (x2 - x1) / 2 : -40 - 12 * Math.abs(a.col - b.col);
+    const d = `M${x1},${y1} C${x1 + bow},${y1} ${x2 - (fwd ? bow : -bow)},${y2} ${x2},${y2}`;
+    kids.push(svg("path", { d, fill: "none", stroke: ink, "stroke-opacity": watch ? 0.15 : 0.7,
+      "stroke-dasharray": watch ? "3 4" : "none", "stroke-width": Math.min(3, 1 + 0.4 * e.topics.length) },
+      svg("title", {}, `${e.from} -> ${e.to}\n${e.topics.join("\n")}`)));
+  }
+  for (const [n, p] of Object.entries(L.at)) {
+    const short = graphName(n);
+    const ins = (g.edges || []).filter((e) => e.to === n).length, outs = (g.edges || []).filter((e) => e.from === n).length;
+    kids.push(svg("g", {},
+      svg("title", {}, `${n}\nfeeds ${outs} node(s), fed by ${ins}`),
+      svg("rect", { x: p.x, y: p.y, width: p.w, height: GRAPH_BOX_H, rx: 3, fill: "var(--mb-d3)",
+        stroke: ins + outs ? "var(--mb-rule-lit)" : "var(--mb-amber)" }),
+      svg("text", { x: p.x + 5, y: p.y + GRAPH_BOX_H / 2 + L.font * 0.35, "font-size": L.font,
+        "font-family": "var(--mb-mono)", fill: "var(--mb-ink)" }, short)));
+  }
+  return svg("svg", { viewBox: `0 0 ${GRAPH_W} ${L.h}`, style: "width:100%;height:auto;display:block" }, ...kids);
+}
+
 const INSTRUMENTS = {
   // The strip above the console's tabs: what an operator must never have to
   // look for, on every tab, and a mark on each tab whose subject needs an eye.
@@ -939,6 +998,24 @@ const INSTRUMENTS = {
     },
   },
 
+  // The ROS graph by stage (graph.py, from the chain node): a column per
+  // stage in the order the chain runs, a box per node, a curve per pair of
+  // nodes a topic joins. Hover an edge for its topics, a node for its counts.
+  Graph: {
+    title: "Graph",
+    topics: ["/mongla/batighor/graph"],
+    fold(s, topic, m) { try { s.g = JSON.parse(m.data); s.at = heard(); } catch { /* keep */ } },
+    draw(s) {
+      const g = s.g;
+      if (!g) return [el("div", { class: "note" }, "no /mongla/batighor/graph: is the chain meter running?")];
+      return [graphSvg(g),
+        kv(["nodes", String(g.nodes)], ["edges", String((g.edges || []).length)],
+          ["view age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 5 ? "warn" : ""]),
+        el("div", { class: "note" }, `published, read by no node: ${(g.unread || []).join("  ") || "none"}`),
+        el("div", { class: "note" }, `read, published by no node: ${(g.unfed || []).join("  ") || "none"}`)];
+    },
+  },
+
   Health: {
     title: "Health",
     topics: ["/diagnostics"],
@@ -1120,7 +1197,7 @@ async function syncLayouts() {
 }
 
 module.exports = {
-  healthNow, managerHeard,
+  healthNow, managerHeard, graphLayout,
   activate(extensionContext) {
     syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {

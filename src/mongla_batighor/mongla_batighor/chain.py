@@ -184,6 +184,19 @@ def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
                  _qos(st.qos))
                 for st in self.rows], on_drop=self._forget)
             self.create_timer(period_s, self._publish)
+            # The ROS graph grouped by stage (graph.py), read only while
+            # someone watches it: each read asks every node in the graph.
+            from mongla_batighor import graph
+            self._graph = graph
+            self.graph_pub = self.create_publisher(String, graph.TOPIC, 10)
+            self.create_timer(graph.PERIOD_S, self._publish_graph)
+
+        def _publish_graph(self):
+            if self.graph_pub.get_subscription_count() == 0:
+                return
+            body = self._graph.group(self._graph.read(self))
+            body['stamp'] = time.time()
+            self.graph_pub.publish(String(data=json.dumps(body)))
 
         def _forget(self):
             # The next viewer must not see rates from before it looked.

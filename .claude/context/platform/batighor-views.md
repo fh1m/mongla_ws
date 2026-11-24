@@ -172,8 +172,13 @@ and gives the command that starts one.
 
 ## Inspect and Log
 
-`inspect` is for a question no view was built for: Lichtblick's topic graph across the
-whole width (every node and topic as the bridge sees them), and under it the source's
+`inspect` is for a question no view was built for: the ROS graph across the whole width,
+every node in the column of its stage (camera, detector, tracker, lock, pose, navigation,
+mission, manager, Batighor; a node that matches none is under `other`, never hidden), one
+curve per pair of nodes a topic joins (hover it for the topics), and the topics published
+and read by no node, or read and published by none. It is ours (`graph.py`, published by
+the chain node every 2 s while watched) because Lichtblick's topic graph drew every node
+and topic in one band and keeps its filter where no layout can set it. Under it the source's
 topics with their rates beside the raw message on any topic, `/mongla/state` first.
 
 `log` is the whole record at full height: every node's `/rosout` at info and above, in

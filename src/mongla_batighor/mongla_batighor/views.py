@@ -51,14 +51,11 @@ TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'ancho
           'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates',
           'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops',
           'forward': 'forward camera', 'downward': 'downward camera', 'hull': 'attitude',
-          'nav': 'odometry, 3D', 'down': 'downward camera', 'graph': 'nodes and topics: the diamond at the right, "No topics", draws nodes only',
+          'nav': 'odometry, 3D', 'down': 'downward camera', 'graph': 'nodes by stage: hover an edge for its topics',
           'topics': 'every topic, its type and rate', 'raw': 'one message, whole',
           'rosout': 'every node\'s log',
           # Empty until a calibration runs, and the panel itself says only that
           # the topic does not exist: the title says when there is a picture.
-          # Lichtblick keeps the graph's topic filter in the panel, not its
-          # config, so every topic shows at first and the graph is a line of
-          # a hundred boxes; the title says where the filter is (bead tci).
           'camera': 'calibration camera, while a calibration runs',
           'undistorted': 'undistorted, once a fit exists',
           'locmap': 'localization map',
@@ -476,10 +473,11 @@ def inspect(v: View):
     nodes and topics, every topic with its type and rate, and the vehicle's
     state message whole, field by field. Lichtblick's own panels; parameters
     stay closed to a browser (batighor.launch.py, BRIDGE_LIMITS)."""
-    # The graph runs wide (every node and topic in one band): at half the
-    # screen it drew 800 px of hairline, unreadable (2026-11-23), so it gets
-    # the whole width and the two tables share the row under it.
-    return col((58, v('graph', ('TopicGraph', {}))),
+    # Lichtblick's own graph drew every node and topic in one band, and its
+    # topic filter is panel state no layout sets (bead tci), so the graph is
+    # ours: the nodes in stage columns (graph.py, from the chain node), the
+    # whole width, with the two tables sharing the row under it.
+    return col((58, v('graph', instrument('Graph'))),
                (42, row((50, v('topics', ('SourceInfo', {}))),
                         (50, v('raw', ('RawMessages', {'topicPath': '/mongla/state',
                                                        'diffEnabled': False,
