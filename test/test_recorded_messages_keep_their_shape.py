@@ -13,6 +13,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 FROZEN = {
     'MonglaState.msg': ['std_msgs/Header header', 'bool armed', 'string mode',
                         'float32 yaw_deg', 'float32 depth_m', 'float32 battery_voltage'],
+    # Frozen from its first bag: new safety data goes on another topic.
+    'MonglaSafety.msg': ['std_msgs/Header header', 'int8 SAFETY_UNKNOWN', 'int8 SAFETY_CLEAR',
+                         'int8 SAFETY_TRIPPED', 'int8 leak', 'int8 kill_switch', 'int8 baro',
+                         'string baro_text'],
 }
 
 

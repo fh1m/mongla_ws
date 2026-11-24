@@ -61,7 +61,7 @@
       "lichtblickPanelTitle": "mode"
     },
     "Indicator!leak": {
-      "path": "/mongla/state.leak",
+      "path": "/mongla/safety.leak",
       "style": "background",
       "fallbackColor": "#3a4256",
       "fallbackLabel": "unknown",
@@ -82,7 +82,7 @@
       "lichtblickPanelTitle": "leak"
     },
     "Indicator!kill": {
-      "path": "/mongla/state.kill_switch",
+      "path": "/mongla/safety.kill_switch",
       "style": "background",
       "fallbackColor": "#3a4256",
       "fallbackLabel": "kill unseen",
@@ -103,7 +103,7 @@
       "lichtblickPanelTitle": "kill"
     },
     "Indicator!baro": {
-      "path": "/mongla/state.baro",
+      "path": "/mongla/safety.baro",
       "style": "background",
       "fallbackColor": "#3a4256",
       "fallbackLabel": "unknown",
