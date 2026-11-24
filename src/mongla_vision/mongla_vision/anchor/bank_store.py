@@ -96,6 +96,7 @@ class StoreMixin:
                 np.sqrt(max(1.0, abs(roi[2] - roi[0]) * abs(roi[3] - roi[1])))))
             self._refs.append(a)
             self._yields.append(yields[i] if i < len(yields) else len(a._ref_kpts))
+            self._best_inl.append(0)       # no lookup since the load
             self._sigs.append(z[f's{i}'])
             self._labels.append(labels[i] if i < len(labels) else '')
             att = z['att'][i] if 'att' in z.files and i < len(z['att']) else None

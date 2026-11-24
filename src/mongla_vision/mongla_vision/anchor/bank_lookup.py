@@ -141,6 +141,8 @@ class LookupMixin:
                                 points=self._warp(self._ann[i], p))
             if n > self._yields[i]:
                 self._yields[i] = n
+            if n > self._best_inl[i]:
+                self._best_inl[i] = n
         # Decaying average of the per-match cost, which is what `shortlist_k`
         # spends. Measured here rather than configured because the same code
         # runs on a dev box and on the Pi and the two differ by 2.2x.
@@ -160,7 +162,7 @@ class LookupMixin:
         """
         idx = sorted(self._last_scores)
         return ([self._last_scores[i] for i in idx],
-                [self._yields[i] for i in idx if i < len(self._yields)])
+                [self._best_inl[i] for i in idx if i < len(self._best_inl)])
 
     @staticmethod
     def _att_gap_deg(a, b) -> float:
