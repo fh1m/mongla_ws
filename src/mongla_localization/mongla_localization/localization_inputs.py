@@ -58,6 +58,9 @@ DEMAND_CENTRE_EPS = 0.005
 # thrusters spin down and the hull coasts, so several of the command model's
 # time constants, and never less than the IMU window.
 DEMAND_SETTLE_TAUS = 3.0
+# A board attitude older than this cannot pair with a heading anchor: the hull
+# may have turned since. The board sends ATTITUDE at 50 Hz.
+BOARD_ATTITUDE_MAX_AGE_S = 1.0
 # A demand older than this is UNKNOWN, the same bar the model aid uses.
 DEMAND_FRESH_S = 0.5
 # Flow newer than this means the camera is already reporting velocity, so a
@@ -171,6 +174,10 @@ class LocalizationInputsMixin:
             # uncertainty for time nobody measured.
             self._apply(t, lambda f, d=dt: f.coast(d), span=dt,
                         make=lambda d: (lambda f: f.coast(d)))
+            # A late sample is still a live IMU: without these the node said
+            # "IMU silent" and froze the odom stamp while samples arrived.
+            self._last_input_t = t
+            self._note_seen('imu', time.monotonic())
             return
         gyro = (msg.angular_velocity.x, msg.angular_velocity.y,
                 msg.angular_velocity.z)
@@ -206,6 +213,7 @@ class LocalizationInputsMixin:
                    if msg.orientation_covariance[0] >= 0.0 else None)
         if R_board is not None:
             self._board_R = R_board
+            self._board_R_at = time.monotonic()
             # Into the pool frame before the filter sees it. The board's yaw
             # is boot-relative; once anchored, handing it over raw pins the
             # filter back to boot axes at 50 Hz while `frame_id` says `pool`.
@@ -556,6 +564,13 @@ class LocalizationInputsMixin:
         heading = float(msg.data)
         if not math.isfinite(heading):
             return
+        age = time.monotonic() - getattr(self, '_board_R_at', -math.inf)
+        if self._board_R is not None and age > BOARD_ATTITUDE_MAX_AGE_S:
+            # The same reason as below: the hull has turned since that sample.
+            self.get_logger().warning(
+                f'[LOCAL] heading anchor {heading:+.1f} deg REFUSED: the last '
+                f'board attitude is {age:.1f} s old. The output stays as it was.')
+            return
         if self._board_R is None:
             # Refused, not held. An absolute heading means nothing without
             # the board yaw it was paired with, and a latched anchor delivered
@@ -685,6 +700,17 @@ class LocalizationInputsMixin:
         parameter stands in -- absence, not a silent zero, which here would
         mean infinite confidence.
         """
+        frame = getattr(getattr(msg, 'header', None), 'frame_id', '')
+        if frame == 'pool' and not self._anchored:
+            # The mission believes it anchored; this node refused the heading
+            # (no board attitude to pair it with). Fused here, a pool position
+            # lands in boot axes, wrong by the rotation between them.
+            self._n['fix_refused'] += 1
+            self.get_logger().warning(
+                f'[LOCAL] position fix ({msg.point.x:+.2f}, {msg.point.y:+.2f}) '
+                f'in `pool` REFUSED: this node has no heading anchor, so its '
+                f'state is in boot axes (`odom_ned`). Anchor again.')
+            return
         sigma = float(msg.point.z)
         if not (sigma > 0.0) or not math.isfinite(sigma):
             sigma = self._fix_sigma
