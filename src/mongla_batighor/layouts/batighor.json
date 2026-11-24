@@ -87,30 +87,8 @@
       },
       "lichtblickPanelTitle": "attitude"
     },
+    "mongla.batighor.Intent!cockpit.intent": {},
     "mongla.batighor.Vision!cockpit.vision": {},
-    "Plot!cockpit.authority": {
-      "paths": [
-        {
-          "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.score",
-          "label": "forward",
-          "enabled": true
-        },
-        {
-          "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.score",
-          "label": "downward",
-          "enabled": true
-        }
-      ],
-      "showLegend": true,
-      "legendDisplay": "left",
-      "sidebarDimension": 140,
-      "followingViewWidth": 60,
-      "isSynced": true,
-      "xAxisVal": "timestamp",
-      "minYValue": 0,
-      "maxYValue": 1.05,
-      "lichtblickPanelTitle": "lock authority"
-    },
     "mongla.batighor.Map!map.map": {},
     "mongla.batighor.Vehicle!map.vehicle": {},
     "3D!map.hull": {
@@ -173,6 +151,7 @@
     "mongla.batighor.Mission!map.mission": {},
     "mongla.batighor.Map!mission.map": {},
     "mongla.batighor.MissionText!mission.text": {},
+    "mongla.batighor.Intent!mission.intent": {},
     "mongla.batighor.Mission!mission.mission": {},
     "Plot!mission.demand": {
       "paths": [
@@ -1060,11 +1039,11 @@
                 },
                 "second": {
                   "direction": "column",
-                  "first": "mongla.batighor.Vision!cockpit.vision",
-                  "second": "Plot!cockpit.authority",
-                  "splitPercentage": 70.0
+                  "first": "mongla.batighor.Intent!cockpit.intent",
+                  "second": "mongla.batighor.Vision!cockpit.vision",
+                  "splitPercentage": 45.5
                 },
-                "splitPercentage": 52.4
+                "splitPercentage": 50.0
               },
               "splitPercentage": 47.6
             },
@@ -1100,9 +1079,14 @@
               "first": "mongla.batighor.MissionText!mission.text",
               "second": {
                 "direction": "column",
-                "first": "mongla.batighor.Mission!mission.mission",
-                "second": "Plot!mission.demand",
-                "splitPercentage": 60.0
+                "first": "mongla.batighor.Intent!mission.intent",
+                "second": {
+                  "direction": "column",
+                  "first": "mongla.batighor.Mission!mission.mission",
+                  "second": "Plot!mission.demand",
+                  "splitPercentage": 60.0
+                },
+                "splitPercentage": 28.6
               },
               "splitPercentage": 53.1
             },

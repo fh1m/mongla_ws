@@ -2,6 +2,7 @@
   "configById": {
     "mongla.batighor.Map!map": {},
     "mongla.batighor.MissionText!text": {},
+    "mongla.batighor.Intent!intent": {},
     "mongla.batighor.Mission!mission": {},
     "Plot!demand": {
       "paths": [
@@ -38,9 +39,14 @@
       "first": "mongla.batighor.MissionText!text",
       "second": {
         "direction": "column",
-        "first": "mongla.batighor.Mission!mission",
-        "second": "Plot!demand",
-        "splitPercentage": 60.0
+        "first": "mongla.batighor.Intent!intent",
+        "second": {
+          "direction": "column",
+          "first": "mongla.batighor.Mission!mission",
+          "second": "Plot!demand",
+          "splitPercentage": 60.0
+        },
+        "splitPercentage": 28.6
       },
       "splitPercentage": 53.1
     },

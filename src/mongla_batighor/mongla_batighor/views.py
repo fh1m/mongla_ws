@@ -238,7 +238,7 @@ def _cameras(v: View, *, synced: bool = False):
 
 
 def cockpit(v: View):
-    """The default: both cameras, control, and what the vehicle sees and feels.
+    """The default: both cameras, control, what the vehicle sees and feels, and what it is trying to do.
 
     Three columns, read left to right: the pictures; the Control Center whole
     (keys, helm, verb, mission, log: at a third of a column ARM and SEND were
@@ -248,10 +248,13 @@ def cockpit(v: View):
                (30, v('control', instrument('ControlCenter'))),
                # The Vehicle card carries the board's six lines under its gauges;
                # at 10 of 21 its last row was cut (Kutum, 2026-11-23).
+               # Intent sits between the vehicle and the vision that serves it: the
+               # verb's goal, whether it closes, what stops it. The lock's
+               # authority history moved to `vision`; Vision still draws each
+               # camera's authority as a bar.
                (33, col((11, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
-                        (7, v('vision', instrument('Vision'))),
-                        (3, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS),
-                                             y=(0, 1.05)))))))
+                        (5, v('intent', instrument('Intent'))),
+                        (6, v('vision', instrument('Vision'))))))
 
 
 def vision(v: View):
@@ -427,7 +430,8 @@ def mission(v: View):
     what the plan says, what the vehicle is doing about it."""
     return row((36, v('map', instrument('Map'))),
                (34, v('text', instrument('MissionText'))),
-               (30, col((3, v('mission', instrument('Mission'))),
+               (30, col((2, v('intent', instrument('Intent'))),
+                        (3, v('mission', instrument('Mission'))),
                         (2, v('demand', plot(series('/mongla/demand.vector.x', 'surge'),
                                              series('/mongla/demand.vector.y', 'sway')))))))
 
