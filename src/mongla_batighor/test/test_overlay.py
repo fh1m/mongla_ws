@@ -35,6 +35,11 @@ def _arr(*dets):
 STAMP = Time(sec=12, nanosec=5)
 
 
+def _drawn(points):
+    """Point sets that draw something: the frame's stamp mark has no points."""
+    return [p for p in points if p.points]
+
+
 def test_a_box_lands_on_the_detectors_pixels():
     out = annotate(STAMP, _arr(_det(320, 180, 100, 60)))
     (box,) = out.points
@@ -88,7 +93,7 @@ def test_no_label_covers_another_and_none_leaves_the_picture():
 
 def test_a_missing_layer_is_simply_absent():
     out = annotate(STAMP, _arr())
-    assert not out.points and not out.texts
+    assert not _drawn(out.points) and not out.texts
     out = annotate(STAMP, None, lock=_arr(_det(10, 10, 4, 4, label='')))
     assert len(out.points) == 1 and out.texts[0].text == 'LOCK'
 
@@ -302,7 +307,7 @@ def test_the_picture_carries_no_caption():
     covered the floor a downward box sits on (owner, 2026-11-24). It is the
     caption under the picture now: nothing in the picture but what is seen."""
     out = annotate(STAMP, _arr(), size=(640, 480))
-    assert not out.texts and not out.points
+    assert not out.texts and not _drawn(out.points)
 
 
 def test_the_floor_read_is_drawn_as_the_grid_and_the_lane_it_says():
@@ -394,9 +399,24 @@ def test_a_silent_detector_still_lets_the_picture_show_and_says_why():
     assert lines[1] == 'detector paused 5 s: it runs when a mission asks'
     c = caption('forward', 'gate_sharks', (640, 480), [], None, silent_s=4.6, paused=True)
     assert (c['state'], c['silent_s'], c['alarm'], c['rate_hz']) == ('paused', 4.6, False, None)
-    # The frame is still marked, so a synchronised picture keeps showing.
+    # The frame is still marked, so a synchronised picture keeps showing:
+    # Lichtblick 1.30.0 files a synchronised annotation under each shape's own
+    # stamp and never reads the message's, so the mark is one shape on the
+    # frame's stamp that draws nothing (Chrome, 2026-11-25: an empty message
+    # left the Vision view "Waiting for synchronized annotations").
     out = annotate(STAMP, size=(640, 480))
-    assert not out.texts and not out.points
+    assert not out.texts and not out.circles
+    (mark,) = out.points
+    assert mark.timestamp == STAMP and not mark.points and mark.type == PointsAnnotation.POINTS
+
+
+def test_every_frame_carries_its_stamp_on_a_shape_even_with_nothing_found():
+    """A detector that ran and found nothing is the same blank as a paused
+    one, unless the frame's stamp rides on a shape: every frame drawn has at
+    least one, each on the frame's own stamp."""
+    out = annotate(STAMP, Detection2DArray(), size=(640, 480))
+    stamps = [a.timestamp for a in [*out.points, *out.texts, *out.circles]]
+    assert stamps and all(s == STAMP for s in stamps)
 
 
 def test_a_detector_silent_while_not_paused_is_an_alarm_not_a_pause():

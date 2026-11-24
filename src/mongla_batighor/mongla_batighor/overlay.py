@@ -449,6 +449,12 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
                                       f'err {lx - cx:+.0f} {ly - cy:+.0f} px', rgba,
                                       LABEL_PX * 0.8))
     out.texts.extend(texts)
+    if not (out.points or out.texts or out.circles):
+        # Lichtblick files a synchronised annotation under each shape's own
+        # stamp and never reads the message's: with no shape the frame is
+        # never matched and the picture stays blank. One empty point set on
+        # the frame's stamp draws nothing and keeps it showing.
+        out.points.append(PointsAnnotation(timestamp=stamp, type=PointsAnnotation.POINTS))
     return out
 
 
