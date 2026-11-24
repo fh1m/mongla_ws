@@ -1,0 +1,199 @@
+{
+  "configById": {
+    "Image!floorcam": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/downward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/downward/flow_annotations": {
+            "visible": true
+          },
+          "/mongla/vision/downward/floor_annotations": {
+            "visible": true
+          }
+        }
+      },
+      "lichtblickPanelTitle": "downward camera, the floor read"
+    },
+    "Plot!distance": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/distance_traveled.data",
+          "label": "distance m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 163,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "distance"
+    },
+    "Plot!tracks": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/distance_debug.data[2]",
+          "label": "tracks",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 117,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "tracks"
+    },
+    "Plot!velocity": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/velocity.twist.twist.linear.x",
+          "label": "flow vx m/s",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/velocity.twist.twist.linear.y",
+          "label": "flow vy m/s",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/odom.twist.twist.linear.x",
+          "label": "filter vx m/s",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/odom.twist.twist.linear.y",
+          "label": "filter vy m/s",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "velocity"
+    },
+    "StateTransitions!calibration": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/flow_calibration.data",
+          "label": "scale from",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/flow/height_source.data",
+          "label": "height from",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": false,
+      "xAxisRange": 60,
+      "lichtblickPanelTitle": "velocity scale"
+    },
+    "Plot!quality": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/flow_quality.data",
+          "label": "quality",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/distance_debug.data[1]",
+          "label": "height m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/floor_height.range",
+          "label": "floor m",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 140,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "flow quality and heights"
+    },
+    "Plot!derotation": {
+      "paths": [
+        {
+          "value": "/mongla/imu_rates.vector.x",
+          "label": "pitch rad/s",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu_rates.vector.y",
+          "label": "roll rad/s",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu_rates.vector.z",
+          "label": "yaw rad/s",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 174,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "derotation"
+    }
+  },
+  "globalVariables": {
+    "track": 0
+  },
+  "userNodes": {
+    "mongla-detections-per-frame": {
+      "name": "detections per frame",
+      "sourceCode": "import { Input } from \"./types\";\n\n// How many boxes each camera's detector gave on its latest frame: a count\n// that drops to zero while the picture runs is a detector that lost the target.\nexport const inputs = [\"/mongla/vision/forward/detections\", \"/mongla/vision/downward/detections\"];\nexport const output = \"/studio_script/mongla_detections_per_frame\";\n\nconst last = { forward: 0, downward: 0 };\n\nexport default function script(\n  event: Input<\"/mongla/vision/forward/detections\"> | Input<\"/mongla/vision/downward/detections\">,\n): { forward: number; downward: number } {\n  const cam = event.topic.includes(\"/forward/\") ? \"forward\" : \"downward\";\n  last[cam] = event.message.detections.length;\n  return { ...last };\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "Image!floorcam",
+      "second": {
+        "direction": "row",
+        "first": "Plot!distance",
+        "second": "Plot!tracks",
+        "splitPercentage": 50.0
+      },
+      "splitPercentage": 80.0
+    },
+    "second": {
+      "direction": "column",
+      "first": "Plot!velocity",
+      "second": {
+        "direction": "column",
+        "first": "StateTransitions!calibration",
+        "second": {
+          "direction": "column",
+          "first": "Plot!quality",
+          "second": "Plot!derotation",
+          "splitPercentage": 50.0
+        },
+        "splitPercentage": 33.3
+      },
+      "splitPercentage": 25.0
+    },
+    "splitPercentage": 62.0
+  }
+}

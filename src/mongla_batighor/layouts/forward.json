@@ -71,6 +71,48 @@
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "target range"
     },
+    "Plot!pose": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/target_pose.bearing_deg",
+          "label": "bearing deg",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_near.bearing_deg",
+          "label": "near deg",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 174,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "target pose"
+    },
+    "Plot!anchor": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/anchor_decomposition.vector.x",
+          "label": "rotation",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/anchor_decomposition.vector.y",
+          "label": "scale",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 140,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "anchor (XFeat)"
+    },
     "Table!dets": {
       "topicPath": "/mongla/vision/forward/detections.detections",
       "lichtblickPanelTitle": "this frame's detections"
@@ -109,13 +151,23 @@
         "first": "StateTransitions!ladder",
         "second": {
           "direction": "column",
-          "first": "Plot!target_range",
-          "second": "Table!dets",
-          "splitPercentage": 42.9
+          "first": {
+            "direction": "row",
+            "first": "Plot!target_range",
+            "second": "Plot!pose",
+            "splitPercentage": 50.0
+          },
+          "second": {
+            "direction": "column",
+            "first": "Plot!anchor",
+            "second": "Table!dets",
+            "splitPercentage": 42.9
+          },
+          "splitPercentage": 30.0
         },
-        "splitPercentage": 36.4
+        "splitPercentage": 28.6
       },
-      "splitPercentage": 21.4
+      "splitPercentage": 17.6
     },
     "splitPercentage": 62.0
   }

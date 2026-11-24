@@ -76,6 +76,43 @@
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "heights (depth negative down)"
     },
+    "Plot!target_range": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/target_pose_fused.range_m",
+          "label": "range m",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 128,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "target range"
+    },
+    "Plot!pose": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/target_pose.bearing_deg",
+          "label": "bearing deg",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/target_pose_near.bearing_deg",
+          "label": "near deg",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 174,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "target pose"
+    },
     "Plot!anchor": {
       "paths": [
         {
@@ -132,12 +169,22 @@
         "second": {
           "direction": "column",
           "first": "Plot!floor",
-          "second": "Plot!anchor",
-          "splitPercentage": 50.0
+          "second": {
+            "direction": "column",
+            "first": {
+              "direction": "row",
+              "first": "Plot!target_range",
+              "second": "Plot!pose",
+              "splitPercentage": 50.0
+            },
+            "second": "Plot!anchor",
+            "splitPercentage": 50.0
+          },
+          "splitPercentage": 33.3
         },
-        "splitPercentage": 40.0
+        "splitPercentage": 30.8
       },
-      "splitPercentage": 33.3
+      "splitPercentage": 27.8
     },
     "splitPercentage": 62.0
   }

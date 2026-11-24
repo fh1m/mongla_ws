@@ -1,0 +1,274 @@
+{
+  "configById": {
+    "mongla.batighor.LocalizationMap!locmap": {},
+    "mongla.batighor.Navigation!navigation": {},
+    "3D!nav": {
+      "followTf": "mongla",
+      "followMode": "follow-position",
+      "topics": {
+        "/mongla/batighor/scene": {
+          "visible": true
+        }
+      },
+      "scene": {
+        "backgroundColor": "#05070c",
+        "labelScaleFactor": 1.0,
+        "transforms": {
+          "showLabel": false,
+          "enablePreloading": true,
+          "lineWidth": 0,
+          "axisScale": 0.5
+        }
+      },
+      "cameraState": {
+        "distance": 0.95,
+        "perspective": true,
+        "phi": 55,
+        "thetaOffset": 200,
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "layers": {
+        "hull": {
+          "visible": true,
+          "label": "Mongla",
+          "layerId": "foxglove.Urdf",
+          "instanceId": "hull",
+          "sourceType": "url",
+          "url": "/model/mongla.urdf",
+          "order": 1
+        }
+      },
+      "lichtblickPanelTitle": "odometry, 3D"
+    },
+    "StateTransitions!aiding": {
+      "paths": [
+        {
+          "value": "/mongla/localization/state.usable",
+          "label": "usable",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/localization/state.reason",
+          "label": "why not",
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/localization/aiding.data",
+          "label": "aiding",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": false,
+      "xAxisRange": 60,
+      "lichtblickPanelTitle": "aiding"
+    },
+    "Plot!pos": {
+      "paths": [
+        {
+          "value": "/mongla/odom.pose.pose.position.x",
+          "label": "x m",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/odom.pose.pose.position.y",
+          "label": "y m",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/odom.pose.pose.position.z",
+          "label": "z m (down)",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/localization/fix.point.x",
+          "label": "prop fix x",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/localization/fix.point.y",
+          "label": "prop fix y",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 163,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "pos"
+    },
+    "Plot!sigma": {
+      "paths": [
+        {
+          "value": "/mongla/localization/state.sigma_xy_m",
+          "label": "sigma xy m",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 163,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "sigma"
+    },
+    "Plot!vel": {
+      "paths": [
+        {
+          "value": "/mongla/odom.twist.twist.linear.x",
+          "label": "filter vx",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/velocity.twist.twist.linear.x",
+          "label": "flow vx",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/odom.twist.twist.linear.y",
+          "label": "filter vy",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/velocity.twist.twist.linear.y",
+          "label": "flow vy",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 152,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "velocity"
+    },
+    "Plot!heading": {
+      "paths": [
+        {
+          "value": "/mongla/state.yaw_deg",
+          "label": "board heading",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/localization/heading.data",
+          "label": "given heading",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/vision/downward/floor_grid_deg.heading_deg",
+          "label": "floor grid",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/lane_heading_deg.heading_deg",
+          "label": "lane line",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 190,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "heading"
+    },
+    "Plot!floor": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/floor_height.range",
+          "label": "floor m",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/state.depth_m",
+          "label": "depth m",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 128,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "heights (depth negative down)"
+    }
+  },
+  "globalVariables": {
+    "track": 0
+  },
+  "userNodes": {
+    "mongla-detections-per-frame": {
+      "name": "detections per frame",
+      "sourceCode": "import { Input } from \"./types\";\n\n// How many boxes each camera's detector gave on its latest frame: a count\n// that drops to zero while the picture runs is a detector that lost the target.\nexport const inputs = [\"/mongla/vision/forward/detections\", \"/mongla/vision/downward/detections\"];\nexport const output = \"/studio_script/mongla_detections_per_frame\";\n\nconst last = { forward: 0, downward: 0 };\n\nexport default function script(\n  event: Input<\"/mongla/vision/forward/detections\"> | Input<\"/mongla/vision/downward/detections\">,\n): { forward: number; downward: number } {\n  const cam = event.topic.includes(\"/forward/\") ? \"forward\" : \"downward\";\n  last[cam] = event.message.detections.length;\n  return { ...last };\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "mongla.batighor.LocalizationMap!locmap",
+      "second": {
+        "direction": "row",
+        "first": "mongla.batighor.Navigation!navigation",
+        "second": "3D!nav",
+        "splitPercentage": 50.0
+      },
+      "splitPercentage": 70.0
+    },
+    "second": {
+      "direction": "column",
+      "first": "StateTransitions!aiding",
+      "second": {
+        "direction": "column",
+        "first": "Plot!pos",
+        "second": {
+          "direction": "column",
+          "first": "Plot!sigma",
+          "second": {
+            "direction": "column",
+            "first": "Plot!vel",
+            "second": {
+              "direction": "column",
+              "first": "Plot!heading",
+              "second": "Plot!floor",
+              "splitPercentage": 50.0
+            },
+            "splitPercentage": 33.3
+          },
+          "splitPercentage": 18.2
+        },
+        "splitPercentage": 21.4
+      },
+      "splitPercentage": 30.0
+    },
+    "splitPercentage": 50.0
+  }
+}

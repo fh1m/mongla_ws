@@ -1,0 +1,91 @@
+{
+  "configById": {
+    "mongla.batighor.Map!map": {},
+    "mongla.batighor.Vehicle!vehicle": {},
+    "3D!hull": {
+      "followTf": "mongla",
+      "followMode": "follow-position",
+      "topics": {
+        "/mongla/batighor/scene": {
+          "visible": true
+        }
+      },
+      "scene": {
+        "backgroundColor": "#05070c",
+        "labelScaleFactor": 1.0,
+        "transforms": {
+          "showLabel": false,
+          "enablePreloading": true,
+          "lineWidth": 0,
+          "axisScale": 0.5
+        }
+      },
+      "cameraState": {
+        "distance": 0.95,
+        "perspective": true,
+        "phi": 55,
+        "thetaOffset": 200,
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 5000
+      },
+      "layers": {
+        "hull": {
+          "visible": true,
+          "label": "Mongla",
+          "layerId": "foxglove.Urdf",
+          "instanceId": "hull",
+          "sourceType": "url",
+          "url": "/model/mongla.urdf",
+          "order": 1
+        }
+      },
+      "lichtblickPanelTitle": "attitude"
+    },
+    "mongla.batighor.Mission!mission": {}
+  },
+  "globalVariables": {
+    "track": 0
+  },
+  "userNodes": {
+    "mongla-detections-per-frame": {
+      "name": "detections per frame",
+      "sourceCode": "import { Input } from \"./types\";\n\n// How many boxes each camera's detector gave on its latest frame: a count\n// that drops to zero while the picture runs is a detector that lost the target.\nexport const inputs = [\"/mongla/vision/forward/detections\", \"/mongla/vision/downward/detections\"];\nexport const output = \"/studio_script/mongla_detections_per_frame\";\n\nconst last = { forward: 0, downward: 0 };\n\nexport default function script(\n  event: Input<\"/mongla/vision/forward/detections\"> | Input<\"/mongla/vision/downward/detections\">,\n): { forward: number; downward: number } {\n  const cam = event.topic.includes(\"/forward/\") ? \"forward\" : \"downward\";\n  last[cam] = event.message.detections.length;\n  return { ...last };\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "mongla.batighor.Map!map",
+    "second": {
+      "direction": "column",
+      "first": {
+        "direction": "row",
+        "first": "mongla.batighor.Vehicle!vehicle",
+        "second": "3D!hull",
+        "splitPercentage": 50.0
+      },
+      "second": "mongla.batighor.Mission!mission",
+      "splitPercentage": 44.4
+    },
+    "splitPercentage": 60.0
+  }
+}

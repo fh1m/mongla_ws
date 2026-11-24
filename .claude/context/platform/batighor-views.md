@@ -71,7 +71,9 @@ vehicle's numbers and attitude over the Vision panel and the lock authority it h
   the full sentence on hover.
 - **Vision**: per camera, the lock ladder's rungs (detection, held, follow, anchor,
   lost) lit in the rung's colour, the identity held and its authority, the model and
-  its epoch, and every perception stage: lit when a node publishes it, struck through
+  its epoch, the classes the model emits beside the mission's filter (in red when the
+  filter names a class the model never emits, which would otherwise read as an empty
+  frame every frame), and every perception stage: lit when a node publishes it, struck through
   when not, with the bringup switch beside it (`lock:=true`).
 - **Over each camera**: every box in its class's colour with its score and track,
   the stats at the bottom left (camera, model, size; the detector's rate and how far
@@ -112,7 +114,9 @@ panel over the ladder's history, every row in view; and the Detectors panel (the
 live camera and each detector's settings) over one plot per quantity, each titled with what it
 is: the lock's authority, the target's range in metres, its bearing and yaw in
 degrees, the anchor's rotation and scale, and the pixel errors (a vision verb's
-alignment and the solver's reprojection).
+alignment and the solver's reprojection). Bearing and reprojection come from both
+solvers, the tight one and the near one whose gate is opened for a board that fills
+the frame, drawn together and never merged: where they disagree is the evidence.
 
 ## Flow (`flow`)
 
@@ -122,7 +126,8 @@ The downward camera as a speed sensor. Each tracked point is a segment from wher
 was on the anchor frame to where it is now; the plots are the flow's velocity beside
 the filter's, the distance travelled, where the velocity scale came from (here
 `uncalibrated`, said in words), the quality with the heights, and the number of
-tracks on an axis of its own.
+tracks on an axis of its own. Under them, the board's turn rates that flow subtracts
+as rotation: a turn that leaks into the speed shows there first.
 
 ## Localization (`localization`)
 
@@ -180,8 +185,8 @@ page has the rule.
 `downward` is everything under the hull, for the bins, the floor markers and any
 target below: the downward camera across the top at its 16:9 shape, synchronised with its boxes, the alignment error under it, and
 beside it the Vision panel, the downward camera's ladder and which camera is live, a
-vision verb's pixel error, the floor height against depth, and the anchor's rotation
-and scale.
+vision verb's pixel error, the floor height against depth, the target's range and its
+bearing from both solvers, and the anchor's rotation and scale.
 
 ![The calibrate view: two empty camera panels for the raw and undistorted calibration pictures, and the Calibrate panel saying no calibration is running, with the command that starts one.](../../../docs/imgs/batighor/calibrate.webp)
 
