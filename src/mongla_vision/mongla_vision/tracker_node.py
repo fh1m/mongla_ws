@@ -212,6 +212,8 @@ class TrackerNode(Node):
         self.declare_parameter('track_buffer',                150)
         self.declare_parameter('min_hits',                    1)
         self.declare_parameter('iou_threshold',               0.2)
+        # Only the legacy_bytetrack engine reads this knob. The default ocsort
+        # engine gates on high_conf_det_threshold instead.
         self.declare_parameter('track_activation_threshold',  0.40)
         # Unset (NaN) means the detector's floor, which the backend clamps to
         # anyway; only an operator's value above the floor is worth a warning.

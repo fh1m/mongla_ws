@@ -226,8 +226,12 @@ class LockSetupMixin:
                         f'accelerator ({type(exc).__name__}: {exc}) -- '
                         f'trying an xfeat_*.onnx beside it on the CPU, about 33 ms a frame against '
                         f'11.4 ms on the chip (measured-bars 92).')
-                    alt = sorted(glob.glob(os.path.join(
-                        os.path.dirname(p), 'xfeat_*.onnx')))
+                    alt = []
+                    for r in roots:
+                        alt = sorted(glob.glob(os.path.join(
+                            os.path.expanduser(r), 'xfeat_*.onnx')))
+                        if alt:
+                            break
                     p = alt[0] if alt else ''
                     if not p:
                         raise

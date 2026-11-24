@@ -85,7 +85,8 @@ def live_window(detection_interval_s: Optional[float]) -> float:
     Never past `FULL_AUTHORITY_S`: a detector slower than that has no live
     detections to speak of, and the ladder's own decay governs instead.
     """
-    if not detection_interval_s or detection_interval_s <= 0.0:
+    if (not detection_interval_s or detection_interval_s <= 0.0
+            or not math.isfinite(detection_interval_s)):
         return DETECTION_LIVE_S
     return min(FULL_AUTHORITY_S, DETECTION_LATENCY_P95_S + float(detection_interval_s))
 
@@ -280,7 +281,7 @@ def arbitrate(*, now: float, last_detection_t: float,
             and held_age_s <= live_s):
         return LockState(rung=Rung.HELD, xyxy=tuple(held),
                          rung_conf=float(held_conf), authority=auth,
-                         age_s=age)
+                         age_s=age, disagreement_px=disagree)
 
     if follow is not None and follow_conf >= min_rung_conf:
         a = auth
