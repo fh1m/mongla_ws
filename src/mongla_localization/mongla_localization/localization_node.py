@@ -90,12 +90,7 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
         self._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0,
                    'flow_refused': 0, 'depth_refused': 0, 'yaw_refused': 0,
                    'fix': 0, 'fix_refused': 0, 'zupt': 0, 'grid': 0, 'grid_refused': 0,
-                   'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0,
-                   # World-frame updates the observability gate refused. A
-                   # non-zero count is not an error -- it is the gate doing its
-                   # job -- but a count that RISES while flow is healthy means
-                   # the threshold is wrong for this vehicle. See B-56.
-                   'gated': 0}
+                   'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0}
         # Whether the OBSERVABILITY GATE is open, latched so it is published
         # only on change. See `_report_aiding`.
         self._aiding_state = None

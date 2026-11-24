@@ -4,7 +4,7 @@
 Run AFTER vision_check confirms the detector is up. Subscribes to the
 /tracks topic (output of tracker_node) and reports:
   * tracks per frame
-  * track ID stability (how often a previously-seen ID returns)
+  * track ID stability (how often an ID from the previous message returns)
   * predicted-frame ratio (how often Kalman is filling gaps)
   * whether a required class was tracked at all
 

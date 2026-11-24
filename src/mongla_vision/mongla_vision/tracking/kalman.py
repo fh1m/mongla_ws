@@ -15,14 +15,15 @@ space for IoU association). The two Kalmans serve different purposes.
 
 Predicted frames
 ----------------
-When `update()` is called with predicted=True (ByteTrack held the track
+When `smooth()` is called with predicted=True (the tracker held the track
 but the detector fired nothing), the Kalman propagates forward using
-`predict()` only (no measurement correction). The returned position is
+the motion model only (no measurement correction). The returned position is
 the Kalman's best guess. `score` stays 0.0 so the control loop can
 tell it apart from a corrected frame.
 
 After `max_predict_s` seconds of capture time with no real detection, the
-filter is dropped and the track is considered gone. Seconds, not frames: a
+track is suppressed, so no coasted box is published for it. The filter is
+kept until a real detection rebuilds it or the tracker drops the id. Seconds, not frames: a
 frame count means a different window at every detection rate.
 
 Install: pip install filterpy
@@ -177,7 +178,7 @@ class TrackKalmanSmoother:
     Parameters
     ----------
     process_noise : float
-        Q diagonal — how much we trust the constant-velocity model.
+        Process noise Q (see `_q_for_dt`): how much we trust the constant-velocity model.
         Lower = smoother, more lag. Default 0.1.
     measurement_noise : float
         R diagonal — how much we trust the detector output.

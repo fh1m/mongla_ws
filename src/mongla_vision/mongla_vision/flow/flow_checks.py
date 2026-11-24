@@ -1,6 +1,6 @@
 """FlowVelocityNode, part 2 of 5: the checks that decide a measurement may be published.
 
-Each one can refuse a frame. A refusal publishes nothing, never a confident zero.
+Each one can refuse a frame. A refusal publishes quality 0 and no velocity, never a confident zero.
 """
 import math
 import time
@@ -122,7 +122,7 @@ class FlowChecksMixin:
     def _cross_check_height(self) -> None:
         """Height from the image, against the height from a typed pool depth.
 
-        The divergence of the flow field is `-vz / h`, and the barometer gives
+        The divergence of the flow field is `vz / h` (vz positive down), and the barometer gives
         `vz` independently -- so the camera can measure its own altitude, with
         no `pool_depth_m` in it. That matters because height is a clean
         multiplier on every velocity this node emits and `pool_depth_m` is the

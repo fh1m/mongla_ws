@@ -35,7 +35,7 @@ class TrackedDetection:
 
     Mirrors Detection fields so it can be used anywhere Detection is
     expected (duck-typed). track_id=-1 means "unconfirmed" (min_hits
-    not yet reached); the publisher filters those out before publishing.
+    not yet reached); the backend drops those before they reach the publisher.
     """
     class_id:   int
     class_name: str

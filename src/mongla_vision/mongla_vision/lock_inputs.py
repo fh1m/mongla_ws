@@ -281,7 +281,7 @@ class LockInputsMixin:
         # each ray through `f_ref`, which defaults to `fx * n` -- so a point at
         # water angle tw lands at radius `f_ref * tan(tw)`, a true pinhole of
         # focal `f_ref`. Feeding those points to PnP with the AIR K would leave
-        # a clean 1/n scale error: every range 33 % short, with a plausible
+        # a clean 1/n scale error: every range about 25 % short, with a plausible
         # number and no warning. Same class as the fx!=fy aspect defect the
         # rectifier's own docstring records.
         # One place builds the (rectifier, matching K) pair -- see

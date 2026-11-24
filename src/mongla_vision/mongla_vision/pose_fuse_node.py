@@ -97,8 +97,8 @@ class PoseFuseNode(Node):
         self.create_subscription(TargetPose, f'{ns}/target_pose', self._on_pose, 10)
         # The hull's own heading, which is what turns counting into evidence:
         # the true branch's pose yaw moves OPPOSITE the hull's and the mirrored
-        # one moves with it. `/mongla/state` publishes ON CHANGE plus a ~1 Hz
-        # heartbeat, so the heading in effect at a pose's capture instant is the
+        # one moves with it. `/mongla/state` publishes at 2 Hz and 20 Hz, so the
+        # heading in effect at a pose's capture instant is the
         # LAST state stamped at or before it -- not the latest to arrive, which
         # during a turn is a heading from after the frame was taken.
         self._yaw_deg = None

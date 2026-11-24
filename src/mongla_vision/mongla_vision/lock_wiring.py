@@ -82,8 +82,8 @@ class LockWiringMixin:
                     f"({d.get('boxes', '?')}; {d.get('source', 'no source')})")
             else:
                 self.get_logger().warn(
-                    f'[LOCK ] no committed width for {self._cls!r} -- the '
-                    f'6-DoF pose will refuse. Fix on the deck without a '
+                    f'[LOCK ] no committed width for {self._cls!r} -- '
+                    f'no 6-DoF pose is published while it is the target. Fix on the deck without a '
                     f'rebuild: put the width in ~/.mongla/target_geometry.yaml '
                     f'(or set MONGLA_TARGET_GEOMETRY).')
 
@@ -220,8 +220,8 @@ class LockWiringMixin:
             self._build_anchor()
 
     def _setup_loop_closure(self, ns) -> None:
-        """Loop closure on the downward camera: odometry, floor height and
-        vehicle state in, position fixes out. Refused on the forward camera.
+        """Loop closure on the downward camera: odometry and floor height in,
+        position fixes out. Refused on the forward camera.
         """
         # ---- loop closure ------------------------------------------------
         # Node parameters, set on the deck under `nodes:` in bringup.yaml,
