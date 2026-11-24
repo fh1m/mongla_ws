@@ -41,3 +41,9 @@ def test_reapplying_a_file_to_its_own_name_keeps_a_copy(tmp_path, monkeypatch):
     assert err is None, err
     baks = list(tmp_path.glob(name + '.bak-*'))
     assert len(baks) == 1 and json.loads(baks[0].read_text())['usb_vid'] == 'aaaa'
+
+
+def test_a_capture_is_written_only_for_the_step_it_was_taken_for():
+    """vl_5 F10: index checked and write result read, under the lock."""
+    src = (SRC / 'guide_capture.py').read_text()
+    assert 'if st.i != i:' in src and 'if not cv2.imwrite(fn, f):' in src

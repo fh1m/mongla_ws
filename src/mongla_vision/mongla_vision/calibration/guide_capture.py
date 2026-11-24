@@ -285,11 +285,19 @@ def detect_loop(st, det_w):
             prog = min(1.0, (time.time() - held_since) / HOLD_S)
             msg = 'hold it...'
             if prog >= 1.0:
-                fn = os.path.join(st.outdir, f'cal_{i:03d}.png')
-                cv2.imwrite(fn, f)
                 held_since = None
                 prog = 0.0
+                # Written and counted under the lock, and only for the step
+                # read above: a skip, undo or reset during this pass moved
+                # st.i, and the frame belongs to a pose no longer asked for.
+                # A failed write is not "got it" (vl_5 F10).
                 with st.lock:
+                    if st.i != i:
+                        continue
+                    fn = os.path.join(st.outdir, f'cal_{i:03d}.png')
+                    if not cv2.imwrite(fn, f):
+                        st.msg = f'could not write {fn}: disk full or no permission'
+                        continue
                     st.i += 1
                     # Past views already on disk: a resume after a skip
                     # starts at the gap, and the next step must not write
