@@ -56,7 +56,7 @@
       "paths": [
         {
           "value": "/mongla/vision/downward/floor_height.range",
-          "label": "floor m",
+          "label": "floor (tile)",
           "enabled": true
         },
         {
@@ -67,7 +67,7 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 128,
+      "sidebarDimension": 186,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
