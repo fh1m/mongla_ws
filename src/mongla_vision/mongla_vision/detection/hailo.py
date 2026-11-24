@@ -75,8 +75,6 @@ from . import hailo_device
 from .detector import Detection, Detector, allow_ids_for
 from .hef_file import baked_score_threshold, load_class_index, measured_bars
 
-_INPUT_FALLBACK = 640
-
 # The NMS score threshold every detection graph is configured at, whatever it
 # was compiled with. It is the value our own graphs are compiled at, so one
 # floor holds for every model; lowering a stock graph from 0.200 to it cost
@@ -158,7 +156,10 @@ class HailoDetector(Detector):
         out_info = self._hef.get_output_vstream_infos()[0]
         self._in_name, self._out_name = in_info.name, out_info.name
         shape = tuple(in_info.shape)
-        self._size = int(shape[0]) if len(shape) >= 2 else _INPUT_FALLBACK
+        if len(shape) < 2:
+            raise ValueError(f'HEF input shape {shape} has no height and width; '
+                             f'refusing to guess a letterbox size')
+        self._size = int(shape[0])
 
         self._target = hailo_device.shared_device()
         hailo_device.register(self)
@@ -629,7 +630,7 @@ class HailoDetector(Detector):
             # it reads scores as coordinates. `_decode_nms` VALIDATES it.
             # Decoded under this detector's lock: the buffer stays bound, and
             # the next infer on this detector would overwrite it mid-read.
-            per_class = self._decode_nms(self._out_buf)
+            per_class = [np.copy(c) for c in self._decode_nms(self._out_buf)]
         return self._boxes_to_detections(per_class, w, h, scale, pad_x, pad_y)
 
     def _boxes_to_detections(self, per_class, w, h, scale, pad_x, pad_y):

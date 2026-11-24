@@ -171,6 +171,7 @@ FALLBACK_ENV = 'MONGLA_HAILO_FALLBACK'
 PREFER_ENV = 'MONGLA_HAILO_PREFER'
 
 # What the last open did: 'service', 'direct', or '' before the first open.
+# Only the tests read it today; no start-up log or health line reports it yet.
 opened_via = ''
 
 

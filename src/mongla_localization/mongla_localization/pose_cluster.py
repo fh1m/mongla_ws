@@ -290,7 +290,9 @@ class PoseCluster:
                   and all(math.isfinite(v) for v in
                           (s.yaw_deg, s.alt_yaw_deg, s.bearing_deg,
                            s.vehicle_yaw_deg))]
-        if len(paired) >= self.min_poses:
+        # `paired` is required so the newest-yaw search below always finds a value,
+        # even when min_poses is 0.
+        if paired and len(paired) >= self.min_poses:
             # The answer is for NOW: the newest heading in the window,
             # which may belong to a frame that carried only one branch.
             # Finite, as in the legacy path: a NaN heading is absent too.

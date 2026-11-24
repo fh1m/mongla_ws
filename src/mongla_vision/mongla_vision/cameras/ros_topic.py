@@ -124,7 +124,8 @@ class RosTopicCamera(Camera):
             height=h,
             fresh=fresh,
         )
-        return frame, meta
+        # A frame already served is not returned again, as the Camera contract says.
+        return (frame if fresh else None), meta
 
     def is_healthy(self) -> bool:
         with self._lock:
@@ -136,14 +137,16 @@ class RosTopicCamera(Camera):
     def info(self) -> dict:
         with self._lock:
             snap = self._latest
-        w, h = (self._exp_w, self._exp_h) if snap is None else (snap[2], snap[3])
+        # Zero means "not declared", so it is reported as None, not as a size.
+        w, h = ((self._exp_w or None, self._exp_h or None) if snap is None
+                else (snap[2], snap[3]))
         return {
             'name':        self.name,
             'source_kind': self.source_kind,
             'topic':       self._topic,
             'width':       w,
             'height':      h,
-            'fps':         self._exp_fps,
+            'fps':         self._exp_fps or None,
             'frame_id':    self._frame_id,
         }
 

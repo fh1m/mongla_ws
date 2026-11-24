@@ -217,6 +217,7 @@ class CameraNode(Node):
                         f'measured on the health line)' if reported > 0
                         else 'the camera\'s rate (unreported; measured on the health line)')
             if self._log_rate_source:
+                self._log_rate_source = False     # say it once, not on every rate read
                 self.get_logger().info(
                     f'[CAM  ] publish rate follows {rate_txt} '
                     f'(set publish_rate_hz to pin it)')
@@ -898,7 +899,9 @@ class CameraNode(Node):
                 'K': [float(v) for row in K for v in row],
                 'D': [float(v) for v in D],
                 'w': int(c['image_width']), 'h': int(c['image_height']),
-                'hfov': float(c.get('hfov_deg_air', 0.0)),
+                # Absent is NaN: a missing lens angle must not read as a 0 deg field of view.
+                'hfov': (float(c['hfov_deg_air']) if c.get('hfov_deg_air') is not None
+                         else float('nan')),
             }
             ere, bar = c.get('max_ere_px'), c.get('max_ere_bar_px')
             if isinstance(ere, (int, float)) and isinstance(bar, (int, float)) \
@@ -992,7 +995,7 @@ class CameraNode(Node):
         extra = ''
         if hasattr(self._cam, 'position'):
             cur, total = self._cam.position
-            pct = 100 * cur / total if total else 0.0
+            pct = 100 * cur / total if total else float('nan')   # unknown total is not 0%
             paused = 'paused' if self._cam.is_paused else 'playing'  # type: ignore[attr-defined]
             spd = self._cam.speed if hasattr(self._cam, 'speed') else 1.0  # type: ignore[attr-defined]
             extra = f'  pos={cur}/{total} ({pct:.0f}%)  {paused}  {spd:.2f}×'

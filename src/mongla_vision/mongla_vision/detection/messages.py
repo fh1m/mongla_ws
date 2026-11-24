@@ -113,7 +113,7 @@ def array_to_detections(array: Detection2DArray) -> list:
             score      = float(hyp.hypothesis.score)
         else:
             class_name = str(getattr(hyp, 'id', ''))
-            score      = float(getattr(hyp, 'score', 0.0))
+            score      = float(getattr(hyp, 'score', float('nan')))
 
         out.append(_Detection(
             class_id=class_index(class_name),

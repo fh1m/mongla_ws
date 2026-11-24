@@ -27,6 +27,7 @@ value is caught here rather than in the water.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import pathlib
 import sys
@@ -76,6 +77,8 @@ def survey(course: str, prop: str, values: dict, *, detect_class: str = '',
     for arg, field in _FIELDS:
         v = values.get(arg)
         if v is not None:
+            if not math.isfinite(float(v)):
+                raise ValueError(f'--{arg} is {v!r}; a surveyed value must be a finite number')
             body[field] = float(v)
     if detect_class:
         body['detect_class'] = detect_class

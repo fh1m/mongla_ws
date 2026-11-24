@@ -72,7 +72,8 @@ class VideoFileCamera(Camera):
         self._actual_w   = int(width)  if width  else file_w
         self._actual_h   = int(height) if height else file_h
         self._actual_fps = float(fps)  if fps    else file_fps
-        self._total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+        # A negative count from the backend means unknown, the same as zero.
+        self._total_frames = max(0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
 
         if self._log:
             self._log.info(
@@ -144,7 +145,7 @@ class VideoFileCamera(Camera):
 
 
     def set_speed(self, speed: float) -> float:
-        """Set playback speed multiplier (0.1–4.0). Returns clamped value."""
+        """Set playback speed multiplier. Floored at 0.05 and with no ceiling. Returns the value used."""
         speed = max(0.05, float(speed))
         with self._lock:
             self._speed = speed
@@ -217,7 +218,11 @@ class VideoFileCamera(Camera):
         wait = self._next_frame_time - now
         if wait > 0.001:
             time.sleep(wait)
-        self._next_frame_time = time.monotonic() + self._frame_interval / max(0.05, self._speed)
+        # Chained from the due time, so an overshoot does not push every later frame.
+        # A stall past one interval resets to now rather than bursting to catch up.
+        self._next_frame_time = max(self._next_frame_time
+                                    + self._frame_interval / max(0.05, self._speed),
+                                    time.monotonic())
         # Stamped when handed over, after the pacing wait: a file has no
         # capture instant, and a stamp taken before the sleep made every
         # freshness gate read the replay's pacing as latency.
