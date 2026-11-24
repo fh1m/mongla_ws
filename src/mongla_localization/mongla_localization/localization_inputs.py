@@ -151,8 +151,9 @@ class LocalizationInputsMixin:
 
     def _on_imu(self, msg: Imu) -> None:
         t = _stamp_s(msg.header)
-        prev, self._last_imu_t = self._last_imu_t, t
+        prev = self._last_imu_t
         if prev is None:
+            self._last_imu_t = t
             return
         dt = t - prev
         if dt <= MIN_PREDICT_DT_S:
@@ -160,8 +161,10 @@ class LocalizationInputsMixin:
             # produce: the mapping moves, so two samples can arrive out of
             # order in host time. Dropping the step is right -- a negative dt
             # integrates the state BACKWARDS and nothing downstream would show
-            # it as anything but drift.
+            # it as anything but drift. The last time kept stays at the last
+            # integrated instant, so the next step does not cover this span twice.
             return
+        self._last_imu_t = t
         if dt > MAX_PREDICT_DT_S:
             self._n['gap'] += 1
             if not self._imu_gap_warned:

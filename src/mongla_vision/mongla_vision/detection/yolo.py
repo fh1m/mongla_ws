@@ -107,6 +107,8 @@ def _real(cand: Path) -> bool:
 def _resolve_model_path(name: str) -> str:
     """Resolve a bare model name to a full path.
 
+    ``$MONGLA_HEF_DIR/<name>.hef`` is tried before the list below, when set.
+
     Priority order:
       1. Path as-is     — if *name* has a separator or a .pt or .hef extension.
       2. MONGLA_HEF_DIR — ``$MONGLA_HEF_DIR/<name>.hef`` when that variable is
@@ -173,10 +175,12 @@ def _resolve_model_path(name: str) -> str:
     # Not found locally and not a known pretrained alias.
     # Fail loudly: never trigger a network download for custom model names.
     searched = []
+    if hef_dir:
+        searched.append(f'  MONGLA_HEF_DIR: {hef_dir}/{name}.hef')
     if share_models_dir:
-        searched.append(f'  ament share:  {share_models_dir}/{name}.pt')
+        searched.append(f'  ament share:  {share_models_dir}/{name}{{.hef,.pt}}')
     if src_models:
-        searched.append(f'  source tree:  {src_models}/{name}.pt')
+        searched.append(f'  source tree:  {src_models}/{name}{{.hef,.pt}}')
     raise FileNotFoundError(
         f"Model {name!r} not found locally.\n"
         + ('\n'.join(searched) + '\n' if searched else '')

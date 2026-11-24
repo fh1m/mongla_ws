@@ -88,15 +88,17 @@ def list_cameras(cal_dir):
         for f in sorted(glob.glob(os.path.join(cal_dir, '*.json'))):
             try:
                 d = json.load(open(f))
+                medium = d.get('medium', 'air')
+                fx = (d.get('camera_matrix') or [[None]])[0][0]
             except Exception:
                 continue
-            if d.get('medium', 'air') != 'air':
+            if medium != 'air':
                 continue        # the stack loads only the air lens (binding.py)
             info = {
                 'file': os.path.basename(f),
                 'applies_to': d.get('applies_to'),
                 'captured': d.get('captured'),
-                'fx': (d.get('camera_matrix') or [[None]])[0][0],
+                'fx': fx,
                 'hfov_air': d.get('hfov_deg_air'),
                 'hfov_water': d.get('hfov_deg_water'),
                 'max_ere_px': d.get('max_ere_px'),
@@ -214,9 +216,10 @@ def library(cal_dir):
     for f in sorted(glob.glob(os.path.join(cal_dir, '*.json'))):
         try:
             d = json.load(open(f))
+            K = d.get('camera_matrix') or [[None]]
+            fx = K[0][0]
         except Exception:
             continue
-        K = d.get('camera_matrix') or [[None]]
         out.append({
             'file': os.path.basename(f),
             'applies_to': d.get('applies_to'),
@@ -225,7 +228,7 @@ def library(cal_dir):
             'camera': d.get('camera'),
             'usb_vid': d.get('usb_vid'), 'usb_pid': d.get('usb_pid'),
             'width': d.get('image_width'), 'height': d.get('image_height'),
-            'fx': K[0][0],
+            'fx': fx,
             'hfov_air': d.get('hfov_deg_air'),
             'hfov_water': d.get('hfov_deg_water'),
             'views': d.get('views_used'),

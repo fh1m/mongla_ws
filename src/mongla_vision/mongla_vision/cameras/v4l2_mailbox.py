@@ -292,7 +292,8 @@ class V4L2MailboxCamera(Camera):
     # so skipping through it still yields a fossil. The frames worth having
     # were never captured. Slack is what keeps them.
     #
-    # 16 buffers is 64 ms of slack and, at 640x360 MJPEG, about 640 kB.
+    # 16 buffers is about 64 ms of slack at the ~250 Hz measured above, and
+    # about 270 ms at the 60 fps that pi_forward requests.
     _NBUF = 16
 
     def __init__(self, device='/dev/video0', width=640, height=360, fps=60,
@@ -698,7 +699,7 @@ class V4L2MailboxCamera(Camera):
     def read(self) -> Tuple[Optional[np.ndarray], FrameMeta]:
         slot = self._slot          # one atomic load; see __init__
         meta = FrameMeta(frame_index=self._idx, width=self._w, height=self._h)
-        if slot is None:
+        if slot is None or self._stop.is_set():   # a closed source serves nothing
             meta.fresh = False
             return None, meta
 

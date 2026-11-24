@@ -327,8 +327,9 @@ class CheckpointBank(LookupMixin, StoreMixin):
         # index -> inliers, from the MOST RECENT locate(). See `health.py`.
         self._last_scores: dict = {}
         # Enrolments refused because the camera, not the scene, was the
-        # problem. Counted so a bank that stops growing can be told apart
-        # from one that is being protected.
+        # problem. Counted here for tests; no shipped node publishes this yet,
+        # so a bank that stops growing is not told apart from one being
+        # protected in the health line.
         self._contaminated_refusals = 0
         # Injection hook for the ported deadlock. Production never sets it;
         # the test does, to watch the bank stay empty forever.

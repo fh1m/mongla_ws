@@ -84,9 +84,16 @@ class WebcamCamera(Camera):
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  width)
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self._cap.set(cv2.CAP_PROP_FPS,          fps)
-        self._cap.set(cv2.CAP_PROP_BUFFERSIZE,   1)        # avoid stale frames
-        self._set_exposure(exposure_us, brightness, max_blur_px, f_px,
-                           max_rate_rad_s)
+        # Requested only. The v4l2 mailbox measured buffer count as no lever on
+        # staleness, so this is not a freshness fix.
+        self._cap.set(cv2.CAP_PROP_BUFFERSIZE,   1)
+        # Exposure runs v4l2-ctl; if that fails the capture is released, not leaked.
+        try:
+            self._set_exposure(exposure_us, brightness, max_blur_px, f_px,
+                               max_rate_rad_s)
+        except BaseException:
+            self._cap.release()
+            raise
 
         # What the driver says, or unknown: never the request standing in for
         # it (vl_7 M8). An unknown size is taken from the first frame.
