@@ -24,6 +24,18 @@ from .camera import Camera, FrameMeta
 from mongla_vision import image_msg
 
 
+# Longer than any real transport delay; past it the header is on another clock.
+MAX_TRANSPORT_AGE_S = 2.0
+
+
+def header_seconds(msg) -> float:
+    s = getattr(getattr(msg, 'header', None), 'stamp', None)
+    if s is None:
+        return float('nan')
+    t = float(s.sec) + float(s.nanosec) * 1e-9
+    return t if t > 0.0 else float('nan')
+
+
 class RosTopicCamera(Camera):
     source_kind = 'ros_topic'
 
@@ -78,10 +90,19 @@ class RosTopicCamera(Camera):
                 self._log.warning(f"[CAM  ] image convert failed: {exc!r}")
             return
         h, w = frame.shape[:2]
+        mono, wall = time.monotonic(), time.time()
+        # The header says when the frame was taken. When it is on this wall
+        # clock and plausibly recent, both stamps move back by its age, so a
+        # frame delayed in transport reads as old as it is. A header from
+        # another clock (a bag played without sim time, an unset stamp) gives
+        # no usable age, and arrival stands.
+        age = wall - header_seconds(msg)
+        if 0.0 <= age < MAX_TRANSPORT_AGE_S:
+            mono, wall = mono - age, wall - age
         with self._lock:
-            # Arrival on both clocks at once: the header (wall) and the
-            # staleness checks (monotonic) describe the same instant.
-            self._latest = (frame, time.monotonic(), w, h, time.time())
+            # One instant on both clocks: the header (wall) and the staleness
+            # checks (monotonic) describe the same moment.
+            self._latest = (frame, mono, w, h, wall)
 
     def read(self) -> Tuple[Optional[np.ndarray], FrameMeta]:
         with self._lock:
