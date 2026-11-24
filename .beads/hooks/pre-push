@@ -1,9 +1,11 @@
 #!/usr/bin/env sh
 # --- BEGIN NOTES GUARD ---
 # Authorship notes (refs/notes/*) are a local debugging record and never leave
-# this machine: the repository is public (owner ruling 2026-11-24). An
-# attribution tool pushes them itself during a push, which runs this hook again
-# with the notes ref on stdin, so the refusal holds whichever tool pushes.
+# this machine: the repository is public (owner ruling 2026-11-24). This
+# catches a person's push. It cannot catch git-ai's: its daemon pushes notes
+# with --no-verify and core.hooksPath=/dev/null, so no hook runs. That push is
+# refused by the git git-ai is configured to use (its `git_path`), a wrapper
+# that rejects any push naming refs/notes (bead mongla_ws-4et).
 _notes_refs=$(mktemp)
 cat > "$_notes_refs"
 if grep -qE '(^| )refs/notes/' "$_notes_refs"; then
