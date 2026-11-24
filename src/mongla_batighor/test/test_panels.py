@@ -242,7 +242,10 @@ def test_every_instrument_the_views_place_exists():
     """views.py names an instrument by its registered name; a typo there is a
     panel Lichtblick cannot find, drawn as an empty box."""
     from mongla_batighor import views
-    ours = set(_instruments()) | {'ControlCenter', 'Detectors', 'Calibrate'}
+    control = (PANELS / 'control' / 'extension.js').read_text()
+    parts = re.search(r'const PARTS = \{(.*?)\n\};', control, re.S).group(1)
+    ours = set(_instruments()) | set(re.findall(r'^  (\w+): \[', parts, re.M)) | {'Calibrate'}
+    assert {'ControlCenter', 'Detectors', 'Keys'} <= ours
     for name in views.VIEWS:
         for pid in views.build(name)['configById']:
             if pid.startswith(views.PANEL):

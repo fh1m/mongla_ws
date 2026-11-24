@@ -555,8 +555,11 @@ def vehicle(v: View):
     depth and both packs, lamps for arming, mode, leak, kill and the
     barometer, and the board's diagnostics row by row with their values."""
     lamps = row(
+        # Each label names its lamp: a lamp's title is cut to one letter in a
+        # narrow panel (seen on the ScreenPad), so "unknown" alone said nothing.
         v('armed', indicator('/mongla/state.armed', [('=', 'true', RED_LIT, 'ARMED'),
-                                                     ('=', 'false', SEA_LIT, 'disarmed')])),
+                                                     ('=', 'false', SEA_LIT, 'disarmed')],
+                             unknown='arming not heard')),
         v('mode', indicator('/mongla/state.mode', [('=', 'SURFACE', AMBER, 'SURFACE'),
                                                    ('=', 'AUTO', TEAL, 'AUTO'),
                                                    ('=', 'DEPTH_HOLD', TEAL, 'DEPTH HOLD'),
@@ -564,12 +567,14 @@ def vehicle(v: View):
                                                    ('=', 'MANUAL', AMBER, 'MANUAL')],
                                                   unknown='mode not heard')),
         v('leak', indicator('/mongla/safety.leak', [(*TRIPPED, RED_LIT, 'LEAK'),
-                                                   (*CLEAR, SEA_LIT, 'dry')])),
+                                                   (*CLEAR, SEA_LIT, 'dry')],
+                            unknown='leak unknown')),
         v('kill', indicator('/mongla/safety.kill_switch', [(*TRIPPED, RED_LIT, 'KILLED'),
                                                           (*CLEAR, SEA_LIT, 'kill clear')],
                             unknown='kill unseen')),
         v('baro', indicator('/mongla/safety.baro', [(*TRIPPED, RED_LIT, 'BARO FAULT: no moves'),
-                                                   (*CLEAR, SEA_LIT, 'baro ok')])))
+                                                   (*CLEAR, SEA_LIT, 'baro ok')],
+                            unknown='baro unknown')))
     dials = row(v('depth_gauge', gauge('/mongla/state.depth_m', -4.0, 0.0)),
                 v('pack_gauge', gauge('/mongla/thruster_pack.voltage', 13.2, 16.8)),
                 v('rail_gauge', gauge('/mongla/state.battery_voltage', 0.0, 5.5)))
@@ -580,6 +585,35 @@ def vehicle(v: View):
                                                                     'sortByLevel': True}))),
                         (6, v('diag_detail', ('DiagnosticStatusPanel',
                                               {'topicToRender': '/diagnostics'}))))))
+
+
+def pilot(v: View):
+    """The main screen when Vitals has the screen under it: the pictures as
+    big as the screen allows, side by side across the top, and under them
+    what Mongla makes of them: what holds the target now, the hull's
+    attitude, and the pool with Mongla on it. The keys and the vehicle's
+    state are on Vitals; helm, verbs and missions have their own tabs (the
+    console's Helm and Mission), so none of them crowds the pictures."""
+    return col((64, row(v('forward', camera('forward')),
+                        v('downward', camera('downward', 'flow_annotations', 'floor_annotations')))),
+               (36, row((40, v('vision', instrument('Vision'))),
+                        (25, v('hull', scene())),
+                        (35, v('map', instrument('Map'))))))
+
+
+def vitals(v: View):
+    """How the vehicle is, for the touchscreen under the main screen (the
+    Zenbook Duo's ScreenPad, 1920 x 550), in its own window: read at a glance
+    while the eyes stay on the cameras above. Left, the keys, tall enough for
+    a thumb; then the Vitals drawing (depth, heading, the demand as water past
+    the hull, each ESC turning, arming, mode, packs, position and the board's
+    six lines); then where Mongla is in the pool and how it sits. Each thing
+    once: a first build repeated the vehicle's state as lamps, traces and a
+    card side by side (seen on the ScreenPad, 2026-11-24)."""
+    return row((11, v('keys', instrument('Keys'))),
+               (51, v('vitals', instrument('Vitals'))),
+               (22, v('map', instrument('Map'))),
+               (16, v('hull', scene())))
 
 
 def tune(v: View):
@@ -664,7 +698,8 @@ NOT_SHOWN = {
 VIEWS = {f.__name__.rstrip('_'): f for f in (cockpit, mission, map_, vision, flow, localization,
                                              thrust, board_health, board_link, chain,
                                              forward, downward, vehicle, tune, helm,
-                                             calibrate, weak_link, inspect, log_)}
+                                             calibrate, weak_link, inspect, log_,
+                                             pilot, vitals)}
 FILE = {'cockpit': 'mongla_layout'}            # the default keeps the name links use
 
 # The console: every view as a tab of one layout, in the order a run is read.
@@ -677,6 +712,13 @@ TABS = [('cockpit', 'Cockpit'), ('map', 'Map'), ('mission', 'Mission'), ('vision
         ('forward', 'Forward'), ('downward', 'Downward'), ('vehicle', 'Vehicle'),
         ('helm', 'Helm'), ('tune', 'Tune'), ('calibrate', 'Calibrate'), ('inspect', 'Inspect'),
         ('log', 'Log')]
+# The same console for the main screen when Vitals has the screen under it:
+# Pilot first, and no Cockpit tab and no status strip, since the keys and the
+# vehicle's state are on Vitals already. The tab bar stays: it is the index
+# to every view.
+PILOT_CONSOLE = 'batighor_pilot'
+PILOT_TABS = [('pilot', 'Pilot')] + [t for t in TABS if t[0] != 'cockpit']
+CONSOLES = {CONSOLE: TABS, PILOT_CONSOLE: PILOT_TABS}
 
 
 # Lichtblick user scripts, run in the browser on what it already receives, so
@@ -704,16 +746,17 @@ export default function script(
 
 
 def build(name: str) -> dict:
-    if name == CONSOLE:
+    if name in CONSOLES:
         v, tabs = View(), []
-        for view, title in TABS:
+        for view, title in CONSOLES[name]:
             v.prefix = f'{view}.'
             tabs.append({'title': title, 'layout': VIEWS[view](v)})
         v.config['Tab!console'] = {'activeTabIdx': 0, 'tabs': tabs}
         # The status strip on every tab: a split is a percentage of the window,
         # and 5 % is one line of cells on a laptop's 1000 px of height.
         v.prefix = ''
-        tree = col((5, v('status', instrument('Status'))), (95, 'Tab!console'))
+        tree = (col((5, v('status', instrument('Status'))), (95, 'Tab!console'))
+                if name == CONSOLE else 'Tab!console')
     else:
         v = View()
         tree = VIEWS[name](v)
@@ -739,7 +782,7 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 2
     stale = []
-    for name in [CONSOLE, *VIEWS]:
+    for name in [*CONSOLES, *VIEWS]:
         path = out / f'{FILE.get(name, name)}.json'
         text = render(name)
         if a.write:
