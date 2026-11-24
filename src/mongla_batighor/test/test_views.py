@@ -219,10 +219,10 @@ def test_everything_drawn_over_a_picture_or_in_the_scene_is_visible():
 
 def test_only_the_detection_views_make_a_picture_wait_for_its_boxes():
     """Synchronised, a picture is shown only with its boxes, so it froze
-    whenever the detector stopped. Vision and Downward are where a box must sit
+    whenever the detector stopped. Vision, Forward and Downward are where a box must sit
     on its own frame; everywhere else (the cockpit, the floor read, a
     calibration) a live picture comes first (views.camera)."""
-    synced = {'vision', 'downward'}
+    synced = {'vision', 'forward', 'downward'}
     seen = set()
     for name in views.VIEWS:
         for k, c in views.build(name)['configById'].items():

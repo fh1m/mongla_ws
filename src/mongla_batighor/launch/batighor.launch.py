@@ -31,10 +31,12 @@ from mongla_runtime.launch_respawn import respawning
 # (mongla_batighor/seat.py), and it publishes nothing.
 # test_the_bridge_only_lets_a_browser_drive_through_the_helm.
 BRIDGE_LIMITS = {
-    'capabilities': ['services', 'connectionGraph', 'assets'],
+    # clientPublish for the Teleop pad's one topic only: the helm reads it and
+    # flies a step for the seated pilot alone (helm.py, `_on_teleop`).
+    'capabilities': ['services', 'connectionGraph', 'assets', 'clientPublish'],
     'service_whitelist': ['^/mongla/batighor/helm$'],
     'param_whitelist': ['^$'],
-    'client_topic_whitelist': ['^$'],
+    'client_topic_whitelist': ['^/mongla/batighor/teleop$'],
 }
 
 
