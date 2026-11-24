@@ -314,6 +314,20 @@ class HailoDetector(Detector):
             return baked
         return EMIT_FLOOR
 
+    def nms_refusal(self, floor=None, iou=None) -> str:
+        """Why `update_nms` would refuse, decided before anything changes."""
+        if self._blocking:
+            return ('the blocking diagnostic path builds its streams '
+                    'once and cannot change the NMS')
+        if self._baked_conf is None:
+            return (f'{Path(self._path).name} reports no NMS score '
+                    f'threshold, so it has no NMS output to set')
+        if floor is not None and not 0.0 < float(floor) < 1.0:
+            return f'nms_floor {floor!r} is outside (0, 1)'
+        if iou is not None and not 0.0 < float(iou) <= 1.0:
+            return f'nms_iou {iou!r} is outside (0, 1]'
+        return ''
+
     def update_nms(self, floor: Optional[float] = None,
                    iou: Optional[float] = None) -> None:
         """Change the NMS score floor and overlap threshold on a live model.
@@ -328,16 +342,9 @@ class HailoDetector(Detector):
         reports a change that did not happen: the blocking diagnostic path,
         and a graph with no NMS output to set.
         """
-        if self._blocking:
-            raise ValueError('the blocking diagnostic path builds its streams '
-                             'once and cannot change the NMS')
-        if self._baked_conf is None:
-            raise ValueError(f'{Path(self._path).name} reports no NMS score '
-                             f'threshold, so it has no NMS output to set')
-        if floor is not None and not 0.0 < float(floor) < 1.0:
-            raise ValueError(f'nms_floor {floor!r} is outside (0, 1)')
-        if iou is not None and not 0.0 < float(iou) <= 1.0:
-            raise ValueError(f'nms_iou {iou!r} is outside (0, 1]')
+        why = self.nms_refusal(floor, iou)
+        if why:
+            raise ValueError(why)
         with self._infer_lock:
             out = self._model.output()
             try:

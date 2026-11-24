@@ -406,10 +406,20 @@ def main():
             # Built SEQUENTIALLY on purpose. The second one configures a second
             # network group on the device the first created; doing that from a
             # thread pool is how the registry path already trips over itself.
-            det = DetectorNode(
-                f'mongla_detector_{camera}',
-                parameter_overrides=launcher.overrides(cam, camera),
-                init_failure_fn=hook)
+            try:
+                det = DetectorNode(
+                    f'mongla_detector_{camera}',
+                    parameter_overrides=launcher.overrides(cam, camera),
+                    init_failure_fn=hook)
+            except Exception as exc:      # noqa: BLE001 -- e.g. an empty registry
+                # The registry path raises instead of calling the hook; one
+                # camera with no loadable model must not take the other eye
+                # down with it (vl_9 M6).
+                failed.append(camera)
+                launcher.get_logger().error(
+                    f'[COMP ] {camera}: DETECTOR did NOT come up ({exc}); '
+                    f'keeping the eye that works')
+                continue
             det._cam_name = camera
             # The detector FIRST, so the camera never submits to a half-built
             # sink. `frame_sink=det` is the whole composition -- one Python
