@@ -15,7 +15,7 @@ Usage:
     # by-path symlink (the int device index 0/2 is wrong there -> camera_node
     # crashes at startup without it):
     ros2 launch mongla_vision vision.launch.py camera:=forward \\
-        device_path:=/dev/mongla_cam_forward \\
+        device_path:=/dev/mongla_cam_forward profile:=pi_forward \\
         model:=gate_sharks classes:=gate,shark,shaw_fish conf:=0.4
 
     # Headless (mission mode, no OpenCV window):
