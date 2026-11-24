@@ -166,15 +166,27 @@ def _console_tabs():
 
 def test_the_pilot_console_starts_on_pilot_and_repeats_nothing_vitals_shows():
     """The main screen beside Vitals: the tab bar is the index, Pilot first;
-    no Cockpit tab and no status strip, which carry the keys and the state
-    Vitals already shows (seen twice on two screens, 2026-11-24)."""
+    no Cockpit tab, which carries the keys and the state Vitals already shows
+    (seen twice on two screens, 2026-11-24), and the slim Watch strip in
+    place of the full one."""
     data = views.build(views.PILOT_CONSOLE)
     tabs = [t['title'] for t in data['configById']['Tab!console']['tabs']]
     assert tabs[0] == 'Pilot' and 'Cockpit' not in tabs
     assert set(tabs) == {t for _, t in views.TABS if t != 'Cockpit'} | {'Pilot'}
-    assert data['layout'] == 'Tab!console'
+    assert data['layout']['second'] == 'Tab!console'
+    assert data['layout']['first'] == views.PANEL + 'Watch!status'
     placed = json.dumps(data['configById']['Tab!console']['tabs'][0])
     assert 'ControlCenter!' not in placed and 'Vehicle!' not in placed and 'Keys!' not in placed
+
+
+def test_every_console_carries_a_strip_above_its_tabs():
+    """The strip marks the tabs and reports this screen's lag to the helm,
+    which sets the shared video for the slowest screen. The pilot console
+    first shipped without one: no tab marks, and its lag never reported."""
+    for name in views.CONSOLES:
+        layout = views.build(name)['layout']
+        assert layout['second'] == 'Tab!console', name
+        assert layout['first'].split('!')[0] in (views.PANEL + 'Status', views.PANEL + 'Watch'), name
 
 
 def test_the_console_holds_every_view_as_a_tab_with_its_own_panels():

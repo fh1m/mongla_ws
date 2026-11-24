@@ -543,6 +543,62 @@ function shouldReport(s, now) {
   return true;
 }
 
+// A link's quality as four bars, from the number that says it: three
+// thresholds, at or under the first is four bars, over the last is one; no
+// number is no bars, never four. Lag in seconds (the strip's warn at 0.5 and
+// error at 2 are the second and third edges); the board's drops in percent
+// (warn over 1). Exported for the test.
+const LAG_BARS = [0.15, 0.5, 2], DROP_BARS = [0.1, 0.5, 1];
+function signalBars(x, edges) {
+  if (!fin(x)) return 0;
+  return 4 - edges.filter((e) => x > e).length;
+}
+
+// One status cell: its name, its value, and, for a link, the bars.
+function statusCell([k, val, lvl, bars]) {
+  const meter = bars === undefined ? null
+    : el("i", { class: `sig s${bars}`, title: `${bars} of 4` }, el("span"), el("span"), el("span"), el("span"));
+  return el("div", { class: `cell ${lvl}` }, el("small", {}, k), el("b", {}, meter, val));
+}
+
+// The strip's fold, and what every strip does each draw besides its cells:
+// mark the console's tabs, and report this screen's lag to the helm, which
+// sets the viewers' video for the slowest screen (link.py). Whichever strip
+// a console carries (Status, or Watch on the pilot console) does both: a
+// console with neither had no tab marks and never reported its lag.
+function statusFold(s, topic, m) {
+  if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteLag(s, heard(), sent() || (m.header && m.header.stamp)); }
+  else if (topic === "/mongla/batighor/helm_state") { try { const h = JSON.parse(m.data); s.video = h.video; s.videoBy = h.video_by || ""; } catch { /* keep */ } }
+  else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
+  else if (topic === "/mongla/mission/task") { try { s.task = JSON.parse(m.data); } catch { /* keep */ } }
+  else if (topic === "/mongla/doing") { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
+  else if (topic === "/diagnostics") foldDiagnostics(s, m);
+  else if (topic === "/mongla/localization/state") { s.loc = m; s.locAt = heard(); }
+  else if (topic === "/mongla/board_link") { s.link = m; s.linkAt = heard(); }
+  else {
+    const c = CAMERAS.find((x) => topic === lockTopic(x));
+    if (c) { s.locks = s.locks || {}; s.locks[c] = { m, at: heard() }; }
+  }
+}
+
+function statusDuties(s, tabs) {
+  if (typeof callAny === "function" && shouldReport(s, Date.now())) {
+    callAny("/mongla/batighor/helm", { who: "", op: "link", cmd: "", mission: "", confirms: [],
+      fields_json: JSON.stringify({ lag_s: Math.round(s.lag * 1000) / 1000, screen: SCREEN }) }).catch(() => { /* no helm */ });
+  }
+  if (typeof document !== "undefined" && document.querySelectorAll) {
+    for (const tab of document.querySelectorAll('[data-testid="toolbar-tab"]')) {
+      const lvl = tabs[tab.getAttribute("title")] || "";
+      if (tab.dataset.mb !== lvl) tab.dataset.mb = lvl;
+    }
+  }
+}
+
+const STATUS_TOPICS = ["/mongla/state", "/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics",
+  "/mongla/localization/state", "/mongla/board_link", "/mongla/batighor/helm_state"];
+// What the pilot console's strip keeps: the rest is on Vitals, below.
+const WATCH_CELLS = ["mission", "verb", "lock", "link", "to kutum"];
+
 // -- the table -----------------------------------------------------------
 
 // The status strip's cells and the console's tab marks, from one fold. Pure:
@@ -586,13 +642,15 @@ function statusOf(s, now) {
   const worst = !rows.length ? -1 : errs ? 2 : warns ? 1 : unknown ? 3 : 0;
   cells.push(["health", worst < 0 ? "--" : said || "all ok", worst < 0 ? "stale" : LEVEL[worst]]);
   const l = s.link && age(s.linkAt) < 3 ? s.link : null;
-  cells.push(["link", l ? `${num(100 * l.bytes_per_s / (l.capacity_bytes_per_s || NaN), 0)} %  drops ${num(l.board_drop_pct, 1)} %` : "--", !l ? "stale" : l.board_drop_pct > 1 ? "warn" : "ok"]);
+  cells.push(["link", l ? `${num(100 * l.bytes_per_s / (l.capacity_bytes_per_s || NaN), 0)} %  drops ${num(l.board_drop_pct, 1)} %` : "--", !l ? "stale" : l.board_drop_pct > 1 ? "warn" : "ok",
+    l ? signalBars(l.board_drop_pct, DROP_BARS) : 0]);
   // This screen's link to Kutum, apart from the board's line above: the lag
   // and the scale the helm put the viewers' video at for it (link.py).
   // The lag is measured on the state's arrival; with the state silent it is unknown.
   const lag = fresh ? s.lag : NaN;
   const lagLvl = !fin(lag) ? "stale" : lag > 2 ? "err" : lag > 0.5 ? "warn" : "ok";
-  cells.push(["to kutum", fin(lag) ? `lag ${num(lag, 2)} s  ${videoWords(s.video, s.videoBy)}` : "--", lagLvl]);
+  cells.push(["to kutum", fin(lag) ? `lag ${num(lag, 2)} s  ${videoWords(s.video, s.videoBy)}` : "--", lagLvl,
+    signalBars(lag, LAG_BARS)]);
   tabs.Cockpit = v && v.armed ? "live" : "";
   tabs.Thrust = v && v.armed ? "live" : "";
   tabs.Mission = running ? "live" : "";
@@ -738,39 +796,24 @@ const INSTRUMENTS = {
   Status: {
     title: "Status",
     kind: "status",
-    topics: ["/mongla/state", "/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics",
-      "/mongla/localization/state", "/mongla/board_link", "/mongla/batighor/helm_state",
-      ...CAMERAS.map(lockTopic)],
-    fold(s, topic, m) {
-      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteLag(s, heard(), sent() || (m.header && m.header.stamp)); }
-      else if (topic === "/mongla/batighor/helm_state") { try { const h = JSON.parse(m.data); s.video = h.video; s.videoBy = h.video_by || ""; } catch { /* keep */ } }
-      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
-      else if (topic === "/mongla/mission/task") { try { s.task = JSON.parse(m.data); } catch { /* keep */ } }
-      else if (topic === "/mongla/doing") { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
-      else if (topic === "/diagnostics") foldDiagnostics(s, m);
-      else if (topic === "/mongla/localization/state") { s.loc = m; s.locAt = heard(); }
-      else if (topic === "/mongla/board_link") { s.link = m; s.linkAt = heard(); }
-      else {
-        const c = CAMERAS.find((x) => topic === lockTopic(x));
-        if (c) { s.locks = s.locks || {}; s.locks[c] = { m, at: heard() }; }
-      }
-    },
+    topics: [...STATUS_TOPICS, ...CAMERAS.map(lockTopic)],
+    fold: statusFold,
     draw(s) {
       const { cells, tabs } = statusOf(s, Date.now());
-      // Every 2 s, this screen's lag to the helm, which sets the viewers'
-      // video for the slowest screen (link.py). Through any mounted panel;
-      // no helm, no report, and nothing else depends on it.
-      if (typeof callAny === "function" && shouldReport(s, Date.now())) {
-        callAny("/mongla/batighor/helm", { who: "", op: "link", cmd: "", mission: "", confirms: [],
-          fields_json: JSON.stringify({ lag_s: Math.round(s.lag * 1000) / 1000, screen: SCREEN }) }).catch(() => { /* no helm */ });
-      }
-      if (typeof document !== "undefined" && document.querySelectorAll) {
-        for (const tab of document.querySelectorAll('[data-testid="toolbar-tab"]')) {
-          const lvl = tabs[tab.getAttribute("title")] || "";
-          if (tab.dataset.mb !== lvl) tab.dataset.mb = lvl;
-        }
-      }
-      return cells.map(([k, val, lvl]) => el("div", { class: `cell ${lvl}` }, el("small", {}, k), el("b", {}, val)));
+      statusDuties(s, tabs);
+      return cells.map(statusCell);
+    },
+  },
+
+  Watch: {
+    title: "Watch",
+    kind: "status watch",
+    topics: [...STATUS_TOPICS, ...CAMERAS.map(lockTopic)],
+    fold: statusFold,
+    draw(s) {
+      const { cells, tabs } = statusOf(s, Date.now());
+      statusDuties(s, tabs);
+      return cells.filter(([k]) => WATCH_CELLS.includes(k)).map(statusCell);
     },
   },
 
@@ -1276,7 +1319,7 @@ async function syncLayouts() {
 }
 
 module.exports = {
-  healthNow, managerHeard, vitalsOf,
+  healthNow, managerHeard, vitalsOf, signalBars, WATCH_CELLS,
   activate(extensionContext) {
     syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {

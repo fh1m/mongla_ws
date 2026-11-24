@@ -37,7 +37,9 @@ them what holds the target, the hull and the pool with Mongla on it. Below, **Vi
 three keys, and the vehicle drawn to be read from the corner of an eye, depth, heading,
 thrust, ESCs, arming, mode, packs, position and the board's lines, beside the map and the
 hull. Nothing is on both screens: the keys and the vehicle's state live below, so the
-pilot console has no Cockpit tab and no status strip.
+pilot console has no Cockpit tab, and its strip (Watch) keeps only the mission, the verb, the
+lock and the two links, each link as four bars that fall as its drops or its lag grow, the
+last bar breathing.
 
 ## The cockpit (`mongla_layout`)
 

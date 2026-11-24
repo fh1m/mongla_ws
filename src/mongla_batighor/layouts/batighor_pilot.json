@@ -1867,7 +1867,8 @@
           }
         }
       ]
-    }
+    },
+    "mongla.batighor.Watch!status": {}
   },
   "globalVariables": {
     "track": 0
@@ -1881,5 +1882,10 @@
   "playbackConfig": {
     "speed": 1
   },
-  "layout": "Tab!console"
+  "layout": {
+    "direction": "column",
+    "first": "mongla.batighor.Watch!status",
+    "second": "Tab!console",
+    "splitPercentage": 5.0
+  }
 }

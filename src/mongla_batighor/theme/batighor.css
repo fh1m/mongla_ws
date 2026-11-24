@@ -88,6 +88,27 @@ body:has(.mb.vitals) .LichtblickPanelRoot-root > div > header{display:none!impor
 .mb.status .cell.warn b{color:var(--mb-amber)}
 .mb.status .cell.err b{color:var(--mb-red);font-weight:700}
 .mb.status .cell.stale b{color:var(--mb-ink-3)}
+/* A link's quality as four rising bars beside its numbers: lit to its
+   count in its level's colour, the rest a dim rule. One bar left breathes,
+   so a starving link is seen from across the deck (signalBars). */
+.mb.status .cell b{display:flex;align-items:flex-end;gap:8px}
+.mb.status i.sig{display:inline-flex;align-items:flex-end;gap:2px;height:13px;flex:none}
+.mb.status i.sig span{width:3px;background:var(--mb-rule);border-radius:1px}
+.mb.status i.sig span:nth-child(1){height:25%}
+.mb.status i.sig span:nth-child(2){height:50%}
+.mb.status i.sig span:nth-child(3){height:75%}
+.mb.status i.sig span:nth-child(4){height:100%}
+.mb.status .ok i.sig span{--on:var(--mb-teal)}
+.mb.status .warn i.sig span{--on:var(--mb-amber)}
+.mb.status .err i.sig span{--on:var(--mb-red)}
+.mb.status i.sig.s1 span:nth-child(-n+1),
+.mb.status i.sig.s2 span:nth-child(-n+2),
+.mb.status i.sig.s3 span:nth-child(-n+3),
+.mb.status i.sig.s4 span:nth-child(-n+4){background:var(--on,var(--mb-teal))}
+.mb.status i.sig.s1 span:first-child{animation:mb-breathe 1.2s ease-in-out infinite}
+/* The pilot console's strip: five cells across, so each is wider and taller. */
+.mb.status.watch .cell{padding:6px 22px}
+.mb.status.watch .cell b{font-size:14px}
 
 /* The tabs: room to read them, a glyph each, red under the open one, and a
    dot when the strip says its subject needs an eye. No close button: a tab
