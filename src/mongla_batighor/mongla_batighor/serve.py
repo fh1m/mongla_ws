@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import json
 import os
 import re
@@ -32,7 +33,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from mongla_batighor import model, panels, shelves
-from mongla_batighor.pin import pin, share, web_dir
+from mongla_batighor.pin import HOME, pin, share, web_dir
 
 _NAME = re.compile(r'^[A-Za-z0-9_-]+$')
 # The Host header becomes the bridge address the app connects to. Any value but
@@ -130,6 +131,36 @@ TYPES = {'.html': 'text/html', '.js': 'text/javascript', '.json': 'application/j
          '.woff2': 'font/woff2', '.map': 'application/json'}
 
 
+# Every version of a layout this machine has served, by its content's hash:
+# what lets a browser tell a working copy the app made of an old version from
+# an operator's edit (bead b0q). Lichtblick keeps a working copy over a new
+# baseline, and it replaces the baseline as soon as it loads, so the version
+# the working copy was made from is gone from the browser. Each file is small
+# and written once; nothing here deletes one.
+HISTORY = HOME / 'layout-history'
+HISTORY_SERVED = 20
+# Kutum's releases (kutum/release.sh, RELEASES), each a whole tree never
+# edited again: the layouts served before this server started, so a working
+# copy made before a deploy is recognised after it.
+RELEASE_LAYOUTS = 'mongla/releases/*/src/mongla_batighor/layouts'
+
+
+def remember(layouts: Path, history: Path) -> None:
+    """A copy of each layout under `history/<name>/<hash>.json`, once."""
+    for f in sorted(layouts.glob('*.json')):
+        body = f.read_bytes()
+        p = history / f.stem / f'{hashlib.sha256(body).hexdigest()[:16]}.json'
+        if not p.exists():
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(body)
+
+
+def past(history: Path, name: str) -> list:
+    """The versions of `name` served here, newest first, at most HISTORY_SERVED."""
+    files = sorted((history / name).glob('*.json'), key=lambda p: p.stat().st_mtime, reverse=True)
+    return [json.loads(p.read_text()) for p in files[:HISTORY_SERVED]]
+
+
 def index(base: Path) -> dict[str, Path]:
     """Every file under `base`, keyed by its path relative to it.
 
@@ -207,8 +238,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def __init__(self, *a, web: Path, layouts: Path, bridge_port: int,
                  default_layout: str, exts: dict, bundle, hull: dict, files: dict,
-                 shelves: dict | None = None, **kw):
+                 shelves: dict | None = None, history: Path | None = None, **kw):
         self.web, self.layouts, self.hull, self.files = web, layouts, hull, files
+        self.history = history
         self.shelves = shelves                     # shelves.SHELVES when None
         self.theme = layouts.parent / 'theme'
         self.exts, self.bundle = exts, bundle      # see make_server
@@ -236,6 +268,13 @@ class Handler(BaseHTTPRequestHandler):
             names = sorted(k.removesuffix('.json') for k in index(self.layouts)
                            if k.endswith('.json'))
             return self._bytes(json.dumps(names).encode(), 'application/json', cache=False)
+        if url.path.startswith('/layouts/history/'):
+            name = url.path[len('/layouts/history/'):].removesuffix('.json')
+            host = self.headers.get('Host', '')
+            if not _NAME.match(name) or self.history is None or not _HOST.match(host):
+                return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
+            data = [absolute(d, f'http://{host}') for d in past(self.history, name)]
+            return self._bytes(json.dumps(data).encode(), 'application/json', cache=False)
         if url.path.startswith('/layouts/'):
             name = url.path[len('/layouts/'):].removesuffix('.json')
             if not _NAME.match(name):
@@ -334,6 +373,8 @@ class Handler(BaseHTTPRequestHandler):
         microseconds: a deck that reaches Kutum by another name gets a fresh
         copy instead of keeping URLs on the old one.
         """
+        if self.history is not None:
+            remember(self.layouts, self.history)
         host = self.headers.get('Host', '')
         origin = f'http://{host}' if _HOST.match(host) else None
         tag = zlib.crc32((origin or '').encode()) % 1_000_000
@@ -404,7 +445,8 @@ class Handler(BaseHTTPRequestHandler):
 def make_server(port: int, web: Path, layouts: Path, bridge_port: int,
                 default_layout: str = 'batighor',
                 panels_dir: Path | None = None,
-                shelves_at: dict | None = None) -> ThreadingHTTPServer:
+                shelves_at: dict | None = None,
+                history: Path | None = None) -> ThreadingHTTPServer:
     """The server; built once, so a panel or the bundle is read at start.
 
     A Lichtblick whose API switch has moved is served without our panels, and
@@ -428,7 +470,7 @@ def make_server(port: int, web: Path, layouts: Path, bridge_port: int,
     return ThreadingHTTPServer(('0.0.0.0', port), partial(
         Handler, web=web, layouts=layouts, bridge_port=bridge_port,
         default_layout=default_layout, exts=exts, bundle=bundle, hull=hull, files=index(web),
-        shelves=shelves_at))
+        shelves=shelves_at, history=history))
 
 
 def main(argv=None) -> int:
@@ -439,8 +481,10 @@ def main(argv=None) -> int:
     a, _ = ap.parse_known_args(argv)          # launch adds --ros-args
     root = share()
     web = web_dir(pin(root)['version'])
+    for d in sorted(Path.home().glob(RELEASE_LAYOUTS)):
+        remember(d, HISTORY)
     srv = make_server(a.port, web, root / 'layouts', a.bridge_port, a.layout,
-                      panels_dir=root / 'panels')
+                      panels_dir=root / 'panels', history=HISTORY)
     state = 'ok' if (web / 'index.html').exists() else \
         'WARNING: not installed, run `ros2 run mongla_batighor fetch`'
     print(f'[batighor] http://0.0.0.0:{a.port}/  Lichtblick at {web}: {state}', flush=True)

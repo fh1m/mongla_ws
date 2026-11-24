@@ -236,7 +236,11 @@ holds was changed; the defaults the app writes into a panel when it mounts, and 
 operator last chose, are not edits, and are kept under Kutum's values (the console never updated
 while they counted). Where a 3D panel's camera looks is not an edit either: the panel writes it
 back as it renders, so it takes Kutum's camera. A real edit is kept and named in the console log; Revert in the layout's
-menu takes Kutum's. `kutum/deploy.sh` runs the desktop step after a release when the app is
+menu takes Kutum's. In a browser the app replaces the baseline itself when it loads but keeps
+the working copy it made of the old one, so the panel asks Kutum for every version it has served
+(`/layouts/history/<name>.json`, kept by `serve.py` under `~/.mongla/batighor/layout-history/`
+and seeded from the releases) and replaces a working copy that is an unedited copy of one of
+them (`staleWorking`, B-152). `kutum/deploy.sh` runs the desktop step after a release when the app is
 installed on the dev box and Batighor answers; with the stack down it says to run
 `tools/pool/batighor_desktop.py kutum --no-launch` after bringup. On a dense screen the app is started at a scale read from
 the screen's pixels and millimetres (`--force-device-scale-factor`, `--scale` to set it): a 4K

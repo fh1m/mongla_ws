@@ -1725,25 +1725,47 @@ function layoutUpdates(records, served, now) {
     if (L.working) {
       const old = L.baseline && L.baseline.data;
       if (!unedited(old, L.working.data)) { edited.push(name); continue; }
-      // Kutum's layout, with what the app added kept beneath it: its
-      // defaults, any setting made in a key the file never wrote, and the
-      // tab that was open.
-      const was = (L.working.data && L.working.data.configById) || {};
-      const oldCfg = (old && old.configById) || {};
-      const cfg = { ...(data.configById || {}) };
-      for (const id of Object.keys(cfg)) {
-        const w = was[id];
-        if (!w || typeof w !== "object") continue;
-        const added = Object.fromEntries(Object.entries(w).filter(([k]) => !(k in (oldCfg[id] || {}))));
-        cfg[id] = { ...added, ...cfg[id] };
-        if (id.startsWith("Tab!") && Number.isInteger(w.activeTabIdx) && w.activeTabIdx < (cfg[id].tabs || []).length) cfg[id].activeTabIdx = w.activeTabIdx;
-      }
-      const vars = L.working.data && L.working.data.globalVariables;
-      data = { ...data, configById: cfg, ...(vars && data.globalVariables ? { globalVariables: { ...data.globalVariables, ...vars } } : {}) };
+      data = takeKutums(old, L.working.data, data);
     }
     update.push({ ...r, layout: { ...L, baseline: { data, savedAt: now }, working: undefined } });
   }
   return { update, edited };
+}
+
+// Kutum's layout `data`, with what the app added to `old` in `work` kept
+// beneath it: its defaults, any setting made in a key the file never wrote,
+// the tab that was open and the selections made while watching.
+function takeKutums(old, work, data) {
+  const was = (work && work.configById) || {};
+  const oldCfg = (old && old.configById) || {};
+  const cfg = { ...(data.configById || {}) };
+  for (const id of Object.keys(cfg)) {
+    const w = was[id];
+    if (!w || typeof w !== "object") continue;
+    const added = Object.fromEntries(Object.entries(w).filter(([k]) => !(k in (oldCfg[id] || {}))));
+    cfg[id] = { ...added, ...cfg[id] };
+    if (id.startsWith("Tab!") && Number.isInteger(w.activeTabIdx) && w.activeTabIdx < (cfg[id].tabs || []).length) cfg[id].activeTabIdx = w.activeTabIdx;
+  }
+  const vars = work && work.globalVariables;
+  return { ...data, configById: cfg, ...(vars && data.globalVariables ? { globalVariables: { ...data.globalVariables, ...vars } } : {}) };
+}
+
+// In a browser, Lichtblick replaces a layout's baseline with Kutum's on load
+// and keeps the working copy it made of the old one, so the console goes on
+// drawing the old layout (bead b0q). A working copy that is an unedited copy
+// of a version Kutum served before (`history`, serve.py) is replaced by the
+// current baseline with what the app added kept; one that matches no
+// version is an operator's edit and is kept. Pure; exported for the test.
+function staleWorking(records, history) {
+  const update = [];
+  for (const r of records) {
+    const L = r && r.layout;
+    if (!L || !L.working || !L.baseline || unedited(L.baseline.data, L.working.data)) continue;
+    const old = (history[L.name] || []).find((h) => unedited(h, L.working.data));
+    if (!old) continue;
+    update.push({ ...r, layout: { ...L, baseline: { ...L.baseline, data: takeKutums(old, L.working.data, L.baseline.data) }, working: undefined } });
+  }
+  return update;
 }
 
 const idb = (req) => new Promise((ok, no) => { req.onsuccess = () => ok(req.result); req.onerror = () => no(req.error); });
@@ -1798,7 +1820,20 @@ function filesPanel() {
 }
 
 async function syncLayouts() {
-  if (typeof location === "undefined" || location.protocol !== "file:" || typeof indexedDB === "undefined") return;
+  if (typeof location === "undefined" || typeof indexedDB === "undefined") return;
+  if (/^https?:$/.test(location.protocol)) {
+    // The app replaces a baseline with Kutum's some seconds after this runs
+    // (seen in Chrome, 2026-11-25: the first pass found the working copy
+    // still matching the old baseline), so look again until it has.
+    for (const wait of BROWSER_SYNC_S) {
+      await new Promise((ok) => setTimeout(ok, wait * 1000));
+      if (await syncBrowserLayouts()) return;
+    }
+    // Nothing stale left: a later deploy in this tab may reload it again.
+    try { sessionStorage.removeItem("mongla.batighor.staleWorking"); } catch { /* none */ }
+    return;
+  }
+  if (location.protocol !== "file:") return;
   const KEY = "mongla.batighor.layoutSync";
   const kutum = await kutumBase();
   if (!kutum) return;
@@ -1824,9 +1859,39 @@ async function syncLayouts() {
   location.reload();
 }
 
+// The browser's half of the sync: drop working copies made of an old layout.
+// True when it reloaded the page.
+const BROWSER_SYNC_S = [0, 4, 6, 10];
+async function syncBrowserLayouts() {
+  const KEY = "mongla.batighor.staleWorking";
+  const db = await idb(indexedDB.open("lichtblick-layouts"));
+  if (!db.objectStoreNames.contains("layouts")) { db.close(); return false; }
+  const store = () => db.transaction("layouts", "readwrite").objectStore("layouts");
+  const records = await idb(store().getAll());
+  const history = {};
+  for (const r of records) {
+    const L = r && r.layout;
+    if (!L || !L.working || !L.baseline || unedited(L.baseline.data, L.working.data) || !/^[A-Za-z0-9_-]+$/.test(L.name || "")) continue;
+    try { history[L.name] = await (await fetch(`${location.origin}/layouts/history/${L.name}.json`, { cache: "no-store" })).json(); } catch { /* none */ }
+  }
+  const update = staleWorking(records, history);
+  for (const r of update) await idb(store().put(r));
+  db.close();
+  if (!update.length) return false;
+  console.info(`[batighor] ${update.length} layout(s) taken from Kutum: ${update.map((r) => r.layout.name).join(", ")}`);
+  // Guarded, so a copy the app rewrites cannot reload it forever.
+  const mark = update.map((r) => r.layout.name).join(",");
+  try {
+    if (sessionStorage.getItem(KEY) === mark) return false;
+    sessionStorage.setItem(KEY, mark);
+  } catch { return false; }
+  location.reload();
+  return true;
+}
+
 module.exports = {
   healthNow, managerHeard, vitalsOf, signalBars, WATCH_CELLS, captionOf, foldCaption, fitText, NAV_WHY_CHARS,
-  attitudeOf, depthRate, vitalsSvg, chainBoxes, chainSvg, classesOf,
+  attitudeOf, depthRate, vitalsSvg, chainBoxes, chainSvg, classesOf, staleWorking,
   activate(extensionContext) {
     syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {
