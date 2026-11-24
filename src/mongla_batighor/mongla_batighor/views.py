@@ -755,8 +755,10 @@ def build(name: str) -> dict:
         # The status strip on every tab: a split is a percentage of the window,
         # and 5 % is one line of cells on a laptop's 1000 px of height.
         v.prefix = ''
-        tree = (col((5, v('status', instrument('Status'))), (95, 'Tab!console'))
-                if name == CONSOLE else 'Tab!console')
+        # The pilot console's strip keeps only what Vitals, below, does not
+        # show; either strip marks the tabs and reports this screen's lag.
+        strip = 'Status' if name == CONSOLE else 'Watch'
+        tree = col((5, v('status', instrument(strip))), (95, 'Tab!console'))
     else:
         v = View()
         tree = VIEWS[name](v)

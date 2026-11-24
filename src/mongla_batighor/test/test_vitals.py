@@ -76,3 +76,24 @@ const fresh = X.vitalsOf({ ...s, rAt: now - 200 }, now);
 const old = X.vitalsOf({ ...s, rAt: now - 5000 }, now);
 process.stdout.write(JSON.stringify([fresh.rpm, fresh.peak, old.rpm]));''')
     assert out == [[0, 1500, -3000], 3000, []]
+
+
+@NEEDS_NODE
+def test_a_link_reads_as_bars_and_no_number_is_no_bars():
+    out = _run(r'''
+const L = [0.15, 0.5, 2];
+process.stdout.write(JSON.stringify([0.05, 0.15, 0.3, 1.0, 5, NaN, undefined].map((x) => X.signalBars(x, L))));''')
+    assert out == [4, 4, 3, 2, 1, 0, 0]
+
+
+@NEEDS_NODE
+def test_the_watch_strip_shows_nothing_vitals_shows():
+    """Vitals draws arming, mode, depth, heading, packs, position and health;
+    the pilot console's strip keeps the rest, the link to Kutum among it."""
+    out = _run(r'''
+const { cells } = X.statusOf({}, 100000);
+process.stdout.write(JSON.stringify([X.WATCH_CELLS, cells.map(([k]) => k)]));''')
+    watch, every = out
+    assert set(watch) <= set(every)
+    assert not set(watch) & {'vehicle', 'mode', 'depth', 'heading', 'battery', 'navigation', 'health'}
+    assert 'to kutum' in watch

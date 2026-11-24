@@ -202,7 +202,10 @@ the view by name (`--defaultLayout`); the default is `batighor`, the console bel
 least three times wider than tall: the Zenbook Duo's ScreenPad (3840 x 1100) under its
 panel. Found, it opens two windows: `batighor_pilot` on the screen above, the console with
 Pilot as its first tab (`views.PILOT_CONSOLE`: both cameras side by side across the top, the
-Vision instrument, the hull and the Map under them; no Cockpit tab and no status strip), and
+Vision instrument, the hull and the Map under them; no Cockpit tab, and the slim **Watch** strip
+in place of the status strip: mission, verb, lock, the board's line and this screen's link to
+Kutum, each link with four bars by its drops or lag. Either strip marks the tabs and reports the
+screen's lag to the helm, so a console without one would do neither), and
 `vitals` below, in a profile of its own (`~/.config/Lichtblick-vitals`), because the app keeps
 one window per profile and a second launch handed its link to the first. Vitals is the keys,
 the **Vitals** instrument (depth as a water column, heading-up compass with the hull fixed and

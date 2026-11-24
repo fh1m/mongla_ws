@@ -149,6 +149,7 @@
     "mongla.batighor.Mission!map.mission": {},
     "mongla.batighor.Map!mission.map": {},
     "mongla.batighor.MissionText!mission.text": {},
+    "mongla.batighor.Intent!mission.intent": {},
     "mongla.batighor.Mission!mission.mission": {},
     "Plot!mission.demand": {
       "paths": [
@@ -379,14 +380,12 @@
         {
           "value": "/mongla/vision/downward/velocity.twist.twist.linear.x",
           "label": "flow vx m/s",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+          "enabled": true
         },
         {
           "value": "/mongla/vision/downward/velocity.twist.twist.linear.y",
           "label": "flow vy m/s",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+          "enabled": true
         },
         {
           "value": "/mongla/odom.twist.twist.linear.x",
@@ -440,13 +439,13 @@
         },
         {
           "value": "/mongla/vision/downward/floor_height.range",
-          "label": "floor m",
+          "label": "floor (tile)",
           "enabled": true
         }
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 140,
+      "sidebarDimension": 186,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
@@ -632,7 +631,7 @@
         },
         {
           "value": "/mongla/vision/downward/floor_grid_deg.heading_deg",
-          "label": "floor grid",
+          "label": "grid (tile)",
           "enabled": true
         },
         {
@@ -653,7 +652,7 @@
       "paths": [
         {
           "value": "/mongla/vision/downward/floor_height.range",
-          "label": "floor m",
+          "label": "floor (tile)",
           "enabled": true
         },
         {
@@ -664,7 +663,7 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 128,
+      "sidebarDimension": 186,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
@@ -732,7 +731,7 @@
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "body rates"
+      "lichtblickPanelTitle": "body rates, rad/s"
     },
     "Plot!board_health.depthyaw": {
       "paths": [
@@ -795,7 +794,7 @@
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "gyro"
+      "lichtblickPanelTitle": "gyro, rad/s"
     },
     "mongla.batighor.Health!board_health.health": {},
     "mongla.batighor.Kutum!board_health.kutum": {},
@@ -1009,7 +1008,7 @@
       "paths": [
         {
           "value": "/mongla/vision/downward/floor_height.range",
-          "label": "floor m",
+          "label": "floor (tile)",
           "enabled": true
         },
         {
@@ -1020,7 +1019,7 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 128,
+      "sidebarDimension": 186,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
@@ -1472,9 +1471,14 @@
               "first": "mongla.batighor.MissionText!mission.text",
               "second": {
                 "direction": "column",
-                "first": "mongla.batighor.Mission!mission.mission",
-                "second": "Plot!mission.demand",
-                "splitPercentage": 60.0
+                "first": "mongla.batighor.Intent!mission.intent",
+                "second": {
+                  "direction": "column",
+                  "first": "mongla.batighor.Mission!mission.mission",
+                  "second": "Plot!mission.demand",
+                  "splitPercentage": 60.0
+                },
+                "splitPercentage": 28.6
               },
               "splitPercentage": 53.1
             },
@@ -1867,7 +1871,8 @@
           }
         }
       ]
-    }
+    },
+    "mongla.batighor.Watch!status": {}
   },
   "globalVariables": {
     "track": 0
@@ -1881,5 +1886,10 @@
   "playbackConfig": {
     "speed": 1
   },
-  "layout": "Tab!console"
+  "layout": {
+    "direction": "column",
+    "first": "mongla.batighor.Watch!status",
+    "second": "Tab!console",
+    "splitPercentage": 5.0
+  }
 }
