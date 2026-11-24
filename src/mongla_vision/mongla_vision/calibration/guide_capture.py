@@ -296,6 +296,18 @@ def detect_loop(st, det_w):
             st.hold, st.msg, st.det_ms = prog, msg, 1000 * dt
 
 
+def clear_fit(st):
+    """Forget the last fit. Called with `st.lock` held.
+
+    The page shows these as the current answer; once the boards behind them
+    are gone (reset, undo below six, a fit that failed) they describe nothing.
+    """
+    st.ere = st.ere_pred = st.K = st.D = None
+    st.fx = st.fy = st.cx = st.cy = None
+    st.fx_sd = st.hfov_air = st.hfov_water = None
+    st.worst_px = st.suggest = None
+
+
 def assess(st, cols, rows, square, size, fs):
     """Refit from what is captured, report Max ERE, and suggest the next pose.
 
@@ -312,6 +324,11 @@ def assess(st, cols, rows, square, size, fs):
         with st.lock:
             files = sorted(glob.glob(os.path.join(st.outdir, 'cal_*.png')))
             n_seen = st.assessed_n
+        if len(files) < 6 and n_seen != len(files):
+            with st.lock:              # undone below six: the old fit is gone
+                clear_fit(st)
+                st.n_boards = 0
+                st.assessed_n = len(files)
         if len(files) < 6 or len(files) == n_seen:
             time.sleep(1.0)
             continue
@@ -355,6 +372,7 @@ def assess(st, cols, rows, square, size, fs):
                 st.assess_err = None       # this fit worked; the old error is past
         except Exception as exc:
             with st.lock:
+                clear_fit(st)
                 st.assessed_n = len(files)
                 st.assess_err = str(exc)[:120]
         time.sleep(0.5)
