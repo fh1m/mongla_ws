@@ -23,13 +23,16 @@ def load_class_index(model_path: str) -> Optional[Dict[int, str]]:
     yaml_path = Path(model_path).with_suffix('.yaml')
     if not yaml_path.exists():
         return None
+    # A sidecar that is there but unreadable is NOT a missing one: the
+    # operator would look for a file that exists. Say what is wrong with it.
     try:
         import yaml
         data = yaml.safe_load(yaml_path.read_text())
         names = data.get('names', {}) if isinstance(data, dict) else {}
         return {int(k): str(v) for k, v in names.items()}
-    except Exception:
-        return None
+    except Exception as exc:                                # noqa: BLE001
+        raise ValueError(f'{yaml_path}: sidecar present but unreadable '
+                         f'({exc!r}); fix its `names:` block') from exc
 
 
 def measured_bars(model_path: str) -> Dict[str, Optional[float]]:
