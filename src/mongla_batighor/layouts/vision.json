@@ -51,11 +51,16 @@
           "value": "/mongla/vision/forward/target_pose_fused.range_m",
           "label": "range m",
           "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_near.range_m",
+          "label": "near range m",
+          "enabled": true
         }
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 128,
+      "sidebarDimension": 186,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
@@ -69,6 +74,11 @@
           "enabled": true
         },
         {
+          "value": "/mongla/vision/forward/target_pose_near.bearing_deg",
+          "label": "near bearing",
+          "enabled": true
+        },
+        {
           "value": "/mongla/vision/forward/target_pose_fused.yaw_deg",
           "label": "yaw deg",
           "enabled": true
@@ -76,7 +86,7 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 174,
+      "sidebarDimension": 186,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
@@ -121,11 +131,16 @@
           "value": "/mongla/vision/forward/target_pose.reproj_px",
           "label": "reproj px",
           "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_near.reproj_px",
+          "label": "near reproj",
+          "enabled": true
         }
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 163,
+      "sidebarDimension": 174,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",

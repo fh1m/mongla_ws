@@ -46,7 +46,13 @@ def test_every_layout_topic_is_published_somewhere(path):
         if cam in ('forward', 'downward'):
             alts.append(rf"f'[^']*{{ns(?:_out)?}}/{re.escape(leaf)}'")
         templated = any(re.search(a, src) for a in alts)
-        assert literal or templated, f'{path.name}: nothing publishes {topic}'
+        # A variant of a solver publishes `<topic>_<variant>` (pnp_node), and
+        # only when some launch file runs that variant.
+        base, _, variant = leaf.rpartition('_')
+        variant_ok = bool(base) and cam in ('forward', 'downward') \
+            and re.search(rf"f'[^']*{{ns}}/{re.escape(base)}' \+ \(f'_{{variant}}'", src) \
+            and re.search(rf"'variant':\s*'{re.escape(variant)}'", src)
+        assert literal or templated or variant_ok, f'{path.name}: nothing publishes {topic}'
 
 
 def test_the_layouts_are_found():
