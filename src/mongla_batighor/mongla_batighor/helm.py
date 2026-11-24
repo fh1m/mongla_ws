@@ -253,6 +253,21 @@ class HelmNode(Node):
 
     # -- requests -----------------------------------------------------
     def _on_request(self, req, res):
+        # Every request is answered. A raise here (no `ros2` on PATH, an
+        # unwritable log folder, mongla_vision absent) left the browser with
+        # no reply and could take the helm, and the pilot's seat, down with it.
+        try:
+            return self._handle(req, res)
+        except Exception as exc:   # noqa: BLE001 -- the reply is the report
+            res.ok, res.message = False, f'{req.op} failed in the helm: {type(exc).__name__}: {exc}'
+            try:
+                self._log(operator=req.who.strip(), op=req.op, cmd=req.cmd,
+                          ok=False, message=res.message)
+            except Exception:      # noqa: BLE001 -- the log itself may be what failed
+                pass
+            return res
+
+    def _handle(self, req, res):
         now = time.monotonic()
         who, op = req.who.strip(), req.op
         if op == 'heartbeat':
@@ -506,7 +521,10 @@ class HelmNode(Node):
         return Verdict(True, f'calibration {cal_op} sent')
 
     def _calibrated(self, who, cal_op, fut):
-        res = fut.result()
+        try:
+            res = fut.result()
+        except Exception:          # noqa: BLE001 -- reported below as no answer
+            res = None
         self._log(operator=who, event=f'calibration {cal_op}: '
                                       f'{res.message if res is not None else "no answer"}',
                   ok=bool(res is not None and res.ok))
