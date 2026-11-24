@@ -501,7 +501,7 @@ def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
     lock = {'detections': [{'id': 'gate', 'results': [{'hypothesis': {'class_id': 'held', 'score': 0.8}}]}]}
     s = {'v': {'armed': True, 'mode': 'AUTO', 'depth_m': -1.2, 'yaw_deg': 90, 'battery_voltage': 14.8},
          'vAt': 1000, 'locks': {'forward': {'m': lock, 'at': 1000}, 'downward': {'m': {}, 'at': 1000}},
-         'health': [{'name': 'baro', 'level': 3}, {'name': 'imu', 'level': 0}]}
+         'health': [{'name': 'baro', 'level': 3, 'at': 1000}, {'name': 'imu', 'level': 0, 'at': 1000}]}
     js = (pre + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS
           + f'\nprocess.stdout.write(JSON.stringify(module.exports.statusOf({_json.dumps(s)}, 1500)));')
     out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
@@ -756,7 +756,9 @@ out.nsec = Math.round(s.lag * 1000);
 // Reports: none in the first 15 s after mounting (a page that has just loaded
 // lags while every panel mounts), then one every 2 s.
 const r = { lag: 1.0, mountAt: 0 };
-out.reports = [1000, 14000, 15500, 16000, 17600].map((t) => X.shouldReport(r, t));
+out.reports = [1000, 14000, 15500, 16000, 17600].map((t) => { r.vAt = t - 100; return X.shouldReport(r, t); });
+// With the state silent the lag is frozen at its last arrival: never reported.
+r.vAt = 17600; out.frozen = X.shouldReport(r, 17600 + 2000 + 2100);
 out.words = [X.videoWords(1, ""), X.videoWords(0.5, "ab12", "ab12"), X.videoWords(0.25, "c3d4", "ab12"), X.videoWords(NaN, "")];
 process.stdout.write(JSON.stringify(out));
 process.exit(0);
@@ -770,8 +772,40 @@ process.exit(0);
     assert got['aged'] == 1, 'samples older than a minute are dropped'
     assert got['nsec'] == 300, got['nsec']
     assert got['reports'] == [False, False, True, False, True], got['reports']
+    assert got['frozen'] is False
     assert got['words'] == ['video x1', 'video x0.5 set by this screen',
                             'video x0.25 set by screen c3d4', 'video --'], got['words']
+
+
+@NEEDS_NODE
+def test_nothing_is_shown_current_after_its_publisher_went_silent():
+    """A dead manager's last green, its latched verb, a mission's latched task
+    and the filter's last pose all stayed on screen as current (audit
+    2026-11-24). Each now ages by its publisher's own rate."""
+    import json as _json
+    import subprocess as _sp
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    js = pre + (PANELS / 'common.js').read_text() + INSTRUMENTS_JS + r"""
+const X = module.exports, out = {};
+const s = { health: [{ name: "mongla: leak", level: 0, message: "dry", at: 1000 }],
+            doing: { now: { verb: "move_forward" } }, v: { armed: false }, vAt: 1000 };
+out.freshHealth = X.statusOf(s, 2000).cells.find((c) => c[0] === "health");
+out.deadHealth = X.statusOf(s, 1000 + 4000).cells.find((c) => c[0] === "health");
+out.row = X.healthNow(s, 5000)[0];
+out.freshVerb = X.statusOf(s, 2000).cells.find((c) => c[0] === "verb");
+out.deadVerb = X.statusOf(s, 5000).cells.find((c) => c[0] === "verb");
+process.stdout.write(JSON.stringify(out));
+process.exit(0);
+"""
+    run = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
+    assert run.returncode == 0, run.stderr
+    got = _json.loads(run.stdout)
+    assert got['freshHealth'][2] == 'ok', got
+    assert got['deadHealth'][2] == 'stale' and 'unknown' in got['deadHealth'][1], got
+    assert got['row']['level'] == 3 and 'silent 4 s' in got['row']['message'], got
+    assert got['freshVerb'] == ['verb', 'move_forward', 'live'], got
+    assert got['deadVerb'][2] == 'warn' and 'manager silent' in got['deadVerb'][1], got
 
 
 @NEEDS_NODE

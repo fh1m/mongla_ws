@@ -19,7 +19,12 @@ const LEVEL = ["ok", "warn", "err", "stale"];
 const LEVEL_WORD = { ok: "ok", warn: "warn", err: "fail", stale: "unknown" };
 const REDRAW_MS = 100;
 const MISSION_ALIVE_S = 1.5;  // the runner beats at 2 Hz; silent this long is no mission (helm.MISSION_ALIVE_S)
-const TRACK_S = 120;          // the navigation plan view keeps two minutes of track
+const TRACK_S = 120;
+// The manager grades /diagnostics once a second (node_setup.py), every row
+// each time: a row not repeated for this long is unknown, not its last word.
+const HEALTH_STALE_S = 3;
+// Anything published faster than once a second is stale after this.
+const FRESH_S = 2;          // the navigation plan view keeps two minutes of track
 const SVG = "http://www.w3.org/2000/svg";
 
 const lockTopic = (c) => `/mongla/vision/${c}/lock`;
@@ -278,8 +283,9 @@ function foldMap(s, topic, m) {
       s.fixes.push({ x: p.x, y: p.y, fx: was ? was.x : NaN, fy: was ? was.y : NaN, t: heard() });
       if (s.fixes.length > 40) s.fixes.shift();
     }
-  } else if (topic === "/mongla/odom") s.odom = m;
-  else if (topic === "/mongla/vision/downward/velocity") s.flow = m;
+  } else if (topic === "/mongla/odom") { s.odom = m; s.odomAt = heard(); }
+  // Flow publishes only an interval it accepted: a refused run is silence.
+  else if (topic === "/mongla/vision/downward/velocity") { s.flow = m; s.flowAt = heard(); }
   else { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
 }
 
@@ -299,10 +305,13 @@ function drawMap(s, forLocalization) {
   const f = now && now.verb === "go_to" ? now.fields || {} : null;
   const target = f && fin(f.x_m) && fin(f.y_m) ? { x: f.x_m, y: f.y_m, tol: f.tolerance_m } : null;
   const pose = mapPose(s);
-  const anchored = pose && !pose.placed;
+  // The filter's last word stays drawn, said to be old: never "anchored" from silence.
+  const silent = loc && ageS(s.lAt) > FRESH_S;
+  const anchored = pose && !pose.placed && !silent;
   const out = [el("div", { class: "row" },
     el("b", {}, c.course || "no course"), el("span", { class: "note" }, c.from === "mission" ? "from the mission" : "from the deck"),
     !loc ? el("span", { class: "stale" }, "no localization")
+      : silent ? el("span", { class: "stale" }, `localization silent ${num(ageS(s.lAt), 0)} s: last position drawn`)
       : anchored ? el("span", { class: "live" }, "anchored in the pool")
         : el("span", { class: "warn" }, `not anchored: drawn by its start (${s.start ? s.start.by : "--"})`))];
   if (c.error) { out.push(el("div", { class: "err" }, c.error)); return out; }
@@ -310,9 +319,9 @@ function drawMap(s, forLocalization) {
   if (forLocalization && pose && fin(pose.yaw)) {
     // Body-frame velocities (FRD), turned into the pool by the drawn heading.
     const turn = (vx, vy) => ({ vx: Math.cos(pose.yaw) * vx - Math.sin(pose.yaw) * vy, vy: Math.sin(pose.yaw) * vx + Math.cos(pose.yaw) * vy });
-    const ot = s.odom && s.odom.twist && s.odom.twist.twist && s.odom.twist.twist.linear;
+    const ot = ageS(s.odomAt) <= 1 && s.odom && s.odom.twist && s.odom.twist.twist && s.odom.twist.twist.linear;
     if (ot) vel.push({ ...turn(ot.x, ot.y), ink: "var(--mb-sea)" });
-    const ft = s.flow && s.flow.twist && s.flow.twist.twist && s.flow.twist.twist.linear;
+    const ft = ageS(s.flowAt) <= 1 && s.flow && s.flow.twist && s.flow.twist.twist && s.flow.twist.twist.linear;
     if (ft) vel.push({ ...turn(ft.x, ft.y), ink: "var(--mb-teal)" });
   }
   const map = poolMap(c, pose, s.track || [], s.fixes || [], target, { rays: forLocalization, vel, px: s.mapPx });
@@ -321,16 +330,16 @@ function drawMap(s, forLocalization) {
   const where = pose ? `${num(pose.x, 2)}, ${num(pose.y, 2)} m  heading ${num(fin(pose.yaw) ? (pose.yaw * 180) / Math.PI : NaN, 0)} deg` : "--";
   const lastFix = (s.fixes || []).at(-1);
   const rows = [
-    ["position", anchored ? where : pose ? `${where} (by its start)` : "--", anchored ? "live" : "warn"],
+    ["position", anchored ? where : pose ? `${where} (${silent ? "old" : "by its start"})` : "--", anchored ? "live" : "warn"],
     ["filter frame", loc ? `${loc.frame || "--"}  ${num(loc.x_m, 2)}, ${num(loc.y_m, 2)} m` : "--"],
     ["sigma", loc ? `${num(loc.sigma_xy_m, 2)} m  yaw ${num(loc.sigma_yaw_deg, 1)} deg` : "--"],
-    ["usable", loc ? (loc.usable ? "yes" : `no: ${loc.reason || "--"}`) : "--", loc && loc.usable ? "live" : "warn"],
+    ["usable", !loc || silent ? "--" : loc.usable ? "yes" : `no: ${loc.reason || "--"}`, loc && !silent && loc.usable ? "live" : "warn"],
     ["aiding", loc ? loc.aiding || "--" : "--"],
     ["going to", target ? `${num(target.x, 2)}, ${num(target.y, 2)} m within ${num(target.tol, 2, " m")}` : "--", target ? "live" : ""],
   ];
   if (forLocalization) {
     rows.push(["flow scale", s.flowCal || "--", s.flowCal === "calibrated" ? "live" : s.flowCal ? "warn" : ""],
-      ["arrows", "2 s ahead: filter (sea), flow (teal)"],
+      ["arrows", "2 s ahead: filter (sea), flow (teal); none while its source is silent", ageS(s.flowAt) > 1 ? "warn" : ""],
       ["last fix", lastFix ? `moved the estimate ${num(Math.hypot(lastFix.x - lastFix.fx, lastFix.y - lastFix.fy), 2, " m")}, ${num(ageS(lastFix.t), 0)} s ago` : "none yet"],
       ["motion", loc ? loc.motion || "--" : "--"],
       ["input ages", loc ? `imu ${num(loc.imu_age_s, 2)}  depth ${num(loc.depth_age_s, 2)}  flow ${num(loc.flow_age_s, 2)} s` : "--"]);
@@ -418,11 +427,24 @@ function healthRows(rows, filter) {
     : el("div", { class: "note" }, "no /diagnostics rows yet: the manager grades health once it runs");
 }
 
+// The rows as of `now`. A dead manager's last green stayed green: a row not
+// repeated for HEALTH_STALE_S reads unknown, with its age and its last word.
+// Exported for the test.
+function healthNow(s, now) {
+  return (s.health || []).map((r) => {
+    const age = (now - (r.at || 0)) / 1000;
+    return age > HEALTH_STALE_S ? { ...r, level: 3, message: `silent ${num(age, 0)} s (last: ${r.message})` } : r;
+  });
+}
+// The manager is heard while any of its rows is fresh: what a latched
+// record of its own (/mongla/doing) is current by.
+const managerHeard = (s, now) => (s.health || []).some((r) => (now - (r.at || 0)) / 1000 <= HEALTH_STALE_S);
+
 function foldDiagnostics(s, m) {
   s.health = s.health || [];
   for (const st of m.status || []) {
     const i = s.health.findIndex((h) => h.name === st.name);
-    const row = { name: st.name, level: typeof st.level === "number" ? st.level : Number(st.level), message: st.message };
+    const row = { name: st.name, level: typeof st.level === "number" ? st.level : Number(st.level), message: st.message, at: heard() };
     if (i < 0) s.health.push(row); else s.health[i] = row;
   }
 }
@@ -435,7 +457,8 @@ const BOARD_LINES = [["link", "board_link"], ["leak", "leak"], ["kill line", "th
 
 function vehicleBody(s, v, h, below) {
   // The manager names each row "mongla: <line>".
-  const graded = (key) => (s.health || []).find((r) => r.name === key || r.name.endsWith(`: ${key}`));
+  const rows = healthNow(s, Date.now());
+  const graded = (key) => rows.find((r) => r.name === key || r.name.endsWith(`: ${key}`));
   const board = BOARD_LINES.map(([label, key]) => {
     const r = graded(key);
     if (!r) return [label, "--", "stale", "not graded yet"];
@@ -447,7 +470,9 @@ function vehicleBody(s, v, h, below) {
   });
   return [
     el("div", { class: "row" },
-      el("span", { class: v.armed ? "armed" : "ok" }, v.armed ? "ARMED" : "disarmed"),
+      ageS(s.at) > FRESH_S
+        ? el("span", { class: "warn" }, `${v.armed ? "ARMED" : "disarmed"}, ${num(ageS(s.at), 0)} s old`)
+        : el("span", { class: v.armed ? "armed" : "ok" }, v.armed ? "ARMED" : "disarmed"),
       el("span", {}, v.mode || "--"),
       h.mission && el("span", { class: "live" }, `mission ${h.mission}`)),
     el("div", { class: "row gauges" },
@@ -510,7 +535,8 @@ function videoWords(scale, by, me = SCREEN) {
 }
 
 function shouldReport(s, now) {
-  if (!fin(s.lag)) return false;
+  // A lag frozen at the state's last arrival is not this screen's lag now.
+  if (!fin(s.lag) || !(now - (s.vAt || 0) <= FRESH_S * 1000)) return false;
   if (!fin(s.mountAt)) s.mountAt = now;
   if (now - s.mountAt < WARM_MS || now - (s.lagSent || -Infinity) < REPORT_MS) return false;
   s.lagSent = now;
@@ -540,7 +566,10 @@ function statusOf(s, now) {
   const task = s.task && running ? ` / ${s.task.task || s.task.name || ""}` : "";
   cells.push(["mission", running ? `${s.missionName || "running"}${task}` : "none", running ? "live" : ""]);
   const doing = s.doing && s.doing.now;
-  cells.push(["verb", doing ? doing.verb : "idle", doing ? "live" : ""]);
+  // /mongla/doing is latched, sent on change: current only while the manager is heard.
+  const heardMgr = managerHeard(s, now);
+  cells.push(["verb", !s.doing ? "--" : !heardMgr ? `${doing ? doing.verb : "idle"}, manager silent` : doing ? doing.verb : "idle",
+    !s.doing ? "stale" : !heardMgr ? "warn" : doing ? "live" : ""]);
   const rungs = CAMERAS.map((c) => [c, s.locks && age(s.locks[c] && s.locks[c].at) < 2 ? rungOf(s.locks[c].m).rung : null]);
   const held = rungs.filter(([, r]) => r && r !== "lost");
   cells.push(["lock", held.length ? held.map(([c, r]) => `${c} ${r}`).join("  ") : rungs.every(([, r]) => r) ? "lost" : "--", held.length ? "live" : ""]);
@@ -549,7 +578,7 @@ function statusOf(s, now) {
   cells.push(["navigation", !loc ? "--" : anchored ? `anchored  ${num(loc.sigma_xy_m, 2)} m` : loc.usable ? `${loc.aiding || "aided"}` : `unusable`, !loc ? "stale" : anchored ? "ok" : loc.usable ? "" : "warn"]);
   // ROS levels: 0 ok, 1 warn, 2 error, 3 stale. A row with no data is
   // unknown, never a fault: the bench has no barometer, not a broken one.
-  const rows = s.health || [];
+  const rows = healthNow(s, now);
   const count = (lvl) => rows.filter((r) => r.level === lvl).length;
   const [errs, warns, unknown] = [count(2), count(1), count(3)];
   const said = [errs && `${errs} error${errs > 1 ? "s" : ""}`, warns && `${warns} warning${warns > 1 ? "s" : ""}`,
@@ -560,8 +589,10 @@ function statusOf(s, now) {
   cells.push(["link", l ? `${num(100 * l.bytes_per_s / (l.capacity_bytes_per_s || NaN), 0)} %  drops ${num(l.board_drop_pct, 1)} %` : "--", !l ? "stale" : l.board_drop_pct > 1 ? "warn" : "ok"]);
   // This screen's link to Kutum, apart from the board's line above: the lag
   // and the scale the helm put the viewers' video at for it (link.py).
-  const lagLvl = !fin(s.lag) ? "stale" : s.lag > 2 ? "err" : s.lag > 0.5 ? "warn" : "ok";
-  cells.push(["to kutum", fin(s.lag) ? `lag ${num(s.lag, 2)} s  ${videoWords(s.video, s.videoBy)}` : "--", lagLvl]);
+  // The lag is measured on the state's arrival; with the state silent it is unknown.
+  const lag = fresh ? s.lag : NaN;
+  const lagLvl = !fin(lag) ? "stale" : lag > 2 ? "err" : lag > 0.5 ? "warn" : "ok";
+  cells.push(["to kutum", fin(lag) ? `lag ${num(lag, 2)} s  ${videoWords(s.video, s.videoBy)}` : "--", lagLvl]);
   tabs.Cockpit = v && v.armed ? "live" : "";
   tabs.Thrust = v && v.armed ? "live" : "";
   tabs.Mission = running ? "live" : "";
@@ -639,7 +670,7 @@ const INSTRUMENTS = {
     fold(s, topic, m) {
       s.lock = s.lock || {}; s.lockAt = s.lockAt || {}; s.seeing = s.seeing || {}; s.model = s.model || {};
       if (topic === "/mongla/vision/active_camera") { s.active = m.data; return; }
-      if (topic === STAGES_TOPIC) { try { s.stages = JSON.parse(m.data); } catch { /* keep */ } return; }
+      if (topic === STAGES_TOPIC) { try { s.stages = JSON.parse(m.data); s.stagesAt = heard(); } catch { /* keep */ } return; }
       for (const c of CAMERAS) {
         if (topic === lockTopic(c)) { s.lock[c] = m; s.lockAt[c] = heard(); }
         if (topic === seeingTopic(c)) s.seeing[c] = m.data;
@@ -671,8 +702,10 @@ const INSTRUMENTS = {
         // What runs on this camera; an off stage carries the switch that turns
         // it on. The overlay node counts publishers: a topic the graph lists
         // is not a stage that runs (a subscriber alone lists it too).
-        const st = (s.stages || {})[c];
-        if (st) {
+        // overlay.py says which stages run once a second.
+        const st = ageS(s.stagesAt) <= HEALTH_STALE_S ? (s.stages || {})[c] : null;
+        if (!st && s.stages) cam.push(el("div", { class: "stale" }, `stages: the overlay node is silent ${num(ageS(s.stagesAt), 0)} s`));
+        else if (st) {
           cam.push(el("div", { class: "stages" }, ...st.map((x) => x.on
             ? el("i", { class: "on", title: x.topic }, x.stage)
             : el("i", { class: "off", title: `off: ${x.switch}` }, el("s", {}, x.stage), el("small", {}, x.switch)))));
@@ -689,6 +722,11 @@ const INSTRUMENTS = {
     fold(s, topic, m) {
       s.track = s.track || []; s.fixes = s.fixes || [];
       if (topic === "/mongla/odom") {
+        // The anchor moves odometry into the pool frame: a track across it
+        // would join two frames, and a fix is drawn only in the frame it is in.
+        const frame = (m.header && m.header.frame_id) || "";
+        if (s.odom && frame !== s.frame) { s.track = []; s.fixes = []; }
+        s.frame = frame;
         s.odom = m; s.at = heard();
         const p = m.pose && m.pose.pose && m.pose.pose.position;
         if (p) {
@@ -697,7 +735,10 @@ const INSTRUMENTS = {
         }
       } else if (topic === "/mongla/localization/aiding") s.aiding = m.data;
       else if (topic === "/mongla/localization/motion") s.motion = m.data;
-      else if (m.point) { s.fixes.push({ x: m.point.x, y: m.point.y }); if (s.fixes.length > 20) s.fixes.shift(); }
+      else if (m.point) {
+        s.nFixes = (s.nFixes || 0) + 1;
+        if (((m.header && m.header.frame_id) || "") === (s.frame || "")) { s.fixes.push({ x: m.point.x, y: m.point.y }); if (s.fixes.length > 20) s.fixes.shift(); }
+      }
     },
     draw(s) {
       const o = s.odom;
@@ -709,7 +750,7 @@ const INSTRUMENTS = {
           ["motion", s.motion || "--"],
           ["north, east", p ? `${num(p.x, 2)}, ${num(p.y, 2)} m` : "--"],
           ["speed", tw ? `${num(Math.hypot(tw.x, tw.y), 2)} m/s` : "--"],
-          ["prop fixes", String((s.fixes || []).length)],
+          ["prop fixes", String(s.nFixes || 0)],
           ["odom age", `${num(ageS(s.at), 1)} s`, ageS(s.at) > 1 ? "warn" : ""]),
       ];
     },
@@ -741,9 +782,10 @@ const INSTRUMENTS = {
   // one ended (refusals too), whoever sent it.
   Mission: {
     title: "Mission",
-    topics: ["/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing"],
+    topics: ["/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics"],
     fold(s, topic, m) {
-      if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
+      if (topic === "/diagnostics") foldDiagnostics(s, m);
+      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
       else if (topic === "/mongla/mission/task") {
         try {
           const t = JSON.parse(m.data); t.at = heard();
@@ -755,8 +797,10 @@ const INSTRUMENTS = {
       const live = ageS(s.aliveAt) < MISSION_ALIVE_S && s.missionName;
       const out = [el("div", { class: "row" }, el("span", { class: "note" }, "mission"),
         live ? el("b", { class: "live" }, s.missionName) : el("span", {}, "none running"))];
+      // A task's start is latched: it runs only while its mission beats.
       const task = (s.tasks || []).find((t) => t.state === "running");
-      if (task) {
+      if (task && !live) out.push(el("div", { class: "warn" }, `${task.task}: its mission is not running (no beat for ${num(ageS(s.aliveAt), 0)} s); last said running`));
+      else if (task) {
         const el_s = task.elapsed_s + ageS(task.at);
         const left = fin(task.deadline_s) ? task.deadline_s - el_s : NaN;
         out.push(kv(["task", task.task, "live"], ["elapsed", clock(el_s)],
@@ -767,7 +811,9 @@ const INSTRUMENTS = {
       const d = s.doing || {};
       const now = d.now;
       out.push(el("h3", {}, el("span", {}, "doing now")));
-      out.push(now ? kv(["verb", now.verb, "live"], ["asked", fieldsText(now.fields) || "defaults"],
+      const heardMgr = managerHeard(s, Date.now());
+      if (s.doing && !heardMgr) out.push(el("div", { class: "warn" }, "the manager is silent: this is its last word, not what runs now"));
+      out.push(now ? kv(["verb", now.verb, heardMgr ? "live" : "warn"], ["asked", fieldsText(now.fields) || "defaults"],
         // Both stamps are the manager's clock: the browser's may differ from Kutum's.
         ["for", clock(d.stamp - now.since + ageS(s.dAt))])
         : el("div", { class: "note" }, s.doing ? "nothing: the manager is idle" : "no /mongla/doing: is the manager running?"));
@@ -806,11 +852,12 @@ const INSTRUMENTS = {
       else if (topic === "/mongla/esc_rpm") {
         s.rpm = Array.from(m.data || []); s.rAt = heard();
         s.peak = Math.max(s.peak || 1000, ...s.rpm.map((r) => Math.abs(r)));
-      } else if (topic === "/mongla/thruster_pack") s.pack = m;
-      else s.state = m;
+      } else if (topic === "/mongla/thruster_pack") { s.pack = m; s.pAt = heard(); }
+      else { s.state = m; s.sAt = heard(); }
     },
     draw(s) {
-      const d = s.demand || {};
+      // A demand not repeated is not the demand now: none rather than the last.
+      const d = ageS(s.dAt) <= FRESH_S ? s.demand || {} : {};
       const rpm = s.rpm || [];
       return [
         el("div", { class: "note" }, "the demand sent to the board, -1 to 1 (NaN: a board primitive owns it)"),
@@ -824,7 +871,10 @@ const INSTRUMENTS = {
           ...rpm.map((r, i) => el("div", { style: "display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;justify-content:flex-end" },
             el("div", { style: `width:100%;height:${(100 * Math.abs(r)) / s.peak}%;background:${r < 0 ? "var(--mb-amber)" : "var(--mb-sea)"};border-radius:2px 2px 0 0` }),
             el("span", { class: "note" }, String(i + 1))))) : null,
-        kv(["ESC age", `${num(ageS(s.rAt), 1)} s`], ["thruster pack", num(s.pack && s.pack.voltage, 2, " V")], ["electronics", num(s.state && s.state.battery_voltage, 2, " V")]),
+        kv(["demand age", `${num(ageS(s.dAt), 1)} s`, ageS(s.dAt) > FRESH_S ? "warn" : ""],
+          ["ESC age", `${num(ageS(s.rAt), 1)} s`, ageS(s.rAt) > FRESH_S ? "warn" : ""],
+          ["thruster pack", ageS(s.pAt) <= FRESH_S ? num(s.pack && s.pack.voltage, 2, " V") : "--"],
+          ["electronics", ageS(s.sAt) <= FRESH_S ? num(s.state && s.state.battery_voltage, 2, " V") : "--"]),
       ];
     },
   },
@@ -836,6 +886,8 @@ const INSTRUMENTS = {
     draw(s) {
       const l = s.l;
       if (!l) return [el("div", { class: "note" }, "no /mongla/board_link")];
+      // The manager sends it once a second; older, it is the line as it was.
+      if (ageS(s.at) > HEALTH_STALE_S) return [el("div", { class: "stale" }, `board_link silent ${num(ageS(s.at), 0)} s: the manager is not publishing`)];
       const use = l.capacity_bytes_per_s > 0 ? l.bytes_per_s / l.capacity_bytes_per_s : NaN;
       return [
         el("span", { class: "big" }, num(100 * use, 0), el("span", { class: "unit" }, "% of the line")),
@@ -891,7 +943,7 @@ const INSTRUMENTS = {
     fold: (s, topic, m) => foldDiagnostics(s, m),
     // Kutum's rows have their own instrument beside this one; shown here too
     // they pushed the board's rows off a small panel.
-    draw: (s) => [healthRows(s.health || [], "!kutum.")],
+    draw: (s) => [healthRows(healthNow(s, Date.now()), "!kutum.")],
   },
 
   // Kutum's own rows (clock, disk, Hailo, power, temperature), on their own.
@@ -899,7 +951,7 @@ const INSTRUMENTS = {
     title: "Kutum",
     topics: ["/diagnostics"],
     fold: (s, topic, m) => foldDiagnostics(s, m),
-    draw: (s) => [healthRows(s.health || [], "kutum.")],
+    draw: (s) => [healthRows(healthNow(s, Date.now()), "kutum.")],
   },
 };
 
@@ -1066,6 +1118,7 @@ async function syncLayouts() {
 }
 
 module.exports = {
+  healthNow, managerHeard,
   activate(extensionContext) {
     syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {
