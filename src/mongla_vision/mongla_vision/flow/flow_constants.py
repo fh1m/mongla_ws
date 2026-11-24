@@ -39,8 +39,9 @@ _LK_PARAMS = dict(winSize=(31, 31), maxLevel=3,
 #
 # Using the air number underwater is the single most dangerous mistake
 # available here: a clean 44 % multiplier on every velocity, invisible in every
-# plot, integrated by everything downstream. So `medium` is an explicit
-# parameter with no safe default -- it is printed at startup.
+# plot, integrated by everything downstream. So `medium` is printed at
+# startup. It defaults to 'water', the vehicle's medium (vision_pi.launch.py
+# declares the same default); a bench camera in air must say medium:=air.
 # Shi-Tomasi corners for the flow tracker. Bucketing is applied on top so the
 # corners spread across the frame rather than clustering on one bright patch of
 # grout: a clustered set makes a rotation and a translation look alike, and a
@@ -55,7 +56,9 @@ _F_AIR_PX = 513.94
 _F_WATER_PX = 741.0
 
 
-# The de-rotation gains default to the canonical -1.0, deliberately.
+# The de-rotation gains: the history of the choice. What ships now is the
+# rig's fitted pair below (_GYRO_GAIN_X/Y_DEFAULT, measured-bars), not -1.0
+# and not zero.
 #
 # The bench rig measured -1.150 (dx<-gx) and -1.095 (dy<-gy), cond(MtM) 27.7,
 # and cut false velocity under pure rotation by 90 %. But rotation about the
@@ -107,8 +110,8 @@ _F_WATER_PX = 741.0
 # most likely reason §12's -1.150 and this round's -1.058 coupling cannot be
 # reconciled: they were excited with different pivots.
 #
-# So the default is ZERO -- de-rotation OFF -- and that is a measured choice,
-# not a surrender:
+# So the default WAS zero -- de-rotation off -- until the rig fit replaced it,
+# for these reasons:
 #   * it is the best of the three on the actual task (9.9 % vs 22.3 / 24.5);
 #   * it is the only value that CANNOT double the error, since the residual
 #     is (S + g) and g = 0 leaves exactly the uncorrected term;

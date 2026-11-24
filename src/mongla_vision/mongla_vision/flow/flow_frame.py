@@ -366,6 +366,11 @@ class FlowFrameMixin:
             got = floor_depth_at(pts, odom[0], odom[1])
             if got is not None:
                 d, fit, grad = got
+                if not math.isfinite(fit):
+                    # Too few points to measure the floor's spread: their
+                    # range is the measured bound, not zero (vl_11 G3).
+                    ds = [p[2] for p in pts]
+                    fit = (max(ds) - min(ds)) / math.sqrt(12.0)
                 self._floor_sigma_m = math.hypot(fit, grad * odom[2])
                 self._floor_source = 'survey'
                 return d

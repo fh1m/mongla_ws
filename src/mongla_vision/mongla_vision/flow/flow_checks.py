@@ -239,7 +239,7 @@ class FlowChecksMixin:
         of two large numbers).
         """
         n_term = min(1.0, n_used / 40.0)
-        d_term = 1.0 - min(1.0, (disp or 0.0) / max(v.net_flow_px, 1e-6)
+        d_term = 1.0 - min(1.0, (disp if disp is not None else math.inf) / max(v.net_flow_px, 1e-6)
                            / max(self._max_disp, 1e-6))
         r_term = 1.0 - min(1.0, v.rot_fraction / max(self._rot_max, 1e-6))
         q = int(round(255.0 * max(0.0, n_term * 0.4 + d_term * 0.3
