@@ -689,8 +689,8 @@ class CameraNode(Node):
         #
         # `meta.stamp_wall` is the capture instant on the wall clock, derived
         # by the source from the kernel's monotonic capture stamp. Sources that
-        # cannot know better (a video file, a ROS topic) set it at read time,
-        # which is the best available answer there and no worse than before.
+        # cannot know better set it when they read or receive the frame: a video
+        # file at read time, a ROS topic at arrival.
         header = self._make_header(meta)
 
         info = CameraInfo()
@@ -917,7 +917,7 @@ class CameraNode(Node):
             extra = f'  pos={cur}/{total} ({pct:.0f}%)  {paused}  {spd:.2f}×'
         self.get_logger().info(
             f"[CAM  ] {marker}  {self._cam_name}  pub={hz:5.1f}Hz  "
-            f"sent={sent}  dropped={dropped}{extra}")
+            f"sent={sent}  encode_dropped={dropped}{extra}")
         # Delta, not reset (B41). `_sent`/`_dropped` are incremented by the
         # CAPTURE THREAD and this runs on a ROS timer thread. Read-then-zero is
         # two operations: an increment landing between them was silently lost, so

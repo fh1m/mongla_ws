@@ -68,9 +68,9 @@ the INSTALLED share, so editing the source copy still needs a colcon build.
 That is what the override files are for.
 
 AND: the committed defaults come from the ORGANISERS' documents, never from
-our simulator. The two SAUVC entries taken from the sim arena spec carry
-`unquoted: true` for that reason. A sim prop's size is our own guess wearing a
-number's clothes.
+our simulator. The two SAUVC entries are read off a rulebook figure and carry
+no `unquoted` key; only a robosub entry sets it. A sim prop's size is our own
+guess wearing a number's clothes.
 """
 import os
 

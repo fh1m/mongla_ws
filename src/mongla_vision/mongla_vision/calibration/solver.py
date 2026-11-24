@@ -624,7 +624,7 @@ def main() -> int:
     v, air_note = fov_for_medium(v, medium)
     if external:
         board_w, dist_z = external
-        # widest observed board span in pixels, over the most frontal view
+        # widest observed board span in pixels, over all views
         best_px = 0.0
         for ip in ips:
             p = ip.reshape(-1, 2)

@@ -94,7 +94,6 @@ class State:
         self.i = 0                     # current step index
         self.raw = None                # the newest camera frame, full size
         self.corners = None
-        self.taken = []                # (y, x, band) actually captured
         self.msg = 'starting...'
         self.err = None
         self.det_ms = 0.0
@@ -282,7 +281,6 @@ def detect_loop(st, det_w):
                 held_since = None
                 prog = 0.0
                 with st.lock:
-                    st.taken.append((ty, tx, tb))
                     st.i += 1
                     msg = 'got it'
         else:

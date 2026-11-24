@@ -43,7 +43,8 @@ ANGLE_UNKNOWN = -1
 
 
 def box_contour(xyxy: Sequence[float]) -> np.ndarray:
-    """The four corners of a bbox, clockwise from top-left. Integer pixels."""
+    """The four corners of a bbox, clockwise from top-left, as unrounded float
+    pixels. flatten() rounds them for the wire."""
     x1, y1, x2, y2 = (float(v) for v in xyxy)
     return np.array([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], np.float32)
 

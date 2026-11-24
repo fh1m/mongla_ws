@@ -108,16 +108,19 @@ def _resolve_model_path(name: str) -> str:
     """Resolve a bare model name to a full path.
 
     Priority order:
-      1. Path as-is     — if *name* has a separator or .pt extension.
-      2. Source tree    — workspace ``src/mongla_vision/models/<name>.pt``
-                          (checked first so models work on any cloned device
-                          without needing a prior colcon build).
-      3. Share dir      — ``<package_share>/models/<name>.pt`` via ament_index
-                          (fallback for installed/container deployments).
-      4. Alias table    — maps descriptive names like ``yolo26_nano_pretrained``
+      1. Path as-is     — if *name* has a separator or a .pt or .hef extension.
+      2. MONGLA_HEF_DIR — ``$MONGLA_HEF_DIR/<name>.hef`` when that variable is
+                          set; checked before the source tree.
+      3. Source tree    — workspace ``src/mongla_vision/models/`` with ``<name>.hef``
+                          first, then ``<name>.pt`` (checked before the share dir so
+                          models work on any cloned device without a colcon build).
+      4. Share dir      — ``<package_share>/models/`` in the same .hef then .pt
+                          order, via ament_index (fallback for installed or
+                          container deployments).
+      5. Alias table    — maps descriptive names like ``yolo26_nano_pretrained``
                           to Ultralytics short stems like ``yolo26n`` so auto-
                           download works correctly (pretrained only).
-      5. Fail loudly    — raise FileNotFoundError with helpful message.
+      6. Fail loudly    — raise FileNotFoundError with helpful message.
                           Custom model names are NOT auto-downloaded; the pool
                           has no internet and a silent download attempt would
                           hang indefinitely.
