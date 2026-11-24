@@ -340,3 +340,14 @@ def test_lock_authority_keeps_its_whole_range():
                 found += 1
                 assert cfg.get('minYValue') == 0 and cfg.get('maxYValue', 0) >= 1, f.name
     assert found, 'no authority plot found: the guard checks nothing'
+
+
+def test_a_fused_pose_plot_reads_only_what_the_fuse_fills():
+    # pose_fuse_node sets the floats it computes and leaves the rest NaN, so
+    # a series on any other field is a line that is never drawn.
+    fuse = (views.LAYOUTS.parents[1] / 'mongla_vision' / 'mongla_vision'
+            / 'pose_fuse_node.py').read_text()
+    filled = set(re.findall(r'\bout\.(\w+) =', fuse))
+    for name in views.VIEWS:
+        for field in re.findall(r'target_pose_fused\.(\w+)', json.dumps(views.build(name))):
+            assert field in filled, (name, field)

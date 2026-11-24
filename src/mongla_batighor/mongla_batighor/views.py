@@ -263,6 +263,8 @@ def vision(v: View):
     # settings, read against what the ladder does, over the numbers the lock
     # produces, one unit per plot (metres, degrees and pixels on one axis
     # flattened all but the largest).
+    # Bearing and reprojection are per-shot numbers: the fuse leaves them NaN,
+    # so they come from the solve itself (`target_pose`), not the fused pose.
     # The Vision instrument is a few rows (at half the column it was mostly
     # empty, beside a Detectors panel that scrolled): the lock's authority
     # sits under it, beside the ladder it scores.
@@ -273,13 +275,13 @@ def vision(v: View):
     numbers = col(
         (5, v('detectors', instrument('Detectors'))),
         (3, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
-                v('pose', plot(series(f'{fwd}/target_pose_fused.bearing_deg', 'bearing deg'),
+                v('pose', plot(series(f'{fwd}/target_pose.bearing_deg', 'bearing deg'),
                                series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),
         (3, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'rotation'),
                              series(f'{dwn}/anchor_decomposition.vector.y', 'scale'),
                              series(f'{dwn}/anchor_decomposition.vector.z', 'range m')))),
         (3, v('align', align('align x px', 'align y px',
-                             series(f'{fwd}/target_pose_fused.reproj_px', 'reproj px')))))
+                             series(f'{fwd}/target_pose.reproj_px', 'reproj px')))))
     right = row(now, numbers)
     return row((CAMERA_COLUMN, col(*(v(c, camera(c, synced=True)) for c in CAMERAS))),
                (100 - CAMERA_COLUMN, right))

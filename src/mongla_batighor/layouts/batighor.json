@@ -259,7 +259,7 @@
     "Plot!vision.pose": {
       "paths": [
         {
-          "value": "/mongla/vision/forward/target_pose_fused.bearing_deg",
+          "value": "/mongla/vision/forward/target_pose.bearing_deg",
           "label": "bearing deg",
           "enabled": true
         },
@@ -318,7 +318,7 @@
           "timestampMethod": "receiveTime"
         },
         {
-          "value": "/mongla/vision/forward/target_pose_fused.reproj_px",
+          "value": "/mongla/vision/forward/target_pose.reproj_px",
           "label": "reproj px",
           "enabled": true
         }
