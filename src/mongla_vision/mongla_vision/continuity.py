@@ -163,8 +163,10 @@ def reacquire_times(obs: Sequence[Obs], stable_frames: int = 3) -> List[float]:
     frame and drops again has not given the control loop anything to steer on.
     """
     out: List[float] = []
-    i = 0
     n = len(obs)
+    # The absence before the first sighting is not a gap (see `find_gaps`):
+    # the target may simply not have been in view yet.
+    i = next((k for k, o in enumerate(obs) if o.seen), n)
     while i < n:
         if obs[i].seen:
             i += 1
@@ -191,8 +193,9 @@ def reacquire_times(obs: Sequence[Obs], stable_frames: int = 3) -> List[float]:
 
 
 # The ladder, so the report answers "is coast_s enough" directly rather than
-# leaving it to be read off a percentile table. Values from
-# vision_tunables.py / motion_vision.py / tracker_node.py.
+# leaving it to be read off a percentile table. A copy of the values in
+# freshness.py, commands.py, control.py, kalman.py and tracker_node.py, which
+# `test_continuity_ladder_matches_the_code.py` compares against them.
 LADDER: Tuple[Tuple[str, float], ...] = (
     ('freshness zero (0.20 s)', 0.20),
     ('coast_s (0.80 s)',        0.80),

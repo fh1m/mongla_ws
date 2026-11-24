@@ -80,8 +80,9 @@ class Tracker:
         detections : List[Detection]
             Raw detections from the detector for this frame. May be empty.
         frame_t : float
-            Monotonic timestamp of this frame (seconds). Used by Kalman
-            to compute dt; pass time.monotonic() from the node.
+            The frame's capture instant on this host's monotonic clock
+            (seconds), as `stamps.capture_monotonic` gives it -- not the
+            time it arrived. Used by Kalman to compute dt.
 
         Returns
         -------
