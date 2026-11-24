@@ -135,8 +135,10 @@ class DetectorPublishMixin:
     def _log_alignment(self, primary, frame) -> None:
         """Always-on operator BEARING line for the currently-loaded class.
 
-        Fires whenever the detector sees its loaded class (``detections`` are
-        already class-filtered, so ``primary`` is that class) -- independent of
+        Fires whenever the detector has a primary box, the largest of
+        ``detections``. ``detections`` holds the loaded class and, in registry
+        mode, merged secondary-model boxes, so ``primary`` can belong to a
+        secondary model -- independent of
         whether a vision verb is running. Reports the RAW bbox-centre pixel
         offset from frame centre on lateral (x) and depth (y). This is live
         telemetry, NOT an alignment verdict: it is deliberately worded distinct

@@ -13,7 +13,8 @@ def discover_cameras(max_probe: int = 8) -> list[dict]:
 
     Resolves /dev/v4l/by-id/ symlinks (stable names) first, then
     probes cv2.VideoCapture(i) for indices 0..max_probe-1 as fallback.
-    Only indices where VideoCapture.isOpened() returns True are included.
+    The index fallback includes only indices where VideoCapture.isOpened()
+    returns True. By-id links are listed without opening them.
     """
     found: dict[int, dict] = {}
 

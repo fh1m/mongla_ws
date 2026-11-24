@@ -87,8 +87,8 @@ class XFeatHailo:
         import cv2
         if gray.shape[:2] != (self.h, self.w):
             gray = cv2.resize(gray, (self.w, self.h))
-        # GREY, normalised to [0, 1] exactly as the ONNX path does. XFeat
-        # takes one channel, which is why B-61's BGR/RGB defect in the
+        # GREY as raw uint8, with no division by 255 (the note in _configured
+        # says why). XFeat takes one channel, which is why B-61's BGR/RGB defect in the
         # DETECTOR path does not touch this one.
         # This anchor's lock only: its bound buffers would be overwritten by
         # a second call mid-read. The chip is shared by the scheduler.

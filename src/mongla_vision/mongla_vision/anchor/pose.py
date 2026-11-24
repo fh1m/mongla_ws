@@ -205,8 +205,9 @@ def solve_pnp(obj_pts, img_pts, K, *, dist=None,
     a pinhole, so points either both go through `optics.RefractiveRectifier`
     with the rectified `K`, or neither does. Rectifying one side compares water
     geometry against air geometry and puts the entire error into the pose,
-    quietly. `lock_node` rectifies both sets before calling; a correspondence
-    publisher must say which it sent, which is why the message carries it.
+    quietly. The caller rectifies the image points first (`pnp_node` does, for
+    OPTICS_RAW); a correspondence publisher must say which it sent, which is why
+    the message carries it.
 
     Refuses -- with a reason -- rather than returning a pose it cannot defend.
     """

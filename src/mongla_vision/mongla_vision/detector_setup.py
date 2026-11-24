@@ -471,8 +471,8 @@ class DetectorSetupMixin:
                 self.get_logger().info(
                     f"[DET  ] assoc_conf → {a:.3f}"
                     + ("  (OFF)" if a <= 0.0 else
-                       "  -- boxes below the control floor now reach the tracker "
-                       "for ASSOCIATION only"))
+                       "  -- boxes below the control floor reach the tracker "
+                       "for ASSOCIATION only, on detectors that support it"))
 
             elif p.name == 'model_conf':
                 # Per-model override (CSV 'name=conf'); targets individual

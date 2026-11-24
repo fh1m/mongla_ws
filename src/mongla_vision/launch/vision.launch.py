@@ -33,7 +33,8 @@ Usage:
 
 Nodes: mongla_camera_<camera>, mongla_detector_<camera>,
        mongla_tracker_<camera>, mongla_image_view (viewer).
-Camera/detector/tracker log at WARN; the viewer logs at INFO.
+Camera and tracker log at WARN; the detector pins its own logger to INFO,
+and the viewer logs at INFO.
 """
 
 from functools                    import partial
@@ -97,7 +98,7 @@ def generate_launch_description():
         # `bringup.launch.py` do not use -- so the capability would have been
         # reachable only from the path a mission does not run. Same default
         # (off) and same staging: `vision.lock_s` gates whether control reads
-        # it, and that stays 0.
+        # it. Its default lives in mongla_manager vision_tunables.py, not here.
         DeclareLaunchArgument(
             'lock', default_value='false',
             description='Run the lock ladder (follower + XFeat anchor), '

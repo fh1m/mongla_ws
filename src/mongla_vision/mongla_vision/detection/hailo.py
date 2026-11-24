@@ -143,7 +143,8 @@ class HailoDetector(Detector):
         names = load_class_index(self._path)
         if not names:
             raise FileNotFoundError(
-                f'{self._path}: no class-index sidecar. A .hef carries NO class '
+                f'{self._path}: no readable class-index sidecar (missing, empty or not parseable). '
+                f'A .hef carries NO class '
                 f'names, so without {Path(self._path).with_suffix(".yaml").name} '
                 f'there is no id->label map, the allowlist matches nothing, and '
                 f'every frame returns [] while the pipeline looks healthy. '

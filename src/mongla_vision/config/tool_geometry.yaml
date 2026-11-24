@@ -39,15 +39,16 @@
 # aims the camera as it always did -- but says so, loudly, because that is
 # exactly the shot that will miss.
 #
-# Measure these. Every entry below is `unmeasured: true`: its zeros are
+# Measure these. Every tool below is `unmeasured: true` except the two camera
+# identities, which are exact at zero. The tool zeros are
 # placeholders, and `pixel_offset` refuses them (None, not a zero correction),
 # so the stack aims the camera and warns. A guessed offset is worse than a
 # known-absent one, because it moves the aim point with false confidence. Measuring is a tape-measure job on the hull:
 # camera optical centre (the lens front element, near enough at these
 # tolerances) to the tool's bore centre, hull upright, in millimetres.
 #
-# Until then the vehicle behaves as before and every fire through an unmeasured
-# tool warns.
+# Until then the vehicle behaves as before, and the first fire through an
+# unmeasured tool warns, once per tool.
 
 tools:
 
