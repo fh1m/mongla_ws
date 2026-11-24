@@ -61,7 +61,7 @@
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "gyro"
+      "lichtblickPanelTitle": "gyro, rad/s"
     },
     "mongla.batighor.Health!health": {},
     "mongla.batighor.Kutum!kutum": {}

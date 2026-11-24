@@ -135,7 +135,8 @@ def _refuse_unknown(path: Path, keys, declared, what: str) -> None:
 def read(path: Path, declared: set[str], section: str | None = None) -> dict[str, str]:
     """{argument: value} from the file; refuses a key the launch file does not declare.
 
-    `section=None` reads the top level (bringup); a name reads `launch: <name>:`.
+    `section=None` reads the top level (bringup), and its `launch:` sections are
+    not checked beyond their names; a name reads and checks `launch: <name>:`.
     """
     import yaml
     body = yaml.safe_load(path.read_text()) or {}

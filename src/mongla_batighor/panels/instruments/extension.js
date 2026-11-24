@@ -225,22 +225,29 @@ function poolMap(course, pose, track, fixes, target, opts) {
       kids.push(svg("line", { x1: here.y, y1: -here.x, x2: here.y + 2 * v.vy, y2: -(here.x + 2 * v.vx), stroke: v.ink, "stroke-width": 1.5 * u, "stroke-linecap": "round" }));
       kids.push(svg("circle", { cx: here.y + 2 * v.vy, cy: -(here.x + 2 * v.vx), r: 1.5 * u, fill: v.ink }));
     }
-    const yaw = fin(here.yaw) ? here.yaw : 0;
+    const headed = fin(here.yaw);
+    const yaw = headed ? here.yaw : 0;
     const hull = [[10, 0], [-6, 5], [-3, 0], [-6, -5]].map(([f, r]) => {
       const n = here.x + u * (f * Math.cos(yaw) - r * Math.sin(yaw)), e = here.y + u * (f * Math.sin(yaw) + r * Math.cos(yaw));
       return `${e},${-n}`;
     });
-    kids.push(svg("polygon", here.placed
+    // No heading, no hull: a hull at 0 would point north, against "heading --".
+    if (!headed) kids.push(svg("circle", { cx: here.y, cy: -here.x, r: 3 * u, fill: here.placed ? "none" : "var(--mb-red)", stroke: here.placed ? "var(--mb-amber)" : "var(--mb-d0)", "stroke-width": u }));
+    else kids.push(svg("polygon", here.placed
       ? { points: hull.join(" "), fill: "none", stroke: "var(--mb-amber)", "stroke-width": 1.5 * u }
       : { points: hull.join(" "), fill: "var(--mb-red)", stroke: "var(--mb-d0)", "stroke-width": u }));
     if (here.placed) kids.push(text(here.y + 8 * u, -here.x + 12 * u, "by its start", "var(--mb-amber)"));
     if (target) kids.push(svg("line", { x1: here.y, y1: -here.x, x2: target.y, y2: -target.x, stroke: "var(--mb-red)", "stroke-width": u, "stroke-dasharray": `${4 * u},${3 * u}` }));
   }
   if (target) {
-    const r = fin(target.tol) && target.tol > 0 ? target.tol : 6 * u;
-    kids.push(svg("circle", { cx: target.y, cy: -target.x, r, fill: "none", stroke: "var(--mb-red)", "stroke-width": 1.5 * u }));
-    kids.push(svg("line", { x1: target.y - r, y1: -target.x, x2: target.y + r, y2: -target.x, stroke: "var(--mb-red)", "stroke-width": u }));
-    kids.push(svg("line", { x1: target.y, y1: -target.x - r, x2: target.y, y2: -target.x + r, stroke: "var(--mb-red)", "stroke-width": u }));
+    // Drawn only for a tolerance that was given: a made-up radius reads as the arrival circle.
+    const toleranced = fin(target.tol) && target.tol > 0;
+    const r = toleranced ? target.tol : 0;
+    if (toleranced) {
+      kids.push(svg("circle", { cx: target.y, cy: -target.x, r, fill: "none", stroke: "var(--mb-red)", "stroke-width": 1.5 * u }));
+      kids.push(svg("line", { x1: target.y - r, y1: -target.x, x2: target.y + r, y2: -target.x, stroke: "var(--mb-red)", "stroke-width": u }));
+      kids.push(svg("line", { x1: target.y, y1: -target.x - r, x2: target.y, y2: -target.x + r, stroke: "var(--mb-red)", "stroke-width": u }));
+    }
     kids.push(text(target.y + r + 3 * u, -target.x, "go_to", "var(--mb-red)"));
   }
   // The scale and north, where an operator looks for them.
@@ -444,7 +451,9 @@ function foldDiagnostics(s, m) {
   s.health = s.health || [];
   for (const st of m.status || []) {
     const i = s.health.findIndex((h) => h.name === st.name);
-    const row = { name: st.name, level: typeof st.level === "number" ? st.level : Number(st.level), message: st.message, at: heard() };
+    const parsed = Number(st.level);
+    // A level that does not parse is unknown (3), not dropped from the count.
+    const row = { name: st.name, level: typeof st.level === "number" ? st.level : Number.isFinite(parsed) ? parsed : 3, message: st.message, at: heard() };
     if (i < 0) s.health.push(row); else s.health[i] = row;
   }
 }
@@ -559,7 +568,7 @@ function statusOf(s, now) {
   cells.push(["vehicle", v && !fresh ? `${armedWord}  ${num(age(s.vAt), 1)} s old` : armedWord,
     !v ? "stale" : !fresh ? "warn" : v.armed ? "armed" : "ok"]);
   cells.push(["mode", v ? v.mode || "--" : "--", ""]);
-  cells.push(["depth", v && fin(v.depth_m) ? `${num(-v.depth_m, 2)} m` : "--", ""]);
+  cells.push(["depth", v && fin(v.depth_m) ? `${num(-v.depth_m, 2)} m deep` : "--", ""]);
   cells.push(["heading", v ? `${num(v.yaw_deg, 0)} deg` : "--", ""]);
   cells.push(["battery", v ? `${num(v.battery_voltage, 1)} V` : "--", ""]);
   const running = age(s.aliveAt) < MISSION_ALIVE_S;
