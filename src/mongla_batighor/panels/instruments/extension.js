@@ -826,6 +826,82 @@ function fitText(s, n) {
   return s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}\u2026`;
 }
 
+// The chain drawn: two camera lanes (frame, detect, track, lock) meeting at
+// the frame-to-command stage, then the demand and the board's half along the
+// bottom, right to left. One box per stage of chain.py's message, placed by
+// its key; what the board does not send is a dashed box naming its ask, so
+// the gap is on the drawing, not only in a list (bead 318.2: the raw topic
+// graph flattened ~90 nodes into one unreadable band).
+const CHAIN_AT = {
+  "frame:forward": [1, 0], "detect:forward": [2, 0], "track:forward": [3, 0], "lock:forward": [4, 0],
+  "frame:downward": [1, 1], "detect:downward": [2, 1], "track:downward": [3, 1], "lock:downward": [4, 1],
+  command: [5, 0.5], demand: [5, 2], "board loop": [4, 2], mixer: [3, 2], rpm: [2, 2], imu: [1, 2],
+  "camera trigger": [0, 0.5],
+};
+const CHAIN_LINKS = [
+  ["camera trigger", "frame:forward"], ["camera trigger", "frame:downward"],
+  ["frame:forward", "detect:forward"], ["detect:forward", "track:forward"], ["track:forward", "lock:forward"],
+  ["frame:downward", "detect:downward"], ["detect:downward", "track:downward"], ["track:downward", "lock:downward"],
+  ["lock:forward", "command"], ["lock:downward", "command"], ["command", "demand"],
+  ["demand", "board loop"], ["board loop", "mixer"], ["mixer", "rpm"],
+];
+// Each stage as a box: where, what it says, and its state. `live` is heard
+// in the window; `idle` is silent with a stated reason (a detector paused
+// until a mission asks, a command until a vision verb drives); `silent` is
+// silent with none, the alarm; `absent` is not sent by the board at all.
+function chainBoxes(c) {
+  const out = [];
+  if (!c) return out;
+  for (const k of c.order || []) {
+    const r = c.stages[k], at = CHAIN_AT[k];
+    if (!r || !at) continue;
+    const quiet = !(r.n > 0) || (fin(r.last_s) && r.last_s > 2);
+    const state = !quiet ? "live" : r.idle ? "idle" : "silent";
+    out.push({ key: k, at, label: r.label, state, hz: fin(r.hz) && r.n > 1 ? r.hz : null,
+      p50: quiet ? null : r.age_ms_p50, p95: quiet ? null : r.age_ms_p95, why: r.idle || r.ask || "" });
+  }
+  for (const n of c.not_sent || []) {
+    const at = CHAIN_AT[n.label];
+    if (at) out.push({ key: n.label, at, label: n.label, state: "absent", hz: null, p50: null, p95: null, why: n.ask });
+  }
+  return out;
+}
+
+const CHAIN_W = 120, CHAIN_H = 54, CHAIN_DX = 132, CHAIN_DY = 78;
+function chainSvg(boxes) {
+  const where = {};
+  for (const b of boxes) where[b.key] = [8 + b.at[0] * CHAIN_DX, 8 + b.at[1] * CHAIN_DY];
+  const worst = Math.max(1, ...boxes.map((b) => (fin(b.p50) ? b.p50 : 0)));
+  const s = svg("svg", { class: "chain", viewBox: `0 0 ${8 + 6 * CHAIN_DX} ${8 + 2 * CHAIN_DY + CHAIN_H + 8}` },
+    svg("defs", {}, svg("marker", { id: "chain-head", viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: "auto" },
+      svg("path", { d: "M0,0 L8,4 L0,8 z", class: "head" }))));
+  for (const [a, b] of CHAIN_LINKS) {
+    if (!where[a] || !where[b]) continue;
+    const [ax, ay] = where[a], [bx, by] = where[b];
+    // Edge to edge: across a row from side to side, down from bottom to top.
+    let x1 = ax + CHAIN_W, y1 = ay + CHAIN_H / 2, x2 = bx, y2 = by + CHAIN_H / 2;
+    if (bx < ax) { x1 = ax; x2 = bx + CHAIN_W; }
+    else if (bx === ax) { x1 = x2 = ax + CHAIN_W / 2; y1 = ay + CHAIN_H; y2 = by; }
+    s.append(svg("line", { x1, y1, x2, y2, class: "link", "marker-end": "url(#chain-head)" }));
+  }
+  for (const b of boxes) {
+    const [x, y] = where[b.key];
+    const words = b.state === "live" ? [fin(b.hz) ? `${num(b.hz, 1)} Hz` : "heard", fin(b.p50) ? `${num(b.p50, 0)} / ${num(b.p95, 0)} ms` : ""]
+      : b.state === "idle" ? ["idle", fitText(b.why, 19)]
+        : b.state === "absent" ? ["not sent", fitText(b.why.split(":")[0], 19)]
+          : ["SILENT", "no reason given"];
+    const g = svg("g", { class: `stage ${b.state}` },
+      svg("title", {}, `${b.label}: ${b.why || b.state}`),
+      svg("rect", { x, y, width: CHAIN_W, height: CHAIN_H, rx: 3 }),
+      svg("text", { x: x + 8, y: y + 15, class: "name" }, fitText(b.label, 18)),
+      svg("text", { x: x + 8, y: y + 32, class: "big" }, words[0]),
+      svg("text", { x: x + 8, y: y + 46, class: "small" }, words[1]));
+    if (fin(b.p50)) g.append(svg("rect", { x, y: y + CHAIN_H - 3, width: Math.max(2, (CHAIN_W * b.p50) / worst), height: 3, class: "age" }));
+    s.append(g);
+  }
+  return s;
+}
+
 function vitalsSvg(g) {
   const T = (x, y, txt, a = {}) => svg("text", { x, y, ...a }, txt);
   // Depth: a water column from the surface to 3 m (deeper, to the vehicle).
@@ -1304,7 +1380,7 @@ const INSTRUMENTS = {
       if (!c) return [el("div", { class: "note" }, "no /mongla/batighor/chain: is the chain meter running?")];
       const rows = (c.order || []).map((k) => c.stages[k]);
       const worst = Math.max(1, ...rows.map((r) => (fin(r.age_ms_p95) ? r.age_ms_p95 : 0)));
-      const out = [el("div", { class: "note" }, `age when seen, p50 / p95 over ${num(c.window_s, 0)} s`)];
+      const out = [chainSvg(chainBoxes(c)), el("div", { class: "note" }, `age when seen, p50 / p95 over ${num(c.window_s, 0)} s`)];
       for (const r of rows) {
         // n > 0 with no rate is one message in the window: heard, not silent.
         const quiet = !(r.n > 0) || (fin(r.last_s) && r.last_s > 2);
@@ -1567,7 +1643,7 @@ async function syncLayouts() {
 
 module.exports = {
   healthNow, managerHeard, vitalsOf, signalBars, WATCH_CELLS, captionOf, foldCaption, fitText, NAV_WHY_CHARS,
-  attitudeOf, depthRate, vitalsSvg,
+  attitudeOf, depthRate, vitalsSvg, chainBoxes, chainSvg,
   activate(extensionContext) {
     syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {

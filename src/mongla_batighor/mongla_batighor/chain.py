@@ -99,6 +99,31 @@ NOT_SENT = (
 )
 
 
+# How long the overlay's caption is believed: past this the detector's
+# pause is not known, and a silent stage is silent with no reason given.
+CAPTION_FRESH_S = 3.0
+PAUSED = 'paused until a mission asks'
+
+
+def idle_of(key: str, idle: str, captions: dict, now_s: float) -> str:
+    """Why `key` may be silent now: its stage's standing reason, or, for a
+    camera's detect and track, a detector the overlay says is paused.
+
+    `captions`: camera -> (caption dict, monotonic seconds it came). The
+    overlay asks each detector its `paused` and says so in the caption
+    (`<camera>/hud`); this reads that one answer rather than asking again.
+    Drawn as an alarm, a paused detector read as a dead one (Chrome,
+    2026-11-25); one that died mid-mission must still read as the alarm, so
+    only `paused`, fresh, is a reason.
+    """
+    kind, _, cam = key.partition(':')
+    if kind in ('detect', 'track') and cam in captions:
+        cap, at = captions[cam]
+        if now_s - at <= CAPTION_FRESH_S and cap.get('state') == 'paused':
+            return PAUSED if kind == 'detect' else f'its detector is {PAUSED}'
+    return idle
+
+
 class ChainMeter:
     """Rates and ages per stage over a sliding window. Pure: no ROS, no clock."""
 
@@ -176,31 +201,44 @@ def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
             from mongla_batighor.overlay import Watched
             self.meter = ChainMeter()
             self.rows = stages(cameras)
+            self.captions = {}
             self.pub = self.create_publisher(String, TOPIC, 10)
             self.watched = Watched(self, self.pub, [
                 (_msg_class(st.msg), st.topic,
                  lambda m, k=st.key, s=st.stamped: self.meter.note(
                      k, _stamp_s(m) if s else None, time.time(), time.monotonic()),
                  _qos(st.qos))
-                for st in self.rows], on_drop=self._forget)
+                for st in self.rows] + [
+                (String, f'/mongla/vision/{c}/hud',
+                 lambda m, c=c: self._caption(c, m), 1)
+                for c in cameras], on_drop=self._forget)
             self.create_timer(period_s, self._publish)
 
         def _forget(self):
             # The next viewer must not see rates from before it looked.
             self.meter = ChainMeter(self.meter.window_s)
+            self.captions = {}
+
+        def _caption(self, cam, msg):
+            try:
+                self.captions[cam] = (json.loads(msg.data), time.monotonic())
+            except ValueError:
+                pass
 
         def _publish(self):
             self.watched.poll()
             if not self.watched.subs:
                 return
-            got = self.meter.summary(time.monotonic())
+            now = time.monotonic()
+            got = self.meter.summary(now)
             empty = {'n': 0, 'hz': None, 'age_ms_p50': None, 'age_ms_p95': None,
                      'last_s': None}
             body = {
                 'window_s': self.meter.window_s,
                 'order': [s.key for s in self.rows],
                 'stages': {s.key: {**got.get(s.key, empty), 'label': s.label,
-                                   'clock': s.clock, 'ask': s.ask, 'idle': s.idle}
+                                   'clock': s.clock, 'ask': s.ask,
+                                   'idle': idle_of(s.key, s.idle, self.captions, now)}
                            for s in self.rows},
                 'not_sent': [{'label': a, 'ask': b} for a, b in NOT_SENT],
             }

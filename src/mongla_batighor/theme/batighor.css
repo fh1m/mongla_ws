@@ -431,3 +431,22 @@ svg.vitals .alarm{animation:mb-breathe 1.2s ease-in-out infinite}
 .mb input.cli:focus{outline:none;border-color:var(--mb-sea)}
 .mb .prompt{font-family:var(--mb-mono);color:var(--mb-sea)}
 .mb .note.bad{color:var(--mb-amber)}
+
+/* The chain drawn (Chain instrument): a stage per box, live in sea, idle
+   with its reason in grey, silent without one in red, not sent dashed amber. */
+/* In the instrument's flex column, height:auto collapsed it to 0 px (Chrome,
+   2026-11-25): the ratio holds its height, and past 1100 px it stops growing. */
+.mb svg.chain{flex:0 0 auto;width:100%;max-width:1100px;aspect-ratio:800/226;height:auto;display:block;margin-bottom:6px}
+.mb svg.chain .link{stroke:var(--mb-rule-lit);stroke-width:1.2}
+.mb svg.chain .head{fill:var(--mb-rule-lit)}
+.mb svg.chain .stage rect{fill:var(--mb-sunk);stroke:var(--mb-rule);stroke-width:1.2}
+.mb svg.chain .stage text{font-family:var(--mb-mono);fill:var(--mb-ink-2)}
+.mb svg.chain .stage .name{font-size:10px;fill:var(--mb-ink-3);letter-spacing:.04em}
+.mb svg.chain .stage .big{font-size:13px;fill:var(--mb-ink)}
+.mb svg.chain .stage .small{font-size:10px}
+.mb svg.chain .stage .age{fill:var(--mb-sea);stroke:none}
+.mb svg.chain .live rect:first-of-type{stroke:var(--mb-sea)}
+.mb svg.chain .silent rect:first-of-type{stroke:var(--mb-red);stroke-width:2}
+.mb svg.chain .silent .big{fill:var(--mb-red)}
+.mb svg.chain .absent rect:first-of-type{stroke:var(--mb-amber);stroke-dasharray:4 3;fill:none}
+.mb svg.chain .absent .big{fill:var(--mb-amber)}

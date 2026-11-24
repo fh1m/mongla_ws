@@ -693,14 +693,15 @@ def weak_link(v: View):
 
 
 def inspect(v: View):
-    """Everything on the wire, for when a number looks wrong: the graph of
-    nodes and topics, every topic with its type and rate, and the vehicle's
-    state message whole, field by field. Lichtblick's own panels; parameters
+    """Everything on the wire, for when a number looks wrong: the chain from
+    photons to thrust drawn stage by stage, every topic with its type and
+    rate, and the vehicle's state message whole, field by field. Parameters
     stay closed to a browser (batighor.launch.py, BRIDGE_LIMITS)."""
-    # The graph runs wide (every node and topic in one band): at half the
-    # screen it drew 800 px of hairline, unreadable (2026-11-23), so it gets
-    # the whole width and the two tables share the row under it.
-    return col((58, v('graph', ('TopicGraph', {}))),
+    # The chain drawn, where Lichtblick's topic graph was: that put ~90 nodes
+    # and topics in one band, unreadable even across a 3824 px screen
+    # (2026-11-24, bead 318.2). Grouped by stage, each box says its rate and
+    # age, and what the board does not send is drawn as the gap it is.
+    return col((58, v('chain', instrument('Chain'))),
                (42, row((50, v('topics', ('SourceInfo', {}))),
                         (50, v('raw', ('RawMessages', {'topicPath': '/mongla/state',
                                                        'diffEnabled': False,
@@ -752,9 +753,10 @@ CONSOLE = 'batighor'
 # One tab per aspect, and no two tabs showing the same thing: 18 tabs did not
 # fit one row at the working scale and their labels ran together, and five
 # of them repeated another (2026-11-24). The rest stay layouts of their own,
-# in the layout menu: map (the Mission tab has the map), chain (the pilot's),
-# forward and downward (one camera at full height; Vision has both), and
-# vehicle (Lichtblick's own gauges, a cross-check on ours).
+# in the layout menu: map (the Mission tab has the map), chain (Inspect
+# draws it; this one sets it beside the cameras), forward and downward (one
+# camera at full height; Vision has both), and vehicle (Lichtblick's own
+# gauges, a cross-check on ours).
 TABS = [('cockpit', 'Cockpit'), ('mission', 'Mission'), ('helm', 'Helm'),
         ('localization', 'Navigation'), ('vision', 'Vision'), ('flow', 'Flow'),
         ('thrust', 'Thrust'), ('board_health', 'Health'), ('board_link', 'Link'),
