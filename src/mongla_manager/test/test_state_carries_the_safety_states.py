@@ -13,10 +13,7 @@ U, C, X = MonglaState.SAFETY_UNKNOWN, MonglaState.SAFETY_CLEAR, MonglaState.SAFE
 
 
 def _safety(**tel):
-    cls = [v for v in vars(node_telemetry).values()
-           if isinstance(v, type) and hasattr(v, '_safety')][0]
-    me = SimpleNamespace(fc=SimpleNamespace(telemetry=lambda: SimpleNamespace(**tel)))
-    return cls._safety(me)
+    return node_telemetry.safety_of(SimpleNamespace(telemetry=lambda: SimpleNamespace(**tel)))
 
 
 def test_a_default_message_reads_unknown_never_clear():
