@@ -73,7 +73,13 @@ def test_a_browser_sets_no_parameter_itself():
         assert not _allowed(lim['param_whitelist'], name), name
 
 
-def test_a_browser_publishes_nothing():
+def test_a_browser_publishes_only_the_pad_the_helm_reads():
+    """The Teleop pad's topic, which the helm turns into a step for the seated
+    pilot, and nothing else: a published mission_alive or a raw demand would
+    reach the vehicle past the helm."""
+    from mongla_batighor.helm import TELEOP_TOPIC
     lim = _launch().BRIDGE_LIMITS
-    assert 'clientPublish' not in lim['capabilities']
-    assert not _allowed(lim['client_topic_whitelist'], '/mongla/mission_alive')
+    assert _allowed(lim['client_topic_whitelist'], TELEOP_TOPIC)
+    for name in ('/mongla/mission_alive', '/mongla/demand', '/mongla/batighor/teleop_x',
+                 '/cmd_vel'):
+        assert not _allowed(lim['client_topic_whitelist'], name), name

@@ -45,7 +45,14 @@ LEGEND_PX = 190
 # the panel's title carries what the plot is, the label only which line.
 LABEL_CHARS = 13
 # A plot's or state panel's title, where its view name is not one.
-TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'anchor (XFeat)',
+TITLES = {'fwd': 'forward camera', 'dets': "this frame's detections",
+          'depth_gauge': 'depth m', 'pack_gauge': 'thruster pack V', 'rail_gauge': 'electronics V',
+          'link_pie': 'link share', 'diag_summary': 'diagnostics',
+          'diag_detail': 'diagnostic detail', 'track': 'track id ($track)',
+          'track_xy': 'the chosen track, centre px', 'per_frame': 'detections per frame',
+          'raw_helm': 'helm request, typed whole', 'scripts': 'user scripts', 'pad': 'pad: one short step per press, seated pilot only',
+          'baro': 'baro', 'target_range': 'target range',
+          'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'anchor (XFeat)',
           'align': 'pixel error', 'ladder': 'lock ladder', 'calibration': 'velocity scale',
           'quality': 'flow quality and heights', 'vel': 'velocity',
           'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates, rad/s',
@@ -165,6 +172,72 @@ def scene() -> tuple:
                                       'layerId': 'foxglove.Urdf', 'instanceId': 'hull',
                                       'sourceType': 'url', 'url': '/model/mongla.urdf',
                                       'order': 1}}}
+
+
+# The site's palette (docs/assets/site.css), for Lichtblick's own panels: red
+# for what needs a hand now, amber for caution, ocean for a normal state, ink
+# for unknown. The same words a reader of the site already knows.
+RED_LIT, AMBER, SEA_LIT, TEAL, INK = '#ff2a14', '#f88701', '#5a8dff', '#22d3c5', '#3a4256'
+
+
+def gauge(path: str, lo: float, hi: float, reverse: bool = False) -> tuple:
+    """A dial with the site's ocean gradient; `reverse` when low is good."""
+    return 'Gauge', {'path': path, 'minValue': lo, 'maxValue': hi, 'colorMode': 'gradient',
+                     'colorMap': 'red-yellow-green', 'gradient': [INK, SEA_LIT] if not reverse
+                     else [SEA_LIT, RED_LIT], 'reverse': False}
+
+
+def indicator(path: str, rules: list, unknown: str = 'unknown') -> tuple:
+    """A lamp: each rule (operator, value, colour, label), first match wins;
+    nothing matched, or nothing heard, reads `unknown` on ink, never a state."""
+    return 'Indicator', {'path': path, 'style': 'background', 'fallbackColor': INK,
+                         'fallbackLabel': unknown,
+                         'rules': [{'operator': o, 'rawValue': str(val), 'color': c, 'label': lab}
+                                   for o, val, c, lab in rules]}
+
+
+# MonglaState's tri-states (SAFETY_*), as an Indicator rule's operator and
+# value. The manager decodes them; a lamp never re-reads the board's raw
+# channels, where a 3 is "not initialised" and a 0 can mean "link lost".
+CLEAR, TRIPPED = ('=', 1), ('=', 2)
+
+
+def table(path: str) -> tuple:
+    return 'Table', {'topicPath': path}
+
+
+def pie(path: str, title: str) -> tuple:
+    return 'PieChart', {'path': path, 'title': title}
+
+
+def slider(var: str, lo: float, hi: float, step: float = 1.0) -> tuple:
+    """Sets a global variable the other panels' paths read as `$var`."""
+    return 'GlobalVariableSliderPanel', {'sliderProps': {'min': lo, 'max': hi, 'step': step},
+                                         'globalVariableName': var}
+
+
+HELM_SERVICE = '/mongla/batighor/helm'
+TELEOP_TOPIC = '/mongla/batighor/teleop'
+
+
+def call(cmd: str, colour: str, tooltip: str) -> tuple:
+    """A one-press verb through the helm, which applies the seat's rules to it
+    as to any browser: stop, disarm and surface are open to everyone."""
+    payload = json.dumps({'who': 'button', 'op': 'command', 'cmd': cmd, 'fields_json': '',
+                          'mission': '', 'confirms': []}, indent=1)
+    return 'CallService', {'serviceName': HELM_SERVICE, 'requestPayload': payload,
+                           'layout': 'vertical', 'buttonText': cmd.upper(),
+                           'buttonTooltip': tooltip, 'buttonColor': colour}
+
+
+def teleop() -> tuple:
+    """Lichtblick's pad. The helm turns each press into one short step for
+    the seated pilot (helm.py, `_on_teleop`)."""
+    return 'Teleop', {'topic': TELEOP_TOPIC, 'publishRate': 4,
+                      'upButton': {'field': 'linear-x', 'value': 1},
+                      'downButton': {'field': 'linear-x', 'value': -1},
+                      'leftButton': {'field': 'angular-z', 'value': 1},
+                      'rightButton': {'field': 'angular-z', 'value': -1}}
 
 
 def instrument(name: str) -> tuple:
@@ -460,6 +533,82 @@ def downward(v: View):
                                  series(f'{d}/anchor_decomposition.vector.y', 'scale')))))))
 
 
+def forward(v: View):
+    """Everything ahead: the forward camera at full height with its boxes,
+    trails and aim, and beside it what holds the target, the ladder, the
+    target's pose and every detection of this frame as a table. Gates,
+    markers and anything met head-on are flown from here."""
+    f = f'{V}/forward'
+    return row(
+        (62, col((80, v('fwd', camera('forward', synced=True))),
+                 (20, v('align', align('align x px', 'align y px'))))),
+        (38, col(
+            (3, v('vision', instrument('Vision'))),
+            (4, v('ladder', states(series(f'{f}/lock{RUNG}.class_id', 'forward rung'),
+                                   series(f'{V}/active_camera.data', 'live camera', True)))),
+            (3, v('target_range', plot(series(f'{f}/target_pose_fused.range_m', 'range m')))),
+            (4, v('dets', table(f'{f}/detections.detections'))))))
+
+
+def vehicle(v: View):
+    """The vehicle at a glance, in Lichtblick's own instruments: dials for
+    depth and both packs, lamps for arming, mode, leak, kill and the
+    barometer, and the board's diagnostics row by row with their values."""
+    lamps = row(
+        v('armed', indicator('/mongla/state.armed', [('=', 'true', RED_LIT, 'ARMED'),
+                                                     ('=', 'false', SEA_LIT, 'disarmed')])),
+        v('mode', indicator('/mongla/state.mode', [('=', 'SURFACE', AMBER, 'SURFACE'),
+                                                   ('=', 'AUTO', TEAL, 'AUTO'),
+                                                   ('=', 'DEPTH_HOLD', TEAL, 'DEPTH HOLD'),
+                                                   ('=', 'STABILIZE', SEA_LIT, 'STABILIZE'),
+                                                   ('=', 'MANUAL', AMBER, 'MANUAL')],
+                                                  unknown='mode not heard')),
+        v('leak', indicator('/mongla/safety.leak', [(*TRIPPED, RED_LIT, 'LEAK'),
+                                                   (*CLEAR, SEA_LIT, 'dry')])),
+        v('kill', indicator('/mongla/safety.kill_switch', [(*TRIPPED, RED_LIT, 'KILLED'),
+                                                          (*CLEAR, SEA_LIT, 'kill clear')],
+                            unknown='kill unseen')),
+        v('baro', indicator('/mongla/safety.baro', [(*TRIPPED, RED_LIT, 'BARO FAULT: no moves'),
+                                                   (*CLEAR, SEA_LIT, 'baro ok')])))
+    dials = row(v('depth_gauge', gauge('/mongla/state.depth_m', -4.0, 0.0)),
+                v('pack_gauge', gauge('/mongla/thruster_pack.voltage', 13.2, 16.8)),
+                v('rail_gauge', gauge('/mongla/state.battery_voltage', 0.0, 5.5)))
+    return row((50, col((2, lamps), (3, dials),
+                        (4, v('link_pie', pie('/mongla/board_link.rates[:].hz',
+                                              'what fills the link, frames per second'))))),
+               (50, col((4, v('diag_summary', ('DiagnosticSummary', {'topicToRender': '/diagnostics',
+                                                                    'sortByLevel': True}))),
+                        (6, v('diag_detail', ('DiagnosticStatusPanel',
+                                              {'topicToRender': '/diagnostics'}))))))
+
+
+def tune(v: View):
+    """Following one track, and the browser's own scripts. The slider sets
+    `$track`; the plot follows that track's box on both cameras. The user
+    script beside them derives a series in the browser, at no cost to Kutum."""
+    t = '.detections[:]{id==$track}'
+    return row((55, col((2, v('track', slider('track', 0, 3000))),
+                        (5, v('track_xy', plot(
+                            series(f'{V}/forward/tracks{t}.bbox.center.position.x', 'fwd x px'),
+                            series(f'{V}/forward/tracks{t}.bbox.center.position.y', 'fwd y px'),
+                            series(f'{V}/downward/tracks{t}.bbox.center.position.x', 'dwn x px'),
+                            series(f'{V}/downward/tracks{t}.bbox.center.position.y', 'dwn y px')))),
+                        (4, v('per_frame', plot(
+                            series('/studio_script/mongla_detections_per_frame.forward', 'forward', True),
+                            series('/studio_script/mongla_detections_per_frame.downward', 'downward', True)))))),
+               (45, v('scripts', ('NodePlayground', {'selectedNodeId': 'mongla-detections-per-frame',
+                                                     'autoFormatOnSave': True}))))
+
+
+def helm(v: View):
+    """Driving by hand: the Control Center, Lichtblick's pad for short steps,
+    and the helm's request typed whole (prefilled with stop), for when a
+    button is not enough to see what the helm answers. All through the seat."""
+    return row((50, v('control', instrument('ControlCenter'))),
+               (50, col((5, row(v('pad', teleop()), v('hull', scene()))),
+                        (3, v('raw_helm', call('stop', AMBER, 'any helm request, typed as JSON'))))))
+
+
 def calibrate(v: View):
     """A camera calibration: the board found, the next pose wanted, the fit."""
     c = f'{V}/calibration'
@@ -514,7 +663,8 @@ NOT_SHOWN = {
 
 VIEWS = {f.__name__.rstrip('_'): f for f in (cockpit, mission, map_, vision, flow, localization,
                                              thrust, board_health, board_link, chain,
-                                             downward, calibrate, weak_link, inspect, log_)}
+                                             forward, downward, vehicle, tune, helm,
+                                             calibrate, weak_link, inspect, log_)}
 FILE = {'cockpit': 'mongla_layout'}            # the default keeps the name links use
 
 # The console: every view as a tab of one layout, in the order a run is read.
@@ -524,8 +674,33 @@ CONSOLE = 'batighor'
 TABS = [('cockpit', 'Cockpit'), ('map', 'Map'), ('mission', 'Mission'), ('vision', 'Vision'),
         ('flow', 'Flow'), ('localization', 'Localization'), ('thrust', 'Thrust'),
         ('board_health', 'Health'), ('board_link', 'Link'), ('chain', 'Chain'),
-        ('downward', 'Downward'), ('calibrate', 'Calibrate'), ('inspect', 'Inspect'),
+        ('forward', 'Forward'), ('downward', 'Downward'), ('vehicle', 'Vehicle'),
+        ('helm', 'Helm'), ('tune', 'Tune'), ('calibrate', 'Calibrate'), ('inspect', 'Inspect'),
         ('log', 'Log')]
+
+
+# Lichtblick user scripts, run in the browser on what it already receives, so
+# a derived series costs the vehicle nothing. Each publishes on
+# /studio_script/<name>.
+USER_SCRIPTS = {'mongla-detections-per-frame': {
+    'name': 'detections per frame',
+    'sourceCode': """import { Input } from "./types";
+
+// How many boxes each camera's detector gave on its latest frame: a count
+// that drops to zero while the picture runs is a detector that lost the target.
+export const inputs = ["/mongla/vision/forward/detections", "/mongla/vision/downward/detections"];
+export const output = "/studio_script/mongla_detections_per_frame";
+
+const last = { forward: 0, downward: 0 };
+
+export default function script(
+  event: Input<"/mongla/vision/forward/detections"> | Input<"/mongla/vision/downward/detections">,
+): { forward: number; downward: number } {
+  const cam = event.topic.includes("/forward/") ? "forward" : "downward";
+  last[cam] = event.message.detections.length;
+  return { ...last };
+}
+"""}}
 
 
 def build(name: str) -> dict:
@@ -542,7 +717,7 @@ def build(name: str) -> dict:
     else:
         v = View()
         tree = VIEWS[name](v)
-    return {'configById': v.config, 'globalVariables': {}, 'userNodes': {},
+    return {'configById': v.config, 'globalVariables': {'track': 0}, 'userNodes': USER_SCRIPTS,
             'playbackConfig': {'speed': 1}, 'layout': tree}
 
 

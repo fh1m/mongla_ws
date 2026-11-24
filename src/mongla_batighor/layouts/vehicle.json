@@ -1,0 +1,243 @@
+{
+  "configById": {
+    "Indicator!armed": {
+      "path": "/mongla/state.armed",
+      "style": "background",
+      "fallbackColor": "#3a4256",
+      "fallbackLabel": "unknown",
+      "rules": [
+        {
+          "operator": "=",
+          "rawValue": "true",
+          "color": "#ff2a14",
+          "label": "ARMED"
+        },
+        {
+          "operator": "=",
+          "rawValue": "false",
+          "color": "#5a8dff",
+          "label": "disarmed"
+        }
+      ],
+      "lichtblickPanelTitle": "armed"
+    },
+    "Indicator!mode": {
+      "path": "/mongla/state.mode",
+      "style": "background",
+      "fallbackColor": "#3a4256",
+      "fallbackLabel": "mode not heard",
+      "rules": [
+        {
+          "operator": "=",
+          "rawValue": "SURFACE",
+          "color": "#f88701",
+          "label": "SURFACE"
+        },
+        {
+          "operator": "=",
+          "rawValue": "AUTO",
+          "color": "#22d3c5",
+          "label": "AUTO"
+        },
+        {
+          "operator": "=",
+          "rawValue": "DEPTH_HOLD",
+          "color": "#22d3c5",
+          "label": "DEPTH HOLD"
+        },
+        {
+          "operator": "=",
+          "rawValue": "STABILIZE",
+          "color": "#5a8dff",
+          "label": "STABILIZE"
+        },
+        {
+          "operator": "=",
+          "rawValue": "MANUAL",
+          "color": "#f88701",
+          "label": "MANUAL"
+        }
+      ],
+      "lichtblickPanelTitle": "mode"
+    },
+    "Indicator!leak": {
+      "path": "/mongla/safety.leak",
+      "style": "background",
+      "fallbackColor": "#3a4256",
+      "fallbackLabel": "unknown",
+      "rules": [
+        {
+          "operator": "=",
+          "rawValue": "2",
+          "color": "#ff2a14",
+          "label": "LEAK"
+        },
+        {
+          "operator": "=",
+          "rawValue": "1",
+          "color": "#5a8dff",
+          "label": "dry"
+        }
+      ],
+      "lichtblickPanelTitle": "leak"
+    },
+    "Indicator!kill": {
+      "path": "/mongla/safety.kill_switch",
+      "style": "background",
+      "fallbackColor": "#3a4256",
+      "fallbackLabel": "kill unseen",
+      "rules": [
+        {
+          "operator": "=",
+          "rawValue": "2",
+          "color": "#ff2a14",
+          "label": "KILLED"
+        },
+        {
+          "operator": "=",
+          "rawValue": "1",
+          "color": "#5a8dff",
+          "label": "kill clear"
+        }
+      ],
+      "lichtblickPanelTitle": "kill"
+    },
+    "Indicator!baro": {
+      "path": "/mongla/safety.baro",
+      "style": "background",
+      "fallbackColor": "#3a4256",
+      "fallbackLabel": "unknown",
+      "rules": [
+        {
+          "operator": "=",
+          "rawValue": "2",
+          "color": "#ff2a14",
+          "label": "BARO FAULT: no moves"
+        },
+        {
+          "operator": "=",
+          "rawValue": "1",
+          "color": "#5a8dff",
+          "label": "baro ok"
+        }
+      ],
+      "lichtblickPanelTitle": "baro"
+    },
+    "Gauge!depth_gauge": {
+      "path": "/mongla/state.depth_m",
+      "minValue": -4.0,
+      "maxValue": 0.0,
+      "colorMode": "gradient",
+      "colorMap": "red-yellow-green",
+      "gradient": [
+        "#3a4256",
+        "#5a8dff"
+      ],
+      "reverse": false,
+      "lichtblickPanelTitle": "depth m"
+    },
+    "Gauge!pack_gauge": {
+      "path": "/mongla/thruster_pack.voltage",
+      "minValue": 13.2,
+      "maxValue": 16.8,
+      "colorMode": "gradient",
+      "colorMap": "red-yellow-green",
+      "gradient": [
+        "#3a4256",
+        "#5a8dff"
+      ],
+      "reverse": false,
+      "lichtblickPanelTitle": "thruster pack V"
+    },
+    "Gauge!rail_gauge": {
+      "path": "/mongla/state.battery_voltage",
+      "minValue": 0.0,
+      "maxValue": 5.5,
+      "colorMode": "gradient",
+      "colorMap": "red-yellow-green",
+      "gradient": [
+        "#3a4256",
+        "#5a8dff"
+      ],
+      "reverse": false,
+      "lichtblickPanelTitle": "electronics V"
+    },
+    "PieChart!link_pie": {
+      "path": "/mongla/board_link.rates[:].hz",
+      "title": "what fills the link, frames per second",
+      "lichtblickPanelTitle": "link share"
+    },
+    "DiagnosticSummary!diag_summary": {
+      "topicToRender": "/diagnostics",
+      "sortByLevel": true,
+      "lichtblickPanelTitle": "diagnostics"
+    },
+    "DiagnosticStatusPanel!diag_detail": {
+      "topicToRender": "/diagnostics",
+      "lichtblickPanelTitle": "diagnostic detail"
+    }
+  },
+  "globalVariables": {
+    "track": 0
+  },
+  "userNodes": {
+    "mongla-detections-per-frame": {
+      "name": "detections per frame",
+      "sourceCode": "import { Input } from \"./types\";\n\n// How many boxes each camera's detector gave on its latest frame: a count\n// that drops to zero while the picture runs is a detector that lost the target.\nexport const inputs = [\"/mongla/vision/forward/detections\", \"/mongla/vision/downward/detections\"];\nexport const output = \"/studio_script/mongla_detections_per_frame\";\n\nconst last = { forward: 0, downward: 0 };\n\nexport default function script(\n  event: Input<\"/mongla/vision/forward/detections\"> | Input<\"/mongla/vision/downward/detections\">,\n): { forward: number; downward: number } {\n  const cam = event.topic.includes(\"/forward/\") ? \"forward\" : \"downward\";\n  last[cam] = event.message.detections.length;\n  return { ...last };\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": {
+        "direction": "row",
+        "first": "Indicator!armed",
+        "second": {
+          "direction": "row",
+          "first": "Indicator!mode",
+          "second": {
+            "direction": "row",
+            "first": "Indicator!leak",
+            "second": {
+              "direction": "row",
+              "first": "Indicator!kill",
+              "second": "Indicator!baro",
+              "splitPercentage": 50.0
+            },
+            "splitPercentage": 33.3
+          },
+          "splitPercentage": 25.0
+        },
+        "splitPercentage": 20.0
+      },
+      "second": {
+        "direction": "column",
+        "first": {
+          "direction": "row",
+          "first": "Gauge!depth_gauge",
+          "second": {
+            "direction": "row",
+            "first": "Gauge!pack_gauge",
+            "second": "Gauge!rail_gauge",
+            "splitPercentage": 50.0
+          },
+          "splitPercentage": 33.3
+        },
+        "second": "PieChart!link_pie",
+        "splitPercentage": 42.9
+      },
+      "splitPercentage": 22.2
+    },
+    "second": {
+      "direction": "column",
+      "first": "DiagnosticSummary!diag_summary",
+      "second": "DiagnosticStatusPanel!diag_detail",
+      "splitPercentage": 40.0
+    },
+    "splitPercentage": 50.0
+  }
+}
