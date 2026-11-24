@@ -163,7 +163,8 @@ class FlowSetupMixin:
     def _scale_ready(self):
         """Both scale terms known? Returns (ok, why_not)."""
         if ((not math.isfinite(self._pool_depth) or self._pool_depth <= 0.0)
-                and not self._floor_pts):
+                and not self._floor_pts
+                and getattr(self, '_tile_height', None) is None):
             return False, ('no height source: no pool depth and no surveyed '
                            'floor (the course\'s pool:, or pool_depth_m)')
         if self._medium not in ('air', 'water'):
