@@ -176,3 +176,16 @@ def test_a_failing_open_counts_as_an_attempt_and_never_raises():
     node, log = _node(_Source(False), build)
     assert _drive(node) is False
     assert sum('reopen failed' in m for m in log.lines) == 3
+
+
+def test_a_closed_webcam_reads_unhealthy_and_never_raises():
+    # A reopen that fails keeps the closed source; its next is_healthy() and
+    # read() raised on `_cap = None` and killed the capture thread before the
+    # three-attempt policy could act (audit 2026-11-24).
+    from mongla_vision.cameras.webcam import WebcamCamera
+    cam = WebcamCamera.__new__(WebcamCamera)
+    cam._cap, cam._idx, cam._consec_fail, cam._last_ok = None, 0, 0, 0.0
+    cam._actual_w, cam._actual_h = 640, 480
+    assert cam.is_healthy() is False
+    frame, meta = cam.read()
+    assert frame is None and meta.fresh is False
