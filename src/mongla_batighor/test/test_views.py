@@ -410,8 +410,9 @@ def test_no_two_tabs_of_a_console_are_the_same_view_twice():
 def test_a_3d_view_draws_its_text_at_its_own_size_and_no_stray_odometry():
     """Every 3D view: labelScaleFactor 1, so the demand's caption and the
     pool's names are drawn at the font_size overlay.py and course.py give
-    them (at 0.3 they were 6 px and 4 px); and no /mongla/odom arrow, which
-    repeats the hull's pose and ran off the panel as a line."""
+    them (at 0.3 they were 6 px and 4 px); no /mongla/odom arrow, which
+    repeats the hull's pose; and no frame-to-parent line, the yellow one
+    that ran from the hull off the panel."""
     import json as _json
     found = 0
     for f in views.LAYOUTS.glob("*.json"):
@@ -420,4 +421,15 @@ def test_a_3d_view_draws_its_text_at_its_own_size_and_no_stray_odometry():
                 found += 1
                 assert cfg['scene']['labelScaleFactor'] == 1.0, (f.name, k)
                 assert '/mongla/odom' not in cfg.get('topics', {}), (f.name, k)
+                assert cfg['scene']['transforms']['lineWidth'] == 0, (f.name, k)
     assert found
+
+
+def test_the_demand_caption_is_the_size_of_the_pools_names():
+    """One size for every caption in the 3D scenes: larger, the demand's
+    covered the hull in the pool view (Chrome, 2026-11-25)."""
+    import re as _re
+    from mongla_batighor import overlay
+    src = (views.LAYOUTS.parent / 'mongla_batighor' / 'course.py').read_text()
+    (px,) = _re.findall(r'def text\(x, y, z, words, c, px=([\d.]+)\)', src)
+    assert overlay.DEMAND_LABEL_PX == float(px)

@@ -49,7 +49,9 @@
         "labelScaleFactor": 1.0,
         "transforms": {
           "showLabel": false,
-          "enablePreloading": true
+          "enablePreloading": true,
+          "lineWidth": 0,
+          "axisScale": 0.5
         }
       },
       "cameraState": {
@@ -184,7 +186,9 @@
         "labelScaleFactor": 1.0,
         "transforms": {
           "showLabel": false,
-          "enablePreloading": true
+          "enablePreloading": true,
+          "lineWidth": 0,
+          "axisScale": 0.5
         }
       },
       "cameraState": {

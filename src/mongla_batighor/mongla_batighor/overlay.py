@@ -583,8 +583,9 @@ def calibrate_annotate(state: dict, stamp) -> ImageAnnotations:
 # DEMAND_ARROW_M (a full demand reaches about the 0.7 m hull's length).
 DEMAND_TOPIC = '/mongla/batighor/scene'
 DEMAND_ARROW_M = 0.6
-# 14 px read about 7 px tall in the cockpit's 3D tile (desktop app, 2026-11-21).
-DEMAND_LABEL_PX = 22.0
+# The scenes draw text at its own size (labelScaleFactor 1, views.py), so the
+# caption matches the pool's names: larger, it covered the hull in the pool view.
+DEMAND_LABEL_PX = 14.0
 
 
 def demand_scene(x, y, stamp, frame):

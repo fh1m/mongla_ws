@@ -179,7 +179,12 @@ def _scene() -> dict:
             # At 0.3 the demand's 22 px caption drew at about 6 px and the
             # pool's 14 px names at about 4 px, unreadable (Chrome, 2026-11-25).
             'scene': {'backgroundColor': '#05070c', 'labelScaleFactor': 1.0,
-                      'transforms': {'showLabel': False, 'enablePreloading': True}},
+                      # No frame-to-parent line: Lichtblick draws one, 2 px
+                      # yellow, from the hull to its odometry frame's origin,
+                      # a stray line across the panel. The axes at half scale:
+                      # at 1 they dwarfed the hull (bead 318.3).
+                      'transforms': {'showLabel': False, 'enablePreloading': True,
+                                     'lineWidth': 0, 'axisScale': 0.5}},
             # From behind and above, the way a pilot looks at a
             # vehicle. At 2.2 m a 45-degree view of a wide panel is
             # 3.4 m across and the 0.7 m hull filled a fifth of it;
