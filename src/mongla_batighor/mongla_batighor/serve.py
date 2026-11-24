@@ -29,9 +29,9 @@ from functools import partial
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from mongla_batighor import model, panels
+from mongla_batighor import model, panels, shelves
 from mongla_batighor.pin import pin, share, web_dir
 
 _NAME = re.compile(r'^[A-Za-z0-9_-]+$')
@@ -43,7 +43,7 @@ _HOST = re.compile(r'^(?:[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A
 # Read only, and fetched by the desktop app from a page that is a file, which
 # a browser allows only with CORS: the hull, the theme's fonts, and the layouts
 # (the instruments extension keeps the app's copies in step: layout_sync).
-_SHARED = ('/model/', '/theme/', '/layouts/')
+_SHARED = ('/model/', '/theme/', '/layouts/', '/files/')
 _HASHED = re.compile(r'\.[0-9a-f]{16,}\.')
 _THEME_FILE = re.compile(r'^(?:fonts/)?[a-z0-9-]+\.(?:css|woff2|svg)$')
 
@@ -203,8 +203,10 @@ class Handler(BaseHTTPRequestHandler):
     server_version = 'batighor'
 
     def __init__(self, *a, web: Path, layouts: Path, bridge_port: int,
-                 default_layout: str, exts: dict, bundle, hull: dict, files: dict, **kw):
+                 default_layout: str, exts: dict, bundle, hull: dict, files: dict,
+                 shelves: dict | None = None, **kw):
         self.web, self.layouts, self.hull, self.files = web, layouts, hull, files
+        self.shelves = shelves                     # shelves.SHELVES when None
         self.theme = layouts.parent / 'theme'
         self.exts, self.bundle = exts, bundle      # see make_server
         self.bridge_port, self.default_layout = bridge_port, default_layout
@@ -260,6 +262,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._text(HTTPStatus.NOT_FOUND, 'not found\n')
             return self._bytes(found[0], 'application/xml' if url.path.endswith('.urdf')
                                else 'model/stl', cache=False, gz=found[1])
+        if url.path == '/files/index.json':
+            return self._bytes(json.dumps(shelves.listing(self.shelves)).encode(),
+                               'application/json', cache=False)
+        if url.path.startswith('/files/'):
+            # The missions and the deck, read only (shelves.py says what is refused).
+            shelf, _, rel = unquote(url.path[len('/files/'):]).partition('/')
+            body, why = shelves.read(shelf, rel, self.shelves)
+            if body is None:
+                return self._text(HTTPStatus.NOT_FOUND, f'{why}\n')
+            return self._bytes(body, 'text/plain; charset=utf-8', cache=False)
         if url.path.startswith('/api/'):
             return self._api(url.path[len('/api/'):])
         if url.path == '/app' or url.path.startswith('/app/'):
@@ -383,7 +395,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def make_server(port: int, web: Path, layouts: Path, bridge_port: int,
                 default_layout: str = 'batighor',
-                panels_dir: Path | None = None) -> ThreadingHTTPServer:
+                panels_dir: Path | None = None,
+                shelves_at: dict | None = None) -> ThreadingHTTPServer:
     """The server; built once, so a panel or the bundle is read at start.
 
     A Lichtblick whose API switch has moved is served without our panels, and
@@ -406,7 +419,8 @@ def make_server(port: int, web: Path, layouts: Path, bridge_port: int,
         hull = {}
     return ThreadingHTTPServer(('0.0.0.0', port), partial(
         Handler, web=web, layouts=layouts, bridge_port=bridge_port,
-        default_layout=default_layout, exts=exts, bundle=bundle, hull=hull, files=index(web)))
+        default_layout=default_layout, exts=exts, bundle=bundle, hull=hull, files=index(web),
+        shelves=shelves_at))
 
 
 def main(argv=None) -> int:

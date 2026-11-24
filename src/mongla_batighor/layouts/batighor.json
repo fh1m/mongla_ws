@@ -856,6 +856,8 @@
       "lichtblickPanelTitle": "every node's log"
     },
     "mongla.batighor.HelmLog!log.helm_log": {},
+    "mongla.batighor.Files!files.files": {},
+    "mongla.batighor.MissionText!files.text": {},
     "GlobalVariableSliderPanel!tune.track": {
       "sliderProps": {
         "min": 0,
@@ -1230,6 +1232,15 @@
             "first": "RosOut!log.rosout",
             "second": "mongla.batighor.HelmLog!log.helm_log",
             "splitPercentage": 68.0
+          }
+        },
+        {
+          "title": "Files",
+          "layout": {
+            "direction": "row",
+            "first": "mongla.batighor.Files!files.files",
+            "second": "mongla.batighor.MissionText!files.text",
+            "splitPercentage": 64.0
           }
         },
         {

@@ -197,6 +197,16 @@ topics with their rates beside the raw message on any topic, `/mongla/state` fir
 Lichtblick's own log panel with its level and text filters, beside the Control Center,
 whose log keeps only the helm and the warnings.
 
+## Files (`files`)
+
+The missions and the deck as Kutum holds them, read only, beside the mission running now
+line by line: what a run will execute and start with, without a shell on the vehicle. The
+missions shelf is the directory the mission runner loads from (its own rule, asked of it),
+the deck is `~/mongla/deck`. Only text files are listed, newest first, nothing whose path
+has a name starting with `.`, nothing over 256 KB, and a path that resolves outside its
+shelf is refused with that reason (`shelves.py`). Nothing is ever written. Batighor has no
+login, so whatever a shelf holds is visible to the network Kutum is on.
+
 ## What the pictures do not show
 
 - **The downward detections are filtered for these pictures.** The development model
