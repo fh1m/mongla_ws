@@ -878,3 +878,35 @@ def test_a_failed_safety_verb_never_reads_like_one_that_took():
     assert 'FAILED: no heartbeat' in bad
     assert 'FAILED' not in good and good.endswith('disarm ended: disarmed')
     assert plain.endswith('pilot ana went silent')
+
+
+@NEEDS_NODE
+def test_a_typed_verb_line_is_the_clis_grammar_checked_before_it_is_sent():
+    """parseVerbLine, against the real verb table: `<verb> --field value` as
+    `mongla` takes it; each malformed line is refused with what is wrong,
+    and arm and `head` are refused on the line (the Arm button's ticks; the
+    CLI's live heading)."""
+    import json as _json
+    import subprocess as _sp
+    from mongla_batighor.panels import verbs
+    lines = ['move_forward --duration 3 --gain 60', 'stop', 'vision_move --camera forward '
+             '--target_class gate --brake_off yes', 'arm', 'fly', 'move_forward --gain 60',
+             'move_forward --duration three', 'move_forward --speed 1 --duration 3',
+             'turn --target head', 'move_forward duration 3', 'vision_move --brake_off maybe', '']
+    js = ((PANELS / 'control' / 'extension.js').read_text()
+          .replace('module.exports = {', 'const _unused = {', 1)
+          + f'\nprocess.stdout.write(JSON.stringify({_json.dumps(lines)}.map((l) => parseVerbLine(l, VERBS))));'
+          + 'process.exit(0);')
+    pre = f'const module={{exports:{{}}}};const VERBS={_json.dumps(verbs())},TUNABLE={{}},THEME_CSS="";'
+    out = _sp.run(['node', '-e', pre + (PANELS / 'common.js').read_text() + js],
+                  capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = _json.loads(out.stdout)
+    assert got[0] == {'cmd': 'move_forward', 'fields': {'duration': 3, 'gain': 60}}
+    assert got[1] == {'cmd': 'stop', 'fields': {}}
+    assert got[2]['fields']['brake_off'] is True and got[2]['fields']['target_class'] == 'gate'
+    says = [g.get('error', '') for g in got[3:]]
+    for said, want in zip(says, ['Arm...', 'no verb fly', 'needs --duration', 'is a number',
+                                 'no field speed', 'CLI', 'fields are --name value',
+                                 'true or false', 'type a verb']):
+        assert want in said, (want, said)

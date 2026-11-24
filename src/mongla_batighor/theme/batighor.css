@@ -426,3 +426,10 @@ svg.vitals .alarm{animation:mb-breathe 1.2s ease-in-out infinite}
 .mb.files .files-main{display:flex;flex-direction:column;min-height:0}
 .mb.files pre.files-view{flex:1;max-height:none;white-space:pre;tab-size:4}
 .mb.files .body:empty{display:none}
+
+/* The typed verb line in the command card: a terminal's prompt, the CLI's grammar. */
+.mb input.cli{flex:1;min-width:0;font-family:var(--mb-mono);font-size:12px;background:var(--mb-sunk);
+  border:1px solid var(--mb-rule);border-radius:3px;color:var(--mb-ink);padding:4px 6px}
+.mb input.cli:focus{outline:none;border-color:var(--mb-sea)}
+.mb .prompt{font-family:var(--mb-mono);color:var(--mb-sea)}
+.mb .note.bad{color:var(--mb-amber)}
