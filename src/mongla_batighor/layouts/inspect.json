@@ -1,8 +1,6 @@
 {
   "configById": {
-    "TopicGraph!graph": {
-      "lichtblickPanelTitle": "nodes and topics: the diamond at the right, \"No topics\", draws nodes only"
-    },
+    "mongla.batighor.Chain!chain": {},
     "SourceInfo!topics": {
       "lichtblickPanelTitle": "every topic, its type and rate"
     },
@@ -27,7 +25,7 @@
   },
   "layout": {
     "direction": "column",
-    "first": "TopicGraph!graph",
+    "first": "mongla.batighor.Chain!chain",
     "second": {
       "direction": "row",
       "first": "SourceInfo!topics",

@@ -167,3 +167,28 @@ X.vitalsSvg(X.vitalsOf(s, now));
 process.stdout.write(JSON.stringify(drawn.filter((n) => (n.a.transform || "").includes("translate(0")).map((n) => n.a.transform)));''')
     (tf,) = out
     assert tf.startswith('rotate(-10 ') and tf.endswith('translate(0 25)'), tf
+
+
+@NEEDS_NODE
+def test_the_chain_drawing_says_live_idle_silent_and_not_sent_apart():
+    """chainBoxes, on a chain.py message built so each answer is fixed: a
+    frame heard at 26 Hz is live with its ages; a detector silent with a
+    reason is idle; a tracker silent with none is the alarm; one message is
+    heard but has no rate; a stage nothing places is not drawn; what the
+    board does not send is drawn absent with its ask."""
+    out = _run(r'''
+const st = (o) => ({ n: 0, hz: 0, age_ms_p50: null, age_ms_p95: null, last_s: null, label: "", idle: "", ask: "", ...o });
+const c = { order: ["frame:forward", "detect:forward", "track:forward", "lock:forward", "nowhere"],
+  stages: { "frame:forward": st({ n: 132, hz: 26.4, age_ms_p50: 46, age_ms_p95: 67, last_s: 0.01, label: "forward frame" }),
+            "detect:forward": st({ label: "forward detect", idle: "until a mission asks" }),
+            "track:forward": st({ label: "forward track" }),
+            "lock:forward": st({ n: 1, hz: 0, age_ms_p50: 40, age_ms_p95: 40, last_s: 0.5, label: "forward lock" }),
+            nowhere: st({ n: 5, hz: 1, last_s: 0.1, label: "unplaced" }) },
+  not_sent: [{ label: "mixer", ask: "upstream B: saturation" }, { label: "unknown", ask: "x" }] };
+const b = X.chainBoxes(c);
+process.stdout.write(JSON.stringify(b.map((x) => [x.key, x.state, x.hz, x.p50, x.why])));''')
+    assert out == [['frame:forward', 'live', 26.4, 46, ''],
+                   ['detect:forward', 'idle', None, None, 'until a mission asks'],
+                   ['track:forward', 'silent', None, None, ''],
+                   ['lock:forward', 'live', None, 40, ''],
+                   ['mixer', 'absent', None, None, 'upstream B: saturation']]

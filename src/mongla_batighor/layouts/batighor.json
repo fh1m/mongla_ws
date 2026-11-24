@@ -921,9 +921,7 @@
       "lichtblickPanelTitle": "undistorted, once a fit exists"
     },
     "mongla.batighor.Calibrate!calibrate.calibrate": {},
-    "TopicGraph!inspect.graph": {
-      "lichtblickPanelTitle": "nodes and topics: the diamond at the right, \"No topics\", draws nodes only"
-    },
+    "mongla.batighor.Chain!inspect.chain": {},
     "SourceInfo!inspect.topics": {
       "lichtblickPanelTitle": "every topic, its type and rate"
     },
@@ -1262,7 +1260,7 @@
           "title": "Inspect",
           "layout": {
             "direction": "column",
-            "first": "TopicGraph!inspect.graph",
+            "first": "mongla.batighor.Chain!inspect.chain",
             "second": {
               "direction": "row",
               "first": "SourceInfo!inspect.topics",

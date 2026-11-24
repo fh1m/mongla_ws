@@ -190,9 +190,12 @@ and gives the command that starts one.
 
 ## Inspect and Log
 
-`inspect` is for a question no view was built for: Lichtblick's topic graph across the
-whole width (every node and topic as the bridge sees them), and under it the source's
-topics with their rates beside the raw message on any topic, `/mongla/state` first.
+`inspect` is for a question no view was built for: the chain from photons to thrust
+drawn stage by stage across the whole width (each box its rate and age; a silent stage
+red unless it has a reason, such as a detector paused until a mission asks; what the
+board does not send dashed, with its ask), and under it the source's topics with their
+rates beside the raw message on any topic, `/mongla/state` first. Lichtblick's topic
+graph was here and put about 90 nodes and topics in one unreadable band.
 
 `log` is the whole record at full height: every node's `/rosout` at info and above, in
 Lichtblick's own log panel with its level and text filters, beside the Control Center,
