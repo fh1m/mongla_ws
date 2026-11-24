@@ -612,6 +612,115 @@ function statusOf(s, now) {
   return { cells, tabs };
 }
 
+// -- intent: what Mongla is trying to do, how far it is, whether it gets there
+//
+// Built only from what the vehicle already says: the verb and the fields its
+// sender set (/mongla/doing), the Move action's feedback (the board's own
+// progress, or a vision verb's pixel error), the state, the filter, the
+// lock, the task clock and the manager's health grades. A goal is shown with
+// its target, where the vehicle is, the error, and the verb's own tolerance
+// where the verb has one (err_px, tolerance_m). Nothing here invents a band.
+// The verdict is the error's own history over the last STALL_S, with both
+// numbers shown, so an operator can judge the word. STALL_S is a display
+// window, not a vehicle threshold.
+const STALL_S = 3;
+const MOTION = new Set(["go_to", "vision_align", "vision_move"]);
+const wrap180 = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
+
+// The goals of the verb running now, as numbers. Pure; exported for the test.
+function goalsOf(d, f, s) {
+  const v = s.v || {}, fb = s.fb || {};
+  const pos = s.odom && s.odom.pose && s.odom.pose.pose && s.odom.pose.pose.position;
+  const out = [];
+  const progress = fb.phase === d.verb && fin(fb.current_value);
+  if (d.verb === "set_depth") out.push({ what: "depth", want: f.target, now: v.depth_m, err: v.depth_m - f.target, unit: "m" });
+  if (d.verb === "surface") out.push({ what: "depth", want: 0, now: v.depth_m, err: v.depth_m, unit: "m" });
+  if (d.verb === "turn") out.push({ what: "heading", want: f.target, now: v.yaw_deg, err: wrap180(v.yaw_deg - f.target), unit: "deg" });
+  if (d.verb === "go_to") {
+    const e = pos ? Math.hypot(pos.x - f.x_m, pos.y - f.y_m) : NaN;
+    out.push({ what: "distance to point", want: `${num(f.x_m, 2)}, ${num(f.y_m, 2)}`,
+      now: pos ? `${num(pos.x, 2)}, ${num(pos.y, 2)}` : NaN, err: e, band: f.tolerance_m, unit: "m" });
+  }
+  if (d.verb === "vision_align" || d.verb === "vision_move") {
+    const ex = fb.err_x_px, ey = fb.err_y_px;
+    const axes = [ex, ey].filter(fin);
+    const worst = axes.length ? Math.max(...axes.map(Math.abs)) : NaN;
+    out.push({ what: "pixel error (worst axis)", want: 0, now: fin(ex) || fin(ey) ? `x ${num(ex, 0)}  y ${num(ey, 0)}` : NaN,
+      err: worst, band: f.err_px, unit: "px" });
+  }
+  if (progress) out.push({ what: "board's progress", want: 100, now: 100 * fb.current_value, err: 100 * (1 - fb.current_value), unit: "%", progress: true });
+  return out;
+}
+
+// Why the verb cannot reach its goal, from evidence only. Pure; exported.
+function cannotOf(d, f, s, now) {
+  const why = [], v = s.v || {}, spec = VERBS[d.verb] || {};
+  const age = (t) => (t ? (now - t) / 1000 : Infinity);
+  const moves = spec.board || MOTION.has(d.verb);
+  if (age(s.vAt) > 2) why.push(`no /mongla/state for ${fin(age(s.vAt)) ? num(age(s.vAt), 0) + " s" : "ever"}: every number here is old`);
+  else if (moves && v.armed === false && d.verb !== "surface") why.push("disarmed: the board moves nothing");
+  const rows = healthNow(s, now);
+  const baro = rows.find((r) => r.name === "barometer" || r.name.endsWith(": barometer"));
+  if (spec.board && d.verb !== "surface" && baro && baro.level === 2)
+    why.push(`barometer unhealthy (${baro.message}): the board refuses AUTO, and every board verb runs in AUTO`);
+  if (d.verb === "vision_align" || d.verb === "vision_move") {
+    const cam = f.camera || "forward";
+    const { rung } = rungOf((s.lock || {})[cam]);
+    const la = age((s.lockAt || {})[cam]);
+    if (la > 1) why.push(`${cam} lock silent ${fin(la) ? num(la, 1) + " s" : "since start"}: nothing to steer on`);
+    else if (rung === "lost") why.push(`${cam} lock is lost: the verb steers on nothing`);
+  }
+  if (d.verb === "go_to" && s.odomAt && age(s.odomAt) > 2) why.push(`no /mongla/odom for ${num(age(s.odomAt), 0)} s: the point is steered on an old estimate`);
+  const task = (s.tasks || []).find((t) => t.state === "running");
+  if (task && fin(task.deadline_s) && task.elapsed_s + age(task.at) > task.deadline_s) why.push(`task ${task.task} is past its deadline`);
+  return why;
+}
+
+// Is the error closing? The oldest and newest error inside STALL_S, so the
+// verdict is two numbers anyone can check. Pure; exported for the test.
+function verdictOf(g, hist, now) {
+  const e = Math.abs(g.err);
+  if (!fin(e)) return { word: "unknown", cls: "stale", say: "no measurement" };
+  if (fin(g.band) && e <= g.band) return { word: "inside", cls: "good", say: `within ${num(g.band, 2)} ${g.unit}` };
+  const win = (hist || []).filter((h) => (now - h.t) / 1000 <= STALL_S && fin(h.e));
+  if (!win.length || (now - win[0].t) / 1000 < STALL_S * 0.66) return { word: "starting", cls: "", say: "under 2 s of history" };
+  const a = win[0].e, b = win[win.length - 1].e;
+  const span = num((win[win.length - 1].t - win[0].t) / 1000, 1);
+  if (b < a) return { word: "closing", cls: "live", say: `${num(a, 2)} to ${num(b, 2)} ${g.unit} in ${span} s` };
+  return { word: "not closing", cls: "warn", say: `${num(a, 2)} to ${num(b, 2)} ${g.unit} in ${span} s` };
+}
+
+function intentDraw(s, now) {
+  const d = s.doing && s.doing.now;
+  const live = ageS(s.aliveAt) < MISSION_ALIVE_S && s.missionName;
+  const task = (s.tasks || []).find((t) => t.state === "running");
+  const head = el("div", { class: "row" }, el("span", { class: "note" }, "mission"),
+    live ? el("b", { class: "live" }, s.missionName) : el("span", {}, "none"),
+    task ? el("span", {}, `task ${task.task}`) : null);
+  if (!d) return [head, el("div", { class: "note" }, s.doing ? "idle: no verb running, so no goal" : "no /mongla/doing: is the manager running?")];
+  const spec = VERBS[d.verb] || { defaults: {} };
+  const f = { ...(spec.defaults || {}), ...(d.fields || {}) };
+  const out = [head, el("div", { class: "row" }, el("b", { class: "live" }, d.verb),
+    el("span", { class: "note" }, spec.board ? "on the board" : "on Kutum"),
+    el("span", {}, fieldsText(d.fields) || "defaults"))];
+  const why = cannotOf(d, f, s, now);
+  if (why.length) out.push(el("div", { class: "cannot" }, el("b", { class: "err" }, "cannot"), ...why.map((w) => el("span", { class: "err" }, w))));
+  const goals = goalsOf(d, f, s);
+  if (!goals.length) out.push(el("div", { class: "note" }, `${d.verb} reports no measurable goal: it is timed, or a one-shot`));
+  for (const g of goals) {
+    const vd = verdictOf(g, (s.hist || {})[g.what], now);
+    const fmt = (x) => (typeof x === "string" ? x : num(x, g.unit === "px" || g.unit === "%" ? 0 : 2));
+    out.push(el("h3", {}, el("span", {}, g.what)));
+    out.push(kv(["want", `${fmt(g.want)} ${g.unit}`], ["now", `${fmt(g.now)} ${g.unit}`],
+      ["error", `${fmt(Math.abs(g.err))} ${g.unit}${fin(g.band) ? ` of ${num(g.band, 2)} allowed` : ""}`],
+      ["verdict", `${vd.word}: ${vd.say}`, why.length && vd.word !== "inside" ? "err" : vd.cls]));
+    const full = g.progress ? 100 : fin(g.band) ? 4 * g.band : NaN;
+    const frac = g.progress ? g.now / 100 : fin(full) ? 1 - Math.min(1, Math.abs(g.err) / full) : NaN;
+    if (fin(frac)) out.push(el("div", { class: "bar" }, el("b", { style: `width:${Math.max(0, Math.min(100, 100 * frac))}%` })));
+  }
+  return out;
+}
+
 const INSTRUMENTS = {
   // The strip above the console's tabs: what an operator must never have to
   // look for, on every tab, and a mark on each tab whose subject needs an eye.
@@ -789,6 +898,46 @@ const INSTRUMENTS = {
   // The decision layer: the mission, the task it is in and its clock, the
   // verb the manager runs now with what was asked of it, and how each recent
   // one ended (refusals too), whoever sent it.
+  // What Mongla is trying to do now: the verb's goal against where the
+  // vehicle is, whether the error is closing, and what stops it (intentOf).
+  Intent: {
+    title: "Intent",
+    topics: ["/mongla/doing", "/mongla/move/_action/feedback", "/mongla/state", "/mongla/odom",
+      ...CAMERAS.map(lockTopic), "/mongla/mission/task", "/mongla/mission_alive", "/diagnostics"],
+    fold(s, topic, m) {
+      s.lock = s.lock || {}; s.lockAt = s.lockAt || {};
+      if (topic === "/mongla/doing") {
+        try {
+          s.doing = JSON.parse(m.data);
+          const n = s.doing.now, key = n ? `${n.verb}@${n.since}` : "";
+          if (key !== s.goalKey) { s.goalKey = key; s.hist = {}; s.fb = null; }
+        } catch { /* keep */ }
+      } else if (topic === "/mongla/move/_action/feedback") s.fb = m.feedback || m;
+      else if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); }
+      else if (topic === "/mongla/odom") { s.odom = m; s.odomAt = heard(); }
+      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
+      else if (topic === "/diagnostics") foldDiagnostics(s, m);
+      else if (topic === "/mongla/mission/task") {
+        try {
+          const t = JSON.parse(m.data); t.at = heard();
+          s.tasks = [t, ...(s.tasks || []).filter((x) => x.task !== t.task)].slice(0, 8);
+        } catch { /* keep */ }
+      } else for (const c of CAMERAS) if (topic === lockTopic(c)) { s.lock[c] = m; s.lockAt[c] = heard(); }
+      // Each goal's error, kept for the verdict's window.
+      const d = s.doing && s.doing.now;
+      if (!d) return;
+      const spec = VERBS[d.verb] || {};
+      const t = heard();
+      s.hist = s.hist || {};
+      for (const g of goalsOf(d, { ...(spec.defaults || {}), ...(d.fields || {}) }, s)) {
+        const h = (s.hist[g.what] = s.hist[g.what] || []);
+        if (!h.length || t - h[h.length - 1].t >= 100) h.push({ t, e: Math.abs(g.err) });
+        while (h.length && (t - h[0].t) / 1000 > STALL_S) h.shift();
+      }
+    },
+    draw: (s) => intentDraw(s, Date.now()),
+  },
+
   Mission: {
     title: "Mission",
     topics: ["/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics"],
@@ -1137,6 +1286,9 @@ module.exports = {
     }
   },
   rungOf,
+  goalsOf,
+  cannotOf,
+  verdictOf,
   poolMap,
   drawMap,
   statusOf,

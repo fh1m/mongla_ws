@@ -228,7 +228,11 @@ def test_every_instrument_reads_only_topics_that_exist_and_small_ones():
         assert topics, name
         for topic in topics:
             leaf = topic.rsplit('/', 1)[-1]
+            # An action's feedback topic is published by its server, which is
+            # named by the action, not the topic.
+            action = topic.split('/_action/')[0] if '/_action/' in topic else None
             assert (f"'{topic}'" in src or topic == '/diagnostics'
+                    or (action and f"'{action}'" in src)
                     or re.search(rf"f'[^']*{{ns(?:_out)?}}/{leaf}'", src)), (name, topic)
             for heavy in ('image', 'compressed', 'detections', 'candidates', 'flow_tracks'):
                 assert heavy not in topic, (name, topic)
