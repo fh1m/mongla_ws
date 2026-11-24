@@ -6,6 +6,7 @@ One mixin of `LocalizationNode` (`localization_node.py`).
 from __future__ import annotations
 
 import math
+import time
 
 import numpy as np
 
@@ -30,6 +31,10 @@ ODOM_MAX_AGE_S = 0.5
 # missed window. The observability gate alone is not enough: it reads aided on
 # a cold filter by design, and did for 20 s while the position ran 9 m.
 AID_MAX_AGE_S = 2.0
+# The motion verdict is decided on each fused flow sample and latched. With
+# no flow for this long it is no longer evidence: it reads unknown, never a
+# stale "ok" (motion() in the DSL keeps answering while odometry is live).
+MOTION_MAX_AGE_S = 1.0
 
 
 def verdict(*, imu_age_s: float, anchored: bool, aiding: str | None,
@@ -142,6 +147,7 @@ class LocalizationPublishMixin:
 
     def _publish(self) -> None:
         self._maybe_model_aid()          # 10 Hz: one aid per output, not per IMU
+        self._expire_motion(time.monotonic())
         # Report observability alongside the pose, so the two can never
         # disagree about which tick they describe.
         self._report_aiding()
@@ -201,12 +207,18 @@ class LocalizationPublishMixin:
                 (qx, qy, qz, qw)), m.header.stamp)
             tf.sendTransform(t)
 
+    def _expire_motion(self, now: float) -> None:
+        from mongla_localization.command_velocity import UNKNOWN
+        state = getattr(self, '_motion_state', None)
+        last = getattr(self, '_last_flow_t', 0.0)
+        if state not in (None, UNKNOWN) and (last <= 0.0 or now - last > MOTION_MAX_AGE_S):
+            self._report_motion(UNKNOWN)
+
     def _publish_state(self, odom) -> None:
         """`/mongla/localization/state`: the one answer to "is it working"."""
         pub = getattr(self, '_pub_state', None)
         if pub is None:
             return
-        import time
         from mongla_interfaces.msg import LocalizationState
         now = time.monotonic()
         seen = getattr(self, '_seen', {})
