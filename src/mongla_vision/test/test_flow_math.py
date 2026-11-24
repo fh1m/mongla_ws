@@ -441,3 +441,11 @@ class TestRefractiveRectifier:
         assert np.allclose(b.rectify(pts), pts, atol=1e-9)
         assert not np.allclose(a.rectify(pts), pts, atol=1e-3)
 
+
+
+def test_a_stalled_gyro_is_no_gyro():
+    # interp_rate clamps to the last sample, so a stalled IMU was held as a
+    # live rotation and subtracted from every velocity (audit 2026-11-24).
+    from mongla_vision.flow.flow_math import integrate_rate
+    assert integrate_rate([(0.0, 0.5, 0.2)], 5.0, 5.2) is None
+    assert integrate_rate([(0.0, 0.5, 0.2), (0.02, 0.5, 0.2)], 0.0, 0.05) is not None

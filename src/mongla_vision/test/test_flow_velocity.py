@@ -229,3 +229,12 @@ def test_real_rotation_is_still_reported_as_rotation():
                       roll_rate=1.2, pitch_rate=0.0)
     assert not v.ok
     assert 'rotation-dominated' in v.reason, v.reason
+
+
+@pytest.mark.parametrize('kw', [dict(dx=math.nan), dict(roll_rate=math.nan)])
+def test_a_nan_flow_or_rate_is_refused_not_ok(kw):
+    # Every gate compares, and comparisons are False on NaN: a NaN input
+    # passed them all and came out ok=True (audit 2026-11-24).
+    dx = kw.pop('dx', 20.0)
+    r = flow_velocity(dx, 0.0, DT, f_px=F, height_m=1.5, **kw)
+    assert not r.ok
