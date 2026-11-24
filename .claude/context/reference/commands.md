@@ -220,6 +220,10 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `tracker_type` | `ocsort` | Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack |
 | `flow` | `false` | Start flow_node on the downward camera (velocity, and calc_distance start/stop). |
 | `pool_depth_m` | `nan` | Water depth in metres. REQUIRED with flow:=true -- the node refuses to publish without it. |
+| `pool_depth_min_m` | `nan` | Shallowest floor depth, metres (the sigma). |
+| `pool_depth_max_m` | `nan` | Deepest floor depth, metres (the sigma). |
+| `tile_m` | `0.0` | Floor tile pitch, metres; 0 = off. |
+| `lane_lines` | `false` | Read the lane line as a heading bound. |
 | `hud_distance` | `true` | HUD pre-arms the distance panel. |
 
 ### `mongla_vision/vision_dual.launch.py`

@@ -470,6 +470,11 @@ def generate_launch_description():
             # Same meaning in both: start flow_node on the downward camera.
             'flow':          LaunchConfiguration('flow'),
             'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
+            # The venue the log line says was applied, all of it (vl_1 #3).
+            'pool_depth_min_m': LaunchConfiguration('pool_depth_min_m'),
+            'pool_depth_max_m': LaunchConfiguration('pool_depth_max_m'),
+            'tile_m':        LaunchConfiguration('tile_m'),
+            'lane_lines':    LaunchConfiguration('lane_lines'),
             # Forwarded EXPLICITLY: both launches declare `paused`, so leaving
             # it out does not keep it out -- an include inherits every parent
             # name:=value. One detector, resumed by the first query or verb.

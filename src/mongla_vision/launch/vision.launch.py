@@ -184,6 +184,16 @@ def generate_launch_description():
         DeclareLaunchArgument('pool_depth_m',    default_value='nan',
                               description='Water depth in metres. REQUIRED with flow:=true -- '
                                           'the node refuses to publish without it.'),
+        # The rest of the venue, as vision_pi takes it: the floor range gives
+        # the height its sigma, the tile its own scale, the lanes a heading.
+        DeclareLaunchArgument('pool_depth_min_m', default_value='nan',
+                              description='Shallowest floor depth, metres (the sigma).'),
+        DeclareLaunchArgument('pool_depth_max_m', default_value='nan',
+                              description='Deepest floor depth, metres (the sigma).'),
+        DeclareLaunchArgument('tile_m', default_value='0.0',
+                              description='Floor tile pitch, metres; 0 = off.'),
+        DeclareLaunchArgument('lane_lines', default_value='false',
+                              description='Read the lane line as a heading bound.'),
         DeclareLaunchArgument('hud_distance',    default_value='true',
                               description='HUD pre-arms the distance panel.'),
     ]
@@ -291,6 +301,10 @@ def generate_launch_description():
             'profile':      PythonExpression([
                 "'", LaunchConfiguration('profile'), "' or '", cam, "'"]),
             'pool_depth_m': ParameterValue(LaunchConfiguration('pool_depth_m'), value_type=float),
+            'pool_depth_min_m': ParameterValue(LaunchConfiguration('pool_depth_min_m'), value_type=float),
+            'pool_depth_max_m': ParameterValue(LaunchConfiguration('pool_depth_max_m'), value_type=float),
+            'tile_m':       ParameterValue(LaunchConfiguration('tile_m'), value_type=float),
+            'lane_lines':   ParameterValue(LaunchConfiguration('lane_lines'), value_type=bool),
         }],
         condition=IfCondition(LaunchConfiguration('flow')),
     )
