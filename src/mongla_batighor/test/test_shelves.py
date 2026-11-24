@@ -19,6 +19,7 @@ def shelf(tmp_path):
     root = tmp_path / 'missions'
     (root / 'sauvc').mkdir(parents=True)
     (root / 'sauvc' / 'gate.py').write_text('mongla.arm()\n')
+    (root / '__init__.py').write_text('')
     (root / '.secret.yaml').write_text('key: 1\n')
     (root / 'blob.bin').write_bytes(b'\0' * 8)
     (root / 'big.txt').write_text('x' * (shelves.MAX_BYTES + 1))
@@ -29,7 +30,9 @@ def shelf(tmp_path):
 
 def test_a_mission_is_listed_and_read_and_nothing_else_is(shelf):
     got = shelves.listing(shelf)
-    # The dotfile, the binary and the link out are not listed.
+    # The dotfile, the binary, the link out and the package's __init__.py
+    # (plumbing, not a mission: it was listed among them, Chrome 2026-11-25)
+    # are not listed.
     assert sorted(f['path'] for f in got['missions']) == ['big.txt', 'sauvc/gate.py']
     assert got['deck'] == []
     assert shelves.read('missions', 'sauvc/gate.py', shelf) == (b'mongla.arm()\n', '')

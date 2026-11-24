@@ -1525,7 +1525,8 @@ function filesPanel() {
       list.replaceChildren(...Object.entries(shelves).flatMap(([shelf, files]) => [
         el("div", { class: "lbl" }, `${shelf} (${files.length})`),
         ...(files.length ? files.map((f) => el("button", { class: `file${`${shelf}/${f.path}` === picked ? " on" : ""}`,
-          "data-key": `${shelf}/${f.path}`, title: `${num(f.size / 1024, 1)} KB, ${new Date(f.mtime * 1000).toLocaleString()}`,
+          "data-key": `${shelf}/${f.path}`, "aria-label": f.path,
+          title: `${f.path}: ${num(f.size / 1024, 1)} KB, ${new Date(f.mtime * 1000).toLocaleString()}`,
           onclick: () => show(shelf, f.path) }, f.path))
           : [el("div", { class: "note" }, "empty or not on this machine")]),
       ]));
