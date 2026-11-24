@@ -753,6 +753,10 @@ def main() -> int:
         os.makedirs(install_dir, exist_ok=True)
         name = calibration_filename(applies_to, w, h, medium)
         dest = os.path.join(install_dir, name)
+        if os.path.exists(dest):
+            # Never overwrite a calibration without keeping the old one, as
+            # the apply path does (vl_5 F4).
+            os.replace(dest, dest + '.bak-' + time.strftime('%Y%m%d-%H%M%S'))
         with open(dest, 'w') as fh:
             json.dump(out, fh, indent=2)
         print(f"installed {dest}")

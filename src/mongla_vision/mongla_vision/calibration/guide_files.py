@@ -5,6 +5,7 @@ directory and the per-medium capture directories, and the library of
 installed calibrations. `calibrate_node.py` reads these; nothing here opens a
 socket or imports ROS.
 """
+import shutil
 import glob
 import json
 import os
@@ -284,9 +285,15 @@ def apply_calibration(cal_dir, src_file, dev, applies_to):
             applies_to, d.get('image_width'), d.get('image_height'), medium))
     except (ValueError, TypeError) as e:
         return None, str(e)
-    if os.path.exists(dest) and os.path.abspath(dest) != os.path.abspath(src):
+    if os.path.exists(dest):
         # Never overwrite a calibration without keeping the old one. It cost
-        # somebody a board and ten minutes.
-        os.replace(dest, dest + '.bak-' + time.strftime('%H%M%S'))
+        # somebody a board and ten minutes. Re-applying a file to its own name
+        # rewrites its identity, so it is kept too (vl_5 F5); the date keeps
+        # one day's backup from replacing another's (F11).
+        bak = dest + '.bak-' + time.strftime('%Y%m%d-%H%M%S')
+        if os.path.abspath(dest) == os.path.abspath(src):
+            shutil.copy2(dest, bak)
+        else:
+            os.replace(dest, bak)
     json.dump(d, open(dest, 'w'), indent=2)
     return os.path.basename(dest), None
