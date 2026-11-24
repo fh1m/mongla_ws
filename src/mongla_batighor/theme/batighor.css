@@ -70,7 +70,8 @@ body{background:var(--mb-d0)!important}
 .mb.status .cell small{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--mb-ink-3)}
 .mb.status .cell b{font-size:13px;font-weight:400;color:var(--mb-ink);overflow:hidden;text-overflow:ellipsis}
 .mb.status .cell.armed{background:var(--mb-red)}
-.mb.status .cell.armed small, .mb.status .cell.armed b{color:#fff;font-weight:700}
+/* Black on the red reads 5.6:1; white read 3.75:1, under WCAG AA for this size. */
+.mb.status .cell.armed small, .mb.status .cell.armed b{color:#000;font-weight:700}
 /* Live is a working thing seen now: sea, as everywhere else. Red stays for
    an error and for armed, so it still means look now. */
 .mb.status .cell.live b{color:var(--mb-sea)}
@@ -171,7 +172,6 @@ body{background:var(--mb-d0)!important}
 .mb .board .cell > b{font-weight:500}
 .mb .rule{width:min(100%,52ch);font-size:9px;letter-spacing:.16em;text-transform:uppercase;
   color:var(--mb-ink-3);border-top:1px solid var(--mb-rule);padding-top:6px}
-.mb .wide{grid-column:1/-1}
 /* The Vehicle readout grows with its tile: a dial and three numbers read
    from across the tent, not 80 px in the corner of a quarter-screen panel. */
 .mb .gauges{align-items:center;gap:4cqi;flex-wrap:nowrap}

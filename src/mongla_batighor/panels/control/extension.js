@@ -21,8 +21,9 @@ const ROSOUT = "/rosout";
 const VEHICLE = "/mongla/state";
 const ANYONE = ["stop", "surface", "disarm"];
 // Under each key, what it does to the vehicle: three red keys alike in a
-// hurry are a guess. Words from mongla_control/commands.py, said shortly.
-const DOES = { stop: "hold here", surface: "go up, stay up", disarm: "motors off" };
+// hurry are a guess. Shortened from each verb's help in mongla_control/
+// commands.py; stop is the board's brake, which older firmware coasts.
+const DOES = { stop: "brake", surface: "brake, then surface", disarm: "motors off" };
 
 // The heartbeat belongs to this browser, not to one panel. Opening another
 // view unmounts the Control Center; a beat kept in the panel stopped with it,
@@ -57,7 +58,7 @@ function initPanel(context, kind = "ControlCenter") {
   const box = mount(context);
 
   let helm = {};
-  let vehicle = null;
+  let vehicle = null, vehicleAt = 0;
   const lines = [];
   const canCall = typeof context.callService === "function";
 
@@ -195,7 +196,8 @@ function initPanel(context, kind = "ControlCenter") {
   for (const cam of CAMERAS) {
     for (const [s, kind] of Object.entries(TUNABLE)) {
       const key = `${cam}.${s}`;
-      const input = el("input", { size: "10", type: kind === "float" ? "number" : "text", step: "any" });
+      const input = el("input", { size: "10", type: kind === "float" && !UNSET[s] ? "number" : "text", step: "any",
+        placeholder: UNSET[s] ? "value or default" : "value" });
       const row = el("div", { class: "row tune" });
       if (s === "active_model") {
         // The detector's registry keys; typing "a,b" for two models still works.
@@ -208,7 +210,9 @@ function initPanel(context, kind = "ControlCenter") {
       const set = el("button", {
         onclick: () => {
           if (input.value === "") return undefined;
-          const value = kind === "float" ? Number(input.value) : input.value;
+          // "default" puts a setting back to what the detector declares.
+          const back = input.value.trim() === "default" && UNSET[s];
+          const value = back ? UNSET[s][0] : kind === "float" ? Number(input.value) : input.value;
           return call("tune", { cmd: key, fields_json: JSON.stringify(value) });
         },
       }, "Set");
@@ -276,6 +280,10 @@ function initPanel(context, kind = "ControlCenter") {
       helm.mission && el("span", { class: "live" }, `mission ${helm.mission} running`),
     ].filter(Boolean));
     const named = me() !== "";
+    // The heartbeat carries this name: changed while flying, the helm would
+    // stop hearing the pilot and stop their verb 3 s later. Release first.
+    name.disabled = mine;
+    name.title = mine ? "release the helm to change the name" : "";
     bRequest.disabled = !named || mine;
     bGive.disabled = !mine || !helm.asker;
     bRelease.disabled = !mine;
@@ -290,7 +298,7 @@ function initPanel(context, kind = "ControlCenter") {
       const [cam, s] = key.split(".");
       const v = (tuning[cam] || {})[s];
       const unset = UNSET[s] && v === UNSET[s][0];
-      cell.textContent = !tuning[cam] ? "--" : unset ? UNSET[s][1] : v === "" ? '""' : String(v);
+      cell.textContent = !tuning[cam] || v === null || v === undefined ? "--" : unset ? UNSET[s][1] : v === "" ? '""' : String(v);
       cell.className = unset ? "note" : "live";
       cell.title = cell.textContent;   // the whole value, where the column cuts it
     }
@@ -312,10 +320,15 @@ function initPanel(context, kind = "ControlCenter") {
     if (mPick.options.length !== ms.length) {
       mPick.replaceChildren(...ms.map((m) => el("option", { value: m }, m)));
     }
+    // The state is sent on change and at least twice a second: older, it is
+    // the vehicle as it was, and says so.
+    const old = vehicle && (Date.now() - vehicleAt) / 1000 > 2;
     vehLine.replaceChildren(...(vehicle
-      ? [el("span", { class: vehicle.armed ? "armed" : "ok" }, vehicle.armed ? "ARMED" : "disarmed"),
+      ? [el("span", { class: old ? "warn" : vehicle.armed ? "armed" : "ok" },
+          (vehicle.armed ? "ARMED" : "disarmed") + (old ? `, ${num((Date.now() - vehicleAt) / 1000, 0)} s old` : "")),
         el("span", {}, vehicle.mode || "--"),
-        el("span", {}, `depth ${num(vehicle.depth_m, 2, " m")}`),
+        // Depth below the surface, as the Status strip says it (depth_m is altitude).
+        el("span", {}, `${num(Number.isFinite(vehicle.depth_m) ? -vehicle.depth_m : NaN, 2, " m")} deep`),
         el("span", {}, `heading ${num(vehicle.yaw_deg, 0)}`),
         el("span", {}, `battery ${num(vehicle.battery_voltage, 1, " V")}`)]
       : [el("span", { class: "stale" }, "no /mongla/state yet")]));
@@ -332,20 +345,6 @@ function initPanel(context, kind = "ControlCenter") {
   // what it answered) and every node's warnings and errors from /rosout, the
   // board's refusals and the stack's faults that no press caused.
   const helmLog = [], nodeLog = [];
-  const clock = (t) => new Date(t * 1000).toLocaleTimeString([], { hour12: false });
-
-  function logLine(raw) {
-    let e;
-    try { e = JSON.parse(raw); } catch { return { t: 0, text: String(raw) }; }
-    let text = e.event;
-    if (text === undefined) {
-      text = [e.op, e.cmd, e.mission].filter(Boolean).join(" ");
-      text += e.ok ? "  ok" : `  REFUSED: ${e.message || ""}`;
-    }
-    const t = e.t || 0;
-    return { t, text: e.operator ? `${clock(t)}  ${e.operator}: ${text}` : `${clock(t)}  ${text}` };
-  }
-
   // rcl_interfaces/Log: WARN is 30, ERROR 40, FATAL 50.
   const LEVEL_NAME = { 30: "WARNING", 40: "ERROR", 50: "FATAL" };
   function nodeLine(m) {
@@ -368,8 +367,8 @@ function initPanel(context, kind = "ControlCenter") {
         try { helm = JSON.parse(ev.message.data); } catch { /* keep the last */ }
       } else if (ev.topic === LOG) {
         try {
-          helmLog.length = 0;
-          for (const raw of JSON.parse(ev.message.data)) helmLog.push(logLine(raw));
+          const fresh = JSON.parse(ev.message.data).map(logLine);
+          helmLog.splice(0, helmLog.length, ...fresh);
           merge();
         } catch { /* keep the last */ }
       } else if (ev.topic === ROSOUT) {
@@ -379,7 +378,7 @@ function initPanel(context, kind = "ControlCenter") {
           merge();
         }
       } else if (ev.topic === VEHICLE) {
-        vehicle = ev.message;
+        vehicle = ev.message; vehicleAt = Date.now();
       }
     }
     draw();
@@ -390,11 +389,31 @@ function initPanel(context, kind = "ControlCenter") {
   draw();
 }
 
+// One helm log record as a line. Exported for the test.
+const clock = (t) => new Date(t * 1000).toLocaleTimeString([], { hour12: false });
+
+function logLine(raw) {
+  let e;
+  try { e = JSON.parse(raw); } catch { return { t: 0, text: String(raw) }; }
+  let text = e.event;
+  // A verb's end carries its outcome: a failed disarm must not read like one that took.
+  if (text !== undefined && e.ok === false) text += `  FAILED${e.message ? `: ${e.message}` : ""}`;
+  else if (text !== undefined && e.message) text += `: ${e.message}`;
+  if (text === undefined) {
+    text = [e.op, e.cmd, e.mission].filter(Boolean).join(" ");
+    text += e.ok ? "  ok" : `  REFUSED: ${e.message || ""}`;
+  }
+  const t = e.t || 0;
+  return { t, text: e.operator ? `${clock(t)}  ${e.operator}: ${text}` : `${clock(t)}  ${text}` };
+}
+
 // A node that says the same thing every second (the lock's "camera looks
 // degraded", Kutum 2026-11-23) filled the whole card. A repeat, digits aside,
 // replaces its earlier line: the newest text, with how many times it came.
 function foldNodeLog(list, e) {
-  const key = String(e.key).replace(/[0-9.]+/g, "#");
+  // Measurements fold (1.27, 7/8, 1043); a lone small whole number is an id
+  // (thruster 3, channel 12) and stays, so two failing thrusters stay two lines.
+  const key = String(e.key).replace(/\d+(?:[./]\d+)+|\d{3,}/g, "#");
   const i = list.findIndex((x) => x.key === key);
   const n = i < 0 ? 1 : list[i].n + 1;
   if (i >= 0) list.splice(i, 1);
@@ -402,7 +421,7 @@ function foldNodeLog(list, e) {
 }
 
 module.exports = {
-  foldNodeLog,
+  foldNodeLog, logLine,
   activate(extensionContext) {
     for (const name of Object.keys(PARTS)) {
       extensionContext.registerPanel({ name, initPanel: (context) => initPanel(context, name) });
