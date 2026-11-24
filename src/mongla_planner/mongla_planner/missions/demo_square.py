@@ -41,5 +41,9 @@ def run(mongla, log):
             mongla.yaw_right(TURN_DEG)       # relative turn, closed on the board's heading
             mongla.pause(PAUSE_S)
 
-    mongla.surface()
-    mongla.disarm()
+    # Disarm even if surface raises: a hull left armed after a
+    # failed surface is the worse outcome (bead 2s8).
+    try:
+        mongla.surface()
+    finally:
+        mongla.disarm()

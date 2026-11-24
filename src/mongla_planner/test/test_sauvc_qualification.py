@@ -46,6 +46,12 @@ class _Recorder:
             return True
         return _call
 
+    def task(self, name, **k):
+        # The DSL's time bound; recorded, and the block runs unbounded here.
+        import contextlib
+        self.sent.append(('task', (name,), k))
+        return contextlib.nullcontext()
+
     def names(self):
         return [n for n, _, _ in self.sent]
 
