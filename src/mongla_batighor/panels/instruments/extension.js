@@ -921,9 +921,11 @@ const INSTRUMENTS = {
       const worst = Math.max(1, ...rows.map((r) => (fin(r.age_ms_p95) ? r.age_ms_p95 : 0)));
       const out = [el("div", { class: "note" }, `age when seen, p50 / p95 over ${num(c.window_s, 0)} s`)];
       for (const r of rows) {
-        const quiet = !(r.hz > 0) || (fin(r.last_s) && r.last_s > 2);
+        // n > 0 with no rate is one message in the window: heard, not silent.
+        const quiet = !(r.n > 0) || (fin(r.last_s) && r.last_s > 2);
         out.push(kv([r.label,
-          quiet ? (r.idle ? `silent ${r.idle}` : "silent") : `${num(r.hz, 1, " Hz")}   ${num(r.age_ms_p50, 1)} / ${num(r.age_ms_p95, 1)} ms`,
+          quiet ? (r.idle ? `silent ${r.idle}` : "silent")
+            : `${fin(r.hz) ? num(r.hz, 1, " Hz") : `${r.n} msg`}   ${num(r.age_ms_p50, 1)} / ${num(r.age_ms_p95, 1)} ms`,
           quiet && !r.idle ? "stale" : ""]));
         if (!quiet && fin(r.age_ms_p50)) {
           out.push(el("div", { class: "bar" }, el("b", { style: `width:${Math.min(100, (100 * r.age_ms_p50) / worst)}%` })));

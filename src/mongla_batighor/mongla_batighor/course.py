@@ -60,8 +60,11 @@ def read(name: str) -> tuple:
     from mongla_localization.course_map import load_course
     try:
         c = load_course(name)
-    except (FileNotFoundError, ValueError, KeyError, OSError) as exc:
-        return {'course': name, 'error': str(exc)}, ''
+    except Exception as exc:                 # noqa: BLE001
+        # Anything a hand-edited file can raise (a YAML syntax error, `props:`
+        # written as a list) is the refusal this topic promises, not a crash
+        # that leaves the map on the last good pool.
+        return {'course': name, 'error': f'{type(exc).__name__}: {exc}'}, ''
     return describe(c), c.source
 
 
