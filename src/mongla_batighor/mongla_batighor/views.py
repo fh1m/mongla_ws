@@ -147,15 +147,22 @@ def scene() -> tuple:
                   # The hull says where the body is; seven frame names drawn
                   # on one point say nothing. Preloading acts on a recording
                   # only, and the panel alerts without it once /tf exists.
-                  'scene': {'backgroundColor': '#05070c', 'labelScaleFactor': 0.3,
-                            'transforms': {'showLabel': False, 'enablePreloading': True}},
+                  # The label scale applies to every text in the scene, the
+                  # demand caption too: at 0.3 it was unreadable (318.3). The
+                  # axes at the default 1 m dwarfed a 0.7 m hull; at 0.15 m
+                  # they say which way is forward and stay inside it.
+                  'scene': {'backgroundColor': '#05070c', 'labelScaleFactor': 1.0,
+                            'transforms': {'showLabel': False, 'enablePreloading': True,
+                                           'axisScale': 0.15}},
                   # From behind and above, the way a pilot looks at a
                   # vehicle. At 2.2 m a 45-degree view of a wide panel is
                   # 3.4 m across and the 0.7 m hull filled a fifth of it;
                   # at 1.3 m it is 2 m, room for the hull and the demand.
-                  # 0.95 m: at 1.3 the hull read small in the cockpit's
-                  # corner (owner, 2026-11-22); the demand arrow still fits.
-                  'cameraState': {'distance': 0.95, 'perspective': True, 'phi': 55,
+                  # 1.6 m: the cockpit's attitude panel is tall and narrow,
+                  # so a 45-degree vertical view is ~27 degrees wide, and at
+                  # 0.95 m the hull ran off both sides (seen in the desktop
+                  # app, 318.3). 0.4 m / tan(13.5 deg) is 1.67 m.
+                  'cameraState': {'distance': 1.6, 'perspective': True, 'phi': 55,
                                   'thetaOffset': 200, 'targetOffset': [0, 0, 0],
                                   'target': [0, 0, 0], 'targetOrientation': [0, 0, 0, 1],
                                   'fovy': 45, 'near': 0.01, 'far': 5000},
