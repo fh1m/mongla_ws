@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import glob
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -68,7 +69,7 @@ def state_dict(st, applies_to: str, size, result: str, library) -> dict:
             target = [tx * w / g, ty * h / g, (tx + 1) * w / g, (ty + 1) * h / g]
         corners = (np.asarray(st.corners).reshape(-1, 2).round(1).tolist()
                    if st.corners is not None else None)
-        return {
+        return _null_nan({
             'applies_to': applies_to, 'medium': st.medium,
             'grid': f'{st.cols}x{st.rows}', 'square': st.square,
             'size': list(size) if size else None,
@@ -89,7 +90,20 @@ def state_dict(st, applies_to: str, size, result: str, library) -> dict:
             'solve': st.solve, 'solve_out': st.solve_out[-1500:],
             'result': result if os.path.exists(result) else '',
             'library': library,
-        }
+        })
+
+
+def _null_nan(o):
+    # A missing number is NaN in the state and null on the wire: json.dumps
+    # writes NaN as a bare token, JSON.parse throws on it, and the panel kept
+    # its last message while 6 or 7 boards gave a NaN Max ERE.
+    if isinstance(o, float) and not math.isfinite(o):
+        return None
+    if isinstance(o, dict):
+        return {k: _null_nan(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_null_nan(v) for v in o]
+    return o
 
 
 def next_capture(current: dict, args: dict):
@@ -201,8 +215,8 @@ class Capture:
             caps = self.captures()
             dest = set_aside(self.outdir, caps) if caps else ''
             self.st.i = 0
-            self.st.ere = self.st.ere_pred = self.st.K = self.st.D = None
-            self.st.worst_px = None
+            capture.clear_fit(self.st)
+            self.st.assess_err = None
             self.st.assessed_n = -1
             self.st.n_boards = 0
             self.st.msg = 'reset'

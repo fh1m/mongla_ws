@@ -50,3 +50,32 @@ def test_a_good_fit_clears_the_old_error_and_suggestion_and_keeps_the_medium(tmp
     fit = solver.fov_from_K(_FS(st).fit_standard()['K'], 1280, 720)
     assert st.hfov_water == fit['hfov_air']          # measured in water
     assert st.hfov_air > st.hfov_water
+
+
+def test_a_nan_max_ere_reaches_the_panel_as_null(tmp_path):
+    # 6 or 7 boards give a NaN Max ERE; json.dumps wrote it as a bare NaN,
+    # JSON.parse threw, and the panel froze on its last message (audit 2026-11-24).
+    import json
+    from mongla_vision.calibration.calibrate_node import state_dict
+    st = g.State(8, 6, str(tmp_path), g.build_steps())
+    st.ere = st.ere_pred = float('nan')
+    d = state_dict(st, 'forward', (1280, 720), str(tmp_path / 'none.json'), [])
+    assert d['ere'] is None and d['ere_pred'] is None
+    json.dumps(d, allow_nan=False)
+
+
+def test_a_fit_that_fails_or_is_undone_below_six_is_not_shown(tmp_path):
+    # Reset, undo below six and a failed refit left the previous fx, FOV and
+    # suggestion on the page as the current answer (audit 2026-11-24).
+    for i in range(6):
+        (tmp_path / f'cal_{i:03d}.png').write_bytes(b'')
+    st = g.State(8, 6, str(tmp_path), g.build_steps())
+    st.fx, st.hfov_air, st.ere, st.suggest = 700.0, 63.8, 0.4, ((0, 0), 25)
+
+    class _Fails(_FS):
+        def detect(self, *a):
+            self.st.stopped = True
+            raise ValueError('board lost')
+    g.assess(st, 8, 6, 0.025, (1280, 720), _Fails(st))
+    assert st.assess_err and st.fx is None and st.hfov_air is None
+    assert st.ere is None and st.suggest is None
