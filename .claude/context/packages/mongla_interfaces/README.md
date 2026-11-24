@@ -48,6 +48,10 @@ string  mode
 float32 yaw_deg
 float32 depth_m
 float32 battery_voltage
+int8    leak              # SAFETY_UNKNOWN 0 / SAFETY_CLEAR 1 / SAFETY_TRIPPED 2
+int8    kill_switch       # UNKNOWN with no second-board link (the firmware sends 0 then)
+int8    baro              # CLEAR = fault code 0; TRIPPED = any other code
+string  baro_text         # the fault code as words, '' when unknown
 ```
 
 Published when something changes, plus a slow heartbeat.

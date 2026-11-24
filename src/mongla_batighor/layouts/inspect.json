@@ -13,8 +13,15 @@
       "lichtblickPanelTitle": "one message, whole"
     }
   },
-  "globalVariables": {},
-  "userNodes": {},
+  "globalVariables": {
+    "track": 0
+  },
+  "userNodes": {
+    "mongla-detections-per-frame": {
+      "name": "detections per frame",
+      "sourceCode": "import { Input } from \"./types\";\n\n// How many boxes each camera's detector gave on its latest frame: a count\n// that drops to zero while the picture runs is a detector that lost the target.\nexport const inputs = [\"/mongla/vision/forward/detections\", \"/mongla/vision/downward/detections\"];\nexport const output = \"/studio_script/mongla_detections_per_frame\";\n\nconst last = { forward: 0, downward: 0 };\n\nexport default function script(\n  event: Input<\"/mongla/vision/forward/detections\"> | Input<\"/mongla/vision/downward/detections\">,\n): { forward: number; downward: number } {\n  const cam = event.topic.includes(\"/forward/\") ? \"forward\" : \"downward\";\n  last[cam] = event.message.detections.length;\n  return { ...last };\n}\n"
+    }
+  },
   "playbackConfig": {
     "speed": 1
   },

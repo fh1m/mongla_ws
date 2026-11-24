@@ -49,9 +49,13 @@ string  mode              # the board's mode name, or '' if unknown
 float32 yaw_deg           # NaN when there is no fresh attitude
 float32 depth_m           # negative below the surface; NaN when absent
 float32 battery_voltage   # NaN when absent
+int8    leak              # SAFETY_UNKNOWN 0 / SAFETY_CLEAR 1 / SAFETY_TRIPPED 2
+int8    kill_switch       # UNKNOWN with no second-board link (the firmware sends 0 then)
+int8    baro              # CLEAR = fault code 0; TRIPPED = any other code
+string  baro_text         # the fault code as words, '' when unknown
 ```
 
-**Absence is `NaN`, never `0.0`** — a zero is a heading, a depth and a voltage, and every
+**Absence is `NaN`, never `0.0`**, and a tri-state's default is UNKNOWN (0), never clear — a zero is a heading, a depth and a voltage, and every
 guard downstream compares with `<` or `>`.
 
 ### Manager parameters

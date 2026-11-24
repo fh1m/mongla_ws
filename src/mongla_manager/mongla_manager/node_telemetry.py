@@ -72,6 +72,9 @@ class TelemetryMixin:
         msg.yaw_deg         = float(yaw_deg) if yaw_deg is not None else math.nan
         msg.depth_m         = float(attitude['depth'])
         msg.battery_voltage = self._fast_batt_v
+        safety = getattr(self, '_fast_safety', None)
+        if safety is not None:
+            self._set_safety(msg, safety)
         self.state_publisher.publish(msg)
 
     def _publish_demand(self):
@@ -629,10 +632,31 @@ class TelemetryMixin:
             return stamp
         return self.get_clock().now().to_msg()
 
+    def _safety(self):
+        """(leak, kill, baro, baro_text) off the board's decoded telemetry."""
+        from mongla_control.fc.srot_protocol import baro_health_text
+        tel = getattr(self.fc, 'telemetry', lambda: None)()
+        u, c, x = MonglaState.SAFETY_UNKNOWN, MonglaState.SAFETY_CLEAR, MonglaState.SAFETY_TRIPPED
+
+        def tri(v):
+            return u if v is None else (x if v else c)
+        if tel is None:
+            return u, u, u, ''
+        code = getattr(tel, 'baro_health', math.nan)
+        known = code is not None and math.isfinite(code)
+        return (tri(getattr(tel, 'leak', None)), tri(getattr(tel, 'kill_switch', None)),
+                (c if int(code) == 0 else x) if known else u,
+                baro_health_text(code) if known else '')
+
+    def _set_safety(self, msg, safety):
+        msg.leak, msg.kill_switch, msg.baro, msg.baro_text = safety
+
     def _publish_state(self, attitude, battery, mode, armed, yaw_deg):
         if attitude is None and battery is None:
             return
         msg = MonglaState()
+        self._fast_safety = self._safety()
+        self._set_safety(msg, self._fast_safety)
         msg.header.stamp    = self._state_stamp()
         msg.header.frame_id = _BODY_FRAME
         msg.armed           = bool(armed)
