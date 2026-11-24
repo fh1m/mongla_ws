@@ -49,3 +49,19 @@ def test_every_verb_and_field_in_the_registry_can_be_sent():
         fields = {f: sample[types[f]] for f in row['fields']}
         goal, why = build_goal(cmd, json.dumps(fields))
         assert goal is not None, (cmd, why)
+
+
+@pytest.mark.parametrize('cmd, fields', [
+    ('turn', '{}'), ('set_depth', '{"timeout": 10}'), ('yaw_left', ''),
+    ('go_to', '{"x_m": 2}'), ('go_to', '{"y_m": 1}'),
+])
+def test_an_empty_box_is_refused_not_flown_as_zero(cmd, fields):
+    # Batighor's Send drops an empty box; the manager would read the missing
+    # field as 0.0 -- north, the surface, the pool origin.
+    goal, why = build_goal(cmd, fields)
+    assert goal is None and 'no default' in why
+
+
+def test_a_typed_zero_is_still_a_zero():
+    goal, _ = build_goal('set_depth', '{"target": 0}')
+    assert goal.target == 0.0 and 'target' in goal.set_fields

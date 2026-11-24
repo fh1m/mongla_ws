@@ -85,6 +85,8 @@ COMMANDS = {
                     'bad or motion reads blocked. final_value = metres left.',
         'fields':   ['x_m', 'y_m', 'tolerance_m', 'duration', 'gain'],
         'defaults': {'tolerance_m': 0.5, 'duration': 60.0, 'gain': 30.0},
+        # A forgotten coordinate would drive to the pool origin.
+        'required': ['x_m', 'y_m'],
     },
     'calc_distance': {
         'help':     "Downward optical-flow distance bracket: phase='start' latches "
