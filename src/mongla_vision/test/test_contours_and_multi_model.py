@@ -244,7 +244,7 @@ class TestASecondaryModelCannotTearDownThePrimary:
         """
         n, D = self._node(monkeypatch, lambda _f: [])
 
-        def explode(_frame, _dets):
+        def explode(_frame, _dets, *_):
             raise RuntimeError('merge exploded')
         n._merge_extra = explode
 
@@ -263,7 +263,7 @@ class TestASecondaryModelCannotTearDownThePrimary:
         AttributeError there would surface as an inference failure."""
         n, _D = self._node(monkeypatch, lambda _f: [])
         del n._extra
-        assert n._merge_extra(object(), ['a']) == ['a']
+        assert n._merge_extra(object(), ['a']) == (['a'], [])
 
 
 def test_the_STARTUP_path_splits_the_csv_too(monkeypatch):

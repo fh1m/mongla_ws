@@ -131,7 +131,7 @@ class HailoDetector(Detector):
         # Publish floor. Defaults to `conf`, i.e. OFF -- byte-for-byte the old
         # behaviour until an operator lowers it.
         self._assoc_conf = float(conf)
-        self._max_det = int(max_det)
+        self._max_det = max(int(max_det), 1)
         self._path = str(model_path)
 
         # Sidecar FIRST, before touching the runtime. It is a cheap,
@@ -405,7 +405,13 @@ class HailoDetector(Detector):
         """Say when the runtime threshold cannot do what it was asked to."""
         if self._log is None:
             return
-        if self._floor is not None and conf < self._floor - 1e-6:
+        if self._floor is None and not self._blocking:
+            self._log.warn(
+                f'[HAILO] the NMS floor this graph was compiled with could not '
+                f'be read (hailortcli missing or its output changed), so it was '
+                f'not lowered: conf={conf:.3f} may be under it, and nothing '
+                f'under it is returned.')
+        elif self._floor is not None and conf < self._floor - 1e-6:
             self._log.warn(
                 f'[HAILO] conf={conf:.3f} is BELOW the NMS floor of '
                 f'{self._floor:.3f} this model is configured at -- nothing '
@@ -453,7 +459,8 @@ class HailoDetector(Detector):
                     f'being discarded.')
 
     def update_max_det(self, max_det: int) -> None:
-        self._max_det = int(max_det)
+        # Clamped as yolo.py does: 0 would delete every box, silently.
+        self._max_det = max(int(max_det), 1)
 
     def is_ready(self) -> bool:
         return bool(self._ready)

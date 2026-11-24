@@ -562,7 +562,10 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
                 if crop_state is not None and crop_state.active:
                     weak = [replace(d, xyxy=crop_state.to_full(d.xyxy))
                             for d in weak]
-            detections = self._merge_extra(infer_frame, detections)
+            detections, low = self._merge_extra(infer_frame, detections)
+            if low and crop_state is not None and crop_state.active:
+                low = [replace(d, xyxy=crop_state.to_full(d.xyxy)) for d in low]
+            weak = weak + low
             detections = self._back_to_full_frame(frame, detections, crop_state)
             dt = time.monotonic() - t0
 
