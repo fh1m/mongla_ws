@@ -25,10 +25,19 @@ def apply_live(node, live: dict, *, restart_hint='set it under `nodes:` in bring
             return SetParametersResult(successful=False, reason=(
                 f'{", ".join(fixed)}: read once at startup -- {restart_hint}. '
                 f'Live here: {", ".join(node.LIVE_PARAMS) or "none"}'))
+        done = []
         try:
             for p in params:
                 live[p.name](p.value)
+                done.append(p.name)
         except ValueError as exc:
+            # The reply says nothing changed, so nothing may have: put back
+            # what this batch already applied, from the values still stored.
+            for name in reversed(done):
+                try:
+                    live[name](node.get_parameter(name).value)
+                except ValueError:
+                    pass
             return SetParametersResult(successful=False, reason=str(exc))
         return SetParametersResult(successful=True)
 
