@@ -53,9 +53,12 @@ const PARTS = {
   Keys: ["safe"],
   // The main screen's half when the keys are on the screen under it (Vitals).
   Command: ["helm", "command", "mission", "log"],
+  // The helm's own record of who asked for what, beside every node's log.
+  HelmLog: ["log"],
 };
 
-const TITLE = { ControlCenter: "Control Center", Detectors: "Detectors", Keys: "Keys", Command: "Command" };
+const TITLE = { ControlCenter: "Control Center", Detectors: "Detectors", Keys: "Keys", Command: "Command",
+  HelmLog: "Helm log" };
 
 function initPanel(context, kind = "ControlCenter") {
   const parts = PARTS[kind];

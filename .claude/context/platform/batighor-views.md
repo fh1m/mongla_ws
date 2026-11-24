@@ -32,11 +32,14 @@ The rules every view keeps:
 On a laptop with a second screen under its panel (the Zenbook Duo's ScreenPad), the desktop
 app opens two windows by itself (`tools/pool/batighor_desktop.py`, `--one-screen` for one).
 Above, the **pilot** console: the tab bar is the index to every view, and its first tab,
-Pilot, gives the pictures the screen: both cameras side by side across the top, and under
-them what holds the target, the hull and the pool with Mongla on it. Below, **Vitals**: the
-three keys, and the vehicle drawn to be read from the corner of an eye, depth, heading,
-thrust, ESCs, arming, mode, packs, position and the board's lines, beside the map and the
-hull. Nothing is on both screens: the keys and the vehicle's state live below, so the
+Pilot, gives the pictures the screen: both cameras side by side across the top, each with
+a one-line caption under it (state, rate, lateness, model), and under them what holds the
+target, the one 3D view (the pool from the course file with Mongla and its recent track in
+it, the pool drawn by its start until the filter is anchored) and the mission. Below,
+**Vitals**: the three keys, and the vehicle drawn to be read from the corner of an eye,
+depth, heading, thrust, ESCs, arming, mode, packs, position, attitude as a horizon, the
+last minute of depth with its rate, and the board's lines, beside the map. Nothing is on both
+screens: the keys, the vehicle's state and the map live below, so the
 pilot console has no Cockpit tab, and its strip (Watch) keeps only the mission, the verb, the
 lock and the two links, each link as four bars that fall as its drops or its lag grow, the
 last bar breathing.

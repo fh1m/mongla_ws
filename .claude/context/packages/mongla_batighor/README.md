@@ -202,7 +202,10 @@ the view by name (`--defaultLayout`); the default is `batighor`, the console bel
 least three times wider than tall: the Zenbook Duo's ScreenPad (3840 x 1100) under its
 panel. Found, it opens two windows: `batighor_pilot` on the screen above, the console with
 Pilot as its first tab (`views.PILOT_CONSOLE`: both cameras side by side across the top, the
-Vision instrument, the hull and the Map under them; no Cockpit tab, and the slim **Watch** strip
+Vision instrument, the one 3D view and the Mission under them; the 3D view is the pool from
+the course (`course.pool_scene` on `/mongla/batighor/pool_scene`, in `pool` once `map -> odom`
+exists and in `odom_ned`, said so, before) with the hull's last three minutes of track
+(`overlay.Track`); no Cockpit, Map, chain or single-camera tab, and the slim **Watch** strip
 in place of the status strip: mission, verb, lock, the board's line and this screen's link to
 Kutum, each link with four bars by its drops or lag. Either strip marks the tabs and reports the
 screen's lag to the helm, so a console without one would do neither), and
@@ -211,13 +214,15 @@ one window per profile and a second launch handed its link to the first. Vitals 
 the **Vitals** instrument (depth as a water column, heading-up compass with the hull fixed and
 the ring turning, the demand as water flowing past the hull, one spinner per ESC by its rpm,
 arming, mode, packs, the filter's position with its sigma and whether navigation is usable,
-and the board's six lines, a bad one breathing), the Map and the hull; its window has no app
+roll and pitch as a horizon from `/mongla/imu` (FRD: the horizon tilts against the roll and
+drops as the nose rises), the last 60 s of depth with its rate, and the board's six lines, a
+bad one breathing) and the Map, the course's rulebook zones on it dashed amber; its window has no app
 bar and no panel titles. Each window is moved onto the workspace its screen is showing (a
 window rule had filed the cockpit on a workspace the OLED was not showing), made full
 screen, and sent one Shift press: the app draws its own minimize, maximize and close over the
 app bar until the page is full screen, and grants that only on a press (`common.js`). The
 scale comes from Hyprland's own sizes (no xrandr there; the app drew at 1 on the Duo), with
-Vitals a quarter step larger. `--one-screen` keeps one window; `--screen` and `--vitals` name
+Vitals a quarter step smaller, its panel being only 1100 px tall. `--one-screen` keeps one window; `--screen` and `--vitals` name
 the screens. Animation in Vitals keeps its phase across redraws (a negative delay from the
 clock) and stops under `prefers-reduced-motion`.
 

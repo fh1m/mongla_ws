@@ -12,6 +12,9 @@
       },
       "lichtblickPanelTitle": "downward camera"
     },
+    "mongla.batighor.Caption!down_caption": {
+      "camera": "downward"
+    },
     "Plot!align": {
       "paths": [
         {
@@ -111,7 +114,12 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "Image!down",
+      "first": {
+        "direction": "column",
+        "first": "Image!down",
+        "second": "mongla.batighor.Caption!down_caption",
+        "splitPercentage": 93.0
+      },
       "second": "Plot!align",
       "splitPercentage": 80.0
     },

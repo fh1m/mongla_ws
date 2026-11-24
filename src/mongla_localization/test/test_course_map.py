@@ -9,6 +9,7 @@ honestly empty.
 
 import pytest
 
+from mongla_localization import course_map as cm
 from mongla_localization.course_map import (
     Course, Prop, bearing_to, load_course, range_to,
 )
@@ -153,3 +154,36 @@ def test_the_deck_courses_are_searched_where_the_docs_say(tmp_path, monkeypatch)
     dirs = cm._search_dirs()
     assert dirs.index(deck) < dirs.index(tmp_path / '.mongla' / 'courses')
     assert cm.load_course('venue_x') is not None
+
+
+def test_rulebook_zones_load_for_drawing_and_place_no_prop():
+    """The olympic course ships the rulebook's zones and still no position:
+    a zone's centre can be metres from its prop, and a prop's position feeds
+    the filter (fix) and dead-reckoning (go_to)."""
+    c = cm.load_course('sauvc_olympic')
+    assert {'gate_line', 'orange_flare_zone', 'starting_zone', 'target_mat'} <= set(c.zones)
+    assert c.zones['gate_line']['kind'] == 'line' and c.zones['gate_line']['source'] == 'rulebook'
+    assert not [p for p in c.props.values() if p.has_position]
+
+
+@pytest.mark.parametrize('body, says', [
+    ('zones:\n  z: {area: [[0, 0]], source: rulebook}\n', 'two'),
+    ('zones:\n  z: {area: [[0, 0], [1, 1]], line: [[0, 0], [1, 1]], source: figure}\n', 'exactly one'),
+    ('zones:\n  z: {area: [[0, 0], [1, 1]], source: guess}\n', 'source'),
+    ('zones:\n  z: {area: [[0, 0], [1, 1]], source: figure, x_m: 3}\n', 'x_m'),
+])
+def test_a_malformed_zone_is_refused(tmp_path, monkeypatch, body, says):
+    monkeypatch.setenv(cm._ENV, str(tmp_path))
+    (tmp_path / 'z.yaml').write_text('course: z\n' + body)
+    with pytest.raises(ValueError, match=says):
+        cm.load_course('z')
+
+
+def test_nothing_that_steers_reads_a_zone():
+    import pathlib
+    import re
+    src = pathlib.Path(__file__).resolve().parents[2]
+    readers = sorted(str(p.relative_to(src)) for p in src.rglob('*.py')
+                     if '/test/' not in str(p) and re.search(r'\.zones\b|\[.zones.\]', p.read_text(errors='ignore')))
+    assert readers == ['mongla_batighor/mongla_batighor/course.py',
+                       'mongla_localization/mongla_localization/course_map.py'], readers

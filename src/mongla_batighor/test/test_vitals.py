@@ -97,3 +97,73 @@ process.stdout.write(JSON.stringify([X.WATCH_CELLS, cells.map(([k]) => k)]));'''
     assert set(watch) <= set(every)
     assert not set(watch) & {'vehicle', 'mode', 'depth', 'heading', 'battery', 'navigation', 'health'}
     assert 'to kutum' in watch
+
+
+@NEEDS_NODE
+def test_a_caption_says_what_its_detector_does_and_goes_stale_when_the_overlay_does():
+    """The strip under a picture (overlay.caption on <camera>/hud): running is
+    calm, paused is amber with why, silent and not paused is the alarm, and a
+    caption older than CAPTION_STALE_S is said stale, not kept as current."""
+    out = _run(r'''
+const now = 100000, s = {};
+const say = (cam, c, at) => X.foldCaption(s, { data: JSON.stringify(c) }, cam, at);
+say("forward", { state: "running", rate_hz: 20, late_ms: 68, model: "m", size: [640, 480], alarm: false }, now - 500);
+say("downward", { state: "silent", silent_s: 4.2, model: "m", size: null, alarm: true }, now - 200);
+const run = X.captionOf(s, "forward", now), dead = X.captionOf(s, "downward", now);
+const old = X.captionOf(s, "forward", now + 5000), never = X.captionOf({}, "forward", now);
+process.stdout.write(JSON.stringify([run.level, run.word, run.rate, run.size, dead.level, dead.why,
+  old.level, old.state, never.state, never.level]));''')
+    assert out == ['ok', 'detecting', 20, '640x480', 'err', '4 s, NOT paused',
+                   'stale', 'stale', 'unheard', 'stale']
+
+
+@NEEDS_NODE
+def test_a_long_reason_is_cut_to_its_room_and_marked():
+    out = _run(r'''
+const long = "heading not anchored: no prop seen since start and flow refused";
+process.stdout.write(JSON.stringify([X.fitText(long, X.NAV_WHY_CHARS), X.fitText("ok", 38), X.NAV_WHY_CHARS]));''')
+    cut, short, room = out
+    assert len(cut) == room and cut.endswith('…') and short == 'ok'
+
+
+@NEEDS_NODE
+def test_attitude_reads_the_boards_frd_quaternion_and_absent_is_null():
+    """Roll 10 deg (starboard down), pitch 15 deg (nose up), yaw 30, packed
+    the way node_support._quat_from_rpy packs them (Z-Y-X)."""
+    import math
+    r, p, y = (math.radians(a) / 2 for a in (10, 15, 30))
+    q = {'w': math.cos(r) * math.cos(p) * math.cos(y) + math.sin(r) * math.sin(p) * math.sin(y),
+         'x': math.sin(r) * math.cos(p) * math.cos(y) - math.cos(r) * math.sin(p) * math.sin(y),
+         'y': math.cos(r) * math.sin(p) * math.cos(y) + math.sin(r) * math.cos(p) * math.sin(y),
+         'z': math.cos(r) * math.cos(p) * math.sin(y) - math.sin(r) * math.sin(p) * math.cos(y)}
+    out = _run(f'''
+const q = {json.dumps(q)};
+const a = X.attitudeOf({{ orientation: q, orientation_covariance: [0.01] }});
+const none = X.attitudeOf({{ orientation: q, orientation_covariance: [-1] }});
+process.stdout.write(JSON.stringify([a.roll, a.pitch, none]));''')
+    assert out[0] == pytest.approx(10, abs=1e-6) and out[1] == pytest.approx(15, abs=1e-6)
+    assert out[2] is None
+
+
+@NEEDS_NODE
+def test_depth_rate_is_down_positive_and_needs_a_second_of_history():
+    out = _run(r'''
+const now = 100000;
+const going = [[now - 2000, 1.0], [now - 1000, 1.25], [now, 1.5]];
+const short = [[now - 500, 1.0], [now, 1.1]];
+process.stdout.write(JSON.stringify([X.depthRate(going, now), X.depthRate(short, now), X.depthRate([], now)]));''')
+    assert out[0] == pytest.approx(0.25) and out[1] is None and out[2] is None
+
+
+@NEEDS_NODE
+def test_the_horizon_tilts_against_the_roll_and_drops_when_the_nose_rises():
+    out = _run(r'''
+const drawn = [];
+global.document = { createElementNS: (_, t) => { const n = { tag: t, a: {}, setAttribute(k, v) { this.a[k] = String(v); },
+  append() {}, addEventListener() {} }; drawn.push(n); return n; }, createElement: (t) => ({ append() {}, setAttribute() {} }) };
+const now = Date.now();
+const s = { v: { armed: false, mode: "", yaw_deg: 0, depth_m: -1 }, vAt: now, att: { roll: 10, pitch: 15 }, aAt: now };
+X.vitalsSvg(X.vitalsOf(s, now));
+process.stdout.write(JSON.stringify(drawn.filter((n) => (n.a.transform || "").includes("translate(0")).map((n) => n.a.transform)));''')
+    (tf,) = out
+    assert tf.startswith('rotate(-10 ') and tf.endswith('translate(0 25)'), tf

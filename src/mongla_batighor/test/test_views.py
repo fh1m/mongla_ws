@@ -380,3 +380,28 @@ def test_a_fused_pose_plot_reads_only_what_the_fuse_fills():
     for name in views.VIEWS:
         for field in re.findall(r'target_pose_fused\.(\w+)', json.dumps(views.build(name))):
             assert field in filled, (name, field)
+
+
+def test_the_two_screens_share_no_panel_and_hold_one_3d_view():
+    """Above, the pilot's tab; below, Vitals. A hull on each, both close in,
+    showed nothing either needed, and the map, keys and state were each on
+    both at one time or another (owner, 2026-11-24)."""
+    kinds = {name: [pid.split('!')[0] for pid in views.build(name)['configById']]
+             for name in ('pilot', 'vitals')}
+    assert not set(kinds['pilot']) & set(kinds['vitals'])
+    assert (kinds['pilot'] + kinds['vitals']).count('3D') == 1
+    (cfg,) = [c for p, c in views.build('pilot')['configById'].items() if p.startswith('3D!')]
+    assert '/mongla/batighor/pool_scene' in cfg['topics']
+    assert cfg['cameraState']['distance'] >= 4             # the pool, not the hull alone
+
+
+def test_no_two_tabs_of_a_console_are_the_same_view_twice():
+    """Forward, Downward, Chain and Vision all showed the cameras; Map and
+    Mission both the pool with the mission (2026-11-24)."""
+    for name, tabs in views.CONSOLES.items():
+        assert len({v for v, _ in tabs}) == len(tabs) <= 14, name
+        both = [t for v, t in tabs if all(f'/{c}/stream' in json.dumps(views.build(v)['configById'])
+                                          for c in ('forward', 'downward'))]
+        assert len(both) <= 2, (name, both)      # the first tab, and Vision in depth
+        maps = [t for v, t in tabs if f'{views.PANEL}Map!' in json.dumps(views.build(v)['configById'])]
+        assert len(maps) <= 1 + (name == views.CONSOLE), (name, maps)

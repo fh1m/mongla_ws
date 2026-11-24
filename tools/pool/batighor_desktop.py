@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import concurrent.futures
 import datetime
 import io
 import json
@@ -50,6 +51,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import zipfile
@@ -154,9 +156,11 @@ READ_DPI = 120
 # shared from ~/.lichtblick-suite.
 VITALS_VIEW = 'vitals'
 VITALS_PROFILE = Path.home() / '.config' / 'Lichtblick-vitals'
-# The screen under the main one is read from further off, at a glance: a
-# quarter step larger (2.75 on the Zenbook Duo, where 2.5 read small).
-VITALS_BOOST = 0.25
+# The screen under the main one, a quarter step smaller (2.25 on the Zenbook
+# Duo): its panel is only 1100 px tall, and at 2.75 the type was too big for
+# what Vitals must hold at a glance (owner, 2026-11-24). Its numbers are
+# drawn large on purpose; the scale sets everything else.
+VITALS_BOOST = -0.25
 
 
 def hyprland(cmd: str) -> str:
@@ -189,6 +193,19 @@ def two_screens(monitors: list) -> tuple[str, str] | None:
     return None
 
 
+# When the key is pressed, in seconds after the window shows: the page must be
+# loaded first, and the app reloads once after start when Kutum's layouts
+# changed (syncLayouts), which leaves full screen; a single press at 8 s left
+# the window's buttons back on such a start (seen 2026-11-24).
+PRESS_AT_S = (8, 20, 35)
+# Focus, then full screen, is one step, and so is focus, then a press:
+# Hyprland's fullscreen acts on the focused window, and a shortcut reaches an
+# XWayland window only while it has focus. Two windows placed at once toggled
+# one twice and the other never, and their presses landed nowhere (seen
+# 2026-11-24). Only the waits between the presses overlap.
+FOCUS = threading.Lock()
+
+
 def place(pid: int, screen: str, wait_s: float = 30.0) -> bool:
     """Put the window of process `pid` on the workspace `screen` is showing,
     full screen, and press one key in it (Hyprland).
@@ -197,7 +214,7 @@ def place(pid: int, screen: str, wait_s: float = 30.0) -> bool:
     filed the cockpit on the OLED's workspace 7 while it showed 1 (seen
     2026-11-24). The key is Shift, which nothing acts on alone: a press is
     what lets the page go full screen and drop the window's own buttons
-    (common.js), and it needs the page loaded first. Both dispatch dialects
+    (common.js), and it needs the page loaded first (PRESS_AT_S). Both dispatch dialects
     are tried: the Lua one this dev box's Hyprland takes, then the classic
     one. False when there is no Hyprland or the window never showed."""
     end = time.monotonic() + wait_s
@@ -212,19 +229,29 @@ def place(pid: int, screen: str, wait_s: float = 30.0) -> bool:
         if mine and shown:
             addr, ws = mine[0]['address'], shown[0]
             win = f'window = "address:{addr}"'
-            if hyprland(f'/dispatch hl.dsp.window.move({{ workspace = "{ws}", {win} }})').strip() == 'ok':
-                hyprland(f'/dispatch hl.dsp.focus({{ {win} }})')
-                if not mine[0].get('fullscreen'):
-                    hyprland('/dispatch hl.dsp.window.fullscreen()')
-                time.sleep(8)
-                hyprland(f'/dispatch hl.dsp.send_shortcut({{ mods = "", key = "Shift_L", {win} }})')
-            else:
-                hyprland(f'/dispatch movetoworkspace {ws},address:{addr}')
-                hyprland(f'/dispatch focuswindow address:{addr}')
-                if not mine[0].get('fullscreen'):
-                    hyprland('/dispatch fullscreen 0')
-                time.sleep(8)
-                hyprland(f'/dispatch sendshortcut , Shift_L, address:{addr}')
+            with FOCUS:
+                if hyprland(f'/dispatch hl.dsp.window.move({{ workspace = "{ws}", {win} }})').strip() == 'ok':
+                    hyprland(f'/dispatch hl.dsp.focus({{ {win} }})')
+                    if not mine[0].get('fullscreen'):
+                        hyprland('/dispatch hl.dsp.window.fullscreen()')
+                    focus = f'/dispatch hl.dsp.focus({{ {win} }})'
+                    press = f'/dispatch hl.dsp.send_shortcut({{ mods = "", key = "Shift_L", {win} }})'
+                else:
+                    hyprland(f'/dispatch movetoworkspace {ws},address:{addr}')
+                    hyprland(f'/dispatch focuswindow address:{addr}')
+                    if not mine[0].get('fullscreen'):
+                        hyprland('/dispatch fullscreen 0')
+                    focus = f'/dispatch focuswindow address:{addr}'
+                    press = f'/dispatch sendshortcut , Shift_L, address:{addr}'
+            was = 0
+            for at in PRESS_AT_S:
+                time.sleep(at - was)
+                was = at
+                # A shortcut reaches this (XWayland) window only while it has
+                # focus: placed together, the presses found it elsewhere.
+                with FOCUS:
+                    hyprland(focus)
+                    hyprland(press)
             return True
         time.sleep(0.5)
     return False
@@ -407,6 +434,7 @@ def main(argv=None) -> int:
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f'ok  opened {view} on {a.host}' + (f' at scale {flags[0].split("=")[1]}' if flags else '')
           + (', drawing through Vulkan' if gpu else ''))
+    placing = []
     if a.vitals:
         if VITALS_VIEW not in views:
             print(f'WARNING: Kutum serves no {VITALS_VIEW} view; update Kutum for the second screen')
@@ -416,11 +444,15 @@ def main(argv=None) -> int:
                                     f'--defaultLayout={VITALS_VIEW}', url], start_new_session=True,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print(f'ok  opened {VITALS_VIEW} in its own window')
-            if not place(pad.pid, a.vitals):
-                print(f'WARNING: move the {VITALS_VIEW} window to {a.vitals} by hand '
-                      '(placing it needs Hyprland)')
-    if a.screen and not place(main_app.pid, a.screen):
-        print(f'WARNING: move the main window to {a.screen} by hand (placing it needs Hyprland)')
+            placing.append((pad.pid, a.vitals, f'the {VITALS_VIEW} window'))
+    if a.screen:
+        placing.append((main_app.pid, a.screen, 'the main window'))
+    # Both at once: each waits for its page and presses three times.
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        done = list(pool.map(lambda w: place(w[0], w[1]), placing))
+    for ok, (_, screen, what) in zip(done, placing):
+        if not ok:
+            print(f'WARNING: move {what} to {screen} by hand (placing it needs Hyprland)')
     return 0
 
 

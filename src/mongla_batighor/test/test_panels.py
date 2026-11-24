@@ -210,7 +210,7 @@ def _instruments():
             if decl:
                 topics += decl.group(1)
         names = set(re.findall(r'"(/[\w/]+)"', topics))
-        for tmpl in re.findall(r'(lockTopic|seeingTopic)\(c\)', topics):
+        for tmpl in re.findall(r'(lockTopic|seeingTopic|hudTopic)\(c\)', topics):
             names |= {f'/mongla/vision/{c}/{tmpl[:-5]}' for c in CAMERAS}
         out[name] = names
     return out
@@ -467,13 +467,19 @@ def test_the_desktop_app_takes_kutums_layout_unless_the_operator_edited_it():
                # edit. Counted as one, it kept the console off Kutum's layout
                # for good (seen on the desktop app, 2026-11-22).
                rec('hull', cam3d(2.2, 200), working={'data': cam3d(2.316, -160)}),
+               # The followed track (a global variable the Detectors panel
+               # sets) is a selection like a tab: counted as an edit, it held
+               # the pilot console on its old layout (desktop, 2026-11-24).
+               rec('tune', {'configById': {}, 'globalVariables': {'track': 0}},
+                   working={'data': {'configById': {}, 'globalVariables': {'track': 349}}}),
                # A value the file set, changed: an edit, kept.
                rec('thrust', {'configById': {'Plot!a': {'paths': [1]}}},
                    working={'data': {'configById': {'Plot!a': {'paths': [2]}}}})]
     served = {'map': {'v': 2}, 'flow': {'v': 2}, 'vision': {'v': 2}, 'mine': {'v': 2},
               'batighor': console(2, 0), 'cockpit': {'configById': {'Plot!a': {'paths': [9]}}},
               'thrust': {'configById': {'Plot!a': {'paths': [9]}}},
-              'hull': cam3d(1.3, 200)}
+              'hull': cam3d(1.3, 200),
+              'tune': {'configById': {'Plot!t': {'paths': [1]}}, 'globalVariables': {'track': 0}}}
     js = (src + '\nprocess.stdout.write(JSON.stringify(module.exports.layoutUpdates('
           + _json.dumps(records) + ',' + _json.dumps(served) + ',"now")));')
     pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
@@ -482,7 +488,9 @@ def test_the_desktop_app_takes_kutums_layout_unless_the_operator_edited_it():
                   capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     got = _json.loads(out.stdout)
-    assert [r['layout']['name'] for r in got['update']] == ['map', 'batighor', 'cockpit', 'hull']
+    assert [r['layout']['name'] for r in got['update']] == ['map', 'batighor', 'cockpit', 'hull', 'tune']
+    assert got['update'][4]['layout']['baseline']['data'] == {
+        'configById': {'Plot!t': {'paths': [1]}}, 'globalVariables': {'track': 349}}
     # Kutum's camera, not the one the panel drifted to: the file changed it.
     assert got['update'][3]['layout']['baseline']['data'] == cam3d(1.3, 200)
     assert got['update'][2]['layout']['baseline']['data'] == {

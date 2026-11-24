@@ -76,9 +76,9 @@ def test_no_label_covers_another_and_none_leaves_the_picture():
                                _det(625, 180, 28, 60, label='shark', score=0.72, track='25')),
                    tracks=_arr(_det(560, 250, 130, 210, track='13'),
                                _det(625, 180, 28, 60, label='shark', track='25')),
-                   size=size, hud=['forward  gate_sharks  640x480', 'detector 18 Hz  71 ms'])
+                   size=size)
     rects = _rects(out)
-    assert len(rects) == 4
+    assert len(rects) == 2
     for i, a in enumerate(rects):
         assert 0 <= a[0] and a[2] <= size[0] + 1e-6 and 0 <= a[1] and a[3] <= size[1], a
         for b in rects[i + 1:]:
@@ -110,20 +110,16 @@ def test_flow_pairs_are_drawn_from_anchor_to_now_on_the_frame_they_were_found_in
     assert out.texts[0].text == 'flow 2 points'
 
 
-def test_the_flow_count_sits_above_the_stats_clear_of_box_labels():
+def test_the_flow_count_sits_on_the_bottom_line_clear_of_box_labels():
     """A box at the frame's top edge has its label pinned there; the flow
-    count at the top left covered it (seen on the bench, 2026-11-12)."""
+    count at the top left covered it (seen on the bench, 2026-11-12). The
+    bottom line is free now that the camera's state is a caption."""
     from mongla_interfaces.msg import FlowTracks
 
-    from mongla_batighor.overlay import HUD_LINES, LABEL_PX, annotate, flow_annotate, hud
+    from mongla_batighor.overlay import flow_annotate
     m = FlowTracks()
     m.anchor_xy, m.now_xy = [10.0, 20.0], [12.0, 21.0]
-    lines = hud('downward', 'm', (640, 480), [], None)
-    assert len(lines) == HUD_LINES
-    stats = annotate(STAMP, None, None, None, None, None, None, (640, 480), lines)
-    top_stat = min(t.position.y for t in stats.texts)
-    y = flow_annotate(m, (640, 480)).texts[0].position.y
-    assert top_stat - (LABEL_PX + 6) <= y < top_stat and y > 240
+    assert flow_annotate(m, (640, 480)).texts[0].position.y == 472
 
 
 def test_no_pairs_draw_nothing():
@@ -287,21 +283,26 @@ def test_each_class_keeps_one_colour_and_two_classes_differ():
     assert class_colour('gate') == class_colour('gate')
 
 
-def test_the_picture_says_how_fast_and_how_late_its_boxes_are():
-    from mongla_batighor.overlay import hud
+def test_the_caption_says_how_fast_and_how_late_its_boxes_are():
+    from mongla_batighor.overlay import caption, hud
     lines = hud('forward', 'gate_sharks', (640, 480), [0.0, 0.05, 0.10, 0.15], 0.068)
     assert lines == ['forward  gate_sharks  640x480', 'detector 20 Hz  68 ms behind the frame']
     assert hud('downward', None, None, [], None) == [
         'downward  no model named  --', 'detector -- Hz  -- ms behind the frame']
-    out = annotate(STAMP, _arr(), hud=lines)
-    assert [t.text for t in out.texts] == lines
+    c = caption('forward', 'gate_sharks', (640, 480), [0.0, 0.05, 0.10, 0.15], 0.068)
+    assert (c['state'], c['rate_hz'], c['late_ms'], c['size'], c['alarm']) == \
+        ('running', 20.0, 68, [640, 480], False)
+    assert c['lines'] == lines
+    # Absence is said, never a zero: no rate from fewer than two answers.
+    assert caption('downward', None, None, [], None)['rate_hz'] is None
 
 
-def test_the_stats_sit_at_the_bottom_once_the_camera_has_said_its_size():
-    """At the top they covered the label of a box near the top edge (Kutum, 2026-11-12)."""
-    out = annotate(STAMP, _arr(), size=(640, 480), hud=['a', 'b'])
-    ys = [t.position.y for t in out.texts]
-    assert ys[-1] == 472 and ys[0] < ys[1]
+def test_the_picture_carries_no_caption():
+    """The camera's state was drawn bottom left in the picture, where it
+    covered the floor a downward box sits on (owner, 2026-11-24). It is the
+    caption under the picture now: nothing in the picture but what is seen."""
+    out = annotate(STAMP, _arr(), size=(640, 480))
+    assert not out.texts and not out.points
 
 
 def test_the_floor_read_is_drawn_as_the_grid_and_the_lane_it_says():
@@ -384,16 +385,18 @@ def test_a_silent_detector_still_lets_the_picture_show_and_says_why():
     ("Waiting for synchronized annotations") and a paused detector looked
     like a dead camera (seen on the bench, 2026-11-22). Silent past
     SILENT_S, every frame is marked by the overlay itself, saying so."""
-    from mongla_batighor.overlay import SILENT_S, hud, silence
+    from mongla_batighor.overlay import SILENT_S, caption, hud, silence
     assert silence([], 10.0, 10.0 + SILENT_S / 2) is None       # just started
     assert silence([], 10.0, 13.0) == pytest.approx(3.0)        # never answered
     assert silence([5.0, 20.0], 0.0, 20.0 + SILENT_S / 2) is None  # answering
     assert silence([5.0, 20.0], 0.0, 24.5) == pytest.approx(4.5)
     lines = hud('forward', 'gate_sharks', (640, 480), [], None, silent_s=4.6, paused=True)
-    assert len(lines) == 2                    # the flow line sits above two
     assert lines[1] == 'detector paused 5 s: it runs when a mission asks'
-    out = annotate(STAMP, size=(640, 480), hud=lines)
-    assert [t.text for t in out.texts] == lines and not out.points
+    c = caption('forward', 'gate_sharks', (640, 480), [], None, silent_s=4.6, paused=True)
+    assert (c['state'], c['silent_s'], c['alarm'], c['rate_hz']) == ('paused', 4.6, False, None)
+    # The frame is still marked, so a synchronised picture keeps showing.
+    out = annotate(STAMP, size=(640, 480))
+    assert not out.texts and not out.points
 
 
 def test_a_detector_silent_while_not_paused_is_an_alarm_not_a_pause():
@@ -401,12 +404,26 @@ def test_a_detector_silent_while_not_paused_is_an_alarm_not_a_pause():
     that died mid-mission look like a paused one, where the blank picture had
     been the warning. The overlay knows the detector's `paused`; silent and
     not paused (or no detector at all) is said in capitals, in red."""
-    from mongla_batighor.overlay import RED, hud, _color
+    from mongla_batighor.overlay import caption, hud
     stopped = hud('forward', 'm', (640, 480), [], None, silent_s=3.2, paused=False)
     assert stopped[1] == 'DETECTOR SILENT 3 s, NOT paused: stopped or stalled'
     unknown = hud('forward', 'm', (640, 480), [], None, silent_s=3.2, paused=None)
     assert unknown[1] == 'NO DETECTOR publishes forward detections (3 s)'
-    out = annotate(STAMP, size=(640, 480), hud=stopped, alarm=True)
-    assert out.texts[1].text_color == _color(RED) and out.texts[0].text_color != _color(RED)
-    calm = annotate(STAMP, size=(640, 480), hud=stopped)
-    assert calm.texts[1].text_color != _color(RED)
+    assert caption('forward', 'm', (640, 480), [], None, 3.2, paused=False)['alarm']
+    assert caption('forward', 'm', (640, 480), [], None, 3.2, paused=None)['state'] == 'none'
+    assert caption('forward', 'm', (640, 480), [], None, 3.2)['state'] == 'unread'
+    assert not caption('forward', 'm', (640, 480), [], None, 3.2, paused=True)['alarm']
+
+def test_the_track_keeps_where_the_vehicle_moved_and_forgets_the_old():
+    from mongla_batighor.overlay import TRACK_S, TRACK_STEP_M, Track, track_scene
+    tr = Track()
+    assert tr.note(0.0, 0, 0, 0, 'odom_ned')
+    assert not tr.note(0.1, TRACK_STEP_M / 2, 0, 0, 'odom_ned')      # at rest: nothing added
+    assert tr.note(1.0, 1.0, 0, 0.5, 'odom_ned')
+    (e,) = track_scene(tr, STAMP).entities
+    assert e.frame_id == 'odom_ned' and [(p.x, p.z) for p in e.lines[0].points] == [(0, 0), (1, 0.5)]
+    tr.note(TRACK_S + 0.5, 2.0, 0, 0, 'odom_ned')                    # the first point aged out
+    assert [p[1] for p in tr.points] == [1.0, 2.0]
+    tr.note(TRACK_S + 1, 0, 0, 0, 'pool')                            # a new frame starts again
+    assert tr.points == [(TRACK_S + 1, 0, 0, 0)]
+    assert not track_scene(tr, STAMP).entities[0].lines             # one point is no line

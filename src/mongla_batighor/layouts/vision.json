@@ -143,6 +143,9 @@
       },
       "lichtblickPanelTitle": "forward camera"
     },
+    "mongla.batighor.Caption!forward_caption": {
+      "camera": "forward"
+    },
     "Image!downward": {
       "imageMode": {
         "imageTopic": "/mongla/vision/downward/stream/compressed",
@@ -154,6 +157,9 @@
         "synchronize": true
       },
       "lichtblickPanelTitle": "downward camera"
+    },
+    "mongla.batighor.Caption!downward_caption": {
+      "camera": "downward"
     }
   },
   "globalVariables": {
@@ -172,8 +178,18 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "Image!forward",
-      "second": "Image!downward",
+      "first": {
+        "direction": "column",
+        "first": "Image!forward",
+        "second": "mongla.batighor.Caption!forward_caption",
+        "splitPercentage": 93.0
+      },
+      "second": {
+        "direction": "column",
+        "first": "Image!downward",
+        "second": "mongla.batighor.Caption!downward_caption",
+        "splitPercentage": 93.0
+      },
       "splitPercentage": 50.0
     },
     "second": {

@@ -12,6 +12,9 @@
       },
       "lichtblickPanelTitle": "forward camera"
     },
+    "mongla.batighor.Caption!fwd_caption": {
+      "camera": "forward"
+    },
     "Plot!align": {
       "paths": [
         {
@@ -89,7 +92,12 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "Image!fwd",
+      "first": {
+        "direction": "column",
+        "first": "Image!fwd",
+        "second": "mongla.batighor.Caption!fwd_caption",
+        "splitPercentage": 93.0
+      },
       "second": "Plot!align",
       "splitPercentage": 80.0
     },
