@@ -8,7 +8,7 @@ layout, chosen from Lichtblick's layout menu, so no one screen is crammed.
 Extending it is one edit here, never a new hand-made layout:
 - a camera added to `seat.CAMERAS` appears in every per-camera view;
 - a new sensor is one series in the view of the aspect it measures;
-- a new aspect is one function in `VIEWS`;
+- a new aspect is one function, added to the tuple that builds `VIEWS`;
 - a new instrument is one entry in `panels/instruments` and one `instrument()`.
 
 `ros2 run mongla_batighor views --write` rewrites the layouts (no argument:
@@ -73,7 +73,7 @@ def legend_px(lines) -> int:
     """The legend as wide as its longest label, never LEGEND_PX for all.
 
     LEGEND_PX holds a 13-character label whole (160 cut it): about 11.5 px a
-    character and 40 of swatch and padding. A plot labelled "gx" spent the same
+    character and 48 of swatch and padding. A plot labelled "gx" spent the same
     190 px, half a narrow column, on blank legend (2026-11-22)."""
     longest = max((len(s.get('label', '')) for s in lines), default=0)
     return max(112, min(LEGEND_PX, round(48 + 11.5 * longest)))

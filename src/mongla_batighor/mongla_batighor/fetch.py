@@ -5,8 +5,8 @@
 
 The tarball must match the hash in LICHTBLICK.json, or nothing is written.
 Source maps are left out (130 of 173 MB, and only a debugger reads them),
-and every text asset gets a gzip copy beside it so a weak link loads about a
-quarter of the bytes.
+and every text asset of a type in `_COMPRESS` and over 1 KB gets a gzip copy
+beside it, so a weak link loads about a quarter of the bytes.
 """
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def main(argv=None) -> int:
     p = pin()
     dest = web_dir(p['version'], a.home)
     if (dest / 'index.html').exists() and a.src is None:
-        print(f'ok  Lichtblick {p["version"]} already at {dest}')
+        print(f'ok  Lichtblick {p["version"]} present at {dest}; files not re-checked (--from FILE.tgz replaces it)')
         return 0
     dest.parent.mkdir(parents=True, exist_ok=True)
     src = a.src

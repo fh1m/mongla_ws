@@ -2,10 +2,11 @@
 //
 // Plain DOM and SVG, no build; panels.py puts CAMERAS and panels/common.js
 // above this file, and theme/batighor.css gives the look. Each instrument
-// names only the topics it draws, all of them small (never an image or a
-// detection stream), and redraws at most ten times a second and only when
-// something changed, plus once a second so an age keeps counting. Opening
-// one costs the vehicle almost nothing.
+// names only the topics it draws. None is an image. Most are small, but the
+// vision lock is a detection array sent once per frame, so every message is
+// folded into state as it arrives. Drawing is capped: at most ten times a
+// second, and only when something changed, plus once a second so an age keeps
+// counting. Opening one costs the vehicle almost nothing.
 //
 // To add an instrument: one entry in INSTRUMENTS (its topics, how to fold a
 // message into its state, how to draw it), and `instrument('<Name>')` in

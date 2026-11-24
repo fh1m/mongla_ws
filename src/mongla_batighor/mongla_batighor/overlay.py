@@ -23,7 +23,9 @@ Lichtblick's image panel draws them over `<cam>/stream/compressed`, the JPEG
 the camera sent, so Kutum never draws on or encodes a frame for an operator.
 
 Nothing here runs unwatched: each group subscribes only while a browser
-subscribes to what it publishes (`Watched`).
+subscribes to what it publishes (`Watched`). The one exception is the stage
+table on `/mongla/batighor/stages`: `_stages` publishes it once a second
+whether or not a browser is open.
 
 Kept out of `mongla_vision` so the vision stack does not depend on a viewer's
 message package: this is the one node that knows both.
