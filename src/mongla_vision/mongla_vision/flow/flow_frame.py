@@ -27,7 +27,8 @@ from mongla_vision.flow.flow_features import (
     suppress_caustics,
 )
 from mongla_vision.flow.flow_velocity import flow_velocity
-from .flow_constants import _FEATURE_PARAMS, _LK_PARAMS, _MIN_TRACKS, HEIGHT_STALE_S
+from .flow_constants import (_FEATURE_PARAMS, _LK_PARAMS, _MIN_TRACKS, HEADING_MAX_AGE_S,
+                             HEIGHT_STALE_S)
 # One bound for "is this position current": the localiser's own (B-126).
 from mongla_localization.localization_publish import ODOM_MAX_AGE_S
 
@@ -455,8 +456,14 @@ class FlowFrameMixin:
         # is displacement this never sees -- which is the point: the old path
         # accumulated whatever LK returned, including a covered lens.
         if self._acc.active:
-            yaw = math.radians(self._yaw_deg
-                               if getattr(self, '_acc_heading', False)
-                               and self._yaw_deg is not None else 0.0)
-            self._acc.add_body_velocity(v.vx, v.vy, yaw, dt)
+            heading = getattr(self, '_acc_heading', False)
+            fresh = (self._yaw_deg is not None
+                     and t - getattr(self, '_yaw_t', -math.inf) <= HEADING_MAX_AGE_S)
+            if heading and not fresh:
+                # A world-frame run with no current heading: this interval's
+                # travel cannot be placed, so it is left out and counted.
+                self._n_heading_gap = getattr(self, '_n_heading_gap', 0) + 1
+            else:
+                yaw = math.radians(self._yaw_deg if heading else 0.0)
+                self._acc.add_body_velocity(v.vx, v.vy, yaw, dt)
         self._publish_distance(self._acc.distance_m)
