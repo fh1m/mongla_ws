@@ -228,7 +228,10 @@ class LookupMixin:
             why.append('no detector opinion')
         elif det_age_s > self._id_det_age:
             why.append(f'detector {det_age_s:.1f}s stale')
-        elif p.label and det_class != p.label:
+        elif not p.label:
+            # Nothing to agree with: skipped and said, never "agrees".
+            why.append('reference unlabelled: detector not compared')
+        elif det_class != p.label:
             ok = False
             why.append(f'detector says {det_class!r}, bank says {p.label!r}')
         else:

@@ -16,6 +16,10 @@ class StoreMixin:
         """Write the bank to a .npz. Returns the number of references saved."""
         if not self._refs:
             raise ValueError('refusing to save an empty bank')
+        if not str(path).endswith('.npz'):
+            # numpy would add the suffix, and the count returned would be for
+            # a file that is not at the path the caller reports and loads.
+            raise ValueError(f'{path!r}: a bank file must end in .npz')
         out = {'version': np.array([self.SAVE_VERSION]),
                'count': np.array([len(self._refs)]),
                'backend_wh': np.array([self._be.w, self._be.h]),

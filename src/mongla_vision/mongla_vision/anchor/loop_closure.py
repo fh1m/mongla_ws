@@ -25,6 +25,7 @@ distribution -- ample to follow a target, useless to assert a position. The
 closure bar is 100: above the far distribution entirely, and near the middle
 of the near one.
 """
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -246,6 +247,10 @@ def consider(pose, *, ref_age_s: float, travel_m: float, ref_sigma_m: float,
     # Self-closure guards. Age and travel are separate on purpose: a vehicle
     # holding station is old but has not moved, and one that dashed away and
     # back has moved but may be seconds old.
+    if not math.isfinite(ref_age_s):
+        # A reference loaded from a saved bank was never taken this run.
+        return Closure(False, 'reference age unknown (not enrolled this run)',
+                       inliers=pose.inliers)
     if not (ref_age_s >= min_age_s):
         return Closure(False, f'reference is {ref_age_s:.1f}s old '
                               f'< {min_age_s:.0f}s -- would close on itself',
