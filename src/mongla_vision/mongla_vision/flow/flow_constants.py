@@ -188,3 +188,8 @@ _GYRO_GAIN_LENS_PIVOT = (1.058, 0.830)
 # the caller cannot see. Two seconds is the bar the earlier distance node
 # shipped with (git history), and well above ordinary depth jitter.
 HEIGHT_STALE_S = 2.0
+
+# How old the board's heading may be when a distance run places an interval
+# by it. /mongla/state publishes on change, so this is generous: a still hull
+# with a steady heading republishes rarely.
+HEADING_MAX_AGE_S = 2.0

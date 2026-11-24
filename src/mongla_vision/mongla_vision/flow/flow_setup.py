@@ -262,7 +262,9 @@ class FlowSetupMixin:
                     # Rectification off: keep the old single-focal-length
                     # behaviour so the two paths can be A/B'd, and say what it
                     # costs rather than leaving it to be discovered.
-                    k = f_water / self._intr.fx
+                    # f_water is stated for FOCAL_PARAMS_WIDTH; fx is already
+                    # scaled to this frame.
+                    k = f_water * (float(width) / FOCAL_PARAMS_WIDTH) / self._intr.fx
                     self._intr.fx *= k
                     self._intr.fy *= k
                     self._f_px = self._intr.fx
@@ -400,8 +402,13 @@ class FlowSetupMixin:
                 and math.isfinite(msg.x_m) and math.isfinite(msg.y_m)):
             self._odom_xy = None
             return
-        sig = float(msg.sigma_xy_m) if math.isfinite(msg.sigma_xy_m) else 1.0
-        self._odom_xy = (float(msg.x_m), float(msg.y_m), sig, time.monotonic())
+        # A position with no spread cannot weigh the floor's gradient; the
+        # survey's own spread is then the honest sigma, not an invented 1 m.
+        if not (math.isfinite(msg.sigma_xy_m) and msg.sigma_xy_m >= 0.0):
+            self._odom_xy = None
+            return
+        self._odom_xy = (float(msg.x_m), float(msg.y_m), float(msg.sigma_xy_m),
+                         time.monotonic())
 
     def _on_state(self, msg: MonglaState) -> None:
         """Depth, stamped when it was MEASURED rather than when it arrived.
@@ -431,8 +438,10 @@ class FlowSetupMixin:
             # clock: a depth's age is now minus when the board took it.
             self._depth_t = t
             self._depth_hist.append((t, self._depth_m))
-        if not np.isnan(msg.yaw_deg):
-            self._yaw_deg = float(msg.yaw_deg)
+        # NaN means the board has no heading now, so neither does this node:
+        # holding the last one rotated the distance by a heading nobody had.
+        self._yaw_deg = None if np.isnan(msg.yaw_deg) else float(msg.yaw_deg)
+        self._yaw_t = time.monotonic()
 
     def _on_control(self, msg: String) -> None:
         cmd = str(msg.data or '').strip().lower()

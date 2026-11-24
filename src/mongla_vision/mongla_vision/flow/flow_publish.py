@@ -126,6 +126,7 @@ class FlowPublishMixin:
                 f'yaw_img={self._last_yaw_img:+.3f} '
                 f'd={self._acc.distance_m:+.3f}m  skipped={dropped} '
                 f'median_fallback={self._n_median_fallback} '
+                f'heading_gap={getattr(self, "_n_heading_gap", 0)} '
                 # Both were counted and never surfaced. rot_anchor is how
                 # often rotation ripeness fired -- the ONLY way to tell at the
                 # pool whether the cap is doing anything (it buys intervals,
