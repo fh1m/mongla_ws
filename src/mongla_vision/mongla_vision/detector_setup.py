@@ -168,19 +168,26 @@ class DetectorSetupMixin:
         # bypasses both init paths has no such attribute, and an AttributeError
         # here would surface as an inference failure rather than as itself.
         if not getattr(self, '_extra', None):
-            return detections
+            return detections, []
         from .detection.messages import remint_class_ids
-        out = list(detections)
+        out, low = list(detections), []
         for det in self._extra:
             # Caught here, not counted: the failure counter rebuilds the
             # PRIMARY detector, and a secondary model's fault must not tear
             # down a primary that just succeeded.
             try:
-                out.extend(det.infer(frame))
+                got = det.infer(frame)
             except Exception as exc:                        # noqa: BLE001
                 self.get_logger().warning(
                     f"[DET  ] secondary model failed on this frame: {exc!r}")
-        return remint_class_ids(out)
+                continue
+            # Each model's own acting bar: its BYTE boxes are association-only,
+            # on `candidates`, never on `detections` (vl_8 F1).
+            act = getattr(det, 'acting_conf', lambda: float('-inf'))()
+            out.extend(d for d in got if d.score >= act)
+            low.extend(d for d in got if d.score < act)
+        both = remint_class_ids(out + low)
+        return both[:len(out)], both[len(out):]
 
     def _load_single_model_async(self, *, model_path, device, conf, iou, imgsz, half, max_det, allowlist):
         """Background thread: load the detector, then go live. Node subscribes before this runs."""
