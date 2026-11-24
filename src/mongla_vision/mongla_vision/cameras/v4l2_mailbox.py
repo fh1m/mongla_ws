@@ -315,7 +315,19 @@ class V4L2MailboxCamera(Camera):
         self._fd = os.open(str(device), os.O_RDWR)
         try:
             self._negotiate(width, height, fps, fourcc)
+            if self._fourcc not in ('MJPG', 'YUYV'):
+                # Anything else decoded as YUYV is garbage or nothing, every
+                # frame, with the camera reading healthy (vl_7 M1).
+                raise ValueError(f'v4l2: {device!r} granted {self._fourcc!r}; '
+                                 f'only MJPG and YUYV are decoded')
             self.auto_mode = self._default_control('auto_exposure')
+            if self.auto_mode is not None and not any(
+                    k in self._controls_asked
+                    for k in ('auto_exposure', 'exposure_time_absolute')):
+                # Exposure 0 is "the camera's own auto": said at open too, or
+                # a run that died in manual leaves the next one there (M3).
+                self._controls_asked = {**self._controls_asked,
+                                        'auto_exposure': int(self.auto_mode)}
             self.set_controls(self._controls_asked)
             self._map_buffers()
             self._streamon()
@@ -370,6 +382,7 @@ class V4L2MailboxCamera(Camera):
         self._store_age_max = 0.0
         self._last_seq = None
         self._consec_fail = 0
+        self._decode_fail = 0
         self._qbuf_warned = False
         self._last_ok = time.monotonic()
         self._idx = 0
@@ -702,8 +715,11 @@ class V4L2MailboxCamera(Camera):
 
         frame = self._decoder(payload)
         if frame is None:
+            # Counted: a source that never decodes is not healthy (vl_7 M4).
+            self._decode_fail += 1
             meta.fresh = False
             return None, meta
+        self._decode_fail = 0
 
         self._served = seq
         self._idx += 1
@@ -742,6 +758,7 @@ class V4L2MailboxCamera(Camera):
         return (not self._stop.is_set()
                 and self._clock_monotonic is not False
                 and self._consec_fail < 30
+                and getattr(self, '_decode_fail', 0) < 30
                 and (time.monotonic() - self._last_ok) < 2.0)
 
     @property
@@ -763,23 +780,34 @@ class V4L2MailboxCamera(Camera):
             'captured': self._captured,
             'dropped_by_driver': self._dropped_by_driver,
             'skipped_to_newest': self._skipped,
-            'store_age_ms': (1000.0 * self._store_age_sum
-                             / max(self._captured, 1)),
-            'store_age_max_ms': 1000.0 * self._store_age_max,
+            # NaN before the first frame: there is no age yet (vl_7 M7).
+            'store_age_ms': (1000.0 * self._store_age_sum / self._captured
+                             if self._captured else float('nan')),
+            'store_age_max_ms': (1000.0 * self._store_age_max
+                                 if self._captured else float('nan')),
             'stamp_source': self._stamp_source,
             'clock_monotonic': self._clock_monotonic,
             'controls': dict(getattr(self, 'controls', {})),
         }
 
     def close(self) -> None:
+        # Idempotent: a second close would close whatever reused the number
+        # (vl_7 M6). STREAMOFF first, which wakes a pump blocked in DQBUF;
+        # the buffers are unmapped only once it has stopped (M5).
+        if getattr(self, '_fd', None) is None:
+            return
         self._stop.set()
-        if self._pump.is_alive():
-            self._pump.join(timeout=1.0)
         try:
             t = ctypes.c_int(V4L2_BUF_TYPE_VIDEO_CAPTURE)
             fcntl.ioctl(self._fd, VIDIOC_STREAMOFF, t)
         except OSError:
             pass
+        if self._pump.is_alive():
+            self._pump.join(timeout=1.0)
+        if self._pump.is_alive():
+            # Still inside an ioctl on these buffers: leaking them is safe,
+            # unmapping them under it is not.
+            return
         for m in getattr(self, '_maps', []):
             try:
                 m.close()
@@ -789,3 +817,4 @@ class V4L2MailboxCamera(Camera):
             os.close(self._fd)
         except OSError:
             pass
+        self._fd = None
