@@ -56,7 +56,8 @@ vehicle's numbers and attitude over the Vision panel and the lock authority it h
 - **Control Center**: STOP, SURFACE and DISARM first and pinned, for anyone, one press,
   one row of three keys sized by the panel's width, each saying under its name what
   it does (hold here; go up, stay up; motors off). Below them the helm (a name, then
-  Request, Give, Release), arming behind two ticks, every verb with its own fields,
+  Request, Give, Release), arming behind two ticks, every verb with its own fields or typed
+  as the CLI takes it (`$ move_forward --duration 3`),
   missions, and the log: every press at the helm (the last 200 lines, kept on Kutum and
   sent whole to a browser that joins late) merged by time with every node's warnings and
   errors from `/rosout` (a node that repeats itself, digits aside, keeps one line with a

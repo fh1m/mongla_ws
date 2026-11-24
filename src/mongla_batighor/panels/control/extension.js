@@ -60,6 +60,45 @@ const PARTS = {
 const TITLE = { ControlCenter: "Control Center", Detectors: "Detectors", Keys: "Keys", Command: "Command",
   HelmLog: "Helm log" };
 
+// A typed verb line, in the `mongla` CLI's own grammar (cli.py):
+// `<verb> --field value ...`, booleans as true/false/1/0/yes/no/on/off.
+// Checked here against the same verb table before it is sent, and the helm
+// checks again. `arm` is refused on the line: its two ticks are the Arm
+// button's. `head` is the CLI's, resolved there from the live heading; here
+// it is refused rather than sent as a word.
+const TRUE = ["1", "true", "t", "yes", "y", "on"], FALSE = ["0", "false", "f", "no", "n", "off"];
+function parseVerbLine(line, verbs) {
+  const words = String(line || "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return { error: "type a verb, e.g. move_forward --duration 3" };
+  const [cmd, ...rest] = words;
+  const v = verbs[cmd];
+  if (!v) return { error: `no verb ${cmd}; the list is in the Send menu` };
+  if (cmd === "arm") return { error: "arm is the Arm... button: it asks for the propellers and the kill switch" };
+  const fields = {};
+  for (let i = 0; i < rest.length; i += 2) {
+    const flag = rest[i];
+    if (!flag.startsWith("--")) return { error: `${flag}: fields are --name value` };
+    const f = flag.slice(2), kind = v.fields[f];
+    if (!kind) return { error: `${cmd} has no field ${f}; it has ${Object.keys(v.fields).join(", ") || "none"}` };
+    const raw = rest[i + 1];
+    if (raw === undefined) return { error: `--${f} has no value` };
+    if (kind === "boolean") {
+      const w = raw.toLowerCase();
+      if (!TRUE.includes(w) && !FALSE.includes(w)) return { error: `--${f} is true or false, not ${raw}` };
+      fields[f] = TRUE.includes(w);
+    } else if (kind === "string") fields[f] = raw;
+    else {
+      if (raw.toLowerCase() === "head") return { error: `--${f} head is the CLI's (it reads the heading there); type the degrees` };
+      const x = Number(raw);
+      if (!Number.isFinite(x)) return { error: `--${f} is a number, not ${raw}` };
+      fields[f] = x;
+    }
+  }
+  const missing = Object.keys(v.fields).filter((f) => !(f in v.defaults) && !(f in fields));
+  if (missing.length) return { error: `${cmd} needs ${missing.map((f) => `--${f}`).join(" ")}` };
+  return { cmd, fields };
+}
+
 function initPanel(context, kind = "ControlCenter") {
   const parts = PARTS[kind];
   if (typeof context.setDefaultPanelTitle === "function") context.setDefaultPanelTitle(TITLE[kind]);
@@ -180,6 +219,30 @@ function initPanel(context, kind = "ControlCenter") {
     },
   }, "Send");
 
+  // -- the same, typed: the CLI's grammar, Enter sends, arrows recall --
+  const typed = el("input", { class: "cli", placeholder: "move_forward --duration 3 --gain 60", spellcheck: "false" });
+  const typedSays = el("div", { class: "note" });
+  const recall = [];
+  let back = 0;
+  typed.addEventListener("keydown", async (e) => {
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      if (!recall.length) return;
+      back = Math.max(0, Math.min(recall.length, back + (e.key === "ArrowUp" ? 1 : -1)));
+      typed.value = back ? recall[recall.length - back] : "";
+      e.preventDefault();
+      return;
+    }
+    if (e.key !== "Enter") return;
+    const got = parseVerbLine(typed.value, VERBS);
+    if (got.error) { typedSays.textContent = got.error; typedSays.className = "note bad"; return; }
+    recall.push(typed.value.trim());
+    back = 0;
+    typedSays.textContent = `sent: ${got.cmd} ${JSON.stringify(got.fields)}`;
+    typedSays.className = "note";
+    const res = await call("command", { cmd: got.cmd, fields_json: JSON.stringify(got.fields) });
+    if (res && res.ok) typed.value = "";
+  });
+
   // -- missions -------------------------------------------------------
   const mPick = el("select");
   const bStart = el("button", { class: "go", onclick: () => call("mission", { mission: mPick.value }) }, "Start");
@@ -253,7 +316,8 @@ function initPanel(context, kind = "ControlCenter") {
   }
   if (has("command")) {
     const cVerb = card(box, "command", "pilot only");
-    cVerb.append(el("div", { class: "row" }, bArm, pick, bSend), help, fields);
+    cVerb.append(el("div", { class: "row" }, bArm, pick, bSend), help, fields,
+      el("div", { class: "row" }, el("span", { class: "prompt" }, "$"), typed), typedSays);
   }
   if (has("mission")) {
     const cMission = card(box, "mission");
@@ -295,7 +359,7 @@ function initPanel(context, kind = "ControlCenter") {
     bRequest.disabled = !named || mine;
     bGive.disabled = !mine || !helm.asker;
     bRelease.disabled = !mine;
-    bArm.disabled = bSend.disabled = bStart.disabled = !mine;
+    bArm.disabled = bSend.disabled = bStart.disabled = typed.disabled = !mine;
     bAbort.disabled = !helm.mission;            // like stop: anyone may end a mission
     for (const b of camButtons) {
       b.disabled = !mine;
@@ -429,7 +493,7 @@ function foldNodeLog(list, e) {
 }
 
 module.exports = {
-  foldNodeLog, logLine,
+  foldNodeLog, logLine, parseVerbLine,
   activate(extensionContext) {
     for (const name of Object.keys(PARTS)) {
       extensionContext.registerPanel({ name, initPanel: (context) => initPanel(context, name) });
