@@ -510,7 +510,7 @@ def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
     cells = {k: (v, lvl) for k, v, lvl in got['cells']}
     assert cells['lock'] == ('forward held', 'live')
     assert cells['health'] == ('1 unknown', 'stale')
-    assert cells['vehicle'] == ('ARMED', 'armed') and cells['depth'][0] == '1.20 m'
+    assert cells['vehicle'] == ('ARMED', 'armed') and cells['depth'][0] == '1.20 m deep'
     assert got['tabs']['Cockpit'] == 'live' and got['tabs']['Vision'] == 'live'
     # A view whose feed has gone quiet (a starved link, 2026-11-23) must not
     # read as calm: the last word stays, with its age, as a warning.

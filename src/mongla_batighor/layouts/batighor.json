@@ -403,14 +403,12 @@
         {
           "value": "/mongla/vision/downward/velocity.twist.twist.linear.x",
           "label": "flow vx m/s",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+          "enabled": true
         },
         {
           "value": "/mongla/vision/downward/velocity.twist.twist.linear.y",
           "label": "flow vy m/s",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+          "enabled": true
         },
         {
           "value": "/mongla/odom.twist.twist.linear.x",
@@ -756,7 +754,7 @@
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "body rates"
+      "lichtblickPanelTitle": "body rates, rad/s"
     },
     "Plot!board_health.depthyaw": {
       "paths": [
@@ -819,7 +817,7 @@
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "gyro"
+      "lichtblickPanelTitle": "gyro, rad/s"
     },
     "mongla.batighor.Health!board_health.health": {},
     "mongla.batighor.Kutum!board_health.kutum": {},

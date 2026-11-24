@@ -8,7 +8,7 @@ layout, chosen from Lichtblick's layout menu, so no one screen is crammed.
 Extending it is one edit here, never a new hand-made layout:
 - a camera added to `seat.CAMERAS` appears in every per-camera view;
 - a new sensor is one series in the view of the aspect it measures;
-- a new aspect is one function in `VIEWS`;
+- a new aspect is one function, added to the tuple that builds `VIEWS`;
 - a new instrument is one entry in `panels/instruments` and one `instrument()`.
 
 `ros2 run mongla_batighor views --write` rewrites the layouts (no argument:
@@ -48,8 +48,8 @@ LABEL_CHARS = 13
 TITLES = {'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'anchor (XFeat)',
           'align': 'pixel error', 'ladder': 'lock ladder', 'calibration': 'velocity scale',
           'quality': 'flow quality and heights', 'vel': 'velocity',
-          'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates',
-          'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops',
+          'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates, rad/s',
+          'depthyaw': 'depth', 'gyro': 'gyro, rad/s', 'bytes': 'bytes per second', 'drops': 'board drops',
           'forward': 'forward camera', 'downward': 'downward camera', 'hull': 'attitude',
           'nav': 'odometry, 3D', 'down': 'downward camera', 'graph': 'nodes and topics: the diamond at the right, "No topics", draws nodes only',
           'topics': 'every topic, its type and rate', 'raw': 'one message, whole',
@@ -73,7 +73,7 @@ def legend_px(lines) -> int:
     """The legend as wide as its longest label, never LEGEND_PX for all.
 
     LEGEND_PX holds a 13-character label whole (160 cut it): about 11.5 px a
-    character and 40 of swatch and padding. A plot labelled "gx" spent the same
+    character and 48 of swatch and padding. A plot labelled "gx" spent the same
     190 px, half a narrow column, on blank legend (2026-11-22)."""
     longest = max((len(s.get('label', '')) for s in lines), default=0)
     return max(112, min(LEGEND_PX, round(48 + 11.5 * longest)))
@@ -299,8 +299,8 @@ def flow(v: View):
                           v('tracks', plot(series(f'{d}/distance_debug.data[2]', 'tracks',
                                                   True))))))),
         (38, col(
-            (3, v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s', True),
-                               series(f'{d}/velocity.twist.twist.linear.y', 'flow vy m/s', True),
+            (3, v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s'),
+                               series(f'{d}/velocity.twist.twist.linear.y', 'flow vy m/s'),
                                series('/mongla/odom.twist.twist.linear.x', 'filter vx m/s'),
                                series('/mongla/odom.twist.twist.linear.y', 'filter vy m/s')))),
             (3, v('calibration', states(series(f'{d}/flow_calibration.data', 'scale from',

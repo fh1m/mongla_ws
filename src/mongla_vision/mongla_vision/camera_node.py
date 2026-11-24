@@ -97,7 +97,7 @@ class CameraNode(Node):
         `wants_frame()` and `submit_frame(frame, header)`. When present the
         decoded frame is handed to it directly, skipping the serialise, the
         transport and the second decode. The image topic is still published,
-        because the HUD, Batighor and any recorder read it; composition takes
+        because the HUD, the detector and any recorder read it; composition takes
         the topic out of the CONTROL path, it does not delete it.
         """
         super().__init__(node_name,

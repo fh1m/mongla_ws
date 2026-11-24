@@ -517,7 +517,8 @@ def generate_launch_description():
     )
 
     # The same file's `nodes:` section: node parameters, applied to every node
-    # below. Each node refuses a key it does not declare.
+    # below. The nodes of this stack refuse a key they do not declare; the web
+    # server and the Lichtblick bridge are not ours, and drop one silently.
     params = launch_defaults.node_actions()
 
     return LaunchDescription(args + file_note + params + [

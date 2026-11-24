@@ -292,7 +292,7 @@ def test_the_picture_says_how_fast_and_how_late_its_boxes_are():
     lines = hud('forward', 'gate_sharks', (640, 480), [0.0, 0.05, 0.10, 0.15], 0.068)
     assert lines == ['forward  gate_sharks  640x480', 'detector 20 Hz  68 ms behind the frame']
     assert hud('downward', None, None, [], None) == [
-        'downward  no model named  --', 'detector -- Hz  -- ms behind the frame']
+        'downward  model unknown  --', 'detector -- Hz  -- ms behind the frame']
     out = annotate(STAMP, _arr(), hud=lines)
     assert [t.text for t in out.texts] == lines
 
@@ -371,11 +371,12 @@ def test_two_boxes_on_one_thing_each_name_the_track_that_follows_it():
                                _det(100, 100, 40, 40, label='fire', track='783')))
     texts = sorted(t.text for t in out.texts)
     assert texts == ['fire 0.50 #785', 'fire 0.51 #783'], texts
-    # A third track with no box of its own still shows, as coasting.
+    # A second track over the same box, which the first holds, is not coasting:
+    # it is left off rather than drawn grey on a detection.
     out = annotate(STAMP, _arr(_det(100, 100, 40, 40, label='fire')),
                    tracks=_arr(_det(100, 100, 40, 40, label='fire', track='1'),
                                _det(103, 103, 40, 40, label='fire', track='2')))
-    assert sorted(t.text for t in out.texts) == ['#2 fire coasting', 'fire 0.80 #1']
+    assert sorted(t.text for t in out.texts) == ['fire 0.80 #1']
 
 
 def test_a_silent_detector_still_lets_the_picture_show_and_says_why():
