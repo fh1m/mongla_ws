@@ -37,8 +37,9 @@ MIN_PREDICT_DT_S = 1e-4
 # roughly twice the observed noise floor -- tight enough to exclude a slow
 # yaw, loose enough not to be tripped by the sensor itself.
 STILL_GYRO_RAD_S = 0.02
-# Peak-to-peak of |specific force| over the window. Gravity is included in the
-# reading, so a tilted hull shows a large CONSTANT; only variation is motion.
+# Per-axis peak-to-peak of the body acceleration over the window, gravity
+# removed with the board attitude when there is one (see `_on_imu`). Only
+# variation is motion.
 STILL_ACCEL_SPREAD = 0.25          # m/s^2
 IMU_HZ = 50                        # ATTITUDE and SCALED_IMU2, pinned (measured-bars: 51.6 Hz)
 STILL_WINDOW = IMU_HZ              # 1.0 s

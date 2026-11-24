@@ -247,10 +247,10 @@ class AnchorMixin:
         self._anchor_inliers = int(bp.inliers)
         self._anchor_gray = job.gray
         # The frame this pose was fitted to. The anchor runs at
-        # 3 Hz while this loop runs at frame rate, so between
-        # evaluations the pose below is REUSED -- up to 333 ms old
+        # `anchor_hz` (4.5 by default) while this loop runs at frame rate, so between
+        # evaluations the pose below is REUSED -- up to one anchor period old
         # -- and publishing it under the current frame's stamp
-        # would report a third of a second of staleness as ~18 ms.
+        # would report a whole anchor period of staleness as ~18 ms.
         # That defeats the freshness machinery precisely on the
         # rung it exists to protect, and only on that rung, so it
         # looks correct whenever a detection is present.

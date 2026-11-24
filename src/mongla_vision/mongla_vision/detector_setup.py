@@ -397,10 +397,10 @@ class DetectorSetupMixin:
                 f'{", ".join(fixed)}: read once at startup -- set it under '
                 f'`nodes:` in bringup.yaml and restart. Live here: '
                 f'{", ".join(LIVE_PARAMS)}'))
-        # rclpy rejects the whole set when this says no, so every refusal is
-        # decided before anything moves: first the checks that need nothing
-        # applied, then the NMS (the one change only a model can refuse), and
-        # only then the changes that cannot fail.
+        # rclpy rejects the whole set when this says no, so the checks that
+        # need nothing applied run first. NMS is the one change a model can
+        # refuse, and across several models it is not all or nothing (see
+        # `_apply_nms`); the changes that cannot fail come last.
         why = self._live_refusal(params)
         if why:
             return SetParametersResult(successful=False, reason=why)

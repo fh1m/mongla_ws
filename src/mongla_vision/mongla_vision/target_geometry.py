@@ -305,9 +305,9 @@ def _candidate_dirs():
 def width_for(class_name: str, competition: str = '') -> float:
     """True width in metres of what the detector boxes for `class_name`.
 
-    0.0 when unknown — never a guess. `target_pose` already refuses on a
-    non-positive width with a stated reason, so an unlisted class degrades to
-    exactly the behaviour it has today rather than to a confident wrong range.
+    0.0 when unknown — never a guess. The lock publishes no pose for a
+    non-positive width, so an unlisted class gives no pose rather than a
+    confident wrong range.
 
     `competition` narrows the lookup; empty searches all and requires the name
     to be unambiguous. A class defined differently in two competitions with the

@@ -102,8 +102,7 @@ def main():
     # exact move that produced `recommend()`. Each line above already prints
     # the references beside the measurement; the reader can see where they sit
     # without this file inventing a number to say it.
-    print('\n    preprocessing is OFF on this vehicle and measured never to '
-          'help -- see mongla_vision/underwater.py\n')
+    print('\n    preprocessing is not read by this check -- see mongla_vision/underwater.py\n')
     return 0
 
 

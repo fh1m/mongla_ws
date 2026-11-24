@@ -490,11 +490,11 @@ class RIEKF:
         0.109 m.
 
         The threshold sits in a narrow band and that is deliberate, not
-        sloppy. A cold filter's own sigma_vel is `sqrt(3) * P0_velocity` =
-        0.866, so the gate must exceed that or it fires on construction and
+        sloppy. A cold filter's horizontal sigma_vel is `sqrt(2) * P0_velocity` =
+        0.707, so the gate must exceed that or it fires on construction and
         refuses everything. And it must be under about 1.2, because the damage
         lands within a fraction of a second: a gate at 1.5 already lets through
-        enough to reach 377 m. The usable band is roughly 0.87 .. 1.2 and 1.0
+        enough to reach 377 m. The usable band is roughly 0.71 .. 1.2 and 1.0
         sits in it. `test_the_gate_clears_a_cold_filter` fails if P0_velocity is
         ever raised past it, rather than leaving that as a comment nobody reads.
 

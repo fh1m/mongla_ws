@@ -22,7 +22,7 @@ plausible number and no warning, and both were already documented in
 
   1. **Optics.** Underwater a flat port is not a pinhole. Rectified points must
      be solved against the RECTIFIED K -- mixing them leaves a clean 1/n scale
-     error, every range 33 % short. The message states which optics its pixels
+     error, every range about 25 % short. The message states which optics its pixels
      are in and an unset value is REFUSED, never assumed.
   2. **Resolution.** The anchor matches in its backend's pixels, not the
      camera's full frame, while CameraInfo describes the full frame. The

@@ -175,9 +175,9 @@ def usable_height_m(focal_px: float, tile_m: float, frame_px: int) -> tuple:
     Worked, at our measured downward focal length of 1027.9 px in a 480 px
     frame:
 
-        0.150 m tile  ->  usable ABOVE 2.0 m     (a pool floor is rarely that far)
-        0.050 m tile  ->  usable 0.67 m .. 8.6 m
-        0.025 m tile  ->  usable 0.33 m .. 4.3 m  (mosaic tile: the good case)
+        0.150 m tile  ->  usable 1.6 m .. 26 m  (a low-altitude run is outside it)
+        0.050 m tile  ->  usable 0.54 m .. 8.6 m
+        0.025 m tile  ->  usable 0.27 m .. 4.3 m  (mosaic tile: the good case)
 
     So the capability is a function of the VENUE's tile size, and a big-tile
     pool at low altitude is outside it. Measure the tile on deck and read this

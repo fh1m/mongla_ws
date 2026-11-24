@@ -48,7 +48,7 @@ class VisionStatus:
     elapsed:       float
 
 
-# Cache so missions don't pay the wait twice. Key = (process id, camera).
+# Cache so missions don't pay the wait twice. Key = the id() of the VisionState object.
 _PREFLIGHT_CACHE: dict = {}
 
 

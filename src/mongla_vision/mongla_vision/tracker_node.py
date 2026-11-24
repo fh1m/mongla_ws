@@ -117,7 +117,7 @@ def kalman_pass(kalman, tracked, frame_t):
             continue
 
     `is_expired()` reads `predict_s`, which resets ONLY inside `smooth()`
-    (`kalman.py:83`) -- which the `continue` skipped. And `prune()` only drops
+    (`PerTrackKalman.step`, kalman.py:143) -- which the `continue` skipped. And `prune()` only drops
     filters whose id is ABSENT from `tracked`. So once a filter expired while
     the backend still held the id, a returning target with that id was
     suppressed **for ever**: it could never reach the one call that would

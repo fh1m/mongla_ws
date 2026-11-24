@@ -3,18 +3,18 @@
 render_ui_strip() assembles the complete strip as a new numpy array.
 Layout (top -> bottom):
 
-  Row 1  h=26*sf   Header bar: "MONGLA"  FPS  LIVE/VIDEO badge
-  Row 2  h=40*sf   ERR_X and ERR_Y needle gauges (full-width, each half)
-  Row 3  h=120*sf  Three proportional columns (each w//3):
+  Row 1  h=22*sf   Header bar: "MONGLA"  FPS  LIVE/VIDEO badge
+  Row 2  h=32*sf   ERR_X and ERR_Y needle gauges (full-width, each half)
+  Row 3  h=100*sf  Three proportional columns (each w//3):
                      Left   PERCEPTION panel + CLASSES panel stacked
                      Middle ALIGNMENT panel (full column height)
                      Right  ERR_X sparkline / ERR_Y sparkline / CONF bar
-  Row 4  h=88*sf   Three proportional zones:
+  Row 4  h=76*sf   Three proportional zones:
                      A ~13%  compass rose + yaw-source label
                      B ~55%  STATE panel (depth, yaw, mode, armed, battery)
                      D ~32%  full-width altimeter depth gauge
-  Row 5  h=26*sf   Full-width heading tape
-  Row 6  h=26*sf   Live: pipeline health row  |  Video: progress bar
+  Row 5  h=22*sf   Full-width heading tape
+  Row 6  h=22*sf   Live: pipeline health row  |  Video: progress bar
   ──────────────────────────────────────────────────────────────────────
   Base  274px  at 1920px render width (sf=1.0)
   All row heights scale with sf = max(0.6, render_width / 1920).

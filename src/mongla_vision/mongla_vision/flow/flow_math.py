@@ -440,11 +440,11 @@ class HeightFromDivergence:
     `scale_rate` -- the divergence of the flow field, which for a downward
     camera is the rate the floor grows in the image. Geometrically:
 
-        scale_rate = -vz / h            (descending -> closer -> scale grows)
+        scale_rate = vz / h             (descending -> closer -> scale grows)
 
     and the barometer measures `vz` directly and independently. So:
 
-        h = -vz / scale_rate
+        h = vz / scale_rate
 
     That is a height measured by the CAMERA, cross-checked against a
     barometer, with no pool depth in it at all. Both quantities are already
