@@ -53,6 +53,21 @@ def _num(v, fmt):
     return '--' if v is None or (isinstance(v, float) and math.isnan(v)) else fmt % v
 
 
+def accepted_entry(future, cmd: str, fields_json: str) -> dict:
+    """The log entry for the manager's answer to one goal."""
+    try:
+        handle = future.result()
+    except Exception as exc:                 # noqa: BLE001 -- said, not raised
+        return dict(op='command', cmd=cmd, fields=fields_json, ok=False,
+                    message=f'no answer from the manager: {exc}')
+    if handle is None or not handle.accepted:
+        return dict(op='command', cmd=cmd, fields=fields_json, ok=False,
+                    message='refused by the manager (another verb running, or a '
+                            'safety latch)')
+    return dict(op='command', cmd=cmd, fields=fields_json, ok=True,
+                message='accepted by the manager')
+
+
 def render(width: int, vehicle, helm: dict, log_lines: list, prompt: str = '') -> list:
     """The screen as lines of at most `width` characters.
 
@@ -62,7 +77,10 @@ def render(width: int, vehicle, helm: dict, log_lines: list, prompt: str = '') -
     if vehicle is None:
         v = 'vehicle  --   no /mongla/state yet'
     else:
-        v = (f"vehicle  {'ARMED' if vehicle.armed else 'disarmed'}  "
+        # `armed` is a bool with no "unknown"; the manager fills it and the
+        # mode from the same heartbeat, so no mode means no arm state yet.
+        arm = ('ARMED' if vehicle.armed else 'disarmed') if vehicle.mode else '--'
+        v = (f"vehicle  {arm}  "
              f"{vehicle.mode or '--'}  depth {_num(vehicle.depth_m, '%.2f m')}  "
              f"heading {_num(vehicle.yaw_deg, '%.0f')}  "
              f"battery {_num(vehicle.battery_voltage, '%.1f V')}")
@@ -78,14 +96,19 @@ def render(width: int, vehicle, helm: dict, log_lines: list, prompt: str = '') -
         except ValueError:
             lines.append(raw)
             continue
-        when = time.strftime('%H:%M:%S', time.localtime(e.get('t', 0)))
+        t = e.get('t')
+        when = (time.strftime('%H:%M:%S', time.localtime(t))
+                if isinstance(t, (int, float)) else '--:--:--')
         who = e.get('operator') or ''
         if 'event' in e:
             text = e['event']
         else:
             text = ' '.join(x for x in (e.get('op', ''), e.get('cmd', ''),
                                         e.get('mission', '')) if x)
-            text += '  ok' if e.get('ok') else f"  REFUSED: {e.get('message', '')}"
+            if e.get('ok') is None:
+                text += f"  {e.get('message', '')}"
+            else:
+                text += '  ok' if e.get('ok') else f"  REFUSED: {e.get('message', '')}"
         lines.append(f"{when} {who:>8}  {text}")
     lines.append('-' * width)
     lines.append(prompt or 's stop   u surface   d disarm   : verb   q quit')
@@ -139,9 +162,15 @@ def main(args=None):
                 self.record(op='command', cmd=cmd, ok=False,
                             message='the manager is not answering /mongla/move')
                 return
-            self.move.send_goal_async(goal)
-            self.record(op='command', cmd=cmd, fields=fields_json, ok=True,
+            # Sent is not accepted: the manager refuses a verb while another
+            # runs or a safety latch holds. The outcome is logged when it comes.
+            self.move.send_goal_async(goal).add_done_callback(
+                lambda f, c=cmd, fj=fields_json: self.accepted(f, c, fj))
+            self.record(op='command', cmd=cmd, fields=fields_json, ok=None,
                         message='sent from the terminal')
+
+        def accepted(self, future, cmd, fields_json):
+            self.record(**accepted_entry(future, cmd, fields_json))
 
     from mongla_runtime.params_file import refuse_unknown
     from mongla_runtime.spin import spin

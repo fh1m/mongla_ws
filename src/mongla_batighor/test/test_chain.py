@@ -43,10 +43,10 @@ def test_a_stage_that_sent_nothing_is_absent_and_an_old_one_goes_quiet():
     m = chain.ChainMeter(window_s=5.0)
     _feed(m, 'lock:forward', 30.0, 0.02, 100.0, 101.0)
     s = m.summary(110.0)                        # nothing for 9 s
-    assert s['lock:forward']['hz'] == 0.0
+    assert s['lock:forward']['hz'] is None          # absent, never 0
     assert s['lock:forward']['age_ms_p50'] is None
     assert s['lock:forward']['last_s'] == pytest.approx(9.0, abs=0.05)
-    assert 'demand' not in s or s['demand']['hz'] == 0.0
+    assert 'demand' not in s or s['demand']['hz'] is None
 
 
 def test_every_registry_row_says_where_its_time_comes_from():
@@ -143,3 +143,15 @@ def test_a_stage_silent_by_design_says_when_it_speaks():
     js = (pathlib.Path(__file__).resolve().parents[1] / 'panels' / 'instruments'
           / 'extension.js').read_text()
     assert 'r.idle' in js, 'the panel must show the reason'
+
+
+def test_one_message_has_no_rate_and_a_wall_step_keeps_the_window():
+    """One sample gave 0 Hz and read as silent; the window ran on the wall
+    clock, which steps on the Pi at NTP sync (audit 2026-11-24)."""
+    m = chain.ChainMeter(window_s=5.0)
+    m.note('command', None, 10.0)
+    assert m.summary(10.1)['command']['hz'] is None
+    m = chain.ChainMeter(window_s=5.0)
+    for i, wall in enumerate((1000.0, 1000.1, 900.2, 900.3)):   # wall steps back
+        m.note('x', None, wall, at_s=50.0 + 0.1 * i)
+    assert m.summary(50.35)['x']['hz'] == pytest.approx(10.0, rel=0.01)

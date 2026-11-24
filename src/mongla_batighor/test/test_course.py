@@ -81,3 +81,13 @@ def test_the_node_follows_a_mission_course_and_an_edited_file(tmp_path, monkeypa
         probe.destroy_node()
     finally:
         rclpy.shutdown()
+
+
+@pytest.mark.parametrize('body', ['pool: {depth_m: 2\n\tbad: 1}\n', 'props: [a, b]\n'])
+def test_a_broken_course_file_is_refused_not_a_crash(tmp_path, monkeypatch, body):
+    # YAMLError and a list-shaped `props:` escaped read() and killed the node,
+    # leaving the map on the last good pool (audit 2026-11-24).
+    monkeypatch.setenv(cm._ENV, str(tmp_path))
+    (tmp_path / 'broken.yaml').write_text(body)
+    doc, src = course.read('broken')
+    assert src == '' and doc['error']

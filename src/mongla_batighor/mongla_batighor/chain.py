@@ -6,7 +6,9 @@ and, where the message carries a stamp, takes `seen - stamp` (the age): how
 old that stage's data is by the time anyone downstream can use it.
 
 Every stamp here is on the host wall clock, which is what makes the ages
-comparable down the chain: camera frames are stamped at capture, detections,
+comparable down the chain: camera frames are stamped at capture (by the
+kernel on the vehicle; a video-file or ROS-topic bench source stamps when it
+hands the frame over, so its frame age is about 0), detections,
 tracks and the lock carry the stamp of the frame they describe, the demand is
 stamped when it is sent, and the board's IMU is stamped on the board's clock
 mapped onto the host (`ClockMap`). That last map is fitted from arrival pairs,
@@ -104,12 +106,17 @@ class ChainMeter:
         self.window_s = float(window_s)
         self._seen = collections.defaultdict(lambda: collections.deque(maxlen=_KEEP))
 
-    def note(self, key: str, stamp_s, seen_s: float) -> None:
-        """One message of `key`, stamped `stamp_s` (None: no stamp), seen at `seen_s`."""
+    def note(self, key: str, stamp_s, seen_s: float, at_s=None) -> None:
+        """One message of `key`, stamped `stamp_s` (None: no stamp), seen at `seen_s`.
+
+        `seen_s` is wall time, to age the wall-clock stamp; `at_s` (default
+        `seen_s`) is the window's clock, monotonic on the vehicle, because the
+        Pi's wall clock steps when NTP syncs and a step unsorts the window.
+        """
         age = None
         if stamp_s is not None and stamp_s > 0.0:
             age = (seen_s - stamp_s) * 1000.0
-        self._seen[key].append((seen_s, age))
+        self._seen[key].append((seen_s if at_s is None else at_s, age))
 
     def summary(self, now_s: float) -> dict:
         out = {}
@@ -122,7 +129,8 @@ class ChainMeter:
             span = (recent[-1][0] - recent[0][0]) if n > 1 else 0.0
             out[key] = {
                 'n': n,
-                'hz': ((n - 1) / span) if span > 0.0 else 0.0,
+                # One sample has no rate: absent, never 0 (this file's rule).
+                'hz': ((n - 1) / span) if span > 0.0 else None,
                 'age_ms_p50': _pct(ages, 50),
                 'age_ms_p95': _pct(ages, 95),
                 'last_s': (now_s - times[-1]) if times else None,
@@ -172,7 +180,7 @@ def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
             self.watched = Watched(self, self.pub, [
                 (_msg_class(st.msg), st.topic,
                  lambda m, k=st.key, s=st.stamped: self.meter.note(
-                     k, _stamp_s(m) if s else None, time.time()),
+                     k, _stamp_s(m) if s else None, time.time(), time.monotonic()),
                  _qos(st.qos))
                 for st in self.rows], on_drop=self._forget)
             self.create_timer(period_s, self._publish)
@@ -185,8 +193,8 @@ def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
             self.watched.poll()
             if not self.watched.subs:
                 return
-            got = self.meter.summary(time.time())
-            empty = {'n': 0, 'hz': 0.0, 'age_ms_p50': None, 'age_ms_p95': None,
+            got = self.meter.summary(time.monotonic())
+            empty = {'n': 0, 'hz': None, 'age_ms_p50': None, 'age_ms_p95': None,
                      'last_s': None}
             body = {
                 'window_s': self.meter.window_s,
