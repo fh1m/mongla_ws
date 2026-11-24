@@ -353,7 +353,7 @@ def vision(v: View):
         (3, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
                 v('pose', plot(series(f'{fwd}/target_pose.bearing_deg', 'bearing deg'),
                                series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),
-        (3, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'rotation'),
+        (3, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'rotation rad'),
                              series(f'{dwn}/anchor_decomposition.vector.y', 'scale')))),
         (3, v('align', align('align x px', 'align y px',
                              series(f'{fwd}/target_pose.reproj_px', 'reproj px')))))
@@ -529,7 +529,7 @@ def downward(v: View):
                                    series(f'{V}/active_camera.data', 'live camera', True)))),
             (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor (tile)'),
                                 series('/mongla/state.depth_m', 'depth m')))),
-            (3, v('anchor', plot(series(f'{d}/anchor_decomposition.vector.x', 'rotation'),
+            (3, v('anchor', plot(series(f'{d}/anchor_decomposition.vector.x', 'rotation rad'),
                                  series(f'{d}/anchor_decomposition.vector.y', 'scale')))))))
 
 

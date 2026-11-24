@@ -77,7 +77,7 @@
       "paths": [
         {
           "value": "/mongla/vision/downward/anchor_decomposition.vector.x",
-          "label": "rotation",
+          "label": "rotation rad",
           "enabled": true
         },
         {
@@ -88,7 +88,7 @@
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 140,
+      "sidebarDimension": 186,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
