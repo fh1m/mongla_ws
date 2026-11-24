@@ -59,6 +59,11 @@ class FlowChecksMixin:
         # the waves' speed as the hull's.
         if getattr(self, '_anchor_caustic', False) and nxt is not None:
             keep = np.asarray(status).reshape(-1).astype(bool)
+            if not keep.any():
+                self._anchor(gray, t)
+                self._refuse('no tracked points survived on a caustic floor: '
+                             'nothing to measure the texture with')
+                return True
             ncc = patch_ncc_median(self._anchor_gray, track,
                                    np.asarray(self._anchor_pts).reshape(-1, 2)[keep],
                                    np.asarray(nxt).reshape(-1, 2)[keep])

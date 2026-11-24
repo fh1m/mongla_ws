@@ -199,7 +199,8 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
     def _take_frame(self):
         """The newest frame and detection, or None when there is nothing to do.
 
-        Grey is converted only when a later stage will read it."""
+        Grey was already converted for every camera frame in `_on_img`, so
+        nothing is converted here."""
         if not self._fresh.wait(0.5):
             return None
         self._fresh.clear()

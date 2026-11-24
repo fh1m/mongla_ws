@@ -437,6 +437,12 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
                 f'gone, not the frame. Rebuilding the detector. Last: {exc!r}')
             self._rebuild_detector()
             return
+        if n < _INFER_FAIL_EXIT:
+            # Between the rebuild and the exit tier: say so on every failure,
+            # so the log does not go quiet while the node is still failing.
+            self.get_logger().error(
+                f'[DET  ] inference still failing ({n}/{_INFER_FAIL_EXIT}): {exc!r}')
+            return
         if n >= _INFER_FAIL_EXIT:
             self.get_logger().fatal(
                 f'[DET  ] {n} consecutive inference failures and a rebuild did '

@@ -151,7 +151,7 @@ def main(argv=None):
     print(f"  tracks topic hz  : {msg_hz:.2f}  (required >= {args.min_track_hz})")
     print(f"  frames with tracks: {state['track_frames']} / {state['msg_count']}")
     print(f"  unique track IDs  : {total_ids}")
-    print(f"  ID stability      : {stability*100:.1f}%  (% of ID appearances that reused a prior ID)")
+    print(f"  ID stability      : {stability*100:.1f}%  (% of ID appearances that were in the previous message)")
     print(f"  predicted ratio   : {pred_ratio*100:.1f}%  (Kalman-only frames; higher = more gaps)")
     if state['classes']:
         top = state['classes'].most_common(5)

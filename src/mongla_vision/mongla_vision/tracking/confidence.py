@@ -127,6 +127,8 @@ class ConfidenceModel:
         Returns a value in [NSA_MIN_FACTOR, NSA_MAX_FACTOR]: small means "trust
         this box", large means "trust the filter's prediction instead".
         """
+        if conf != conf:
+            return 1.0      # no score: leave R alone, not the maximum distrust
         n = self.normalise(conf)
         f = NSA_MAX_FACTOR - n * (NSA_MAX_FACTOR - NSA_MIN_FACTOR)
         return max(NSA_MIN_FACTOR, min(NSA_MAX_FACTOR, f))

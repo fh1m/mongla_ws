@@ -91,7 +91,8 @@ class FlowFrameMixin:
         return False
 
     def _rotation_since_anchor(self, t_now: float) -> float:
-        """|image rotation| since the anchor: the gyro rate at the middle of the interval, times its length.
+        """|image rotation| since the anchor, estimated from one gyro sample at
+        the interval midpoint (not an integral over the interval).
 
         Yaw about the optical axis is what rotates a DOWNWARD image, so the
         yaw channel is the one that matters here -- the same channel the
