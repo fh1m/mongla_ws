@@ -36,6 +36,31 @@ from mongla_vision import qos
 from mongla_vision.utils.check_pipeline import _class_of
 
 
+def failures_of(state, msg_hz, min_track_hz, require_class=''):
+    """Why the run fails, or [] when it passes.
+
+    A tracker publishes an array on every detector message, empty or not, so
+    the topic rate alone passes while nothing is tracked. The docstring's
+    promise -- at least one stable confirmed track -- is an id seen again in
+    the next message.
+    """
+    failures = []
+    if msg_hz < min_track_hz:
+        failures.append(
+            f"tracks hz {msg_hz:.2f} < required {min_track_hz} -- "
+            "is tracker_node running? (ros2 run mongla_vision tracker_node)")
+    if state['reused_ids'] == 0:
+        failures.append(
+            "no stable track: no id was seen in two consecutive messages "
+            f"({state['track_frames']} of {state['msg_count']} messages had a track)")
+    if require_class and require_class not in state['classes']:
+        failures.append(
+            f"class {require_class!r} not seen in tracks -- "
+            "is the detector seeing it? (ros2 run mongla_vision vision_check "
+            f"--require-class {require_class})")
+    return failures
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Tracker pipeline smoke test.')
     parser.add_argument('--camera',         default='laptop',
@@ -132,17 +157,7 @@ def main(argv=None):
         top = state['classes'].most_common(5)
         print(f"  classes tracked   : {dict(top)}")
 
-    failures = []
-    if msg_hz < args.min_track_hz:
-        failures.append(
-            f"tracks hz {msg_hz:.2f} < required {args.min_track_hz} -- "
-            "is tracker_node running? (ros2 run mongla_vision tracker_node)")
-    if args.require_class and args.require_class not in state['classes']:
-        failures.append(
-            f"class {args.require_class!r} not seen in tracks -- "
-            "is the detector seeing it? (ros2 run mongla_vision vision_check "
-            f"--require-class {args.require_class})")
-
+    failures = failures_of(state, msg_hz, args.min_track_hz, args.require_class)
     if failures:
         print()
         print("[FAIL]")
