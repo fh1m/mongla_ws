@@ -153,6 +153,7 @@ def test_a_fouled_camera_refuses_enrolment():
     # the camera verdict.
     b._refs = [object(), object(), object(), object()]
     b._yields = [100, 100, 100, 100]
+    b._best_inl = [100, 100, 100, 100]   # health judges the best inliers reached
     b._last_scores = {0: 1, 1: 2, 2: 0, 3: 3}
     r = b.enrol(np.zeros((240, 320), np.uint8), det_conf=1.0)
     assert not r.accepted and r.reason == 'camera degraded'
@@ -176,6 +177,7 @@ def test_a_changed_world_does_NOT_block_enrolment():
     b = CheckpointBank(_Be())
     b._refs = [object(), object(), object(), object()]
     b._yields = [100, 100, 100, 100]
+    b._best_inl = [100, 100, 100, 100]   # health judges the best inliers reached
     b._last_scores = {0: 1, 1: 90, 2: 80, 3: 70}   # one collapsed, rest fine
     r = b.enrol(np.zeros((240, 320), np.uint8), det_conf=1.0, force=True)
     assert r.reason != 'camera degraded'
@@ -197,6 +199,7 @@ def test_force_overrides_the_contamination_guard():
     b = CheckpointBank(_Be())
     b._refs = [object(), object(), object(), object()]
     b._yields = [100, 100, 100, 100]
+    b._best_inl = [100, 100, 100, 100]   # health judges the best inliers reached
     b._last_scores = {0: 1, 1: 2, 2: 0, 3: 3}
     r = b.enrol(np.zeros((240, 320), np.uint8), det_conf=1.0, force=True)
     assert r.reason != 'camera degraded'
