@@ -22,63 +22,6 @@
       },
       "lichtblickPanelTitle": "pad: one short step per press, seated pilot only"
     },
-    "3D!hull": {
-      "followTf": "mongla",
-      "followMode": "follow-position",
-      "topics": {
-        "/mongla/odom": {
-          "visible": true
-        },
-        "/mongla/batighor/scene": {
-          "visible": true
-        }
-      },
-      "scene": {
-        "backgroundColor": "#05070c",
-        "labelScaleFactor": 0.3,
-        "transforms": {
-          "showLabel": false,
-          "enablePreloading": true
-        }
-      },
-      "cameraState": {
-        "distance": 0.95,
-        "perspective": true,
-        "phi": 55,
-        "thetaOffset": 200,
-        "targetOffset": [
-          0,
-          0,
-          0
-        ],
-        "target": [
-          0,
-          0,
-          0
-        ],
-        "targetOrientation": [
-          0,
-          0,
-          0,
-          1
-        ],
-        "fovy": 45,
-        "near": 0.01,
-        "far": 5000
-      },
-      "layers": {
-        "hull": {
-          "visible": true,
-          "label": "Mongla",
-          "layerId": "foxglove.Urdf",
-          "instanceId": "hull",
-          "sourceType": "url",
-          "url": "/model/mongla.urdf",
-          "order": 1
-        }
-      },
-      "lichtblickPanelTitle": "attitude"
-    },
     "CallService!raw_helm": {
       "serviceName": "/mongla/batighor/helm",
       "requestPayload": "{\n \"who\": \"button\",\n \"op\": \"command\",\n \"cmd\": \"stop\",\n \"fields_json\": \"\",\n \"mission\": \"\",\n \"confirms\": []\n}",
@@ -106,12 +49,7 @@
     "first": "mongla.batighor.ControlCenter!control",
     "second": {
       "direction": "column",
-      "first": {
-        "direction": "row",
-        "first": "Teleop!pad",
-        "second": "3D!hull",
-        "splitPercentage": 50.0
-      },
+      "first": "Teleop!pad",
       "second": "CallService!raw_helm",
       "splitPercentage": 62.5
     },

@@ -110,6 +110,36 @@ body:has(.mb.vitals) .LichtblickPanelRoot-root > div > header{display:none!impor
 .mb.status.watch .cell{padding:6px 22px}
 .mb.status.watch .cell b{font-size:14px}
 
+/* -- a camera's caption: under the picture, never in it -------------------- */
+/* One line under each camera: which camera, what its detector is doing, the
+   model, the rate with its last half minute, how far the boxes trail the
+   frame. It was drawn into the picture's corner, over the floor a box sits on. */
+.LichtblickPanelRoot-root:has(.mb.caption) > div > header{display:none!important}
+.mb.caption{padding:0;background:var(--mb-d0);border-top:1px solid var(--mb-rule);overflow:hidden}
+.mb.caption > .body{flex-direction:column;gap:0;height:100%;justify-content:center}
+.mb.caption .cap{display:flex;align-items:center;gap:18px;padding:0 14px;min-height:28px;flex:1;
+  white-space:nowrap;overflow:hidden;font-size:12px}
+.mb.caption .cap + .cap{border-top:1px solid var(--mb-rule)}
+.mb.caption .cam{display:flex;flex-direction:row;flex:none;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.16em;
+  font-size:11px;color:var(--mb-ink-2);min-width:7.5em}
+.mb.caption .eye{width:14px;height:9px;border:1.5px solid currentColor;border-radius:50%;position:relative}
+.mb.caption .eye::after{content:"";position:absolute;inset:2px 4px;border-radius:50%;background:currentColor}
+.mb.caption .state{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.08em;color:var(--mb-ink-3)}
+.mb.caption .state em{font-style:normal;font-weight:400;letter-spacing:0;color:var(--mb-ink-3)}
+.mb.caption .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.mb.caption .ok .state{color:var(--mb-teal)}
+.mb.caption .ok .dot{animation:mb-breathe 2.4s ease-in-out infinite}
+.mb.caption .warn .state{color:var(--mb-amber)}
+.mb.caption .err{background:linear-gradient(90deg,rgba(255,42,20,.18),transparent 60%)}
+.mb.caption .err .state{color:var(--mb-red)}
+.mb.caption .err .dot{animation:mb-breathe .8s ease-in-out infinite}
+.mb.caption .chip{display:flex;align-items:baseline;gap:6px}
+.mb.caption .chip small{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--mb-ink-3)}
+.mb.caption .chip b{font-weight:400;color:var(--mb-ink)}
+.mb.caption svg.spark{flex:1 1 60px;min-width:40px;max-width:220px;height:18px}
+.mb.caption svg.spark polyline{fill:none;stroke:var(--mb-sea);stroke-width:1.5;vector-effect:non-scaling-stroke}
+.mb.caption .cap > :last-child{margin-left:auto}
+
 /* The tabs: room to read them, a glyph each, red under the open one, and a
    dot when the strip says its subject needs an eye. No close button: a tab
    lost in a run is a view lost. */
@@ -137,18 +167,13 @@ body:has(.mb.vitals) .LichtblickPanelRoot-root > div > header{display:none!impor
   box-shadow:0 0 0 3px rgba(255,42,20,.22)}
 [data-testid="toolbar-tab"][title="Pilot"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%226%22%20y%3D%223%22%20width%3D%224%22%20height%3D%2211%22%20rx%3D%222%22%2F%3E%3Cpath%20d%3D%22M8%203%205%200.5M8%203l3-2.5%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Cockpit"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%225%22%2F%3E%3Cpath%20d%3D%22M8%201v4M8%2011v4M1%208h4M11%208h4%22%2F%3E%3C%2Fsvg%3E")}
-[data-testid="toolbar-tab"][title="Map"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M1.5%203.5%205.5%202l5%201.5%204-1.5v10.5l-4%201.5-5-1.5-4%201.5z%20M5.5%202v10.5%20M10.5%203.5V14%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Mission"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%2015V1.5h9.5l-2%203%202%203H3%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Vision"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M1%208s2.6-5%207-5%207%205%207%205-2.6%205-7%205-7-5-7-5z%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%222.2%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Flow"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2%2014%2013%203%20M7.5%203H13v5.5%20M2%209l4-4%20M7%2014l4-4%22%2F%3E%3C%2Fsvg%3E")}
-[data-testid="toolbar-tab"][title="Localization"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M8%2015s-5-4.6-5-8.5a5%205%200%200%201%2010%200C13%2010.4%208%2015%208%2015z%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%226.5%22%20r%3D%221.8%22%2F%3E%3C%2Fsvg%3E")}
+[data-testid="toolbar-tab"][title="Navigation"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M8%2015s-5-4.6-5-8.5a5%205%200%200%201%2010%200C13%2010.4%208%2015%208%2015z%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%226.5%22%20r%3D%221.8%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Thrust"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%221.6%22%2F%3E%3Cpath%20d%3D%22M8%206.4C7%203.5%208%201.5%209.5%201.5S10%205%208%206.4%20M9.4%208.8c2.9.9%204.3%202.6%203.5%203.9s-3.6-.8-3.5-3.9%20M6.6%208.8c-2.3%202-4.5%202.4-5.2%201.1s2.4-2.8%205.2-1.1%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Health"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M1%208.5h3l2-5%203%209%202-4h4%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Link"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%221.5%22%20y%3D%225.5%22%20width%3D%227%22%20height%3D%225%22%20rx%3D%222.5%22%2F%3E%3Crect%20x%3D%227.5%22%20y%3D%225.5%22%20width%3D%227%22%20height%3D%225%22%20rx%3D%222.5%22%2F%3E%3C%2Fsvg%3E")}
-[data-testid="toolbar-tab"][title="Chain"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%222.5%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Ccircle%20cx%3D%2213.5%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Cpath%20d%3D%22M4%208h2.5%20M9.5%208H12%22%2F%3E%3C%2Fsvg%3E")}
-[data-testid="toolbar-tab"][title="Downward"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2.5%203.5h11%20M6%203.5v2h4v-2%20M8%205.5v5.5%20M5.5%209l2.5%202.5%202.5-2.5%20M1.5%2014h13%22%2F%3E%3C%2Fsvg%3E")}
-[data-testid="toolbar-tab"][title="Forward"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2.5%208h9%20M8.5%204.5l3.5%203.5-3.5%203.5%22%2F%3E%3Cpath%20d%3D%22M13.5%203v10%22%2F%3E%3C%2Fsvg%3E")}
-[data-testid="toolbar-tab"][title="Vehicle"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2.5%2011a5.5%205.5%200%200%201%2011%200%22%2F%3E%3Cpath%20d%3D%22M8%2011l2.5-3.5%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%2211%22%20r%3D%220.8%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Helm"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%225.5%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%221.5%22%2F%3E%3Cpath%20d%3D%22M8%202.5v4%20M8%209.5v4%20M2.5%208h4%20M9.5%208h4%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Tune"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%202.5v11%20M8%202.5v11%20M12%202.5v11%22%2F%3E%3Cpath%20d%3D%22M2.5%205h3%20M6.5%2010h3%20M10.5%207h3%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Calibrate"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%222%22%20width%3D%2212%22%20height%3D%2212%22%2F%3E%3Cpath%20d%3D%22M2%208h12M8%202v12%22%2F%3E%3Cpath%20d%3D%22M2%202h6v6H2z%20M8%208h6v6H8z%22%20fill%3D%22%23000%22%2F%3E%3C%2Fsvg%3E")}
@@ -374,6 +399,14 @@ svg.vitals .hl{font-size:11px;fill:var(--mb-ink-2)}
 svg.vitals .hl.err{fill:var(--mb-red)} svg.vitals .hl.warn{fill:var(--mb-amber)}
 svg.vitals .nav{font-size:10px;letter-spacing:.18em} svg.vitals .nav.ok{fill:var(--mb-teal)}
 svg.vitals .nav.warn{fill:var(--mb-amber)}
+svg.vitals .divider{stroke:var(--mb-rule)}
+svg.vitals .sea{fill:var(--mb-sea);opacity:.35}
+svg.vitals .horizon{stroke:var(--mb-glass);stroke-width:1.5}
+svg.vitals .rung{stroke:var(--mb-ink-3)}
+svg.vitals .wings{fill:none;stroke:var(--mb-amber);stroke-width:2.5;stroke-linejoin:round}
+svg.vitals .att{font-size:11px;fill:var(--mb-ink-2)}
+svg.vitals .trace{fill:none;stroke:var(--mb-sea);stroke-width:1.5;stroke-linejoin:round}
+svg.vitals .rate{font-size:16px} svg.vitals .rate.moving{fill:var(--mb-teal)}
 svg.vitals .alarm{animation:mb-breathe 1.2s ease-in-out infinite}
 @keyframes mb-wave{to{transform:translateX(-24px)}}
 @keyframes mb-flow{to{stroke-dashoffset:-16}}

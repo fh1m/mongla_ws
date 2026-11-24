@@ -101,7 +101,7 @@ def test_vitals_opens_in_a_window_of_its_own_on_the_screen_named(desk, capsys, m
     desk.hyprland = lambda cmd: json.dumps(duo)
     assert desk.main(['h']) == 0
     assert '--defaultLayout=batighor_pilot' in desk.launches[0]  # keys and state are on Vitals
-    assert '--force-device-scale-factor=2.75' in desk.launches[1]  # Vitals, a quarter larger
+    assert '--force-device-scale-factor=2.25' in desk.launches[1]  # Vitals, a quarter smaller
     assert '--defaultLayout=vitals' in desk.launches[1]
     assert sorted(s for _, s in desk.placed) == ['DP-2', 'eDP-1']
     desk.launches.clear()
@@ -118,7 +118,7 @@ def test_vitals_opens_in_a_window_of_its_own_on_the_screen_named(desk, capsys, m
     assert 'serves no vitals view' in capsys.readouterr().out
 
 
-def test_a_placed_window_lands_where_its_screen_is_looking_and_is_pressed_once(tmp_path, monkeypatch):
+def test_a_placed_window_lands_where_its_screen_is_looking_and_is_pressed_past_a_reload(tmp_path, monkeypatch):
     """Seen 2026-11-24: a window rule filed the cockpit on the OLED's
     workspace 7 while the OLED showed 1, so the screen showed the desktop."""
     spec = importlib.util.spec_from_file_location('_desk4', ROOT / 'tools' / 'pool' / 'batighor_desktop.py')
@@ -139,7 +139,10 @@ def test_a_placed_window_lands_where_its_screen_is_looking_and_is_pressed_once(t
     assert mod.place(7, 'eDP-1')
     assert 'workspace = "1"' in sent[0] and 'address:0xab' in sent[0]
     assert any('fullscreen' in c for c in sent)
-    assert 'Shift_L' in sent[-1] and 'address:0xab' in sent[-1]
+    presses = [c for c in sent if 'Shift_L' in c]
+    # Pressed again after the app's one reload, which leaves full screen.
+    assert len(presses) == len(mod.PRESS_AT_S) >= 2 and max(mod.PRESS_AT_S) >= 20
+    assert all('address:0xab' in c for c in presses)
     # No Hyprland: says so, places nothing.
     monkeypatch.setattr(mod, 'hyprland', lambda cmd: '')
     assert not mod.place(7, 'eDP-1', wait_s=0.01)
@@ -249,3 +252,42 @@ def test_vulkan_reaches_the_launch_unless_the_operator_says_no(desk, monkeypatch
     assert desk.main(['h']) == 0 and desk.main(['h', '--no-vulkan']) == 0
     assert '--use-angle=vulkan' in desk.launches[0]
     assert '--use-angle=vulkan' not in desk.launches[1]
+
+
+def test_two_windows_placed_at_once_both_end_full_screen_and_both_are_pressed(monkeypatch):
+    """Hyprland's fullscreen, and a shortcut to an XWayland window, act on the
+    focused window. Placed in parallel, one window's focus landed between the
+    other's focus and fullscreen: one was toggled twice and the other never,
+    and no press reached either page (seen on the Duo, 2026-11-24)."""
+    import threading
+    import time as _time
+    spec = importlib.util.spec_from_file_location('_desk6', ROOT / 'tools' / 'pool' / 'batighor_desktop.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    real_sleep, guard = _time.sleep, threading.Lock()
+    state = {'focus': None, 'fs': {'0xa': 0, '0xb': 0}, 'pressed': {'0xa': 0, '0xb': 0}}
+
+    def hypr(cmd):
+        with guard:
+            if cmd == 'j/clients':
+                return json.dumps([{'pid': 1, 'address': '0xa', 'fullscreen': state['fs']['0xa']},
+                                   {'pid': 2, 'address': '0xb', 'fullscreen': state['fs']['0xb']}])
+            if cmd == 'j/monitors':
+                return json.dumps([{'name': 'eDP-1', 'activeWorkspace': {'id': 1}},
+                                   {'name': 'DP-2', 'activeWorkspace': {'id': 2}}])
+            if 'hl.dsp.focus' in cmd:
+                state['focus'] = '0xa' if '0xa' in cmd else '0xb'
+            elif 'window.fullscreen' in cmd:
+                state['fs'][state['focus']] ^= 1
+            elif 'Shift_L' in cmd:
+                # Delivered only to the focused window, whatever it names.
+                state['pressed'][state['focus']] += 1
+        if 'hl.dsp.focus' in cmd:
+            real_sleep(0.05)          # the other window's turn comes here
+        return 'ok'
+    monkeypatch.setattr(mod, 'hyprland', hypr)
+    monkeypatch.setattr(mod.time, 'sleep', lambda s: real_sleep(0.001))
+    with mod.concurrent.futures.ThreadPoolExecutor() as pool:
+        assert all(pool.map(lambda w: mod.place(*w), [(1, 'eDP-1'), (2, 'DP-2')]))
+    assert state['fs'] == {'0xa': 1, '0xb': 1}
+    assert state['pressed'] == {'0xa': len(mod.PRESS_AT_S), '0xb': len(mod.PRESS_AT_S)}

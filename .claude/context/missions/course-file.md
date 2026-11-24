@@ -48,6 +48,11 @@ on the day needs no rebuild.
 | `props: <name>: bearing_deg` | the compass direction its face points | `anchor_on`, `go_to_prop` | no heading anchor from it |
 | `props: <name>: width_m` | the width of what the detector BOXES, measured on the real prop | the pose path's range (`target_geometry`) | the shipped table's nominal |
 | `props: <name>: measured` | true: taped at the venue; false: a nominal or a vision placement | `place_prop` never overwrites a measured prop | false |
+| `zones: <name>: area` / `line` | where the rulebook says a prop MAY be: two opposite corners, or a line's two ends, `[x, y]` in the pool frame; `source: rulebook` (a distance its text states) or `figure` (read off its not-to-scale drawing) | Batighor's map and 3D pool, nothing else (a test holds that) | not drawn |
+
+A zone is never a position. The rulebook places the gate "anywhere along a line" and the
+orange flare anywhere in a 4 m band, so `sauvc_olympic.yaml` ships its zones and still no
+prop position: `go_to_prop` and the prop fixes refuse every prop there until it is surveyed.
 
 Depth signs, because they differ on purpose: `pool:` depths are **positive** metres below
 the surface (they are distances to a floor), a prop's `depth_m` is **negative** below the

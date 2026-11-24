@@ -250,6 +250,34 @@ def hud(cam, model, size, arrivals, latency_s, silent_s=None, paused=UNREAD):
     return [first, f'detector {rate}  {late} behind the frame']
 
 
+def caption(cam, model, size, arrivals, latency_s, silent_s=None, paused=UNREAD) -> dict:
+    """The camera's and detector's state, for the caption under the picture.
+
+    It was drawn into the picture's bottom left, where it covered the floor a
+    downward box sits on and read as part of the scene (owner, 2026-11-24).
+    `state`: running, paused (waits for a mission), silent (not paused: an
+    alarm), none (nothing publishes this camera's detections) or unread (the
+    detector's pause not yet read). `lines` is the same said in words."""
+    if silent_s is None:
+        state = 'running'
+    else:
+        state = {True: 'paused', False: 'silent', None: 'none'}.get(paused, 'unread')
+    rate = None
+    if silent_s is None and len(arrivals) >= 2 and arrivals[-1] > arrivals[0]:
+        rate = round((len(arrivals) - 1) / (arrivals[-1] - arrivals[0]), 1)
+    return {'cam': cam, 'model': model or '', 'size': list(size) if size else None,
+            'state': state, 'rate_hz': rate,
+            'late_ms': round(latency_s * 1000) if latency_s is not None and silent_s is None else None,
+            'silent_s': round(silent_s, 1) if silent_s is not None else None,
+            'alarm': state not in ('running', 'paused'),
+            'lines': hud(cam, model, size, arrivals, latency_s, silent_s, paused)}
+
+
+# How long a caption waits before it is sent again with only its numbers
+# changed: the detector paces the overlay at 20-30 Hz, a caption is read.
+CAPTION_EVERY_S = 0.5
+
+
 # How long a trail is remembered: about two seconds of a target's path at the
 # detector's rate, enough to read a drift or a swing, short enough that the
 # picture does not fill with the past.
@@ -296,7 +324,7 @@ def _corners(b):
 
 
 def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
-             contours=None, features=None, size=None, hud=(), alarm=False,
+             contours=None, features=None, size=None,
              trails=()) -> ImageAnnotations:
     """One frame's annotations: everything the vision stack holds, each as itself.
 
@@ -305,9 +333,9 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     on a box below the floor is faint and says `weak`; one with nothing under
     it this frame is grey and says `coasting` (the tracker predicting). A
     candidate below the floor is thin, with its class and score. The lock is
-    drawn over all of them in its rung's colour. `hud`: lines of what the
-    camera and detector are doing, bottom left; `alarm` draws the second (the
-    detector's) in red.
+    drawn over all of them in its rung's colour. What the camera and detector
+    are doing is not drawn here: it is the caption under the picture
+    (`caption`, on `<camera>/hud`).
 
     Any layer may be None (its node is not running). Boxes are in the image's
     own pixels, which is what the detector publishes, so they land on the
@@ -324,12 +352,6 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
             points=[Point2(x=x, y=y) for x, y in pts],
             outline_color=_color(rgba[:3] + (0.6,)), thickness=2.0))
     labels = _Labels(stamp, size)
-    # Bottom left, under the labels a box near the top carries; top left
-    # until the camera has said its size. Placed first so no label covers it.
-    base = (size[1] - 8 - (len(hud) - 1) * (LABEL_PX + 6)) if size else LABEL_PX + 6
-    hud_texts = [labels.place([(8.0, base + k * (LABEL_PX + 6))], line,
-                              RED if alarm and k == 1 else GLASS)
-                 for k, line in enumerate(hud)]
     dets = [_box(d) for d in (detections.detections if detections else [])]
     # `candidates` carries the detections too (detector_node); drawn again
     # beneath them each box showed twice.
@@ -432,22 +454,18 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
             texts.append(labels.place([(cx + 8, cy + LABEL_PX + 8), (cx + 8, cy - 8)],
                                       f'err {lx - cx:+.0f} {ly - cy:+.0f} px', rgba,
                                       LABEL_PX * 0.8))
-    out.texts.extend(texts + hud_texts)
+    out.texts.extend(texts)
     return out
 
 
-# The flow count sits just above the camera's stats lines (`hud`, two of
-# them, at the bottom). At the top left it covered the label of any box that
-# touched the frame's top edge, which is pinned there.
-HUD_LINES = 2
+# The flow count sits on the picture's bottom line, left. At the top left it
+# covered the label of any box that touched the frame's top edge, which is
+# pinned there; the camera's own state is the caption under the picture.
 FLOW_LINE_Y = LABEL_PX + 6                 # until the camera has said its size
 
 
 def flow_line_y(size) -> float:
-    # Without the size the camera's lines are at the top too (see `annotate`), so the count goes under them.
-    if size:
-        return size[1] - 8 - HUD_LINES * (LABEL_PX + 6)
-    return FLOW_LINE_Y + HUD_LINES * (LABEL_PX + 6)
+    return float(size[1] - 8) if size else FLOW_LINE_Y
 
 
 def flow_annotate(tracks, size=None) -> ImageAnnotations:
@@ -606,6 +624,42 @@ def demand_scene(x, y, stamp, frame):
     return update
 
 
+# Mongla's track in the 3D scene: the odometry's last TRACK_S, a point each
+# TRACK_STEP_M moved, so a vehicle at rest adds nothing and a long run does
+# not grow the line without end.
+TRACK_S, TRACK_STEP_M = 180.0, 0.05
+
+
+class Track:
+    """Where the vehicle has been, in one frame: a new frame starts again."""
+
+    def __init__(self):
+        self.frame, self.points = None, []
+
+    def note(self, t, x, y, z, frame) -> bool:
+        """Keep (t, x, y, z) if it moved; True when the line changed."""
+        if frame != self.frame:
+            self.frame, self.points = frame, []
+        old = len(self.points)
+        self.points = [p for p in self.points if t - p[0] <= TRACK_S]
+        last = self.points[-1] if self.points else None
+        if last is None or (x - last[1]) ** 2 + (y - last[2]) ** 2 + (z - last[3]) ** 2 >= TRACK_STEP_M ** 2:
+            self.points.append((t, x, y, z))
+        return len(self.points) != old
+
+
+def track_scene(track: Track, stamp):
+    """The track as one line in its own frame, sea blue as everything live is."""
+    from foxglove_msgs.msg import LinePrimitive, SceneEntity, SceneUpdate
+    from geometry_msgs.msg import Point
+    e = SceneEntity(timestamp=stamp, frame_id=track.frame or '', id='track', frame_locked=True)
+    if len(track.points) >= 2:
+        e.lines.append(LinePrimitive(
+            type=LinePrimitive.LINE_STRIP, thickness=2.0, scale_invariant=True, color=_color(SEA),
+            points=[Point(x=float(x), y=float(y), z=float(z)) for _, x, y, z in track.points]))
+    return SceneUpdate(entities=[e])
+
+
 class Watched:
     """Subscriptions that exist only while someone watches what they feed.
 
@@ -722,9 +776,20 @@ def main(args=None):
                 latest = dict.fromkeys(LAYERS)
                 latest['arrivals'] = deque(maxlen=RATE_WINDOW)
                 pub = self.create_publisher(ImageAnnotations, f'{ns}/annotations', 5)
+                hud_pub = self.create_publisher(String, f'{ns}/hud', 1)
                 trails = Trails()
 
-                def draw(latest=latest, pub=pub, cam=cam, trails=trails):
+                def say(c, latest=latest, hud_pub=hud_pub):
+                    # A changed state goes at once; the same state with new
+                    # numbers waits CAPTION_EVERY_S.
+                    now = time.monotonic()
+                    if (c['state'] == latest.get('said_state')
+                            and now - latest.get('said_at', 0.0) < CAPTION_EVERY_S):
+                        return
+                    latest['said_state'], latest['said_at'] = c['state'], now
+                    hud_pub.publish(String(data=json.dumps(c)))
+
+                def draw(latest=latest, pub=pub, cam=cam, trails=trails, say=say):
                     det = latest['detections']
                     if det is None:
                         return
@@ -733,8 +798,8 @@ def main(args=None):
                     # Boxes from the frame being drawn and no other: a track
                     # or candidate from the frame before sat beside each
                     # detection, offset by the motion between them.
-                    lines = hud(cam, latest['model'], latest['size'], latest['arrivals'],
-                                latest['latency'])
+                    say(caption(cam, latest['model'], latest['size'], latest['arrivals'],
+                                latest['latency']))
                     now = time.monotonic()
                     trks = latest['tracks'] if same_frame(latest['tracks'], stamp) else None
                     for d in (trks.detections if trks else []):
@@ -751,7 +816,7 @@ def main(args=None):
                         latest['candidates'] if same_frame(latest['candidates'], stamp) else None,
                         latest['contours'] if same_frame(latest['contours'], stamp) else None,
                         feats if fresh(feats, stamp, FEATURES_MAX_AGE_S) else None,
-                        latest['size'], lines, trails=trails.lines(now)))
+                        latest['size'], trails=trails.lines(now)))
 
                 def on_detections(msg, latest=latest, draw=draw):
                     latest['detections'] = msg
@@ -773,7 +838,7 @@ def main(args=None):
                             draw()
                     return cb
 
-                def on_info(msg, latest=latest, pub=pub, cam=cam):
+                def on_info(msg, latest=latest, pub=pub, cam=cam, say=say):
                     latest['size'] = (msg.width, msg.height) if msg.width else None
                     # The camera's own beat, one per frame on the frame's
                     # stamp: while the detector is silent the overlay marks
@@ -783,11 +848,11 @@ def main(args=None):
                     if latest.get('since') is None:
                         latest['since'] = now
                     quiet = silence(latest['arrivals'], latest['since'], now)
-                    if quiet is not None and pub.get_subscription_count():
+                    if quiet is not None:
                         paused = self._paused(f'/mongla/vision/{cam}/detections')
-                        pub.publish(annotate(msg.header.stamp, size=latest['size'], hud=hud(
-                            cam, latest['model'], latest['size'], (), None, silent_s=quiet,
-                            paused=paused), alarm=paused is not True))
+                        pub.publish(annotate(msg.header.stamp, size=latest['size']))
+                        say(caption(cam, latest['model'], latest['size'], (), None,
+                                    silent_s=quiet, paused=paused))
 
                 def keep(key, latest=latest):
                     return lambda msg: latest.__setitem__(key, msg)
@@ -848,8 +913,18 @@ def main(args=None):
                 scene_pub.publish(demand_scene(msg.vector.x, msg.vector.y,
                                                msg.header.stamp, msg.header.frame_id))
 
+            from nav_msgs.msg import Odometry
+            track = Track()
+
+            def on_odom(msg):
+                p = msg.pose.pose.position
+                st = msg.header.stamp
+                if track.note(st.sec + st.nanosec * 1e-9, p.x, p.y, p.z, msg.header.frame_id):
+                    scene_pub.publish(track_scene(track, st))
+
             self.watched.append(Watched(self, scene_pub, [
-                (Vector3Stamped, '/mongla/demand', on_demand, 5)]))
+                (Vector3Stamped, '/mongla/demand', on_demand, 5),
+                (Odometry, '/mongla/odom', on_odom, 10)]))
             self.create_timer(WATCH_PERIOD_S, self._poll)
             self.cams = cams
             self.stages_pub = self.create_publisher(String, '/mongla/batighor/stages', LATCHED)

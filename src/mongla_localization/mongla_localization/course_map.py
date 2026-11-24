@@ -51,7 +51,13 @@ def _deck() -> pathlib.Path:
 # Every key a course file may hold. Anything else is refused: a typo such as
 # `bearing:` for `bearing_deg:` would otherwise load as "unset" and surface
 # minutes later as a refusal that names the right key, on the venue's day.
-TOP_KEYS = ('course', 'frame', 'pool', 'props')
+TOP_KEYS = ('course', 'frame', 'pool', 'props', 'zones')
+# A zone is where a rulebook says a prop MAY be, not where it is: an `area`
+# (two opposite corners) or a `line` (its two ends), in this frame, for an
+# operator's map. Nothing that steers, fixes or anchors reads it: a zone's
+# centre can be metres from the prop, and a prop's position feeds the filter.
+ZONE_KEYS = ('area', 'line', 'source', 'note')
+ZONE_SOURCES = ('rulebook', 'figure')
 PROP_KEYS = ('x_m', 'y_m', 'depth_m', 'bearing_deg', 'detect_class', 'measured',
              'note', 'width_m')
 POOL_KEYS = ('depth_m', 'depth_min_m', 'depth_max_m', 'floor', 'tile_m',
@@ -91,10 +97,13 @@ class Course:
     """A named set of prop priors, with refusals instead of defaults."""
 
     def __init__(self, name: str, props: Dict[str, Prop], source: str = '',
-                 pool: Optional[Dict[str, Optional[float]]] = None):
+                 pool: Optional[Dict[str, Optional[float]]] = None,
+                 zones: Optional[Dict[str, dict]] = None):
         self.name = name
         self.props = props
         self.source = source
+        # For drawing only (ZONE_KEYS): {name: {kind, points, source, note}}.
+        self.zones = dict(zones or {})
         # The venue's floor: `depth_m`, and `depth_min_m`/`depth_max_m` for a
         # floor that slopes or steps. None where unset, never a default.
         self.pool = dict(pool or {})
@@ -241,10 +250,37 @@ def load_course(name: str) -> Course:
                 raise ValueError(f'{path}: pool.lane_lines is {rp["lane_lines"]!r}; '
                                  f'write true or false unquoted')
             pool['lane_lines'] = rp['lane_lines']
-        return Course(stem, props, source=str(path), pool=pool)
+        return Course(stem, props, source=str(path), pool=pool,
+                      zones=_zones(raw.get('zones'), path))
     raise FileNotFoundError(
         f'no course {stem!r}. Looked in: '
         f'{[str(d) for d in _search_dirs()]}')
+
+
+def _zones(raw, path) -> dict:
+    """`zones:` read strictly: each an area or a line of two [x, y] points,
+    and a source that says whether the rulebook states it or its figure
+    (marked "not to scale") only draws it."""
+    out = {}
+    for key, body in (raw or {}).items():
+        body = body or {}
+        _refuse_unknown(body, ZONE_KEYS, path, f'zones.{key}')
+        kinds = [k for k in ('area', 'line') if k in body]
+        if len(kinds) != 1:
+            raise ValueError(f'{path}: zones.{key} needs exactly one of area: or line:')
+        pts = body[kinds[0]]
+        try:
+            pts = [[float(a), float(b)] for a, b in pts]
+        except (TypeError, ValueError):
+            pts = None
+        if not pts or len(pts) != 2:
+            raise ValueError(f'{path}: zones.{key}.{kinds[0]} must be two [x_m, y_m] points')
+        source = body.get('source')
+        if source not in ZONE_SOURCES:
+            raise ValueError(f'{path}: zones.{key}.source is {source!r}; write one of {ZONE_SOURCES}')
+        out[str(key).strip().lower()] = {'kind': kinds[0], 'points': pts, 'source': source,
+                                         'note': str(body.get('note', '') or '')}
+    return out
 
 
 def _floor_points(raw, path):

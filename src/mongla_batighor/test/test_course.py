@@ -91,3 +91,72 @@ def test_a_broken_course_file_is_refused_not_a_crash(tmp_path, monkeypatch, body
     (tmp_path / 'broken.yaml').write_text(body)
     doc, src = course.read('broken')
     assert src == '' and doc['error']
+
+
+def test_the_pool_is_drawn_in_3d_where_the_file_puts_it(tmp_path, monkeypatch):
+    """The 3D scene draws the course the Map draws: a surveyed prop where the
+    file puts it, red; the outline at the surface and on the floor; nothing
+    the file does not give."""
+    monkeypatch.setenv(cm._ENV, str(tmp_path))
+    survey(['--course', 'sauvc26', '--prop', 'final_gate', '--x', '16', '--y', '-1',
+            '--bearing', '0', '--width', '1.5'])
+    survey(['--course', 'sauvc26', '--corner', '0', '-8', '--corner', '0', '8',
+            '--corner', '25', '8', '--corner', '25', '-8'])
+    doc, _ = course.read('sauvc26')
+    (e,) = course.pool_scene(doc).entities
+    assert e.frame_id == course.POOL_FRAME == 'pool'
+    surface = e.lines[0]
+    assert [(p.x, p.y, p.z) for p in surface.points][0] == (0, -8, 0) and len(surface.points) == 5
+    gate = next(t for t in e.texts if t.text.startswith('final_gate'))
+    # The survey gave no depth: a post, said so, never a block at a made-up depth.
+    assert doc['props'][0]['depth_m'] is None
+    assert 'depth not set' in gate.text and not e.cubes
+    # A refused course clears the scene and says why.
+    (bad,) = course.pool_scene({'error': 'no course here'}).entities
+    assert not bad.lines and not bad.cubes and 'no course here' in bad.texts[0].text
+
+
+def test_a_nominal_prop_is_drawn_apart_from_a_measured_one():
+    # A prop's depth is negative below the surface (course_map); the pool's is
+    # positive. NED down is +z, so both props sit under the surface.
+    doc = {'pool': {'outline': [], 'depth_m': 2.0},
+           'props': [{'name': 'gate', 'x_m': 5, 'y_m': 0, 'depth_m': -1.0, 'measured': False},
+                     {'name': 'drum', 'x_m': 9, 'y_m': 2, 'depth_m': -2.0, 'measured': True}]}
+    (e,) = course.pool_scene(doc).entities
+    nominal, measured = e.cubes
+    assert (nominal.pose.position.z, measured.pose.position.z) == (1.0, 2.0)
+    assert nominal.color.a < 0.5 < measured.color.a
+    assert [t.text for t in e.texts] == ['gate (nominal)', 'drum']
+    assert nominal.size.y == course.PROP_M        # no width given: the default, drawn as such
+
+
+def test_a_pool_known_only_by_soundings_still_has_a_floor():
+    doc = {'pool': {'outline': [[0, 0], [10, 0], [10, 5]], 'floor': [[2, 2, 1.2], [8, 3, 1.6]],
+                    'depth_m': None},
+           'props': []}
+    (e,) = course.pool_scene(doc).entities
+    floor = e.lines[1]
+    assert {p.z for p in floor.points} == {1.6}
+
+
+def test_the_rulebook_zones_are_drawn_and_say_their_source():
+    doc, _ = course.read('sauvc_olympic')
+    names = {z['name'] for z in doc['zones']}
+    assert {'gate_line', 'orange_flare_zone'} <= names and doc['props'] == []
+    (e,) = course.pool_scene(doc).entities
+    words = [t.text for t in e.texts]
+    assert 'gate line' in words and 'target mat (figure)' in words
+    gate = next(z for z in doc['zones'] if z['name'] == 'gate_line')
+    assert any(len(ln.points) == 2 and ln.points[0].x == gate['points'][0][0] for ln in e.lines)
+
+
+def test_before_the_anchor_the_pool_is_drawn_by_its_start_and_says_so():
+    """`pool` hangs off `map`, and `map -> odom` exists only once anchored:
+    drawn in `pool` before then, the scene was in a tree with no hull and
+    the 3D view showed nothing. By its start it is odometry's NED frame."""
+    doc, _ = course.read('sauvc_olympic')
+    (before,) = course.pool_scene(doc, frame=course.START_FRAME).entities
+    (after,) = course.pool_scene(doc).entities
+    assert before.frame_id == 'odom_ned' and after.frame_id == 'pool'
+    assert any('not anchored' in t.text for t in before.texts)
+    assert not any('not anchored' in t.text for t in after.texts)

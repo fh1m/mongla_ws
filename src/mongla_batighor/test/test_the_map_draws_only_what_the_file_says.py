@@ -43,9 +43,10 @@ COURSE = {'course': 't', 'pool': {'outline': [[0, -5], [0, 5], [20, 5], [20, -5]
           'unplaced': [{'name': 'drum'}]}
 
 
-def _draw(pose, target=None, px=None):
+def _draw(pose, target=None, px=None, course=None):
     src = (PANELS / 'common.js').read_text() + (PANELS / 'instruments' / 'extension.js').read_text()
-    out = subprocess.run(['node', '-e', HARNESS % {'src': src}, json.dumps([COURSE, pose, target, px])],
+    out = subprocess.run(['node', '-e', HARNESS % {'src': src},
+                          json.dumps([course or COURSE, pose, target, px])],
                          capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
@@ -159,3 +160,45 @@ def test_the_grid_step_follows_the_pool_not_the_panel():
                      and n['attrs'].get('fill') == 'var(--mb-ink-2)')
         return scale['text']
     assert step({'w': 300, 'h': 300}) == step({'w': 1500, 'h': 300}) == '2 m'
+
+
+def test_a_rulebook_zone_is_drawn_dashed_and_says_where_it_came_from():
+    """The olympic course ships zones and no positions: the map shows where
+    the rulebook says a prop may be, as a dashed amber box or line, and
+    "(figure)" where only the not-to-scale figure places it."""
+    course = {'course': 'o', 'pool': {'outline': [], 'floor': []}, 'props': [], 'unplaced': [],
+              'zones': [{'name': 'gate_line', 'kind': 'line', 'points': [[10.8, -17], [10.8, 18]],
+                         'source': 'rulebook', 'note': ''},
+                        {'name': 'target_mat', 'kind': 'area', 'points': [[20, -9], [22, -1]],
+                         'source': 'figure', 'note': ''}]}
+    d = _draw(None, course=course, px={'w': 2000, 'h': 2000})
+    texts = {n['text'] for n in d if n['tag'] == 'text'}
+    assert {'gate line', 'target mat (figure)'} <= texts
+    line = [n for n in d if n['tag'] == 'line' and n['attrs'].get('stroke') == 'var(--mb-amber)']
+    box = [n for n in d if n['tag'] == 'rect' and n['attrs'].get('stroke') == 'var(--mb-amber)']
+    assert line and box and all(n['attrs'].get('stroke-dasharray') for n in line + box)
+    # The mat: 8 m east-west and 2 m north-south, north up.
+    assert (float(box[0]['attrs']['width']), float(box[0]['attrs']['height'])) == (8, 2)
+
+
+def test_a_zone_too_small_on_screen_for_its_name_is_drawn_unnamed():
+    """Eight names centred on a 50 m pool piled into one blur: a box keeps
+    its name only where the name fits inside it."""
+    zone = lambda n, pts: {'name': n, 'kind': 'area', 'points': pts, 'source': 'rulebook', 'note': ''}  # noqa: E731
+    course = {'course': 'o', 'pool': {'outline': [], 'floor': []}, 'props': [], 'unplaced': [],
+              'zones': [zone('pool_walls', [[0, -30], [25, 20]]), zone('starting_zone', [[-0.7, -0.7], [0.7, 0.7]])]}
+    d = _draw(None, course=course, px={'w': 300, 'h': 300})
+    texts = {n['text'] for n in d if n['tag'] == 'text'}
+    boxes = [n for n in d if n['tag'] == 'rect' and n['attrs'].get('stroke') == 'var(--mb-amber)']
+    assert 'pool walls' in texts and 'starting zone' not in texts and len(boxes) == 2
+
+
+def test_a_wide_pool_fills_a_wide_panel():
+    """50 m east-west by 25 m north-south in a 600 x 300 panel: the width
+    sets the scale, so the pool spans most of the panel, not a third."""
+    course = {'course': 'o', 'pool': {'outline': [[0, -25], [0, 25], [25, 25], [25, -25]], 'floor': []},
+              'props': [], 'unplaced': []}
+    d = _draw(None, course=course, px={'w': 600, 'h': 300})
+    (svg,) = [n for n in d if n['tag'] == 'svg' and 'viewBox' in n['attrs']]
+    _, _, w, _ = (float(v) for v in svg['attrs']['viewBox'].split())
+    assert 50 / w > 0.7, w            # 0.46 with the longer side for both

@@ -28,6 +28,7 @@ const FRESH_S = 2;          // the navigation plan view keeps two minutes of tra
 const SVG = "http://www.w3.org/2000/svg";
 
 const lockTopic = (c) => `/mongla/vision/${c}/lock`;
+const hudTopic = (c) => `/mongla/vision/${c}/hud`;
 const seeingTopic = (c) => `/mongla/vision/${c}/seeing`;
 const modelTopic = (c) => `/mongla/vision/${c}/vision_info`;
 const STAGES_TOPIC = "/mongla/batighor/stages";     // overlay.py, once a second
@@ -152,8 +153,11 @@ const HALO = (u) => ({ stroke: "var(--mb-d0)", "stroke-width": 2.5 * u, "paint-o
 function poolMap(course, pose, track, fixes, target, opts) {
   const C = course || {}, P = C.pool || {}, O = opts || {};
   const props = C.props || [];
+  // The rulebook's zones (course.py): where a prop may be, never steered by.
+  const zones = (C.zones || []).filter((z) => (z.points || []).length === 2);
   const here = pose && fin(pose.x) && fin(pose.y) ? pose : null;
   const pts = [...(P.outline || []).map(([x, y]) => ({ x, y })), ...(P.floor || []).map(([x, y]) => ({ x, y })),
+    ...zones.flatMap((z) => z.points.map(([x, y]) => ({ x, y }))),
     ...props.map((p) => ({ x: p.x_m, y: p.y_m })), ...(here ? track : []), ...(here ? fixes : []),
     ...(here ? [here] : []), ...(target ? [target] : [])].filter((p) => fin(p.x) && fin(p.y));
   if (!pts.length) return null;
@@ -168,7 +172,10 @@ function poolMap(course, pose, track, fixes, target, opts) {
   // height the names were 7 px (Kutum, 2026-11-23). Without it, a square
   // drawn as if 300 px wide.
   const px = O.px && O.px.w > 0 && O.px.h > 0 ? O.px : null;
-  const m = px ? Math.max((span + 2 * pad) / px.w, (span + 2 * pad) / px.h) : (span + 2 * pad) / 300;
+  // Each axis by its own extent: the longer side used for both left the
+  // 50 x 25 m olympic pool a third of a wide panel (2026-11-24).
+  const sE = Math.max(e1 - e0, 4) + 2 * pad, sN = Math.max(n1 - n0, 4) + 2 * pad;
+  const m = px ? Math.max(sE / px.w, sN / px.h) : (span + 2 * pad) / 300;
   const hw = px ? (m * px.w) / 2 : span / 2 + pad, hh = px ? (m * px.h) / 2 : span / 2 + pad;
   n0 = cn - hh; n1 = cn + hh; e0 = ce - hw; e1 = ce + hw;
   const W = e1 - e0;
@@ -182,6 +189,26 @@ function poolMap(course, pose, track, fixes, target, opts) {
   const kids = [];
   for (let g = Math.ceil(e0 / step) * step; g <= e1; g += step) kids.push(svg("line", { x1: g, y1: -n1, x2: g, y2: -n0, stroke: "var(--mb-rule)", "stroke-width": u }));
   for (let g = Math.ceil(n0 / step) * step; g <= n1; g += step) kids.push(svg("line", { x1: e0, y1: -g, x2: e1, y2: -g, stroke: "var(--mb-rule)", "stroke-width": u }));
+  // Zones under everything else, dashed amber and labelled small: an area
+  // as its box, a line as itself; "(figure)" when only the rulebook's
+  // not-to-scale figure places it.
+  for (const z of zones) {
+    const [[a0, b0], [a1, b1]] = z.points;
+    const dash = `${4 * u},${3 * u}`, ink = "var(--mb-amber)";
+    kids.push(z.kind === "line"
+      ? svg("line", { x1: b0, y1: -a0, x2: b1, y2: -a1, stroke: ink, "stroke-width": 1.5 * u, "stroke-dasharray": dash, opacity: 0.8 })
+      : svg("rect", { x: Math.min(b0, b1), y: -Math.max(a0, a1), width: Math.abs(b1 - b0), height: Math.abs(a1 - a0),
+        fill: "rgba(248,135,1,0.05)", stroke: ink, "stroke-width": u, "stroke-dasharray": dash, opacity: 0.8 }));
+    // Named inside its north-west corner, and only where the box holds the
+    // name (about 6 px a character at 10 px): centred, the olympic pool's
+    // eight names piled into one blur on a small map (2026-11-24).
+    const words = z.name.replace(/_/g, " ") + (z.source === "rulebook" ? "" : " (figure)");
+    const room = z.kind === "line" ? Infinity : Math.abs(b1 - b0);
+    if (words.length * 6 * u <= room && (z.kind === "line" || Math.abs(a1 - a0) >= 14 * u)) {
+      kids.push(svg("text", { x: Math.min(b0, b1) + 3 * u, y: -Math.max(a0, a1) + 11 * u, "font-size": 10 * u, fill: ink,
+        opacity: 0.85, ...HALO(u) }, svg("title", {}, z.note || ""), words));
+    }
+  }
   if ((P.outline || []).length >= 3) {
     kids.push(svg("polygon", { points: P.outline.map(([x, y]) => `${y},${-x}`).join(" "), fill: "rgba(90,141,255,0.06)", stroke: "var(--mb-sea)", "stroke-width": 1.5 * u }));
   }
@@ -608,6 +635,72 @@ const STATUS_TOPICS = ["/mongla/state", "/mongla/mission_alive", "/mongla/missio
 // What the pilot console's strip keeps: the rest is on Vitals, below.
 const WATCH_CELLS = ["mission", "verb", "lock", "link", "to kutum"];
 
+// A camera's caption, from the overlay's `<camera>/hud` (overlay.caption):
+// what the strip under the picture says. Pure: exported for the test. The
+// rate's last half minute is kept for the sparkline; a caption older than
+// CAPTION_STALE_S is the overlay gone quiet, said, never the last word kept
+// as if current.
+const CAPTION_STALE_S = 3, RATE_KEEP_S = 30;
+const CAPTION_WORDS = {
+  running: "detecting", paused: "paused", silent: "silent", none: "no detector", unread: "silent",
+};
+function captionOf(s, cam, now) {
+  const c = s.caps && s.caps[cam];
+  if (!c) return { cam, state: "unheard", word: "no overlay", level: "stale", rates: [] };
+  const ageS = (now - c.at) / 1000;
+  const rates = (c.rates || []).filter(([t]) => now - t <= RATE_KEEP_S * 1000);
+  if (ageS > CAPTION_STALE_S) {
+    return { cam, state: "stale", word: `overlay silent ${num(ageS, 0)} s`, level: "stale", model: c.m.model, rates };
+  }
+  const m = c.m;
+  const level = m.alarm ? "err" : m.state === "paused" ? "warn" : "ok";
+  const why = m.state === "paused" ? `${num(m.silent_s, 0)} s, runs when a mission asks`
+    : m.state === "running" ? "" : m.state === "none" ? "nothing publishes its detections"
+      : `${num(m.silent_s, 0)} s, NOT paused`;
+  return { cam, state: m.state, word: CAPTION_WORDS[m.state] || m.state, level, why, model: m.model || "",
+    size: m.size ? `${m.size[0]}x${m.size[1]}` : "--", rate: m.rate_hz, late: m.late_ms, rates };
+}
+
+function foldCaption(s, m, cam, at) {
+  let c;
+  try { c = JSON.parse(m.data); } catch { return; }
+  s.caps = s.caps || {};
+  const was = s.caps[cam] || { rates: [] };
+  const rates = was.rates.filter(([t]) => at - t <= RATE_KEEP_S * 1000);
+  if (fin(c.rate_hz)) rates.push([at, c.rate_hz]);
+  else if (c.state !== "running") rates.push([at, 0]);
+  s.caps[cam] = { m: c, at, rates };
+}
+
+// The rate's last half minute as a line, on its own peak; nothing heard,
+// nothing drawn.
+function rateSpark(rates, now) {
+  if (rates.length < 2) return null;
+  const peak = Math.max(1, ...rates.map(([, r]) => r));
+  const pts = rates.map(([t, r]) => `${num(100 - (now - t) / (RATE_KEEP_S * 10), 1)},${num(18 - 16 * r / peak, 1)}`);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 100 20");
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("class", "spark");
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  line.setAttribute("points", pts.join(" "));
+  svg.append(line);
+  return svg;
+}
+
+function captionStrip(g, now) {
+  const chip = (k, v) => el("span", { class: "chip" }, el("small", {}, k), el("b", {}, v));
+  return el("div", { class: `cap ${g.level}` },
+    el("span", { class: "cam" }, el("i", { class: "eye" }), g.cam),
+    el("span", { class: "state" }, el("i", { class: "dot" }), g.word.toUpperCase(),
+      g.why ? el("em", {}, g.why) : null),
+    g.model !== undefined ? chip("model", g.model || "none named") : null,
+    g.state === "running" ? chip("rate", `${num(g.rate, 0)} Hz`) : null,
+    g.state === "running" ? chip("behind", `${num(g.late, 0)} ms`) : null,
+    typeof document !== "undefined" ? rateSpark(g.rates, now) : null,
+    g.size ? chip("frame", g.size) : null);
+}
+
 // -- the table -----------------------------------------------------------
 
 // The status strip's cells and the console's tab marks, from one fold. Pure:
@@ -788,6 +881,32 @@ function phase(ms) { return `animation-delay:-${Date.now() % ms}ms`; }
 const HEALTH_FILL = { ok: "var(--mb-teal)", warn: "var(--mb-amber)", err: "var(--mb-red)", stale: "var(--mb-ink-3)" };
 
 // Pure, for the test: what the drawing says, from the folded state.
+// Roll and pitch in degrees from /mongla/imu: body FRD, world NED (the
+// board's convention, node_telemetry), so roll + is starboard down and pitch
+// + is nose up. A covariance of -1 is "no orientation", which is null here.
+function attitudeOf(m) {
+  const q = m && m.orientation, c = m && m.orientation_covariance;
+  if (!q || (c && c[0] < 0) || ![q.w, q.x, q.y, q.z].every(fin)) return null;
+  const { w, x, y, z } = q, D = 180 / Math.PI;
+  return { roll: Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) * D,
+    pitch: Math.asin(Math.max(-1, Math.min(1, 2 * (w * y - z * x)))) * D };
+}
+
+// The last DEPTH_TRACE_S of depth below the surface, for the trace and rate.
+const DEPTH_TRACE_S = 60;
+function noteDepth(s, depth_m, at) {
+  if (!fin(depth_m)) return;
+  const h = (s.dh = s.dh || []);
+  h.push([at, -depth_m]);
+  while (h.length && (at - h[0][0]) / 1000 > DEPTH_TRACE_S) h.shift();
+}
+// Metres a second, + going down, over the last 2 s; NaN with under 1 s heard.
+function depthRate(h, now) {
+  const r = (h || []).filter(([t]) => (now - t) / 1000 <= 2);
+  if (r.length < 2 || (r[r.length - 1][0] - r[0][0]) / 1000 < 1) return NaN;
+  return (r[r.length - 1][1] - r[0][1]) / ((r[r.length - 1][0] - r[0][0]) / 1000);
+}
+
 function vitalsOf(s, now) {
   const v = s.v || {};
   const stale = !s.vAt || (now - s.vAt) / 1000 > FRESH_S;
@@ -804,12 +923,25 @@ function vitalsOf(s, now) {
     surge: d.x, sway: d.y, health, rpm, peak: Math.max(1000, ...rpm.map((r) => Math.abs(r))),
     pack: s.pAt && (now - s.pAt) / 1000 <= FRESH_S && s.pack ? s.pack.voltage : NaN,
     rail: v.battery_voltage,
+    att: s.aAt && (now - s.aAt) / 1000 <= FRESH_S ? s.att : null,
+    trace: stale ? [] : (s.dh || []).map(([t, d]) => [(t - now) / 1000, d]),
+    rate: stale ? NaN : depthRate(s.dh, now),
     // Where the filter puts the hull, and whether it says to trust it.
     nav: s.locAt && (now - s.locAt) / 1000 <= FRESH_S && s.loc ? {
       x: s.loc.x_m, y: s.loc.y_m, sigma: s.loc.sigma_xy_m, frame: s.loc.frame,
       usable: !!s.loc.usable, why: s.loc.reason || s.loc.aiding || "",
     } : null,
   };
+}
+
+// The navigation reason's room on the Vitals drawing: from x 400 to the
+// divider at 672 less a margin, 250 units at 11 px mono, which renders at
+// about 7.2 units a character (38 ran past it on the ScreenPad, 2026-11-24).
+const NAV_WHY_CHARS = 34;
+// A string cut to `n` characters, the cut marked; whole if it fits.
+function fitText(s, n) {
+  s = String(s || "");
+  return s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}\u2026`;
 }
 
 function vitalsSvg(g) {
@@ -884,10 +1016,16 @@ function vitalsSvg(g) {
     ...(g.nav && fin(g.nav.x) ? [
       T(560, 148, `N ${g.nav.x >= 0 ? " " : ""}${g.nav.x.toFixed(2)}`, { class: "num" }),
       T(560, 170, `E ${g.nav.y >= 0 ? " " : ""}${g.nav.y.toFixed(2)}`, { class: "num" }),
-      T(560, 186, fin(g.nav.sigma) ? `\u00b1${g.nav.sigma.toFixed(2)} m ${g.nav.frame}` : g.nav.frame, { class: "unit" }),
+      // Right-aligned to the drawing's edge: "odom_ned" ran past it.
+      T(652, 186, fin(g.nav.sigma) ? `\u00b1${g.nav.sigma.toFixed(2)} m ${g.nav.frame}` : g.nav.frame,
+        { class: "unit", "text-anchor": "end" }),
     ] : [T(560, 150, g.nav ? "no position yet" : "no filter", { class: "absent" })]),
-    g.nav && T(400, 280, g.nav.usable ? "NAVIGATION USABLE" : `NAVIGATION: ${g.nav.why}`.slice(0, 44),
-      { class: g.nav.usable ? "nav ok" : "nav warn" }),
+    // Usable is one line; not usable says so, then why, cut to the width
+    // (the whole sentence on hover): one line of both ran off the edge.
+    ...(!g.nav ? [] : g.nav.usable ? [T(400, 284, "NAVIGATION USABLE", { class: "nav ok" })] : [
+      T(400, 276, "NAVIGATION NOT USABLE", { class: "nav warn" }),
+      svg("text", { x: 400, y: 291, class: "unit why" }, svg("title", {}, g.nav.why), fitText(g.nav.why, NAV_WHY_CHARS)),
+    ]),
   ];
   // One spinner per ESC the board reports; speed and sense from its rpm.
   const escs = g.rpm.length ? g.rpm.map((r, i) => {
@@ -899,13 +1037,45 @@ function vitalsSvg(g) {
   }) : [T(400, 256, "ESCs not announced", { class: "lbl" })];
   // The board's six lines along the bottom; a bad one breathes.
   const health = g.health.map(([label, lvl, msg], i) => {
-    const x = 14 + i * 108;
+    const x = 14 + i * 128;
     return svg("g", {}, svg("title", {}, msg),
       svg("circle", { cx: x + 6, cy: 306, r: 5, fill: HEALTH_FILL[lvl], class: lvl === "err" || lvl === "warn" ? "alarm" : "", style: phase(1200) }),
       T(x + 16, 311, label, { class: `hl ${lvl}` }));
   });
-  return svg("svg", { viewBox: "0 0 660 322", class: `vitals${g.stale ? " stale" : ""}`, preserveAspectRatio: "xMidYMid meet" },
-    ...depth, ...compass, ...words, ...escs, ...health);
+  // The right column: attitude as a horizon, and depth as a trace with its
+  // rate. Neither is on the main screen.
+  const ax = 735, ay = 98, AR = 50, K = AR / 30;     // 30 deg of pitch to the rim
+  const att = g.att;
+  const horizon = [
+    T(ax, 26, "ATTITUDE", { class: "lbl", "text-anchor": "middle" }),
+    svg("defs", {}, svg("clipPath", { id: "mb-ball" }, svg("circle", { cx: ax, cy: ay, r: AR }))),
+    svg("circle", { cx: ax, cy: ay, r: AR, class: "ring" }),
+    att ? svg("g", { "clip-path": "url(#mb-ball)" },
+      svg("g", { transform: `rotate(${-att.roll} ${ax} ${ay}) translate(0 ${Math.max(-AR, Math.min(AR, att.pitch * K))})` },
+        svg("rect", { x: ax - 2 * AR, y: ay, width: 4 * AR, height: 2 * AR, class: "sea" }),
+        svg("line", { x1: ax - 2 * AR, y1: ay, x2: ax + 2 * AR, y2: ay, class: "horizon" }),
+        ...[-20, -10, 10, 20].map((d) => svg("line", { x1: ax - (d % 20 ? 8 : 14), y1: ay - d * K, x2: ax + (d % 20 ? 8 : 14), y2: ay - d * K, class: "rung" }))))
+      : T(ax, ay + 4, "NO ATTITUDE", { class: "absent", "text-anchor": "middle" }),
+    svg("path", { d: `M${ax - 30} ${ay} h18 l6 6 l6 -6 h18`, class: "wings" }),
+    // Either side of the centre: from the ball's edges, "R -1.0" ran into "P +0.6".
+    T(ax - 5, 172, att ? `R ${att.roll >= 0 ? "+" : ""}${att.roll.toFixed(1)}\u00b0` : "R --", { class: "unit att", "text-anchor": "end" }),
+    T(ax + 5, 172, att ? `P ${att.pitch >= 0 ? "+" : ""}${att.pitch.toFixed(1)}\u00b0` : "P --", { class: "unit att" }),
+  ];
+  const tx0 = 690, tx1 = 780, ty0 = 200, ty1 = 254;
+  const deepest = Math.max(1, ...g.trace.map(([, d]) => d));
+  const tp = g.trace.map(([s, d]) => `${(tx1 + (s / DEPTH_TRACE_S) * (tx1 - tx0)).toFixed(1)},${(ty0 + (Math.max(0, d) / deepest) * (ty1 - ty0)).toFixed(1)}`);
+  const trace = [
+    T(tx0, 192, `DEPTH ${DEPTH_TRACE_S} s`, { class: "lbl" }),
+    svg("rect", { x: tx0, y: ty0, width: tx1 - tx0, height: ty1 - ty0, class: "well" }),
+    tp.length > 1 ? svg("polyline", { points: tp.join(" "), class: "trace" })
+      : T((tx0 + tx1) / 2, (ty0 + ty1) / 2 + 4, "no depth heard", { class: "absent", "text-anchor": "middle" }),
+    T(tx1, ty1 + 12, `${deepest.toFixed(1)} m`, { class: "unit", "text-anchor": "end" }),
+    T(tx0, 284, !fin(g.rate) ? "-- m/s" : Math.abs(g.rate) < 0.02 ? "holding" :
+      `${g.rate > 0 ? "\u2193" : "\u2191"} ${Math.abs(g.rate).toFixed(2)} m/s`, { class: `num rate${fin(g.rate) && Math.abs(g.rate) >= 0.02 ? " moving" : ""}` }),
+  ];
+  return svg("svg", { viewBox: "0 0 790 322", class: `vitals${g.stale ? " stale" : ""}`, preserveAspectRatio: "xMidYMid meet" },
+    svg("line", { x1: 672, y1: 14, x2: 672, y2: 290, class: "divider" }),
+    ...depth, ...compass, ...words, ...escs, ...horizon, ...trace, ...health);
 }
 
 const INSTRUMENTS = {
@@ -935,13 +1105,31 @@ const INSTRUMENTS = {
     },
   },
 
+  Caption: {
+    title: "Caption",
+    kind: "caption",
+    topics: [...CAMERAS.map((c) => hudTopic(c))],
+    fold(s, topic, m) {
+      const cam = CAMERAS.find((c) => topic === hudTopic(c));
+      if (cam) foldCaption(s, m, cam, heard());
+    },
+    draw(s) {
+      const now = Date.now();
+      // The layout names the camera; a caption placed by hand with none
+      // says each camera's, one line each.
+      const cams = s.cfg && CAMERAS.includes(s.cfg.camera) ? [s.cfg.camera] : CAMERAS;
+      return cams.map((c) => captionStrip(captionOf(s, c, now), now));
+    },
+  },
+
   Vitals: {
     title: "Vitals",
     kind: "vitals",
     topics: ["/mongla/state", "/mongla/demand", "/mongla/esc_rpm", "/mongla/thruster_pack", "/diagnostics",
-      "/mongla/localization/state"],
+      "/mongla/localization/state", "/mongla/imu"],
     fold(s, topic, m) {
-      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); }
+      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteDepth(s, m.depth_m, s.vAt); }
+      else if (topic === "/mongla/imu") { s.att = attitudeOf(m); s.aAt = heard(); }
       else if (topic === "/mongla/localization/state") { s.loc = m; s.locAt = heard(); }
       else if (topic === "/mongla/demand") { s.demand = m.vector; s.dAt = heard(); }
       else if (topic === "/mongla/esc_rpm") { s.rpm = Array.from(m.data || []); s.rAt = heard(); }
@@ -1332,7 +1520,8 @@ function makePanel(spec) {
         localStorage.setItem("mb.vitals.sidebar", "closed");
       } catch { /* no storage: leave the sidebar as it is */ }
     }, 1500);
-    const s = {};
+    // The panel's config from the layout (views.instrument(name, **config)).
+    const s = { cfg: context.initialState || {} };
     let dirty = true;
     // A control built once (spec.head): a redrawn button can lose its click.
     if (spec.head) root.append(spec.head(s, () => { dirty = true; }));
@@ -1402,7 +1591,10 @@ function said(base, work) {
 
 function unedited(base, work) {
   const cfg = (d) => (d && d.configById) || {};
-  const { configById: bc, ...bRest } = base || {}, { configById: wc, ...wRest } = work || {};
+  // Global variables are selections made while watching (the track the
+  // Detectors panel follows), like the open tab: not the layout's design.
+  const { configById: bc, globalVariables: bg, ...bRest } = base || {};
+  const { configById: wc, globalVariables: wg, ...wRest } = work || {};
   if (!said(bRest, wRest)) return false;
   return Object.entries(cfg(base)).every(([id, c]) => {
     if (!(id in cfg(work))) return false;
@@ -1436,7 +1628,8 @@ function layoutUpdates(records, served, now) {
         cfg[id] = { ...added, ...cfg[id] };
         if (id.startsWith("Tab!") && Number.isInteger(w.activeTabIdx) && w.activeTabIdx < (cfg[id].tabs || []).length) cfg[id].activeTabIdx = w.activeTabIdx;
       }
-      data = { ...data, configById: cfg };
+      const vars = L.working.data && L.working.data.globalVariables;
+      data = { ...data, configById: cfg, ...(vars && data.globalVariables ? { globalVariables: { ...data.globalVariables, ...vars } } : {}) };
     }
     update.push({ ...r, layout: { ...L, baseline: { data, savedAt: now }, working: undefined } });
   }
@@ -1477,7 +1670,8 @@ async function syncLayouts() {
 }
 
 module.exports = {
-  healthNow, managerHeard, vitalsOf, signalBars, WATCH_CELLS,
+  healthNow, managerHeard, vitalsOf, signalBars, WATCH_CELLS, captionOf, foldCaption, fitText, NAV_WHY_CHARS,
+  attitudeOf, depthRate, vitalsSvg,
   activate(extensionContext) {
     syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {

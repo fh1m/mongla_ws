@@ -11,6 +11,9 @@
       },
       "lichtblickPanelTitle": "forward camera"
     },
+    "mongla.batighor.Caption!forward_caption": {
+      "camera": "forward"
+    },
     "Image!downward": {
       "imageMode": {
         "imageTopic": "/mongla/vision/downward/stream/compressed",
@@ -28,8 +31,11 @@
       },
       "lichtblickPanelTitle": "downward camera"
     },
+    "mongla.batighor.Caption!downward_caption": {
+      "camera": "downward"
+    },
     "mongla.batighor.Vision!vision": {},
-    "3D!hull": {
+    "3D!pool": {
       "followTf": "mongla",
       "followMode": "follow-position",
       "topics": {
@@ -37,6 +43,9 @@
           "visible": true
         },
         "/mongla/batighor/scene": {
+          "visible": true
+        },
+        "/mongla/batighor/pool_scene": {
           "visible": true
         }
       },
@@ -49,9 +58,9 @@
         }
       },
       "cameraState": {
-        "distance": 0.95,
+        "distance": 6.0,
         "perspective": true,
-        "phi": 55,
+        "phi": 50,
         "thetaOffset": 200,
         "targetOffset": [
           0,
@@ -84,9 +93,9 @@
           "order": 1
         }
       },
-      "lichtblickPanelTitle": "attitude"
+      "lichtblickPanelTitle": "pool"
     },
-    "mongla.batighor.Map!map": {}
+    "mongla.batighor.Mission!mission": {}
   },
   "globalVariables": {
     "track": 0
@@ -104,8 +113,18 @@
     "direction": "column",
     "first": {
       "direction": "row",
-      "first": "Image!forward",
-      "second": "Image!downward",
+      "first": {
+        "direction": "column",
+        "first": "Image!forward",
+        "second": "mongla.batighor.Caption!forward_caption",
+        "splitPercentage": 93.0
+      },
+      "second": {
+        "direction": "column",
+        "first": "Image!downward",
+        "second": "mongla.batighor.Caption!downward_caption",
+        "splitPercentage": 93.0
+      },
       "splitPercentage": 50.0
     },
     "second": {
@@ -113,11 +132,11 @@
       "first": "mongla.batighor.Vision!vision",
       "second": {
         "direction": "row",
-        "first": "3D!hull",
-        "second": "mongla.batighor.Map!map",
-        "splitPercentage": 41.7
+        "first": "3D!pool",
+        "second": "mongla.batighor.Mission!mission",
+        "splitPercentage": 64.7
       },
-      "splitPercentage": 40.0
+      "splitPercentage": 32.0
     },
     "splitPercentage": 64.0
   }
