@@ -257,3 +257,32 @@ def test_a_mirror_pair_too_noisy_to_resolve_is_not_an_answer():
     out = c.fuse(now=5.0)
     assert not out.decided
     assert 'unresolved' in out.reason
+
+
+def test_a_pool_fix_before_the_anchor_is_refused():
+    # The node refused the heading; fusing a pool-frame fix into the boot-axis
+    # state put it wrong by the rotation between them (audit 2026-11-24).
+    n = _node()
+    hdr = SimpleNamespace(stamp=SimpleNamespace(sec=0, nanosec=0), frame_id='pool')
+    n._on_fix(SimpleNamespace(header=hdr, point=SimpleNamespace(x=0.6, y=0.0, z=0.3)))
+    assert n._n['fix'] == 0 and n._n['fix_refused'] == 1
+
+
+def test_an_anchor_paired_with_an_old_board_attitude_is_refused():
+    # Any attitude ever heard was paired, however old (audit 2026-11-24).
+    import time as _t
+    n = _node()
+    n._on_imu(_Imu(100.0))
+    n._on_imu(_Imu(100.02))
+    n._board_R_at = _t.monotonic() - 30.0
+    n._on_heading(SimpleNamespace(data=90.0))
+    assert n._anchored is False
+
+
+def test_a_late_imu_sample_still_says_the_imu_is_alive():
+    # The gap branch returned before the age and stamp moved (audit 2026-11-24).
+    n = _node()
+    n._imu_gap_warned = True
+    n._on_imu(_Imu(100.0))
+    n._on_imu(_Imu(100.5))
+    assert n._last_input_t > 100.0
