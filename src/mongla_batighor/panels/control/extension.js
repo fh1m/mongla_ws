@@ -129,6 +129,7 @@ function initPanel(context, kind = "ControlCenter") {
     if (tProps.checked) confirms.push("propellers_clear");
     if (tKill.checked) confirms.push("kill_switch_manned");
     armDlg.close();
+    if (!(helm && helm.pilot === me())) { say("you are no longer the pilot: not armed", true); return; }
     await call("command", { cmd: "arm", confirms });
   });
   const bArm = el("button", {
@@ -158,9 +159,13 @@ function initPanel(context, kind = "ControlCenter") {
     }
   }
   pick.addEventListener("change", drawFields);
+  // One press, one goal: a double click or a held Enter must not send the
+  // verb again once the first has finished (two yaw_left 90 is 180 degrees).
+  let sending = false;
   const bSend = el("button", {
     class: "go",
-    onclick: () => {
+    onclick: async () => {
+      if (sending) return;
       // Only what the operator filled in is sent; the verb's defaults do the rest.
       const out = {};
       for (const i of fields.querySelectorAll("input")) {
@@ -168,7 +173,12 @@ function initPanel(context, kind = "ControlCenter") {
         if (k === "boolean") { if (i.checked !== (VERBS[pick.value].defaults[i.dataset.f] === true)) out[i.dataset.f] = i.checked; }
         else if (i.value !== "") out[i.dataset.f] = k === "string" ? i.value : Number(i.value);
       }
-      return call("command", { cmd: pick.value, fields_json: JSON.stringify(out) });
+      sending = true;
+      try {
+        return await call("command", { cmd: pick.value, fields_json: JSON.stringify(out) });
+      } finally {
+        setTimeout(() => { sending = false; }, 400);
+      }
     },
   }, "Send");
 

@@ -313,7 +313,7 @@ def flow(v: View):
             # ~160, and on one axis it flattened them onto the floor.
             (3, v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
                                   series(f'{d}/distance_debug.data[1]', 'height m', True),
-                                  series(f'{d}/floor_height.range', 'floor m')))))))
+                                  series(f'{d}/floor_height.range', 'floor (tile)')))))))
 
 def localization(v: View):
     """Navigation: where the filter puts the vehicle on the pool, and why.
@@ -345,9 +345,9 @@ def localization(v: View):
             (3, v('heading', plot(series('/mongla/state.yaw_deg', 'board heading'),
                                   series('/mongla/localization/heading.data', 'given heading',
                                          True),
-                                  series(f'{d}/floor_grid_deg.heading_deg', 'floor grid'),
+                                  series(f'{d}/floor_grid_deg.heading_deg', 'grid (tile)'),
                                   series(f'{d}/lane_heading_deg.heading_deg', 'lane line')))),
-            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor m'),
+            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor (tile)'),
                                 series('/mongla/state.depth_m', 'depth m')))))))
 
 
@@ -450,7 +450,7 @@ def downward(v: View):
             (5, v('vision', instrument('Vision'))),
             (4, v('ladder', states(series(f'{d}/lock{RUNG}.class_id', 'downward rung'),
                                    series(f'{V}/active_camera.data', 'live camera', True)))),
-            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor m'),
+            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor (tile)'),
                                 series('/mongla/state.depth_m', 'depth m')))),
             (3, v('anchor', plot(series(f'{d}/anchor_decomposition.vector.x', 'rotation'),
                                  series(f'{d}/anchor_decomposition.vector.y', 'scale')))))))
