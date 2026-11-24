@@ -49,7 +49,8 @@ def test_the_slope_is_followed_within_the_bar():
 def test_a_flat_floor_reads_the_same_either_way():
     flat = [(0, 0, 1.5), (10, 0, 1.5), (0, 5, 1.5)]
     d, sig, grad = floor_depth_at(flat, 3.0, 2.0)
-    assert math.isclose(d, 1.5) and abs(grad) < 1e-9 and abs(sig) < 1e-9
+    # Three points fit any plane exactly: no spread was measured.
+    assert math.isclose(d, 1.5) and abs(grad) < 1e-9 and math.isnan(sig)
 
 
 def test_never_extrapolates_past_the_survey():
@@ -62,7 +63,8 @@ def test_never_extrapolates_past_the_survey():
 def test_two_points_and_one_point():
     d, _, g = floor_depth_at([(0, 0, 1.0), (10, 0, 2.0)], 5.0, 3.0)
     assert math.isclose(d, 1.5) and math.isclose(g, 0.1)
-    assert floor_depth_at([(1, 1, 1.7)], 9.0, 9.0) == (1.7, 0.0, 0.0)
+    d, sig, g = floor_depth_at([(1, 1, 1.7)], 9.0, 9.0)
+    assert (d, g) == (1.7, 0.0) and math.isnan(sig)
 
 
 def test_no_survey_is_no_answer():
