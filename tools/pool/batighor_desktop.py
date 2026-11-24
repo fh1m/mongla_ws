@@ -33,6 +33,8 @@ Lichtblick 1.27: `loadDefaultLayouts.ts`, `DesktopLayoutLoader.ts`,
     python3 tools/pool/batighor_desktop.py                    # kutum.local, every view
     python3 tools/pool/batighor_desktop.py 192.168.0.103 --view localization
     python3 tools/pool/batighor_desktop.py --list             # the views Kutum serves
+    python3 tools/pool/batighor_desktop.py --screen eDP-1 --vitals DP-2   # two screens, named
+    python3 tools/pool/batighor_desktop.py --one-screen       # the cockpit alone, even on a Duo
 
 Standard library only: the operator's machine needs no ROS.
 """
@@ -140,9 +142,92 @@ def embed_fonts(code: bytes, base: str) -> bytes:
 
 # The density the app's sizes were drawn for, on a laptop read at arm's
 # length. A 4K 15-inch panel is ~290 dpi; at device scale 1, the app's 12 px
-# type is 1 mm tall on it (seen on the dev box 2026-11-12); at 120 it drew at 2.5,
-# 1506 px of layout, and every view was cramped (2026-11-21): 140 gives it 2.
-READ_DPI = 140
+# type is 1 mm tall on it (seen on the dev box 2026-11-12). At 2 the owner read
+# the type as tiny (2026-11-24); 120 gives 2.5, 1536 px of layout, which the
+# views are now laid out for (2026-11-21 had found them cramped there).
+READ_DPI = 120
+
+# The Vitals view opens in a window of its own, for a second screen. The app
+# keeps one window per profile (a second launch hands its link to the first,
+# and `--force-multiple-windows` opened the cockpit again, not the view it
+# was given), so this window has its own profile; panels and layouts are
+# shared from ~/.lichtblick-suite.
+VITALS_VIEW = 'vitals'
+VITALS_PROFILE = Path.home() / '.config' / 'Lichtblick-vitals'
+# The screen under the main one is read from further off, at a glance: a
+# quarter step larger (2.75 on the Zenbook Duo, where 2.5 read small).
+VITALS_BOOST = 0.25
+
+
+def hyprland(cmd: str) -> str:
+    """One request to Hyprland's socket; '' where there is none."""
+    import socket
+    sig = os.environ.get('HYPRLAND_INSTANCE_SIGNATURE')
+    run = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')) / 'hypr'
+    socks = [run / sig / '.socket.sock'] if sig else sorted(run.glob('*/.socket.sock'))
+    if not socks or not socks[0].exists():
+        return ''
+    with socket.socket(socket.AF_UNIX) as s:
+        s.connect(str(socks[0]))
+        s.sendall(cmd.encode())
+        out = b''
+        while chunk := s.recv(65536):
+            out += chunk
+    return out.decode()
+
+
+def two_screens(monitors: list) -> tuple[str, str] | None:
+    """(main, under) when a wide, short screen sits under another: the
+    Zenbook Duo's ScreenPad (3840 x 1100, 3.5 wide to 1 tall) under its
+    panel. None for an ordinary desk."""
+    wide = [m for m in monitors if m.get('height') and m['width'] / m['height'] >= 3]
+    for w in wide:
+        above = [m for m in monitors if m is not w and m.get('x') == w.get('x')
+                 and m.get('y', 0) < w.get('y', 0)]
+        if above:
+            return above[0]['name'], w['name']
+    return None
+
+
+def place(pid: int, screen: str, wait_s: float = 30.0) -> bool:
+    """Put the window of process `pid` on the workspace `screen` is showing,
+    full screen, and press one key in it (Hyprland).
+
+    The workspace the screen shows, not the monitor alone: a window rule had
+    filed the cockpit on the OLED's workspace 7 while it showed 1 (seen
+    2026-11-24). The key is Shift, which nothing acts on alone: a press is
+    what lets the page go full screen and drop the window's own buttons
+    (common.js), and it needs the page loaded first. Both dispatch dialects
+    are tried: the Lua one this dev box's Hyprland takes, then the classic
+    one. False when there is no Hyprland or the window never showed."""
+    end = time.monotonic() + wait_s
+    while time.monotonic() < end:
+        try:
+            clients = json.loads(hyprland('j/clients') or '[]')
+            monitors = json.loads(hyprland('j/monitors') or '[]')
+        except (OSError, ValueError):
+            return False
+        mine = [c for c in clients if c.get('pid') == pid]
+        shown = [m['activeWorkspace']['id'] for m in monitors if m.get('name') == screen]
+        if mine and shown:
+            addr, ws = mine[0]['address'], shown[0]
+            win = f'window = "address:{addr}"'
+            if hyprland(f'/dispatch hl.dsp.window.move({{ workspace = "{ws}", {win} }})').strip() == 'ok':
+                hyprland(f'/dispatch hl.dsp.focus({{ {win} }})')
+                if not mine[0].get('fullscreen'):
+                    hyprland('/dispatch hl.dsp.window.fullscreen()')
+                time.sleep(8)
+                hyprland(f'/dispatch hl.dsp.send_shortcut({{ mods = "", key = "Shift_L", {win} }})')
+            else:
+                hyprland(f'/dispatch movetoworkspace {ws},address:{addr}')
+                hyprland(f'/dispatch focuswindow address:{addr}')
+                if not mine[0].get('fullscreen'):
+                    hyprland('/dispatch fullscreen 0')
+                time.sleep(8)
+                hyprland(f'/dispatch sendshortcut , Shift_L, address:{addr}')
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def screen_scale(xrandr: str) -> float | None:
@@ -152,17 +237,42 @@ def screen_scale(xrandr: str) -> float | None:
     lines.sort(key=lambda ln: ' primary ' not in ln)
     for ln in lines[:1]:
         m = re.search(r'(\d+)x\d+\+\d+\+\d+.* (\d+)mm x \d+mm', ln)
-        if m and int(m.group(2)) > 0:
-            dpi = int(m.group(1)) / (int(m.group(2)) / 25.4)
-            return max(1.0, min(3.0, round(dpi / READ_DPI * 4) / 4))
+        if m:
+            return scale_for(int(m.group(1)), int(m.group(2)))
     return None
 
 
-def scale_flag(asked: float | None) -> list[str]:
+def scale_for(px: int, mm: int) -> float | None:
+    """The scale for a screen `px` wide and `mm` wide, to a quarter; None if unknown."""
+    if mm <= 0:
+        return None
+    return max(1.0, min(3.0, round(px / (mm / 25.4) / READ_DPI * 4) / 4))
+
+
+def hyprland_scale(screen: str | None) -> float | None:
+    """The scale for the screen named (else the focused one) from Hyprland's
+    own sizes; None without Hyprland. Under Hyprland there is often no
+    xrandr, and the app (through XWayland) is not scaled for it: on the
+    Zenbook Duo it drew at 1, its type a millimetre tall (2026-11-24)."""
+    try:
+        mons = json.loads(hyprland('j/monitors') or '[]')
+    except (OSError, ValueError):
+        return None
+    pick = [m for m in mons if m.get('name') == screen] or [m for m in mons if m.get('focused')] or mons
+    return scale_for(pick[0].get('width', 0), pick[0].get('physicalWidth', 0)) if pick else None
+
+
+def scale_flag(asked: float | None, screen: str | None = None, boost: float = 0.0) -> list[str]:
     """`--force-device-scale-factor` for the app, unless the desktop scales it."""
     if asked:
-        return [f'--force-device-scale-factor={asked:g}']
-    if os.environ.get('GDK_SCALE') or not shutil.which('xrandr'):
+        return [f'--force-device-scale-factor={asked + boost:g}']
+    if os.environ.get('GDK_SCALE'):
+        return []
+    found = hyprland_scale(screen)
+    if found:
+        found += boost
+        return [f'--force-device-scale-factor={found:g}'] if found > 1 else []
+    if not shutil.which('xrandr'):
         return []
     xrdb = subprocess.run(['xrdb', '-query'], capture_output=True, text=True).stdout \
         if shutil.which('xrdb') else ''
@@ -226,6 +336,13 @@ def main(argv=None) -> int:
     ap.add_argument('--scale', type=float, help='the app\'s scale (default: from the screen\'s density)')
     ap.add_argument('--list', action='store_true', help="print Kutum's views and exit")
     ap.add_argument('--no-launch', action='store_true', help='install the panels only')
+    ap.add_argument('--one-screen', action='store_true',
+                    help='one window even where a second screen is found')
+    ap.add_argument('--vitals', metavar='SCREEN',
+                    help='also open the Vitals view in its own window on this screen '
+                         '(a Hyprland monitor name, e.g. DP-2 for the Zenbook Duo\'s ScreenPad)')
+    ap.add_argument('--screen', metavar='SCREEN',
+                    help='move the main window to this screen (Hyprland), e.g. eDP-1')
     ap.add_argument('--no-vulkan', action='store_true',
                     help="render through ANGLE's OpenGL backend even where Vulkan is found")
     a = ap.parse_args(argv)
@@ -265,18 +382,45 @@ def main(argv=None) -> int:
     if app is None:
         print('ERROR: the lichtblick desktop app is not on PATH', file=sys.stderr)
         return 1
-    view = a.view or 'mongla_layout'
+    # Two screens by default where Hyprland shows a screen under the main
+    # one: the pictures and the pilot's tools above, Vitals below.
+    if not a.one_screen and not a.vitals:
+        try:
+            found = two_screens(json.loads(hyprland('j/monitors') or '[]'))
+        except (OSError, ValueError):
+            found = None
+        if found and VITALS_VIEW in views:
+            a.screen = a.screen or found[0]
+            a.vitals = found[1]
+            print(f'ok  two screens: {a.screen} and {a.vitals} under it (--one-screen for one)')
+    pilot = 'batighor_pilot'                   # the console, Pilot first (views.PILOT_CONSOLE)
+    view = a.view or (pilot if a.vitals and pilot in views else 'mongla_layout')
     url = link(a.host, a.bridge)
     if running():
         # A second launch hands its link to the open app, which ignores flags.
         print(f'WARNING: the app is already open and keeps its view; pick {view} under '
               f'Layouts, or close the app and run this again')
-    flags = scale_flag(a.scale)
+    flags = scale_flag(a.scale, a.screen)
     gpu = [] if a.no_vulkan else vulkan_flag()
-    subprocess.Popen([app, *flags, *gpu, f'--defaultLayout={view}', url], start_new_session=True,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    main_app = subprocess.Popen([app, *flags, *gpu, f'--defaultLayout={view}', url],
+                                start_new_session=True,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f'ok  opened {view} on {a.host}' + (f' at scale {flags[0].split("=")[1]}' if flags else '')
           + (', drawing through Vulkan' if gpu else ''))
+    if a.vitals:
+        if VITALS_VIEW not in views:
+            print(f'WARNING: Kutum serves no {VITALS_VIEW} view; update Kutum for the second screen')
+        else:
+            pad = subprocess.Popen([app, f'--user-data-dir={VITALS_PROFILE}',
+                                    *scale_flag(a.scale, a.vitals, VITALS_BOOST), *gpu,
+                                    f'--defaultLayout={VITALS_VIEW}', url], start_new_session=True,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f'ok  opened {VITALS_VIEW} in its own window')
+            if not place(pad.pid, a.vitals):
+                print(f'WARNING: move the {VITALS_VIEW} window to {a.vitals} by hand '
+                      '(placing it needs Hyprland)')
+    if a.screen and not place(main_app.pid, a.screen):
+        print(f'WARNING: move the main window to {a.screen} by hand (placing it needs Hyprland)')
     return 0
 
 

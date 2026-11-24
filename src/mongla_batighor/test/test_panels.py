@@ -242,7 +242,10 @@ def test_every_instrument_the_views_place_exists():
     """views.py names an instrument by its registered name; a typo there is a
     panel Lichtblick cannot find, drawn as an empty box."""
     from mongla_batighor import views
-    ours = set(_instruments()) | {'ControlCenter', 'Detectors', 'Calibrate'}
+    control = (PANELS / 'control' / 'extension.js').read_text()
+    parts = re.search(r'const PARTS = \{(.*?)\n\};', control, re.S).group(1)
+    ours = set(_instruments()) | set(re.findall(r'^  (\w+): \[', parts, re.M)) | {'Calibrate'}
+    assert {'ControlCenter', 'Detectors', 'Keys'} <= ours
     for name in views.VIEWS:
         for pid in views.build(name)['configById']:
             if pid.startswith(views.PANEL):
@@ -511,7 +514,7 @@ def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
     out = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     got = _json.loads(out.stdout)
-    cells = {k: (v, lvl) for k, v, lvl in got['cells']}
+    cells = {k: (v, lvl) for k, v, lvl, *_ in got['cells']}
     assert cells['lock'] == ('forward held', 'live')
     assert cells['health'] == ('1 unknown', 'stale')
     assert cells['vehicle'] == ('ARMED', 'armed') and cells['depth'][0] == '1.20 m deep'
@@ -521,7 +524,7 @@ def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
     js_old = js.replace('statusOf(' + _json.dumps(s) + ', 1500)', 'statusOf(' + _json.dumps(s) + ', 4600)')
     old = _sp.run(['node', '-e', js_old], capture_output=True, text=True, timeout=30)
     assert old.returncode == 0, old.stderr
-    cells = {k: (v, lvl) for k, v, lvl in _json.loads(old.stdout)['cells']}
+    cells = {k: (v, lvl) for k, v, lvl, *_ in _json.loads(old.stdout)['cells']}
     assert cells['vehicle'] == ('ARMED  3.6 s old', 'warn'), cells['vehicle']
 
 
@@ -770,9 +773,9 @@ process.exit(0);
     run = _sp.run(['node', '-e', js], capture_output=True, text=True, timeout=30)
     assert run.returncode == 0, run.stderr
     got = _json.loads(run.stdout)
-    assert got['calm'] == ['to kutum', 'lag 0.00 s  video x0.5', 'ok'], got['calm']
-    assert got['slow'] == ['to kutum', 'lag 0.70 s  video x0.5', 'warn'], got['slow']
-    assert got['late'] == ['to kutum', 'lag 2.50 s  video x0.5', 'err'], got['late']
+    assert got['calm'] == ['to kutum', 'lag 0.00 s  video x0.5', 'ok', 4], got['calm']
+    assert got['slow'] == ['to kutum', 'lag 0.70 s  video x0.5', 'warn', 2], got['slow']
+    assert got['late'] == ['to kutum', 'lag 2.50 s  video x0.5', 'err', 1], got['late']
     assert got['aged'] == 1, 'samples older than a minute are dropped'
     assert got['nsec'] == 300, got['nsec']
     assert got['reports'] == [False, False, True, False, True], got['reports']

@@ -1052,7 +1052,7 @@
       "path": "/mongla/state.armed",
       "style": "background",
       "fallbackColor": "#3a4256",
-      "fallbackLabel": "unknown",
+      "fallbackLabel": "arming not heard",
       "rules": [
         {
           "operator": "=",
@@ -1112,7 +1112,7 @@
       "path": "/mongla/safety.leak",
       "style": "background",
       "fallbackColor": "#3a4256",
-      "fallbackLabel": "unknown",
+      "fallbackLabel": "leak unknown",
       "rules": [
         {
           "operator": "=",
@@ -1154,7 +1154,7 @@
       "path": "/mongla/safety.baro",
       "style": "background",
       "fallbackColor": "#3a4256",
-      "fallbackLabel": "unknown",
+      "fallbackLabel": "baro unknown",
       "rules": [
         {
           "operator": "=",
