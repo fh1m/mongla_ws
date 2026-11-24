@@ -32,7 +32,8 @@ class _Log:
 
 def _build(monkeypatch, fps):
     params = {'device_path': '/dev/null', 'profile': 'pi_downward', 'name': '',
-              'fps': fps, 'device': -1, 'controls': '', 'exposure_us': 0}
+              'fps': fps, 'device': -1, 'controls': '', 'exposure_us': 0,
+              'width': 640, 'height': 480}
     log = _Log()
     me = types.SimpleNamespace(
         get_parameter=lambda n: types.SimpleNamespace(value=params[n]),

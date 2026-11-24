@@ -207,11 +207,18 @@ class CameraNode(Node):
         # image_raw 30.0 -> 71.2 Hz on the same hardware.
         rate = float(self.get_parameter('publish_rate_hz').value)
         pinned = rate > 0
-        if rate <= 0:
-            rate = float(self._info.get('fps') or 30.0)
+        if pinned:
+            rate_txt = f'{rate:.1f} Hz (pinned)'
+        else:
+            # What the driver REPORTS, which a Fantech asked for 60 answers
+            # while delivering 15 (config.py): the health line measures it.
+            reported = float(self._info.get('fps') or 0.0)
+            rate_txt = (f'the camera\'s rate (driver reports {reported:.1f} Hz; '
+                        f'measured on the health line)' if reported > 0
+                        else 'the camera\'s rate (unreported; measured on the health line)')
             if self._log_rate_source:
                 self.get_logger().info(
-                    f'[CAM  ] publish rate follows the camera: {rate:.1f} Hz '
+                    f'[CAM  ] publish rate follows {rate_txt} '
                     f'(set publish_rate_hz to pin it)')
         # A positive publish_rate_hz THROTTLES; it never paces. The
         # capture thread publishes on arrival, so this is a ceiling for the
@@ -231,6 +238,10 @@ class CameraNode(Node):
 
         # Background capture thread — keeps read() off the ROS executor AND
         # owns the publish, so a frame goes out the moment it exists.
+        # Held by the capture thread while it swaps a lost camera, and by a
+        # control set from the executor: a set mid-reopen would ioctl a
+        # closed (or reused) descriptor (vl_6 F5).
+        self._cam_lock = threading.Lock()
         threading.Thread(target=self._capture_loop, daemon=True).start()
 
         # Video file playback controls (only active when source supports pause/seek).
@@ -245,7 +256,7 @@ class CameraNode(Node):
 
         self.get_logger().info(
             f"[CAM  ] {self._cam_name!r} ({self._info.get('source_kind')}) -> "
-            f"{ns}/image_raw  @ {rate:.1f} Hz")
+            f"{ns}/image_raw  @ {rate_txt}")
 
     # A transient USB-enumeration blip at startup shouldn't kill the camera for
     # the whole session -- retry a few times before giving up. __init__ hasn't
@@ -344,7 +355,21 @@ class CameraNode(Node):
                 except (TypeError, ValueError):
                     dev_int = -1
                 if dev_int >= 0:
+                    # Both keys again: the profile's own device_path would
+                    # otherwise win in the factory over the index asked for.
                     profile['device'] = dev_int
+                    profile.pop('device_path', None)
+                    self.get_logger().info(f'[CAM  ] device override → index {dev_int}')
+            # width/height/frame_id belong to the non-profile path; a size
+            # asked for that the profile does not have is said, not dropped.
+            asked = (int(self.get_parameter('width').value),
+                     int(self.get_parameter('height').value))
+            has = (profile.get('width'), profile.get('height'))
+            if asked != (640, 480) and None not in has and asked != has:
+                self.get_logger().warning(
+                    f'[CAM  ] width/height {asked[0]}x{asked[1]} are not read '
+                    f'with profile {profile_name!r}, which runs at '
+                    f'{has[0]}x{has[1]}: edit the profile to change it')
             return make_camera_from_profile(
                 profile, node=self, logger=self.get_logger())
 
@@ -463,7 +488,13 @@ class CameraNode(Node):
             return SetParametersResult(successful=False, reason=str(exc))
         want = {**asked['controls'],
                 **exposure_controls(asked['exposure_us'], self._cam.auto_mode)}
-        got = self._cam.set_controls(want)
+        if not self._cam_lock.acquire(blocking=False):
+            return SetParametersResult(successful=False, reason=(
+                'the camera is being reopened; set it again in a moment'))
+        try:
+            got = self._cam.set_controls(want)
+        finally:
+            self._cam_lock.release()
         wrong = {k: (v, got.get(k)) for k, v in want.items() if got.get(k) != v}
         if wrong:
             return SetParametersResult(successful=False, reason=(
@@ -574,7 +605,8 @@ class CameraNode(Node):
         """Reopen a lost device camera (`cameras/reopen.py`). False: stop the loop.
 
         Runs on the capture thread, which owns `self._cam`, so the swap never
-        races a `read()`.
+        races a `read()`; the swap holds `_cam_lock`, so it never races a
+        control set from the executor either.
         """
         if not watch.enabled:          # not a device: nothing to reopen
             return True
@@ -597,35 +629,41 @@ class CameraNode(Node):
                 f'[CAM  ] WARNING: {self._cam_name} delivered nothing for '
                 f'{watch.lost_after_s:.0f} s past its health limit; reopening '
                 f'({watch.reopens}/{watch.max_reopens})')
-            try:
-                self._cam.close()
-            except Exception as exc:   # noqa: BLE001 -- the device is already gone
-                self.get_logger().debug(f'[CAM  ] close of the lost camera: {exc!r}')
-            try:
-                fresh = self._build_camera()
-            except Exception as exc:   # noqa: BLE001 -- counted as a failed attempt
-                self.get_logger().error(f'[CAM  ] reopen failed: {exc}')
-                return True
-            if fresh.source_kind != kind:
-                # The factory falls back to the OpenCV source when the mailbox
-                # will not open -- right on a dev box, wrong here: 396 ms stale
-                # against 17 ms (measured-bars §3), for the rest of the run.
-                self.get_logger().error(
-                    f'[CAM  ] reopen gave a {fresh.source_kind} source, not the '
-                    f'{kind} it replaces; refused, counted as a failed attempt')
-                try:
-                    fresh.close()
-                except Exception:  # noqa: BLE001
-                    pass
-                return True
-            self._cam = fresh
-            self.get_logger().warning(
-                f'[CAM  ] {self._cam_name} reopened ({kind}); frames resume')
+            with self._cam_lock:
+                return self._reopen(kind)
         elif verdict == GAVE_UP:
             self.get_logger().error(
                 f'[CAM  ] ERROR: {self._cam_name} LOST: {watch.max_reopens} '
                 f'reopens failed; it stays down for this run and publishes NOTHING')
             return False
+        return True
+
+    def _reopen(self, kind) -> bool:
+        """Close the lost camera and swap in a fresh one of the same kind."""
+        try:
+            self._cam.close()
+        except Exception as exc:   # noqa: BLE001 -- the device is already gone
+            self.get_logger().debug(f'[CAM  ] close of the lost camera: {exc!r}')
+        try:
+            fresh = self._build_camera()
+        except Exception as exc:   # noqa: BLE001 -- counted as a failed attempt
+            self.get_logger().error(f'[CAM  ] reopen failed: {exc}')
+            return True
+        if fresh.source_kind != kind:
+            # The factory falls back to the OpenCV source when the mailbox
+            # will not open -- right on a dev box, wrong here: 396 ms stale
+            # against 17 ms (measured-bars §3), for the rest of the run.
+            self.get_logger().error(
+                f'[CAM  ] reopen gave a {fresh.source_kind} source, not the '
+                f'{kind} it replaces; refused, counted as a failed attempt')
+            try:
+                fresh.close()
+            except Exception:  # noqa: BLE001
+                pass
+            return True
+        self._cam = fresh
+        self.get_logger().warning(
+            f'[CAM  ] {self._cam_name} reopened ({kind}); frames resume')
         return True
 
     def _time_to_next_slot(self) -> float:
@@ -827,6 +865,14 @@ class CameraNode(Node):
                 'w': int(c['image_width']), 'h': int(c['image_height']),
                 'hfov': float(c.get('hfov_deg_air', 0.0)),
             }
+            ere, bar = c.get('max_ere_px'), c.get('max_ere_bar_px')
+            if isinstance(ere, (int, float)) and isinstance(bar, (int, float)) \
+                    and ere > bar:
+                # Published, because the lock has no better K, but never quietly.
+                self.get_logger().warn(
+                    f"[CAM  ] calibration {os.path.basename(path)} did not pass "
+                    f"its own bar: max ERE {ere:.1f} px against {bar:.1f} px. "
+                    f"Ranges from this K carry that error; recalibrate.")
             self.get_logger().info(
                 f"[CAM  ] calibration {os.path.basename(path)}: "
                 f"fx={cal['K'][0]:.1f} fy={cal['K'][4]:.1f} "
