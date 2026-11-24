@@ -906,3 +906,31 @@ def test_a_typed_verb_line_is_the_clis_grammar_checked_before_it_is_sent():
                                  'no field speed', 'CLI', 'fields are --name value',
                                  'true or false', 'type a verb']):
         assert want in said, (want, said)
+
+
+@NEEDS_NODE
+def test_a_browser_drops_a_working_copy_made_of_an_old_layout_and_keeps_an_edit():
+    """staleWorking (bead b0q): the app updated the baseline to Kutum's v2 and
+    kept the working copy it made of v1 by writing its defaults in. Found
+    unedited against v1 in Kutum's history, it is replaced by v2 with the
+    defaults kept. A copy that changed a value v1 set is an edit and stays,
+    and so does one with no history at all."""
+    import json as _json
+    import subprocess as _sp
+    src = (PANELS / 'common.js').read_text() + INSTRUMENTS_JS
+    v = lambda s: {'configById': {'3D!h': {'scene': {'labelScaleFactor': s}}}}  # noqa: E731
+    app = lambda s: {'configById': {'3D!h': {'scene': {'labelScaleFactor': s}, 'publish': {'type': 'point'}}}}  # noqa: E731
+    rec = lambda name, work: {'layout': {'name': name, 'baseline': {'data': v(1.0), 'savedAt': 'k'},  # noqa: E731
+                                         'working': {'data': work}}}
+    records = [rec('stale', app(0.3)), rec('edited', app(0.7)), rec('unknown', app(0.3)),
+               rec('current', app(1.0))]
+    history = {'stale': [v(1.0), v(0.3)], 'edited': [v(1.0), v(0.3)]}
+    js = (src + '\nprocess.stdout.write(JSON.stringify(module.exports.staleWorking('
+          + _json.dumps(records) + ',' + _json.dumps(history) + ')));')
+    pre = ('const module={exports:{}};const CAMERAS=["forward","downward"],VERBS={},'
+           'TUNABLE={},THEME_CSS="";')
+    out = _sp.run(['node', '-e', pre + js], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = _json.loads(out.stdout)
+    assert [r['layout']['name'] for r in got] == ['stale']
+    assert 'working' not in got[0]['layout'] and got[0]['layout']['baseline'] == {'data': app(1.0), 'savedAt': 'k'}
