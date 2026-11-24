@@ -141,7 +141,7 @@ class LockPublishMixin:
         return self._det_cls or ''
 
     def _publish_decomposition(self, pose, header) -> None:
-        """theta, scale and the range they imply -- the anchor's other outputs.
+        """theta and scale -- the anchor's other outputs. `vector.z` is NaN.
 
         What each one is.
 
@@ -172,11 +172,11 @@ class LockPublishMixin:
         m.header.frame_id = self._cam
         m.vector.x = th
         m.vector.y = sc
-        # The locked class's width from the per-class table, kept in step
-        # with the class by `_retarget_width`.
-        w = float(self._target_w_m or 0.0)
-        m.vector.z = (w / sc) if (w > 0.0 and math.isfinite(sc) and sc > 1e-6) \
-            else float('nan')
+        # No range here. width / scale was published as one, and it is not:
+        # the range is fx * width / (scale * w_px at enrolment), and this node
+        # holds neither factor in the reference's pixels. The real range is
+        # PnP's (`target_pose.range_m`).
+        m.vector.z = float('nan')
         self._decomp_pub.publish(m)
 
     # -- the field-of-view guard, ADVISORY ---------------------------------- #

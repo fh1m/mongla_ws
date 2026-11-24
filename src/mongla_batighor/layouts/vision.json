@@ -93,11 +93,6 @@
           "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
           "label": "scale",
           "enabled": true
-        },
-        {
-          "value": "/mongla/vision/downward/anchor_decomposition.vector.z",
-          "label": "range m",
-          "enabled": true
         }
       ],
       "showLegend": true,
