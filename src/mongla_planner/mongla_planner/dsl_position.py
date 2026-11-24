@@ -563,7 +563,7 @@ class WhereMixin:
         if isinstance(prop_class, ClassRef):
             prop_class = prop_class.class_name
         real_w = width_for(str(prop_class))
-        if real_w <= 0.0:
+        if not real_w > 0.0:          # NaN: no committed width
             return None
         cam = camera or self.camera
         self._subscribe_detections(cam)

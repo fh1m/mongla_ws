@@ -24,9 +24,10 @@
 # `shaw_fish`); two props that only share a handbook size (the 12 in symbols)
 # each keep their own, so re-measuring one cannot move the other.
 #
-# Every entry carries its source. No `measured:` key is read. A tape-measured
-# width goes under its class, here or in the deck override below. The SAUVC
-# tolerance (+/- 5 %) is what the nominal width allows for.
+# Every entry carries its source. A width we measured on the actual prop goes
+# in the deck override or the venue's course file (below), which wins over
+# these nominals: that is what the SAUVC tolerance (+/- 5 %) allows for.
+# There is no `measured:` key.
 #
 # Our pool is not the venue, so these are defaults, not hardcodings.
 # We practise against props we built, and ours are not the handbook's sizes. A
@@ -109,7 +110,7 @@ sauvc:
     # "80cm tall, ~1.6cm in diameter" -- the coloured bump flares.
     #
     # 16 mm is SMALL. At 640 px wide and a 73.9 deg HFOV, a 1.6 cm pole is
-    # under 2 px beyond ~3 m, so a metric answer from this class is only
+    # under 2 px beyond ~3.4 m (f = 427 px), so a metric answer from this class is only
     # defensible up close. The pose solver's own reprojection and ambiguity
     # gates are what refuse it; this note is here so a wide range is not
     # believed.

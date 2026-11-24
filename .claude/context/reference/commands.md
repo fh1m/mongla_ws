@@ -230,6 +230,8 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 
 | argument | default | what it does |
 |---|---|---|
+| `fwd_calibration` | `` | calibration JSON for the forward camera; empty publishes k=0 and says so |
+| `dwn_calibration` | `` | calibration JSON for the downward camera; empty publishes k=0 and says so |
 | `fwd_device` | `0` | /dev/videoN index for the forward camera — LAST-RESORT fallback, only used on a box with no /dev/mongla_cam_* symlink (dev box). On the vehicle the port-stable symlink wins automatically (see device_path below). |
 | `dwn_device` | `4` | /dev/videoN index for the downward camera (dev-box fallback; the vehicle symlink wins automatically) |
 | `fwd_device_path` | `` | override device for forward (empty = auto /dev/mongla_cam_forward) |
