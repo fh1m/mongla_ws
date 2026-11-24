@@ -119,7 +119,11 @@ class LockFramesMixin:
         key = _stamp_key(det_header)
         if key is None:
             return None
-        for k, g in self._recent:
+        # A copy taken under the lock the camera thread appends under:
+        # iterating the live deque raced it.
+        with self._lock:
+            recent = list(self._recent)
+        for k, g in recent:
             if k == key:
                 # Composed intake stores BGR; it turns grey only here, for
                 # the one frame a snap needs.

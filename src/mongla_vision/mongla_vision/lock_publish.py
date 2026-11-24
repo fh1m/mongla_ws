@@ -4,6 +4,7 @@ correspondences, and what the node remembers about where the target was.
 The /lock box names its rung in the hypothesis and the class it follows in
 `Detection2D.id`, so a consumer can refuse a box for another target (#74).
 """
+import copy
 import math
 import time
 import numpy as np
@@ -66,7 +67,7 @@ class LockPublishMixin:
 
         m = TargetCorrespondences()
         if header is not None:
-            m.header = header
+            m.header = copy.copy(header)
         m.camera = self._cam
         # What the anchor enrolled on, not the class the mission asked for:
         # the pose downstream is trusted as a pose OF this label (#76).
@@ -168,7 +169,7 @@ class LockPublishMixin:
             return
         m = Vector3Stamped()
         if header is not None:
-            m.header = header
+            m.header = copy.copy(header)
         m.header.frame_id = self._cam
         m.vector.x = th
         m.vector.y = sc
