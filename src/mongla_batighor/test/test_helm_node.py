@@ -25,7 +25,7 @@ from mongla_interfaces.srv import Helm
 class FakeManager(Node):
     """Holds a move goal for HOLD_S, as a running verb would; ends the rest at once."""
 
-    HOLD_S = 3.0
+    HOLD_S = 5.0
 
     def __init__(self):
         super().__init__('fake_manager')
@@ -68,7 +68,9 @@ DISCOVERY_S = 20.0
 
 @pytest.fixture
 def rig(tmp_path, monkeypatch):
-    monkeypatch.setattr(seat_rules, 'LOST_S', 0.6)
+    # Three beats' slack: at 0.6 one slow service call on a loaded jazzy
+    # runner lost a beating pilot and stopped the move (bead 35h).
+    monkeypatch.setattr(seat_rules, 'LOST_S', 1.5)
     rclpy.init()
     helm, mgr, me = HelmNode(log_path=tmp_path / 'helm.log'), FakeManager(), Node('browser')
     dets = {c: FakeDetector(c) for c in ('forward', 'downward')}
@@ -145,7 +147,7 @@ def test_a_silent_pilots_running_verb_is_followed_by_stop(rig):
     call('ana', 'request')
     call('ana', 'command', cmd='move_forward', fields_json='{"duration": 3}')
     # No heartbeat: the helm is lost after LOST_S, while the move still runs.
-    assert sent(2, timeout=3.0) == ['move_forward', 'stop']
+    assert sent(2, timeout=4.5) == ['move_forward', 'stop']
     # The stop is sent first and the freed helm published after it, so the
     # state may arrive a moment later (seen on jazzy CI).
     assert _until(lambda: states and states[-1]['pilot'] == '')
