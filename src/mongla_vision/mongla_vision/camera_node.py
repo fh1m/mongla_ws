@@ -796,6 +796,24 @@ class CameraNode(Node):
         h.frame_id = self._frame_id
         return h
 
+    def _calibration_pairing(self, cal):
+        """('match'|'different'|'unverified'|'unknown', connected USB id)."""
+        from mongla_vision.calibration.binding import device_usb_id, pairing
+        source = str(self.get_parameter('source').value or '').strip()
+        if source in ('video_file', 'ros_topic'):
+            return 'unknown', ('', '')
+        dev = str(self.get_parameter('device_path').value or '').strip()
+        if not dev:
+            profile = str(self.get_parameter('profile').value or '').strip()
+            try:
+                dev = str((get_profile(profile) if profile else {}).get('device_path') or '')
+            except Exception:
+                dev = ''
+        if not dev:
+            dev = str(self.get_parameter('device').value)
+        ident = device_usb_id(dev)
+        return pairing(cal, ident), ident
+
     def _load_calibration(self) -> dict | None:
         """Load intrinsics measured by calibration/solver.py, if any.
 
@@ -858,6 +876,23 @@ class CameraNode(Node):
                     f"in {c.get('medium')!r}; CameraInfo carries the air lens, "
                     f"so it is not used. Publishing size-only CameraInfo (k=0)")
                 return None
+            # Only the unit it was measured on: a lens fitted on another
+            # camera gives confident bearings wrong by a fixed factor, which
+            # is worse than none (vl_5 F6, vl_6 F9). Forward is the Fantech
+            # C30 and downward the Sonix global shutter (owner, 2026-11-24).
+            verdict, dev_id = self._calibration_pairing(c)
+            if verdict == 'different':
+                self.get_logger().warn(
+                    f"[CAM  ] calibration {os.path.basename(path)} was measured "
+                    f"on USB {c.get('usb_vid')}:{c.get('usb_pid')}, and this "
+                    f"camera is {dev_id[0]}:{dev_id[1]}. Not used: publishing "
+                    f"size-only CameraInfo (k=0). Calibrate this unit.")
+                return None
+            if verdict == 'unverified':
+                self.get_logger().warn(
+                    f"[CAM  ] calibration {os.path.basename(path)} recorded no "
+                    f"USB id, so it cannot be proved to be this unit's "
+                    f"({dev_id[0]}:{dev_id[1]}). Used; recalibrate to bind it.")
             K = c['camera_matrix']; D = c['distortion_coefficients']
             cal = {
                 'K': [float(v) for row in K for v in row],

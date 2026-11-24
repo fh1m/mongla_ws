@@ -83,3 +83,41 @@ def calibration_for_profile(profile: str) -> str:
             if isinstance(applies, list) and profile in applies:
                 return path
     return ''
+
+
+def device_usb_id(device) -> tuple:
+    """(vendor, product) of the USB camera behind `device`, or ('', '').
+
+    Read from sysfs, so it names the unit actually plugged in, not the
+    one a symlink was meant for. '' when it cannot be told (a file, a topic,
+    a non-USB device): unknown, never a guess.
+    """
+    try:
+        dev = f'/dev/video{int(device)}' if str(device).isdigit() else str(device)
+        name = os.path.basename(os.path.realpath(dev))
+        d = os.path.realpath(f'/sys/class/video4linux/{name}/device')
+        for _ in range(6):
+            v, p = os.path.join(d, 'idVendor'), os.path.join(d, 'idProduct')
+            if os.path.isfile(v) and os.path.isfile(p):
+                return (open(v).read().strip().lower(), open(p).read().strip().lower())
+            d = os.path.dirname(d)
+    except Exception:
+        pass
+    return ('', '')
+
+
+def pairing(cal: dict, device_id: tuple) -> str:
+    """Does this calibration belong to the unit plugged in?
+
+    'match'      the USB id recorded at capture is the connected one;
+    'different'  it was recorded on ANOTHER unit: not to be used;
+    'unverified' the file recorded no id (taken before ids were kept);
+    'unknown'    the connected unit's id cannot be read.
+    """
+    vid, pid = (str(cal.get('usb_vid') or '').lower(), str(cal.get('usb_pid') or '').lower())
+    if not device_id or not device_id[0]:
+        return 'unknown'
+    if not vid:
+        return 'unverified'
+    return 'match' if (vid, pid) == tuple(device_id) else 'different'
+

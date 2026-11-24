@@ -88,6 +88,11 @@ class _Stub:
         return types.SimpleNamespace(info=lambda m: None,
                                      warn=self.warned.append)
 
+    def _calibration_pairing(self, cal):
+        # No camera behind a stub: the unit cannot be read, so the pairing
+        # check stands aside (test_a_calibration_binds_only_its_own_camera).
+        return 'unknown', ('', '')
+
 
 @pytest.fixture
 def cal_file():
