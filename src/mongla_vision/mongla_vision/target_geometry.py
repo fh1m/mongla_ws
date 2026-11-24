@@ -219,15 +219,28 @@ def _merge(table, extra, origin):
     other -- the label you did not re-cut would resolve to 0.0 and the pose path
     would refuse, on a pool day, for a prop you never touched.
     """
-    for key, value in (extra or {}).items():
+    if not extra:
+        return
+    if not isinstance(extra, dict):
+        # Valid YAML that is not a table (a list, a bare number): recorded
+        # like a parse failure, never raised into the lock's start-up.
+        _ERRORS.append((origin, 'not a mapping of label: {width_m: ...} '
+                                '(got %s)' % type(extra).__name__))
+        return
+    for key, value in extra.items():
         if not isinstance(value, dict):
+            _REJECTED.append((key, value, origin))     # `red_pipe: 0.0334`
             continue
         if _is_entry(value):                    # flat: this IS a target
             _put(table, 'custom', key, value, origin)
-        else:                                   # nested: a group of targets
-            for name, entry in value.items():
-                if isinstance(entry, dict):
-                    _put(table, key, name, entry, origin)
+            continue
+        for name, entry in value.items():       # nested: a group of targets
+            if isinstance(entry, dict):
+                _put(table, key, name, entry, origin)
+            else:
+                # `red_pipe: {width: 0.0334}` reads as a group whose member
+                # `width` is no target: the operator's correction, dropped.
+                _REJECTED.append(('%s.%s' % (key, name), entry, origin))
 
 
 def _is_entry(value):
@@ -274,7 +287,8 @@ _REJECTED = []
 
 
 def rejected_overrides():
-    """Overrides ignored for an implausible width, so a node can log them.
+    """Overrides ignored (an implausible width, or an entry that is not a
+    `label: {width_m: ...}` mapping), so a node can log them.
 
     A silently-dropped override looks exactly like an override that was never
     read, which is the single most confusing failure this file could have.
