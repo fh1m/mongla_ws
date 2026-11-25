@@ -123,8 +123,9 @@ def test_nobody_watching_costs_no_subscription():
         sub = viewer.create_subscription(String, chain.TOPIC, lambda m: None, 10)
         ex.add_node(viewer)
         spin(1.0)
-        # Each stage, and the camera's caption (why its detector is quiet).
-        assert len(list(node.subscriptions)) == len(chain.stages(('downward',))) + 1
+        # Each stage, the camera's caption (why its detector is quiet) and the
+        # health line that says whether the ESCs were announced.
+        assert len(list(node.subscriptions)) == len(chain.stages(('downward',))) + 2
         viewer.destroy_subscription(sub)
         spin(1.0)
         assert list(node.subscriptions) == []
@@ -174,3 +175,26 @@ def test_a_paused_detector_is_idle_and_a_dead_one_is_not():
     assert chain.idle_of('lock:forward', '', caps, 101.0) == ''           # not its stage
     assert chain.idle_of('command', 'until a vision verb drives', caps, 101.0) \
         == 'until a vision verb drives'
+
+
+def test_silent_esc_rpm_has_a_reason_only_before_the_board_announces_them():
+    """The board announces its ESCs once, at the first arm, so no rpm before
+    that is expected and was drawn as SILENT, no reason given. After the
+    announcement a silent stream is a fault and must stay the alarm."""
+    waiting = (chain.ESC_UNANNOUNCED + ' -- the board announces presence', 100.0)
+    assert chain.idle_of('rpm', '', {}, 101.0, waiting) == chain.NO_ESCS
+    assert chain.idle_of('rpm', '', {}, 101.0, ('8 of 8 thrusters present', 100.0)) == ''
+    assert chain.idle_of('rpm', '', {}, 100.0 + chain.CAPTION_FRESH_S + 0.1, waiting) == ''
+    assert chain.idle_of('rpm', '', {}, 101.0, None) == ''
+    assert chain.idle_of('imu', '', {}, 101.0, waiting) == ''
+
+
+def test_the_esc_wording_is_the_manager_s_own():
+    """The chain matches the health line's first words: one truth, read here."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[2] / 'mongla_control' / 'mongla_control'
+           / 'fc' / 'srot_health.py').read_text()
+    assert f"'{chain.ESC_UNANNOUNCED} -- " in src
+    node = (Path(__file__).resolve().parents[2] / 'mongla_manager' / 'mongla_manager'
+            / 'node_health.py').read_text()
+    assert "name=f'mongla: {h.name}'" in node and chain.THRUSTERS == 'mongla: thrusters'

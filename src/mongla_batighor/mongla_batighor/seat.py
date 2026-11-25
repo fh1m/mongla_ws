@@ -63,6 +63,9 @@ class Seat:
             return Verdict(True, 'you are already the pilot')
         if self.requester and self.requester != operator:
             return Verdict(False, f'{self.requester} asked first')
+        if self.requester == operator:      # a second press keeps the countdown
+            return Verdict(True, f'already asked; it passes to you in '
+                                 f'{max(0.0, self.request_deadline - now):.0f} s')
         self.requester = operator
         self.request_deadline = now + ANSWER_S
         self._note(f'{operator} asked {self.pilot} for the helm')

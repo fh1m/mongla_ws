@@ -107,9 +107,15 @@ NOT_SENT = (
 # pause is not known, and a silent stage is silent with no reason given.
 CAPTION_FRESH_S = 3.0
 PAUSED = 'paused until a mission asks'
+# The manager's health line for the thrusters (node_health.py), and its first
+# words while the board has not announced its ESCs (srot_health.py).
+THRUSTERS = 'mongla: thrusters'
+ESC_UNANNOUNCED = 'thruster telemetry UNKNOWN'
+NO_ESCS = 'no ESCs announced'
 
 
-def idle_of(key: str, idle: str, captions: dict, now_s: float) -> str:
+def idle_of(key: str, idle: str, captions: dict, now_s: float,
+            thrusters=None) -> str:
     """Why `key` may be silent now: its stage's standing reason, or, for a
     camera's detect and track, a detector the overlay says is paused.
 
@@ -119,7 +125,15 @@ def idle_of(key: str, idle: str, captions: dict, now_s: float) -> str:
     Drawn as an alarm, a paused detector read as a dead one (Chrome,
     2026-11-25); one that died mid-mission must still read as the alarm, so
     only `paused`, fresh, is a reason.
+
+    The rpm stage is silent until the board announces its ESCs. `thrusters` is
+    (health message, monotonic seconds it came); only that fresh "unknown" is a
+    reason, so a stream that stops after the announcement stays the alarm.
     """
+    if key == 'rpm' and thrusters is not None:
+        said, at = thrusters
+        if now_s - at <= CAPTION_FRESH_S and said.startswith(ESC_UNANNOUNCED):
+            return NO_ESCS
     kind, _, cam = key.partition(':')
     if kind in ('detect', 'track') and cam in captions:
         cap, at = captions[cam]
@@ -196,6 +210,7 @@ def _qos(name: str):
 
 def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
     """The node: one subscription per stage, the summary on `TOPIC`."""
+    from diagnostic_msgs.msg import DiagnosticArray
     from rclpy.node import Node
     from std_msgs.msg import String
 
@@ -206,6 +221,7 @@ def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
             self.meter = ChainMeter()
             self.rows = stages(cameras)
             self.captions = {}
+            self.thrusters = None
             self.pub = self.create_publisher(String, TOPIC, 10)
             self.watched = Watched(self, self.pub, [
                 (_msg_class(st.msg), st.topic,
@@ -215,13 +231,20 @@ def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
                 for st in self.rows] + [
                 (String, f'/mongla/vision/{c}/hud',
                  lambda m, c=c: self._caption(c, m), 1)
-                for c in cameras], on_drop=self._forget)
+                for c in cameras] + [
+                (DiagnosticArray, '/diagnostics', self._on_diagnostics, 10)], on_drop=self._forget)
             self.create_timer(period_s, self._publish)
 
         def _forget(self):
             # The next viewer must not see rates from before it looked.
             self.meter = ChainMeter(self.meter.window_s)
             self.captions = {}
+            self.thrusters = None
+
+        def _on_diagnostics(self, msg):
+            for status in msg.status:
+                if status.name == THRUSTERS:
+                    self.thrusters = (status.message, time.monotonic())
 
         def _caption(self, cam, msg):
             try:
@@ -242,7 +265,8 @@ def ChainNode(cameras=CAMERAS, period_s: float = PERIOD_S):
                 'order': [s.key for s in self.rows],
                 'stages': {s.key: {**got.get(s.key, empty), 'label': s.label,
                                    'clock': s.clock, 'ask': s.ask,
-                                   'idle': idle_of(s.key, s.idle, self.captions, now)}
+                                   'idle': idle_of(s.key, s.idle, self.captions, now,
+                                                   self.thrusters)}
                            for s in self.rows},
                 'not_sent': [{'label': a, 'ask': b} for a, b in NOT_SENT],
             }

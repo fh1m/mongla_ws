@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-VIEWS = ['batighor_pilot', 'board_health', 'mongla_layout', 'thrust', 'vitals']
+VIEWS = ['batighor', 'batighor_pilot', 'board_health', 'mongla_layout', 'thrust', 'vitals']
 
 
 @pytest.fixture
@@ -50,10 +50,10 @@ def desk(tmp_path, monkeypatch):
     return mod
 
 
-def test_a_fresh_app_opens_on_the_cockpit(desk):
+def test_a_fresh_app_opens_on_the_console_as_the_browser_does(desk):
     assert desk.main(['h']) == 0
     argv = desk.launches[0]
-    assert '--defaultLayout=mongla_layout' in argv
+    assert '--defaultLayout=batighor' in argv
     assert sorted(p.stem for p in desk.LAYOUTS.glob('*.json')) == sorted(VIEWS)
 
 
@@ -106,7 +106,7 @@ def test_vitals_opens_in_a_window_of_its_own_on_the_screen_named(desk, capsys, m
     assert sorted(s for _, s in desk.placed) == ['DP-2', 'eDP-1']
     desk.launches.clear()
     assert desk.main(['h', '--one-screen']) == 0
-    assert len(desk.launches) == 1 and '--defaultLayout=mongla_layout' in desk.launches[0]
+    assert len(desk.launches) == 1 and '--defaultLayout=batighor' in desk.launches[0]
     desk.hyprland = lambda cmd: ''
     monkeypatch.setenv('GDK_SCALE', '1')
     # A Kutum without the view says so and opens no second window.

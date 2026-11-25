@@ -25,8 +25,8 @@ that names a layout saves a copy with no `from`, so the next start imports
 the file again beside it: two of each in the menu. So no link names a
 layout. Every run writes every view to the folder (a fresh app imports them
 all), and starts the app with `--defaultLayout=<view>`, which selects by
-name once the folder is imported: the cockpit, unless `--view` names
-another. A view that changed is named, with how to refresh it. Read from
+name once the folder is imported: the console, as the browser does, unless
+`--view` names another. A view that changed is named, with how to refresh it. Read from
 Lichtblick 1.27: `loadDefaultLayouts.ts`, `DesktopLayoutLoader.ts`,
 `useLayoutTransfer.tsx` and `CurrentLayoutProvider/index.tsx`.
 
@@ -359,7 +359,7 @@ def main(argv=None) -> int:
     ap.add_argument('host', nargs='?', default='kutum.local', help="Kutum's name or address")
     ap.add_argument('--port', type=int, default=8000, help="Batighor's web port")
     ap.add_argument('--bridge', type=int, default=8765, help="foxglove_bridge's port")
-    ap.add_argument('--view', help='open on this view (default: the cockpit, mongla_layout)')
+    ap.add_argument('--view', help='open on this view (default: the console, batighor)')
     ap.add_argument('--scale', type=float, help='the app\'s scale (default: from the screen\'s density)')
     ap.add_argument('--list', action='store_true', help="print Kutum's views and exit")
     ap.add_argument('--no-launch', action='store_true', help='install the panels only')
@@ -420,7 +420,7 @@ def main(argv=None) -> int:
             a.vitals = found[1]
             print(f'ok  two screens: {a.screen} and {a.vitals} under it (--one-screen for one)')
     pilot = 'batighor_pilot'                   # the console, Pilot first (views.PILOT_CONSOLE)
-    view = a.view or (pilot if a.vitals and pilot in views else 'mongla_layout')
+    view = a.view or (pilot if a.vitals and pilot in views else 'batighor')
     url = link(a.host, a.bridge)
     if running():
         # A second launch hands its link to the open app, which ignores flags.

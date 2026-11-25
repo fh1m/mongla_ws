@@ -179,12 +179,12 @@
         },
         {
           "value": "/mongla/vision/downward/floor_grid_deg.heading_deg",
-          "label": "grid (tile)",
+          "label": "grid mod 90",
           "enabled": true
         },
         {
           "value": "/mongla/vision/downward/lane_heading_deg.heading_deg",
-          "label": "lane line",
+          "label": "lane mod 180",
           "enabled": true
         }
       ],
@@ -220,7 +220,7 @@
   },
   "globalVariables": {
     "track": 0,
-    "layoutRev": "90e19fe7e783"
+    "layoutRev": "ec1464554f9e"
   },
   "userNodes": {
     "mongla-detections-per-frame": {
