@@ -17,7 +17,8 @@ is_healthy() -> bool
     True when the source is currently producing usable frames. Used for
     the startup banner, the diag log line and the reopen watchdog
     (`reopen.py`), which reopens the SAME source -- one source per launch
-    is the design, so there is no fallback to another.
+    is the design. A reopen that returns another source kind is refused by
+    camera_node, not used.
 
 info() -> dict
     Snapshot of the source's view of the world: width, height, fps,

@@ -252,7 +252,7 @@ def rectifier_for(K, medium: str, D=None):
     re-projects each ray through `f_ref` (which defaults to `fx * n`), so a
     point at water angle tw lands at radius `f_ref * tan(tw)` -- a true pinhole
     of focal `f_ref`. Feeding those points to PnP with the AIR K leaves a clean
-    1/n scale error: every range 33 % short, a plausible number, no warning.
+    1/n scale error: every range about 25 % short, a plausible number, no warning.
     Two nodes each building this pair by hand is how the two would drift apart.
     """
     K = np.asarray(K, float)

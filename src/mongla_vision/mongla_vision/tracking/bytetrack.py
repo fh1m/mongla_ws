@@ -24,14 +24,14 @@ class ByteTrackWrapper(Tracker):
     Parameters
     ----------
     track_buffer : int
-        Frames to keep a lost track alive (ByteTrack's `lost_track_buffer`).
-        Default 30 frames at 20 Hz ≈ 1.5 s of occlusion tolerance.
+        A lost track's life, written as 30 Hz frames and enforced in seconds
+        of capture time: 150 -> 5.0 s at any detection rate.
     min_hits : int
         Frames a track must be continuously detected before it is
         published (filters one-shot false positives).
     iou_threshold : float
-        IoU threshold for the second association pass (low-confidence
-        detections). Default 0.3.
+        Minimum IoU (weighted by the detection's score, as supervision
+        fuses them) for a detection to continue a track. Default 0.3.
     track_activation_threshold : float
         Minimum detection score to immediately activate a new track.
         Higher values suppress spurious IDs from low-confidence detections.
@@ -43,7 +43,8 @@ class ByteTrackWrapper(Tracker):
                  track_buffer: int = 30,
                  min_hits: int = 3,
                  iou_threshold: float = 0.3,
-                 track_activation_threshold: float = 0.25):
+                 track_activation_threshold: float = 0.25,
+                 detector_conf: float = 0.0):
         try:
             import supervision as sv
         except ImportError as exc:
@@ -51,12 +52,29 @@ class ByteTrackWrapper(Tracker):
                 "supervision is required. Install with: pip install supervision"
             ) from exc
 
+        # As in RoboflowTracker: a box the detector chose to publish must be
+        # able to start a track, so the activation bar never sits above the
+        # detector's own floor (vl_15 F-02).
+        # supervision starts a NEW track only at score >= threshold + 0.1
+        # (`det_thresh`), so the clamp sits that margin below the floor.
+        if detector_conf > 0.0:
+            track_activation_threshold = min(track_activation_threshold,
+                                             max(float(detector_conf) - 0.1, 0.0))
+        # The lost window in SECONDS of capture time, written as 30 Hz frames
+        # like the Roboflow path. supervision counts update calls, which is
+        # 1.5 s at 99 Hz and 15 s at 10 Hz for the same 150 (vl_15 F-01).
+        self.coast_max_s = int(track_buffer) / 30.0
+        self._last_seen: Dict[int, float] = {}
         self._sv = sv
         # To swap to OC-SORT at pool day: replace sv.ByteTrack with sv.OCSORT (same API).
         self._bt = sv.ByteTrack(
             lost_track_buffer=track_buffer,
             minimum_consecutive_frames=min_hits,
-            minimum_matching_threshold=iou_threshold,
+            # supervision's threshold is a MAXIMUM COST, cost = 1 - IoU * score;
+            # ours is a minimum IoU, as the Roboflow path takes it. Passed
+            # straight through, 0.2 demanded IoU * score above 0.8 and every
+            # moving target fragmented on the fallback engine.
+            minimum_matching_threshold=1.0 - float(iou_threshold),
             track_activation_threshold=track_activation_threshold,
         )
 
@@ -64,7 +82,7 @@ class ByteTrackWrapper(Tracker):
         self._class_map: Dict[int, tuple] = {}     # track id -> (class id, name)
 
     def update(self, detections: List[Detection],
-               frame_t: float) -> List[TrackedDetection]:  # noqa: ARG002
+               frame_t: float) -> List[TrackedDetection]:
         if not detections:
             sv_dets = self._sv.Detections.empty()
         else:
@@ -92,6 +110,7 @@ class ByteTrackWrapper(Tracker):
                 if confidence > 0.0:
                     name = _class_name_from_id(class_id, detections)
                     self._class_map[tid] = (class_id, name)
+                    self._last_seen[tid] = float(frame_t)
                 class_name = self._class_map.get(tid, (class_id, str(class_id)))[1]
 
                 results.append(TrackedDetection(
@@ -117,6 +136,9 @@ class ByteTrackWrapper(Tracker):
             class_id, class_name = self._class_map.get(tid, (0, ''))
             if not class_name:
                 continue   # never got a real detection; skip
+            last = self._last_seen.get(tid)
+            if last is None or float(frame_t) - last > self.coast_max_s:
+                continue   # past the window in seconds, whatever the call count
             # Use last known bbox from the STrack (Kalman state in ByteTrack).
             tlbr = getattr(strack, 'tlbr', None)
             if tlbr is None:
@@ -142,12 +164,14 @@ class ByteTrackWrapper(Tracker):
         stale = [k for k in self._class_map if k not in live_ids]
         for k in stale:
             del self._class_map[k]
+            self._last_seen.pop(k, None)
 
         return results
 
     def reset(self) -> None:
         self._bt.reset()
         self._class_map.clear()
+        self._last_seen.clear()
 
 
 def _class_name_from_id(class_id: int,

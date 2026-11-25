@@ -31,7 +31,11 @@ class DetectorPublishMixin:
         # attributing a detection to "the model" when two are live would
         # attribute half of them to the wrong one, so the field names both --
         # the same comma form `active_model` accepts.
-        names = [str(self._active_name or self._single_model_name or '')]
+        # The single-model stem is announced only once the model has loaded.
+        # Before that, or after a failed load, the latched message says ''.
+        live_single = (self._single_model_name
+                       if getattr(self, '_det', None) is not None else None)
+        names = [str(self._active_name or live_single or '')]
         names += list(getattr(self, '_extra_names', []) or [])
         m.database_location = ','.join(n for n in names if n)
         self._model_epoch += 1
@@ -135,8 +139,10 @@ class DetectorPublishMixin:
     def _log_alignment(self, primary, frame) -> None:
         """Always-on operator BEARING line for the currently-loaded class.
 
-        Fires whenever the detector sees its loaded class (``detections`` are
-        already class-filtered, so ``primary`` is that class) -- independent of
+        Fires whenever the detector has a primary box, the largest of
+        ``detections``. ``detections`` holds the loaded class and, in registry
+        mode, merged secondary-model boxes, so ``primary`` can belong to a
+        secondary model -- independent of
         whether a vision verb is running. Reports the RAW bbox-centre pixel
         offset from frame centre on lateral (x) and depth (y). This is live
         telemetry, NOT an alignment verdict: it is deliberately worded distinct
@@ -195,8 +201,12 @@ class DetectorPublishMixin:
         now = time.monotonic()
         elapsed = max(now - self._last_log, 1e-3)
         in_hz   = self._frames / elapsed
-        avg_ms  = (self._infer_total_s / max(self._frames, 1)) * 1000.0
-        target_pct = 100.0 * self._with_target / max(self._frames, 1)
+        # No frames in the window means no measurement: NaN, never 0.0.
+        if self._frames:
+            avg_ms  = (self._infer_total_s / self._frames) * 1000.0
+            target_pct = 100.0 * self._with_target / self._frames
+        else:
+            avg_ms = target_pct = float('nan')
         model_tag = f'  model={self._active_name!r}' if self._active_name else ''
         self.get_logger().debug(
             f"[DET  ] in_hz={in_hz:5.1f}  avg_infer={avg_ms:5.1f}ms  "

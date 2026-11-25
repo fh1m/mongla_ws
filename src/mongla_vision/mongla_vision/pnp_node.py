@@ -22,7 +22,7 @@ plausible number and no warning, and both were already documented in
 
   1. **Optics.** Underwater a flat port is not a pinhole. Rectified points must
      be solved against the RECTIFIED K -- mixing them leaves a clean 1/n scale
-     error, every range 33 % short. The message states which optics its pixels
+     error, every range about 25 % short. The message states which optics its pixels
      are in and an unset value is REFUSED, never assumed.
   2. **Resolution.** The anchor matches in its backend's pixels, not the
      camera's full frame, while CameraInfo describes the full frame. The
@@ -150,6 +150,15 @@ class PnPNode(Node):
         out.target_label = msg.target_label
         out.ok = False
         out.reason = reason
+        # A refusal has no measurement. The float fields default to 0.0 in the
+        # message, which reads as "perfect fit", "certain" and "on top of the
+        # target", so they are set to the values that refuse.
+        out.reproj_px = float('inf')
+        out.ambiguity = 1.0
+        for name in ('yaw_deg', 'pitch_deg', 'roll_deg', 'range_m',
+                     'yaw_spread_deg', 'pitch_spread_deg', 'off_axis_deg',
+                     'alt_yaw_deg', 'bearing_deg'):
+            setattr(out, name, float('nan'))
         self._pub.publish(out)
 
     def _on_corr(self, msg):

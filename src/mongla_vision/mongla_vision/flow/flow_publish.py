@@ -73,9 +73,10 @@ class FlowPublishMixin:
         m.twist.twist.linear.y = float(v.vy)
 
         # Covariance from the data, not a constant. velocity = scale * mean
-        # flow, so var(v) = scale^2 * var(flow) / N -- the standard error of
-        # the mean, which is the honest statement of how well N noisy points
-        # pinned one displacement. A constant here would tell a filter the
+        # flow, so var(v) = scale^2 * var(flow) / N -- the standard error of the mean,
+        # with the per-axis sigma taken as the median radial spread of the points.
+        # For Gaussian noise that spread is about 1.18 times the per-axis sigma,
+        # so this variance errs high, not low. A constant here would tell a filter the
         # estimate is equally good on a textured floor and a bare one.
         scale = h / (self._f_px * dt)
         sigma_px = (disp if disp is not None else 1.0) / math.sqrt(

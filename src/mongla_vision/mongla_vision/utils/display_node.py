@@ -108,7 +108,11 @@ _RENDER_W = 1920
 def _start_pipeline(camera: str, model: str, classes: str,
                     conf: float) -> list[subprocess.Popen]:
     """Spawn camera_node + detector_node as child processes."""
-    source = CAMERA_PROFILES.get(camera, {}).get('source', 'webcam')
+    if camera not in CAMERA_PROFILES:
+        # A typo must not start a generic webcam source, which can open an IR device.
+        raise ValueError(f'unknown camera profile {camera!r}. '
+                         f'known: {sorted(CAMERA_PROFILES)}')
+    source = CAMERA_PROFILES[camera].get('source', 'webcam')
     camera_proc = subprocess.Popen([
         'ros2', 'run', 'mongla_vision', 'camera_node',
         '--ros-args',
@@ -148,7 +152,6 @@ def _build_health(node: 'VisionDisplayNode') -> dict[str, bool]:
         'camera':   (now - node._last_frame_t)     < 2.0,
         'detector': (now - node._last_det_t)        < 3.0,
         'tracker':  (now - node._last_track_t)      < 3.0,
-        'state':    (now - node._last_state_t)      < 5.0,
     }
 
 
@@ -222,7 +225,6 @@ class VisionDisplayNode(Node):
         self._last_frame_t = 0.0
         self._last_det_t   = 0.0
         self._last_track_t = 0.0
-        self._last_state_t = 0.0
         # One-way "have we EVER seen a detection" latch, distinct from _last_det_t.
         # _last_det_t is reset to 0 on a camera switch (health goes stale until the
         # new detector publishes) -- but the STARTUP splash must NOT re-appear on a
@@ -368,7 +370,6 @@ class VisionDisplayNode(Node):
 
     def _on_state(self, msg: MonglaState) -> None:
         self._state = msg
-        self._last_state_t = time.monotonic()
 
     def _on_detections(self, msg: Detection2DArray) -> None:
         dets = array_to_detections(msg)
@@ -398,13 +399,13 @@ class VisionDisplayNode(Node):
 
     def _on_image(self, msg: Image) -> None:
         self._frames_received += 1
-        self._last_frame_t = time.monotonic()
 
         try:
             frame = image_msg.to_array(msg, 'bgr8')
         except Exception as exc:
             self.get_logger().warning(f'[DISP ] image decode failed: {exc!r}')
             return
+        self._last_frame_t = time.monotonic()    # only a frame that decoded
 
         self._fps_count += 1
         now = time.monotonic()
@@ -447,15 +448,22 @@ def main(args=None):
     rclpy.init(args=args)
     node = VisionDisplayNode()
     from mongla_runtime.params_file import refuse_unknown
-    refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
+    try:
+        refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
+    except Exception:
+        node.stop_pipeline()       # or the camera and detector it spawned live on
+        raise
 
     from rclpy.executors import ExternalShutdownException
 
     def _spin_target(n):
         try:
             rclpy.spin(n)
-        except (ExternalShutdownException, Exception):
+        except ExternalShutdownException:
             pass
+        except Exception as exc:
+            # The HUD would keep drawing its last frame with nothing said.
+            n.get_logger().error(f'[DISP ] spin thread stopped: {exc!r}')
 
     spin_thread = threading.Thread(target=_spin_target, args=(node,), daemon=True)
     spin_thread.start()

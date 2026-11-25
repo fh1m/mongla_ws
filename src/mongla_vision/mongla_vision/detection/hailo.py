@@ -75,8 +75,6 @@ from . import hailo_device
 from .detector import Detection, Detector, allow_ids_for
 from .hef_file import baked_score_threshold, load_class_index, measured_bars
 
-_INPUT_FALLBACK = 640
-
 # The NMS score threshold every detection graph is configured at, whatever it
 # was compiled with. It is the value our own graphs are compiled at, so one
 # floor holds for every model; lowering a stock graph from 0.200 to it cost
@@ -131,7 +129,7 @@ class HailoDetector(Detector):
         # Publish floor. Defaults to `conf`, i.e. OFF -- byte-for-byte the old
         # behaviour until an operator lowers it.
         self._assoc_conf = float(conf)
-        self._max_det = int(max_det)
+        self._max_det = max(int(max_det), 1)
         self._path = str(model_path)
 
         # Sidecar FIRST, before touching the runtime. It is a cheap,
@@ -143,7 +141,8 @@ class HailoDetector(Detector):
         names = load_class_index(self._path)
         if not names:
             raise FileNotFoundError(
-                f'{self._path}: no class-index sidecar. A .hef carries NO class '
+                f'{self._path}: no readable class-index sidecar (missing, empty or not parseable). '
+                f'A .hef carries NO class '
                 f'names, so without {Path(self._path).with_suffix(".yaml").name} '
                 f'there is no id->label map, the allowlist matches nothing, and '
                 f'every frame returns [] while the pipeline looks healthy. '
@@ -157,7 +156,10 @@ class HailoDetector(Detector):
         out_info = self._hef.get_output_vstream_infos()[0]
         self._in_name, self._out_name = in_info.name, out_info.name
         shape = tuple(in_info.shape)
-        self._size = int(shape[0]) if len(shape) >= 2 else _INPUT_FALLBACK
+        if len(shape) < 2:
+            raise ValueError(f'HEF input shape {shape} has no height and width; '
+                             f'refusing to guess a letterbox size')
+        self._size = int(shape[0])
 
         self._target = hailo_device.shared_device()
         hailo_device.register(self)
@@ -313,6 +315,20 @@ class HailoDetector(Detector):
             return baked
         return EMIT_FLOOR
 
+    def nms_refusal(self, floor=None, iou=None) -> str:
+        """Why `update_nms` would refuse, decided before anything changes."""
+        if self._blocking:
+            return ('the blocking diagnostic path builds its streams '
+                    'once and cannot change the NMS')
+        if self._baked_conf is None:
+            return (f'{Path(self._path).name} reports no NMS score '
+                    f'threshold, so it has no NMS output to set')
+        if floor is not None and not 0.0 < float(floor) < 1.0:
+            return f'nms_floor {floor!r} is outside (0, 1)'
+        if iou is not None and not 0.0 < float(iou) <= 1.0:
+            return f'nms_iou {iou!r} is outside (0, 1]'
+        return ''
+
     def update_nms(self, floor: Optional[float] = None,
                    iou: Optional[float] = None) -> None:
         """Change the NMS score floor and overlap threshold on a live model.
@@ -327,16 +343,9 @@ class HailoDetector(Detector):
         reports a change that did not happen: the blocking diagnostic path,
         and a graph with no NMS output to set.
         """
-        if self._blocking:
-            raise ValueError('the blocking diagnostic path builds its streams '
-                             'once and cannot change the NMS')
-        if self._baked_conf is None:
-            raise ValueError(f'{Path(self._path).name} reports no NMS score '
-                             f'threshold, so it has no NMS output to set')
-        if floor is not None and not 0.0 < float(floor) < 1.0:
-            raise ValueError(f'nms_floor {floor!r} is outside (0, 1)')
-        if iou is not None and not 0.0 < float(iou) <= 1.0:
-            raise ValueError(f'nms_iou {iou!r} is outside (0, 1]')
+        why = self.nms_refusal(floor, iou)
+        if why:
+            raise ValueError(why)
         with self._infer_lock:
             out = self._model.output()
             try:
@@ -404,7 +413,13 @@ class HailoDetector(Detector):
         """Say when the runtime threshold cannot do what it was asked to."""
         if self._log is None:
             return
-        if self._floor is not None and conf < self._floor - 1e-6:
+        if self._floor is None and not self._blocking:
+            self._log.warn(
+                f'[HAILO] the NMS floor this graph was compiled with could not '
+                f'be read (hailortcli missing or its output changed), so it was '
+                f'not lowered: conf={conf:.3f} may be under it, and nothing '
+                f'under it is returned.')
+        elif self._floor is not None and conf < self._floor - 1e-6:
             self._log.warn(
                 f'[HAILO] conf={conf:.3f} is BELOW the NMS floor of '
                 f'{self._floor:.3f} this model is configured at -- nothing '
@@ -452,7 +467,8 @@ class HailoDetector(Detector):
                     f'being discarded.')
 
     def update_max_det(self, max_det: int) -> None:
-        self._max_det = int(max_det)
+        # Clamped as yolo.py does: 0 would delete every box, silently.
+        self._max_det = max(int(max_det), 1)
 
     def is_ready(self) -> bool:
         return bool(self._ready)
@@ -614,7 +630,7 @@ class HailoDetector(Detector):
             # it reads scores as coordinates. `_decode_nms` VALIDATES it.
             # Decoded under this detector's lock: the buffer stays bound, and
             # the next infer on this detector would overwrite it mid-read.
-            per_class = self._decode_nms(self._out_buf)
+            per_class = [np.copy(c) for c in self._decode_nms(self._out_buf)]
         return self._boxes_to_detections(per_class, w, h, scale, pad_x, pad_y)
 
     def _boxes_to_detections(self, per_class, w, h, scale, pad_x, pad_y):

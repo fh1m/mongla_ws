@@ -1,5 +1,6 @@
 """LockNode's setup: parameters, the anchor and the bank, and live retuning.
 """
+import math
 import os
 
 from mongla_vision.anchor import loop_closure as _lc
@@ -222,11 +223,15 @@ class LockSetupMixin:
                 except Exception as exc:                         # noqa: BLE001
                     self.get_logger().warn(
                         f'[LOCK ] {os.path.basename(p)} would not load on the '
-                        f'accelerator ({type(exc).__name__}: {exc}) -- falling '
-                        f'back to ONNX on the CPU, about 33 ms a frame against '
+                        f'accelerator ({type(exc).__name__}: {exc}) -- '
+                        f'trying an xfeat_*.onnx beside it on the CPU, about 33 ms a frame against '
                         f'11.4 ms on the chip (measured-bars 92).')
-                    alt = sorted(glob.glob(os.path.join(
-                        os.path.dirname(p), 'xfeat_*.onnx')))
+                    alt = []
+                    for r in roots:
+                        alt = sorted(glob.glob(os.path.join(
+                            os.path.expanduser(r), 'xfeat_*.onnx')))
+                        if alt:
+                            break
                     p = alt[0] if alt else ''
                     if not p:
                         raise
@@ -276,9 +281,9 @@ class LockSetupMixin:
         """Aim (or un-aim) the ladder while a mission is running.
 
         `target_class` non-empty PINS the aim, exactly as the launch argument
-        does. Setting it back to '' releases the pin and the ladder resumes
-        following `classes_filter` -- so a mission can take manual control of
-        one leg and hand it back, without a relaunch.
+        does. Setting it back to '' releases the pin. The aim then follows
+        `classes_filter` again once that names exactly one class, so a mission
+        can take manual control of one leg and hand it back, without a relaunch.
         """
         from rcl_interfaces.msg import SetParametersResult
         params = changes(self, params)     # a declaration is not a change (B-145)
@@ -323,8 +328,8 @@ class LockSetupMixin:
                     if filt and filt != self._cls:
                         self._switch_target(filt)
                     self.get_logger().info(
-                        '[LOCK ] target_class released -- following '
-                        f'classes_filter again ({self._cls!r})')
+                        f'[LOCK ] target_class released -- aim is {self._cls!r}; it follows '
+                        'classes_filter while that names exactly one class')
             elif prm.name == 'publish_hz':
                 hz = float(prm.value or 0.0)
                 self._pub_min_dt = (1.0 / hz) if hz > 0.0 else 0.0
@@ -388,9 +393,9 @@ class LockSetupMixin:
             from mongla_vision.target_geometry import width_for
         except ImportError:
             return
-        w = width_for(self._cls) if self._cls else 0.0
-        self._target_w_m = float(w or 0.0)
+        w = width_for(self._cls) if self._cls else math.nan
+        self._target_w_m = w if w > 0.0 else 0.0    # 0.0: no width, the pose refuses
         if self._target_w_m <= 0.0:
             self.get_logger().warn(
-                f'[LOCK ] no committed width for {self._cls!r} -- the 6-DoF '
-                f'pose will refuse while this class is the target.')
+                f'[LOCK ] no committed width for {self._cls!r} -- no 6-DoF '
+                f'pose is published while this class is the target.')

@@ -143,6 +143,9 @@ def _paused(node, cam: str, timeout_s: float = 1.0) -> Optional[bool]:
         res = fut.result()
         if res is None or not res.values:
             return None
+        from rcl_interfaces.msg import ParameterType
+        if res.values[0].type == ParameterType.PARAMETER_NOT_SET:
+            return None          # the detector has no `paused` parameter
         return bool(res.values[0].bool_value)
     finally:
         node.destroy_client(cli)

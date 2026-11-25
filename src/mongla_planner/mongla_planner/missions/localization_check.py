@@ -98,8 +98,12 @@ def run(mongla, log):
                    f'filter sigma {est.sigma_xy_m:.2f} m')
     finally:
         _report(table, log)
-        mongla.surface()
-        mongla.disarm()
+        # Disarm even if surface raises: a hull left armed after a
+        # failed surface is the worse outcome (bead 2s8).
+        try:
+            mongla.surface()
+        finally:
+            mongla.disarm()
 
 
 def _report(table, log):

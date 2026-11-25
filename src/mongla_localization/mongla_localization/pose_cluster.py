@@ -33,11 +33,6 @@ from typing import Optional
 # reads +179 on one frame and -179 on the next, and those two agree.
 from mongla_localization.heading_anchor import _wrap180
 
-# A pose whose two flip branches disagree by less than this is not really
-# ambiguous; the solver already picked. Above it, the frame carries a genuine
-# fork and belongs in a cluster rather than being trusted alone.
-FLIP_SPREAD_DEG = 8.0
-
 # Frames grouped together must agree to within this. Set from the flip
 # geometry, NOT from a tuning session: the two branches of a planar solve sit
 # roughly symmetric about zero, so the gap between them is about `2 * |yaw|`.
@@ -124,7 +119,7 @@ class Fused:
     considered: int = 0         # frames that passed the gates
     spread_deg: float = float('nan')   # MAD of the winning cluster
     rival: int = 0              # frames in the NEXT largest cluster
-    rule: str = ''              # 'egomotion' | 'support' -- WHICH test decided
+    rule: str = ''              # 'viewpoint' | 'support' -- WHICH test decided
     slope: float = float('nan') # d(world yaw)/d(world bearing) of the winner
     reason: str = ''
     # When two hypotheses both fit, BOTH, camera-relative now -- so the
@@ -295,7 +290,9 @@ class PoseCluster:
                   and all(math.isfinite(v) for v in
                           (s.yaw_deg, s.alt_yaw_deg, s.bearing_deg,
                            s.vehicle_yaw_deg))]
-        if len(paired) >= self.min_poses:
+        # `paired` is required so the newest-yaw search below always finds a value,
+        # even when min_poses is 0.
+        if paired and len(paired) >= self.min_poses:
             # The answer is for NOW: the newest heading in the window,
             # which may belong to a frame that carried only one branch.
             # Finite, as in the legacy path: a NaN heading is absent too.

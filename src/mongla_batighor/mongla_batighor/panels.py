@@ -46,8 +46,25 @@ def verbs() -> dict:
     types = Move.Goal.get_fields_and_field_types()
     return {name: {'help': row['help'],
                    'fields': {f: types[f] for f in row['fields']},
-                   'defaults': row.get('defaults', {})}
+                   'defaults': row.get('defaults', {}),
+                   'board': on_the_board(name)}
             for name, row in COMMANDS.items()}
+
+
+def on_the_board(verb: str) -> bool:
+    """Does the board run this verb as one SROT_MOVE? Asked of the verb table
+    the driver itself uses (`srot_moves._build_params`), so no second list:
+    an unmapped verb raises KeyError, a mapped one returns or refuses the
+    sample fields with ValueError. The instruments need it because every
+    board verb runs in AUTO, which an unhealthy barometer refuses."""
+    from mongla_control.fc.srot_moves import _build_params
+    try:
+        _build_params(verb, {'duration': 1.0, 'timeout': 1.0, 'target': -1.0, 'gain': 50.0})
+    except KeyError:
+        return False
+    except ValueError:
+        return True
+    return True
 
 
 def foxe(src: Path, preamble: str = '') -> tuple[dict, bytes]:

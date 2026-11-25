@@ -110,7 +110,7 @@ def compose(img, dets, primary, fps):
         fps=fps, healthy=True, tracking_on=True, n_tracks=len(dets),
         primary_track_id=1 if primary else None,
         configured_classes=[d.class_name for d in dets][:6] or ["-"],
-        state=State(), yaw_source="mavlink_ahrs", deadband=12.0,
+        state=State(), yaw_source="mavlink_ahrs", deadband=0.05,
         err_x_history=[ex * 0.6, ex * 0.8, ex],
         err_y_history=[ey * 0.6, ey * 0.8, ey],
         conf_history=[d.score for d in dets][:8] or [0.0],

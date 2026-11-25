@@ -27,6 +27,7 @@ The three invariants:
 """
 import ctypes
 import sys
+import math
 import threading
 import time
 from pathlib import Path
@@ -99,6 +100,7 @@ class _Fake(M.V4L2MailboxCamera):
         self._store_age_max = 0.0
         self._last_seq = None
         self._consec_fail, self._last_ok, self._idx = 0, time.monotonic(), 0
+        self._decode_fail = 0
         self._clock_monotonic, self._stamp_source = True, 'soe'
         self._pump = threading.Thread(target=lambda: None)
 
@@ -368,3 +370,32 @@ def test_the_control_ioctls_encode_their_struct_sizes():
 def test_an_unknown_control_refuses_before_the_device_opens():
     with pytest.raises(ValueError, match='gian'):
         M.V4L2MailboxCamera('/dev/does-not-exist', controls={'gian': 1})
+
+
+def test_a_source_that_never_decodes_reads_unhealthy():
+    """vl_7 M4: every frame failing to decode left is_healthy() True."""
+    c = _Fake()
+    c._decoder = lambda _p: None
+    for i in range(31):
+        c.deliver(i + 1, time.monotonic())
+        c._last_ok = time.monotonic()
+        c.read()
+    assert M.V4L2MailboxCamera.is_healthy(c) is False
+
+
+def test_no_store_age_before_the_first_frame():
+    """vl_7 M7: 0.0 is an age; before any frame there is none."""
+    info = M.V4L2MailboxCamera.info(_Fake())
+    assert math.isnan(info['store_age_ms']) and math.isnan(info['store_age_max_ms'])
+
+
+def test_close_twice_closes_once(monkeypatch):
+    """vl_7 M6: the second close must not close a reused descriptor."""
+    import os
+    closed = []
+    monkeypatch.setattr(os, 'close', lambda fd: closed.append(fd))
+    c = _Fake()
+    c._fd, c._maps = 99, []
+    M.V4L2MailboxCamera.close(c)
+    M.V4L2MailboxCamera.close(c)
+    assert closed == [99]

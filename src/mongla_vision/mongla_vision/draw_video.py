@@ -8,8 +8,8 @@ render_video_section() is the main entry point.  It returns a new ndarray
   - horizontal alignment bar at frame bottom
   - stale-frame banner (when healthy=False)
 
-Helper functions (draw_*, highlight_*, crosshair, etc.) are kept for callers
-that apply overlays individually without going through render_video_section().
+The private helpers below are internal to this module. Callers use
+render_video_section().
 """
 
 from __future__ import annotations
@@ -263,11 +263,9 @@ _CLASS_PALETTE = [
 def _tint_mask(out, d, col, x1, y1) -> None:
     """Shade the instance mask, when the backend produced one.
 
-    This is the ONLY consumer of `Detection.mask` today, and that is
-    deliberate: the geometry consumer that wants it (pose from a mask rather
-    than from a box) wants a CONTOUR, not a bitmap, and choosing a wire format
-    for a consumer that does not exist yet would be choosing it blind. Drawing
-    it is what proves at the pool that the masks are real rather than a
+    This is one of three readers of `Detection.mask` (detection/contours.py
+    and identity.py read it too). Drawing it
+    is what proves at the pool that the masks are real rather than a
     plausible array -- a mask that is shifted, transposed or off by the
     letterbox pads looks perfect in every unit test and obviously wrong here.
 

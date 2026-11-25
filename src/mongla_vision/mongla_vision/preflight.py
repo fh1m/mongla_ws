@@ -41,14 +41,12 @@ class VisionNotReadyError(RuntimeError):
 
 @dataclass
 class VisionStatus:
-    image_hz:      float
-    detection_hz:  float
     image_size:    tuple   # (W, H) from CameraInfo, or (0, 0) if not seen
     info_seen:     bool
     elapsed:       float
 
 
-# Cache so missions don't pay the wait twice. Key = (process id, camera).
+# Cache so missions don't pay the wait twice. Key = the id() of the VisionState object.
 _PREFLIGHT_CACHE: dict = {}
 
 
@@ -106,7 +104,6 @@ def wait_vision_state_ready(vision_state, *,
         if info_ok and frames_ok and det_ok:
             elapsed = time.monotonic() - started
             status = VisionStatus(
-                image_hz=float('nan'), detection_hz=float('nan'),
                 image_size=tuple(diag['image_size']),
                 info_seen=info_ok, elapsed=elapsed)
             _PREFLIGHT_CACHE[cache_key] = status

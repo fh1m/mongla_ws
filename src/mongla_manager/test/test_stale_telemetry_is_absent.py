@@ -52,6 +52,7 @@ class _StubNode:
         self.yaw_source = BoardYaw(fc)
         self.state_publisher = _Pub()
         self.thruster_pack_publisher = _Pub()
+        self.safety_publisher = _Pub()
 
     def _state_stamp(self):
         return Time()
@@ -146,3 +147,16 @@ def test_the_thruster_pack_is_on_the_state_and_absent_is_nan():
     amn.AUVManagerNode._publish_state(node, att, None, 'MANUAL', False, 0.0)
     pack = node.thruster_pack_publisher.msgs[-1]
     assert abs(pack.voltage - 14.63) < 1e-3 and pack.present
+
+
+def test_the_safety_states_go_out_with_the_state_and_unheard_is_unknown():
+    """Leak, kill and the barometer ride /mongla/safety under the state's own
+    header (MonglaState keeps its shape). A board that has said nothing about
+    them reads UNKNOWN, never clear."""
+    from mongla_interfaces.msg import MonglaSafety
+    node = _StubNode(_fc_with_attitude(0.0))
+    amn.AUVManagerNode._publish_state(node, node.fc.get_attitude(), None, 'MANUAL', False, 0.0)
+    (state,), (safety,) = node.state_publisher.msgs, node.safety_publisher.msgs
+    assert safety.header == state.header
+    u = MonglaSafety.SAFETY_UNKNOWN
+    assert (safety.leak, safety.kill_switch, safety.baro, safety.baro_text) == (u, u, u, '')

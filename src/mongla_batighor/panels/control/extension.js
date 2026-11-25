@@ -45,17 +45,22 @@ setInterval(beat, 1000);
 // helm, a verb, a mission, the log), and Detectors chooses the live camera
 // and tunes the detectors. As one panel it needed 1042 px and showed a
 // third of it, ARM and SEND below the fold (Cockpit, 2026-11-22).
+// Keys: the emergency keys alone, tall, for the ScreenPad: the touchscreen
+// under the operator's hands, where a key is a thumb's reach away.
 const PARTS = {
   ControlCenter: ["safe", "helm", "command", "mission", "log"],
   Detectors: ["detectors"],
+  Keys: ["safe"],
+  // The main screen's half when the keys are on the screen under it (Vitals).
+  Command: ["helm", "command", "mission", "log"],
 };
 
-const TITLE = { ControlCenter: "Control Center", Detectors: "Detectors" };
+const TITLE = { ControlCenter: "Control Center", Detectors: "Detectors", Keys: "Keys", Command: "Command" };
 
 function initPanel(context, kind = "ControlCenter") {
   const parts = PARTS[kind];
   if (typeof context.setDefaultPanelTitle === "function") context.setDefaultPanelTitle(TITLE[kind]);
-  const box = mount(context);
+  const box = mount(context, kind === "Keys" ? "pad" : undefined);
 
   let helm = {};
   let vehicle = null, vehicleAt = 0;
@@ -129,6 +134,7 @@ function initPanel(context, kind = "ControlCenter") {
     if (tProps.checked) confirms.push("propellers_clear");
     if (tKill.checked) confirms.push("kill_switch_manned");
     armDlg.close();
+    if (!(helm && helm.pilot === me())) { say("you are no longer the pilot: not armed", true); return; }
     await call("command", { cmd: "arm", confirms });
   });
   const bArm = el("button", {
@@ -158,9 +164,13 @@ function initPanel(context, kind = "ControlCenter") {
     }
   }
   pick.addEventListener("change", drawFields);
+  // One press, one goal: a double click or a held Enter must not send the
+  // verb again once the first has finished (two yaw_left 90 is 180 degrees).
+  let sending = false;
   const bSend = el("button", {
     class: "go",
-    onclick: () => {
+    onclick: async () => {
+      if (sending) return;
       // Only what the operator filled in is sent; the verb's defaults do the rest.
       const out = {};
       for (const i of fields.querySelectorAll("input")) {
@@ -168,7 +178,12 @@ function initPanel(context, kind = "ControlCenter") {
         if (k === "boolean") { if (i.checked !== (VERBS[pick.value].defaults[i.dataset.f] === true)) out[i.dataset.f] = i.checked; }
         else if (i.value !== "") out[i.dataset.f] = k === "string" ? i.value : Number(i.value);
       }
-      return call("command", { cmd: pick.value, fields_json: JSON.stringify(out) });
+      sending = true;
+      try {
+        return await call("command", { cmd: pick.value, fields_json: JSON.stringify(out) });
+      } finally {
+        setTimeout(() => { sending = false; }, 400);
+      }
     },
   }, "Send");
 

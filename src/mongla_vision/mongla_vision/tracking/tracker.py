@@ -35,7 +35,7 @@ class TrackedDetection:
 
     Mirrors Detection fields so it can be used anywhere Detection is
     expected (duck-typed). track_id=-1 means "unconfirmed" (min_hits
-    not yet reached); the publisher filters those out before publishing.
+    not yet reached); the backend drops those before they reach the publisher.
     """
     class_id:   int
     class_name: str
@@ -80,8 +80,9 @@ class Tracker:
         detections : List[Detection]
             Raw detections from the detector for this frame. May be empty.
         frame_t : float
-            Monotonic timestamp of this frame (seconds). Used by Kalman
-            to compute dt; pass time.monotonic() from the node.
+            The frame's capture instant on this host's monotonic clock
+            (seconds), as `stamps.capture_monotonic` gives it -- not the
+            time it arrived. Used by Kalman to compute dt.
 
         Returns
         -------

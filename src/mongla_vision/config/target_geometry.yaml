@@ -2,8 +2,9 @@
 # monocular answer METRIC.
 #
 # What the number means. `width_m` is the true width of WHAT THE DETECTOR
-# BOXES, not the prop's largest dimension. `lock_node` snaps its anchor
-# reference to the detection bbox (`self._anchor.snap(gray, roi=det_box)`) and
+# BOXES, not the prop's largest dimension. `lock_node` enrols its anchor
+# from the detection bbox (`roi=det_box` in `lock_anchor.py`, snapped in
+# `anchor/bank.py`) and
 # `anchor/pose.py::patch_object_points` scales that region by
 # `m_per_px = width_m / w_px`. So for a vertical pole spanning the pool the
 # right number is the POLE DIAMETER, not the span between two poles — using the
@@ -23,9 +24,10 @@
 # `shaw_fish`); two props that only share a handbook size (the 12 in symbols)
 # each keep their own, so re-measuring one cannot move the other.
 #
-# Every entry carries its source. `measured: true` means we measured the actual
-# competition prop and that number wins over the rulebook's nominal, which is
-# what the SAUVC tolerance (+/- 5 %) exists to allow for.
+# Every entry carries its source. A width we measured on the actual prop goes
+# in the deck override or the venue's course file (below), which wins over
+# these nominals: that is what the SAUVC tolerance (+/- 5 %) allows for.
+# There is no `measured:` key.
 #
 # Our pool is not the venue, so these are defaults, not hardcodings.
 # We practise against props we built, and ours are not the handbook's sizes. A
@@ -53,9 +55,9 @@
 #
 # And the defaults come from the organisers, never from our simulator.
 # RoboSub: the team handbook (robonation.gitbook.io). SAUVC: sauvc.org/rulebook.
-# Two SAUVC entries are read off a rulebook FIGURE rather than quoted prose and
-# carry `unquoted: true` for exactly that reason -- pinned by
-# test_every_model_class_has_a_width.py. A simulator prop's size is our own
+# Two SAUVC entries are read off a rulebook FIGURE rather than quoted prose.
+# No SAUVC entry sets `unquoted: true`; only a robosub entry does. A simulator
+# prop's size is our own
 # guess wearing a number's clothes; it never sources an entry here.
 #
 # Who loads this. No launch file does. `mongla_vision/target_geometry.py`
@@ -108,7 +110,7 @@ sauvc:
     # "80cm tall, ~1.6cm in diameter" -- the coloured bump flares.
     #
     # 16 mm is SMALL. At 640 px wide and a 73.9 deg HFOV, a 1.6 cm pole is
-    # under 2 px beyond ~3 m, so a metric answer from this class is only
+    # under 2 px beyond ~3.4 m (f = 427 px), so a metric answer from this class is only
     # defensible up close. The pose solver's own reprojection and ambiguity
     # gates are what refuse it; this note is here so a wide range is not
     # believed.

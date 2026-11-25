@@ -46,7 +46,8 @@ CAMERA_PROFILES = {
     # them to a port that matched no device at all), so `pi_forward` opened
     # the bottom camera. Corrected in kutum/system/udev/99-mongla-cameras.rules.
     #
-    # `fps` and `fourcc` are MEASURED on the vehicle, not requested. Both were
+    # `fps` and `fourcc` are MEASURED on the vehicle, not requested, except where
+    # a profile asks on purpose (pi_forward, below). Both were
     # previously absent or wrong, and `fourcc` could not be expressed at all:
     # the builder hardcoded MJPG, so a camera that is faster in another format
     # was unconfigurable.

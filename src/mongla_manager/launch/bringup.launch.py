@@ -470,6 +470,11 @@ def generate_launch_description():
             # Same meaning in both: start flow_node on the downward camera.
             'flow':          LaunchConfiguration('flow'),
             'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
+            # The venue the log line says was applied, all of it (vl_1 #3).
+            'pool_depth_min_m': LaunchConfiguration('pool_depth_min_m'),
+            'pool_depth_max_m': LaunchConfiguration('pool_depth_max_m'),
+            'tile_m':        LaunchConfiguration('tile_m'),
+            'lane_lines':    LaunchConfiguration('lane_lines'),
             # Forwarded EXPLICITLY: both launches declare `paused`, so leaving
             # it out does not keep it out -- an include inherits every parent
             # name:=value. One detector, resumed by the first query or verb.
@@ -512,7 +517,8 @@ def generate_launch_description():
     )
 
     # The same file's `nodes:` section: node parameters, applied to every node
-    # below. Each node refuses a key it does not declare.
+    # below. The nodes of this stack refuse a key they do not declare; the web
+    # server and the Lichtblick bridge are not ours, and drop one silently.
     params = launch_defaults.node_actions()
 
     return LaunchDescription(args + file_note + params + [

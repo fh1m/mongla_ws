@@ -1,7 +1,7 @@
 """Pick a detector backend from the resolved model path. One seam, three callers.
 
-Modelled on `cameras/factory.py`, which already solves the same problem for
-camera sources.
+Modelled on the camera source builder in `mongla_vision/factory.py`, which
+solves the same problem for camera sources.
 
 Why the extension decides, not a `backend=` parameter
 -----------------------------------------------------
@@ -45,9 +45,10 @@ def backend_for(path: str) -> str:
 def make_detector(*, model_path: str, logger=None, **kwargs) -> Detector:
     """Construct the right backend for `model_path` (a stem or a full path).
 
-    Every kwarg the YOLO backend takes is accepted; the Hailo backend ignores
-    the ones that describe a graph compiled hours earlier on another machine
-    (`device`, `iou`, `half`, `imgsz`). It does NOT ignore `conf` -- that one
+    Every kwarg the YOLO backend takes is accepted. The Hailo detection backend
+    ignores, at construction, the ones that describe a graph compiled hours
+    earlier on another machine (`device`, `iou`, `half`, `imgsz`); the Hailo seg
+    backend reads `iou`. It does NOT ignore `conf` -- that one
     still filters at runtime, it just cannot go below the baked-in threshold.
     """
     from .yolo import _resolve_model_path      # local: pulls in ultralytics

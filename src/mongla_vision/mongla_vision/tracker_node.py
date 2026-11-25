@@ -68,7 +68,8 @@ def _build_tracker(tracker_type, *, track_buffer, min_hits,
         return ByteTrackWrapper(
             track_buffer=track_buffer, min_hits=min_hits,
             iou_threshold=iou_threshold,
-            track_activation_threshold=track_activation_threshold)
+            track_activation_threshold=track_activation_threshold,
+            detector_conf=detector_conf)
     try:
         return RoboflowTracker(
             tracker_type=ttype, track_buffer=track_buffer,
@@ -83,7 +84,8 @@ def _build_tracker(tracker_type, *, track_buffer, min_hits,
         return ByteTrackWrapper(
             track_buffer=track_buffer, min_hits=min_hits,
             iou_threshold=iou_threshold,
-            track_activation_threshold=track_activation_threshold)
+            track_activation_threshold=track_activation_threshold,
+            detector_conf=detector_conf)
 
 
 def capture_time(header) -> float:
@@ -117,7 +119,7 @@ def kalman_pass(kalman, tracked, frame_t):
             continue
 
     `is_expired()` reads `predict_s`, which resets ONLY inside `smooth()`
-    (`kalman.py:83`) -- which the `continue` skipped. And `prune()` only drops
+    (`PerTrackKalman.step`, kalman.py:143) -- which the `continue` skipped. And `prune()` only drops
     filters whose id is ABSENT from `tracked`. So once a filter expired while
     the backend still held the id, a returning target with that id was
     suppressed **for ever**: it could never reach the one call that would
@@ -210,6 +212,8 @@ class TrackerNode(Node):
         self.declare_parameter('track_buffer',                150)
         self.declare_parameter('min_hits',                    1)
         self.declare_parameter('iou_threshold',               0.2)
+        # Only the legacy_bytetrack engine reads this knob. The default ocsort
+        # engine gates on high_conf_det_threshold instead.
         self.declare_parameter('track_activation_threshold',  0.40)
         # Unset (NaN) means the detector's floor, which the backend clamps to
         # anyway; only an operator's value above the floor is worth a warning.

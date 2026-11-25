@@ -229,7 +229,8 @@ class VisionVerbs:
             return
         self._tool_warned.add(tool)
         try:
-            from mongla_vision.tool_geometry import is_measured, known_tools
+            from mongla_vision.tool_geometry import (is_measured, known_tools,
+                                                     offset_m, tool_camera)
         except ImportError:
             return
         if tool not in known_tools():
@@ -245,6 +246,21 @@ class VisionVerbs:
                 f'closing in does not help. Measure it into '
                 f'config/tool_geometry.yaml.')
             return
+        cam = str(getattr(vstate, '_camera', '') or '')
+        if tool_camera(tool) and cam and tool_camera(tool) != cam:
+            self.log.warning(
+                f'[VIS  ] tool {tool!r} is measured from the '
+                f'{tool_camera(tool)} camera, and this align runs on the {cam} '
+                f'camera: the offset does not apply. Aiming the CAMERA.')
+            return
+        off = offset_m(tool)
+        if cam == 'forward' and off is not None and abs(off[1]) > 1e-3:
+            # A forward align has no depth axis, so the vertical term is
+            # dropped: the round misses by y at every range (vl_3 F6).
+            self.log.warning(
+                f'[VIS  ] tool {tool!r} sits {100 * off[1]:+.0f} cm below the '
+                f'forward camera, and a forward align steers no depth: the '
+                f'vertical offset is NOT applied. set_depth for it first.')
         if getattr(vstate, 'tool_offset_px', None) and vstate.tool_offset_px(
                 tool, class_name=target_class) is None:
             self.log.warning(

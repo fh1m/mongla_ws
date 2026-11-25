@@ -28,7 +28,3 @@ imu_to:
   downward_cam: null
   forward_cam: null
   baro: null
-
-measured:
-  date: null
-  method: null

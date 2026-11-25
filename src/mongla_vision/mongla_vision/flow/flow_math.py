@@ -70,7 +70,8 @@ def floor_depth_at(points: Sequence[Sequence[float]], x: float, y: float
 
     One point: a flat floor. Two, or points on one line: linear along that
     line. Three or more: a least-squares plane, whose residual RMS is the fit
-    sigma (0 when the points fit exactly). Never extrapolated past the
+    sigma. Too few points to measure a spread (one, two, or three on a
+    plane) give NaN, never 0: three points fit any plane exactly. Never extrapolated past the
     surveyed depths: the answer is clamped to [min, max] of them, so a
     position off the surveyed area reads the nearest surveyed depth, not a
     floor the plane invents.
@@ -80,7 +81,7 @@ def floor_depth_at(points: Sequence[Sequence[float]], x: float, y: float
         return None
     lo, hi = float(pts[:, 2].min()), float(pts[:, 2].max())
     if len(pts) == 1:
-        return float(pts[0, 2]), 0.0, 0.0
+        return float(pts[0, 2]), math.nan, 0.0
     xy = pts[:, :2] - pts[:, :2].mean(axis=0)
     _, s, vt = np.linalg.svd(xy, full_matrices=False)
     if len(pts) == 2 or s[-1] < 1e-6 * max(s[0], 1e-9):
@@ -89,19 +90,19 @@ def floor_depth_at(points: Sequence[Sequence[float]], x: float, y: float
         t = xy @ u
         if float(np.ptp(t)) < 1e-9:
             d = float(pts[:, 2].mean())
-            return d, float(pts[:, 2].std()), 0.0
+            return d, (float(pts[:, 2].std()) if len(pts) > 2 else math.nan), 0.0
         A = np.column_stack([t, np.ones_like(t)])
         (g, c), *_ = np.linalg.lstsq(A, pts[:, 2], rcond=None)
         q = (np.array([x, y]) - pts[:, :2].mean(axis=0)) @ u
         res = pts[:, 2] - A @ np.array([g, c])
         dof = max(len(pts) - 2, 1)
-        sig = float(math.sqrt(float(res @ res) / dof)) if len(pts) > 2 else 0.0
+        sig = float(math.sqrt(float(res @ res) / dof)) if len(pts) > 2 else math.nan
         return float(min(hi, max(lo, g * q + c))), sig, abs(float(g))
     A = np.column_stack([pts[:, 0], pts[:, 1], np.ones(len(pts))])
     (a, b, c), *_ = np.linalg.lstsq(A, pts[:, 2], rcond=None)
     res = pts[:, 2] - A @ np.array([a, b, c])
     sig = (float(math.sqrt(float(res @ res) / (len(pts) - 3)))
-           if len(pts) > 3 else 0.0)
+           if len(pts) > 3 else math.nan)
     return (float(min(hi, max(lo, a * x + b * y + c))), sig,
             float(math.hypot(a, b)))
 
@@ -440,11 +441,11 @@ class HeightFromDivergence:
     `scale_rate` -- the divergence of the flow field, which for a downward
     camera is the rate the floor grows in the image. Geometrically:
 
-        scale_rate = -vz / h            (descending -> closer -> scale grows)
+        scale_rate = vz / h             (descending -> closer -> scale grows)
 
     and the barometer measures `vz` directly and independently. So:
 
-        h = -vz / scale_rate
+        h = vz / scale_rate
 
     That is a height measured by the CAMERA, cross-checked against a
     barometer, with no pool depth in it at all. Both quantities are already

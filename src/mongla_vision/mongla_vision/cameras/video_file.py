@@ -62,19 +62,24 @@ class VideoFileCamera(Camera):
                 f"Check the file path and that OpenCV was built with ffmpeg support.")
 
         self._cap = cap
-        file_w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or 640)
-        file_h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480)
-        file_fps = float(cap.get(cv2.CAP_PROP_FPS)        or 30.0)
+        # Unknown is 0 / NaN, not 640x480 at 30 (vl_7 M10); playback paces at
+        # 30 when the file says nothing, and the log says so.
+        file_w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)  or 0)
+        file_h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        self._file_fps = float(cap.get(cv2.CAP_PROP_FPS) or float('nan'))
+        file_fps = self._file_fps if self._file_fps == self._file_fps else 30.0
 
         self._actual_w   = int(width)  if width  else file_w
         self._actual_h   = int(height) if height else file_h
         self._actual_fps = float(fps)  if fps    else file_fps
-        self._total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+        # A negative count from the backend means unknown, the same as zero.
+        self._total_frames = max(0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
 
         if self._log:
             self._log.info(
                 f'[CAM  ] video_file {path!r} opened: '
-                f'{self._actual_w}x{self._actual_h}@{self._actual_fps:.1f} '
+                f'{self._actual_w or "?"}x{self._actual_h or "?"}@{self._actual_fps:.1f}'
+                f'{"" if self._file_fps == self._file_fps or fps else " (file fps unknown)"} '
                 f'frames={self._total_frames}  loop={self._loop}')
 
         self._idx         = 0
@@ -112,7 +117,9 @@ class VideoFileCamera(Camera):
         with self._lock:
             if not self._cap or not self._cap.isOpened():
                 return
-            delta  = int(seconds * self._actual_fps)
+            # Seconds of the FILE, not of the playback-rate override (M11).
+            rate   = self._file_fps if self._file_fps == self._file_fps else self._actual_fps
+            delta  = int(seconds * rate)
             cur    = int(self._cap.get(cv2.CAP_PROP_POS_FRAMES))
             hi     = max(0, self._total_frames - 1) if self._total_frames else cur + abs(delta)
             target = max(0, min(hi, cur + delta))
@@ -138,7 +145,7 @@ class VideoFileCamera(Camera):
 
 
     def set_speed(self, speed: float) -> float:
-        """Set playback speed multiplier (0.1–4.0). Returns clamped value."""
+        """Set playback speed multiplier. Floored at 0.05 and with no ceiling. Returns the value used."""
         speed = max(0.05, float(speed))
         with self._lock:
             self._speed = speed
@@ -211,7 +218,11 @@ class VideoFileCamera(Camera):
         wait = self._next_frame_time - now
         if wait > 0.001:
             time.sleep(wait)
-        self._next_frame_time = time.monotonic() + self._frame_interval / max(0.05, self._speed)
+        # Chained from the due time, so an overshoot does not push every later frame.
+        # A stall past one interval resets to now rather than bursting to catch up.
+        self._next_frame_time = max(self._next_frame_time
+                                    + self._frame_interval / max(0.05, self._speed),
+                                    time.monotonic())
         # Stamped when handed over, after the pacing wait: a file has no
         # capture instant, and a stamp taken before the sleep made every
         # freshness gate read the replay's pacing as latency.

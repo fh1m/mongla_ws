@@ -36,6 +36,23 @@ function theme() {
   s.dataset.mb = "theme";
   s.textContent = THEME_CSS;
   document.head.append(s);
+  // The desktop app draws minimize, maximize and close over the app bar
+  // (Electron's window controls overlay), out of the page's reach, and keeps
+  // them in a window the compositor made full screen. A page in full screen
+  // hides them, and the app grants that only on a press, a key's or a
+  // pointer's: the launcher sends each window it places one key (F13), and
+  // otherwise the first touch does it. The overlay is the desktop app's
+  // alone, so a browser tab never does this. Esc leaves it.
+  const wco = typeof navigator !== "undefined" && navigator.windowControlsOverlay;
+  if (wco && wco.visible) {
+    const full = () => {
+      if (!document.fullscreenElement && wco.visible) {
+        document.documentElement.requestFullscreen().catch(() => { /* refused: the controls stay */ });
+      }
+    };
+    document.addEventListener("pointerdown", full, { capture: true });
+    document.addEventListener("keydown", full, { capture: true });
+  }
 }
 
 // Service calls for the page, lent by whichever Batighor panel is mounted.

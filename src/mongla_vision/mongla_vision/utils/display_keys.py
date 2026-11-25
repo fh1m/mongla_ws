@@ -68,10 +68,12 @@ def _send_speed(node: VisionDisplayNode, speed: float) -> None:
 
 
 def _send_pause(node: VisionDisplayNode, pause: bool) -> None:
-    """Update pause state optimistically then fire service call."""
-    node._is_paused = pause          # update now — don't wait for service ACK
+    """Send the pause; the local state follows only a request that was sent."""
     if node._pause_client is None or not node._pause_client.service_is_ready():
+        # Flipping the state anyway inverted the next Space press.
+        node.get_logger().warn('[DISP ] pause service not ready; press again')
         return
+    node._is_paused = pause
     req = SetBool.Request()
     req.data = pause
     node._pause_client.call_async(req)
@@ -86,9 +88,15 @@ def _handle_camera_keys(node: VisionDisplayNode, key: int) -> None:
     if key < 0:
         return
     if key == ord('f'):
-        node._pending_sub_action = 'forward'
+        name = 'forward'
     elif key == ord('d'):
-        node._pending_sub_action = 'downward'
+        name = 'downward'
+    else:
+        return
+    if name not in node._cameras_available:
+        node.get_logger().warning(f'[DISP ] no {name} camera on this host; key ignored')
+        return
+    node._pending_sub_action = name
 
 
 def _handle_video_keys(node: VisionDisplayNode, key: int) -> None:

@@ -1,0 +1,100 @@
+{
+  "configById": {
+    "GlobalVariableSliderPanel!track": {
+      "sliderProps": {
+        "min": 0,
+        "max": 3000,
+        "step": 1.0
+      },
+      "globalVariableName": "track",
+      "lichtblickPanelTitle": "track id ($track)"
+    },
+    "Plot!track_xy": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/tracks.detections[:]{id==$track}.bbox.center.position.x",
+          "label": "fwd x px",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/tracks.detections[:]{id==$track}.bbox.center.position.y",
+          "label": "fwd y px",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/tracks.detections[:]{id==$track}.bbox.center.position.x",
+          "label": "dwn x px",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/tracks.detections[:]{id==$track}.bbox.center.position.y",
+          "label": "dwn y px",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 140,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "the chosen track, centre px"
+    },
+    "Plot!per_frame": {
+      "paths": [
+        {
+          "value": "/studio_script/mongla_detections_per_frame.forward",
+          "label": "forward",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/studio_script/mongla_detections_per_frame.downward",
+          "label": "downward",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 140,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "detections per frame"
+    },
+    "NodePlayground!scripts": {
+      "selectedNodeId": "mongla-detections-per-frame",
+      "autoFormatOnSave": true,
+      "lichtblickPanelTitle": "user scripts"
+    }
+  },
+  "globalVariables": {
+    "track": 0
+  },
+  "userNodes": {
+    "mongla-detections-per-frame": {
+      "name": "detections per frame",
+      "sourceCode": "import { Input } from \"./types\";\n\n// How many boxes each camera's detector gave on its latest frame: a count\n// that drops to zero while the picture runs is a detector that lost the target.\nexport const inputs = [\"/mongla/vision/forward/detections\", \"/mongla/vision/downward/detections\"];\nexport const output = \"/studio_script/mongla_detections_per_frame\";\n\nconst last = { forward: 0, downward: 0 };\n\nexport default function script(\n  event: Input<\"/mongla/vision/forward/detections\"> | Input<\"/mongla/vision/downward/detections\">,\n): { forward: number; downward: number } {\n  const cam = event.topic.includes(\"/forward/\") ? \"forward\" : \"downward\";\n  last[cam] = event.message.detections.length;\n  return { ...last };\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": "GlobalVariableSliderPanel!track",
+      "second": {
+        "direction": "column",
+        "first": "Plot!track_xy",
+        "second": "Plot!per_frame",
+        "splitPercentage": 55.6
+      },
+      "splitPercentage": 18.2
+    },
+    "second": "NodePlayground!scripts",
+    "splitPercentage": 55.0
+  }
+}

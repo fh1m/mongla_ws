@@ -65,5 +65,9 @@ def run(mongla, log):
                 placed.append(name)
         log(f'survey_course: placed {len(placed)} of {len(SURVEY_PROPS)}')
     finally:
-        mongla.surface()
-        mongla.disarm()
+        # Disarm even if surface raises: a hull left armed after a
+        # failed surface is the worse outcome (bead 2s8).
+        try:
+            mongla.surface()
+        finally:
+            mongla.disarm()

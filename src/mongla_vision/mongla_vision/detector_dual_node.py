@@ -94,7 +94,7 @@ _PER_CAMERA = ('model_path', 'models', 'active_model', 'classes', 'conf',
 _SHARED = ('device', 'half', 'iou', 'nms_floor', 'nms_iou', 'imgsz', 'max_det',
            'publish_contours',
            'publish_debug_image',
-           'debug_image_hz', 'alignment_deadband', 'paused', 'range_crop')
+           'debug_image_hz', 'alignment_deadband', 'paused', 'range_crop', 'masks')
 
 # The camera half. Same prefixing scheme, same reason: launch cannot address
 # two nodes in one process.
@@ -136,6 +136,8 @@ _DEFAULTS = {
     # raises InvalidParameterTypeException and the whole composed process
     # dies at startup.
     'range_crop': False,
+    # Same type and default as detector_setup.declare_parameter('masks', True).
+    'masks': True,
 }
 
 
@@ -406,11 +408,20 @@ def main():
             # Built SEQUENTIALLY on purpose. The second one configures a second
             # network group on the device the first created; doing that from a
             # thread pool is how the registry path already trips over itself.
-            det = DetectorNode(
-                f'mongla_detector_{camera}',
-                parameter_overrides=launcher.overrides(cam, camera),
-                init_failure_fn=hook)
-            det._cam_name = camera
+            try:
+                det = DetectorNode(
+                    f'mongla_detector_{camera}',
+                    parameter_overrides=launcher.overrides(cam, camera),
+                    init_failure_fn=hook)
+            except Exception as exc:      # noqa: BLE001 -- e.g. an empty registry
+                # The registry path raises instead of calling the hook; one
+                # camera with no loadable model must not take the other eye
+                # down with it (vl_9 M6).
+                failed.append(camera)
+                launcher.get_logger().error(
+                    f'[COMP ] {camera}: DETECTOR did NOT come up ({exc}); '
+                    f'keeping the eye that works')
+                continue
             # The detector FIRST, so the camera never submits to a half-built
             # sink. `frame_sink=det` is the whole composition -- one Python
             # reference where a topic used to be.

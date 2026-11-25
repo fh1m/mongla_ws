@@ -5,6 +5,7 @@ directory and the per-medium capture directories, and the library of
 installed calibrations. `calibrate_node.py` reads these; nothing here opens a
 socket or imports ROS.
 """
+import shutil
 import glob
 import json
 import os
@@ -87,15 +88,17 @@ def list_cameras(cal_dir):
         for f in sorted(glob.glob(os.path.join(cal_dir, '*.json'))):
             try:
                 d = json.load(open(f))
+                medium = d.get('medium', 'air')
+                fx = (d.get('camera_matrix') or [[None]])[0][0]
             except Exception:
                 continue
-            if d.get('medium', 'air') != 'air':
+            if medium != 'air':
                 continue        # the stack loads only the air lens (binding.py)
             info = {
                 'file': os.path.basename(f),
                 'applies_to': d.get('applies_to'),
                 'captured': d.get('captured'),
-                'fx': (d.get('camera_matrix') or [[None]])[0][0],
+                'fx': fx,
                 'hfov_air': d.get('hfov_deg_air'),
                 'hfov_water': d.get('hfov_deg_water'),
                 'max_ere_px': d.get('max_ere_px'),
@@ -213,9 +216,10 @@ def library(cal_dir):
     for f in sorted(glob.glob(os.path.join(cal_dir, '*.json'))):
         try:
             d = json.load(open(f))
+            K = d.get('camera_matrix') or [[None]]
+            fx = K[0][0]
         except Exception:
             continue
-        K = d.get('camera_matrix') or [[None]]
         out.append({
             'file': os.path.basename(f),
             'applies_to': d.get('applies_to'),
@@ -224,7 +228,7 @@ def library(cal_dir):
             'camera': d.get('camera'),
             'usb_vid': d.get('usb_vid'), 'usb_pid': d.get('usb_pid'),
             'width': d.get('image_width'), 'height': d.get('image_height'),
-            'fx': K[0][0],
+            'fx': fx,
             'hfov_air': d.get('hfov_deg_air'),
             'hfov_water': d.get('hfov_deg_water'),
             'views': d.get('views_used'),
@@ -284,9 +288,15 @@ def apply_calibration(cal_dir, src_file, dev, applies_to):
             applies_to, d.get('image_width'), d.get('image_height'), medium))
     except (ValueError, TypeError) as e:
         return None, str(e)
-    if os.path.exists(dest) and os.path.abspath(dest) != os.path.abspath(src):
+    if os.path.exists(dest):
         # Never overwrite a calibration without keeping the old one. It cost
-        # somebody a board and ten minutes.
-        os.replace(dest, dest + '.bak-' + time.strftime('%H%M%S'))
+        # somebody a board and ten minutes. Re-applying a file to its own name
+        # rewrites its identity, so it is kept too (vl_5 F5); the date keeps
+        # one day's backup from replacing another's (F11).
+        bak = dest + '.bak-' + time.strftime('%Y%m%d-%H%M%S')
+        if os.path.abspath(dest) == os.path.abspath(src):
+            shutil.copy2(dest, bak)
+        else:
+            os.replace(dest, bak)
     json.dump(d, open(dest, 'w'), indent=2)
     return os.path.basename(dest), None

@@ -130,9 +130,12 @@ class TargetPose:
         """Single number for a gate: total angle off the board's normal."""
         if not self.ok:
             return float('nan')
-        return math.degrees(math.acos(max(-1.0, min(1.0,
-            math.cos(math.radians(self.yaw_deg))
-            * math.cos(math.radians(self.pitch_deg))))))
+        # The normal's direction is (tan yaw, tan pitch, 1) under `_angles`,
+        # so cos(off) = 1/sqrt(1 + tan^2 yaw + tan^2 pitch). The product
+        # cos(yaw) cos(pitch) is another angle: 41.4 for 39.2 at 30/30.
+        ty = math.tan(math.radians(self.yaw_deg))
+        tp = math.tan(math.radians(self.pitch_deg))
+        return math.degrees(math.acos(1.0 / math.sqrt(1.0 + ty * ty + tp * tp)))
 
     def square_within(self, tol_deg: float) -> bool:
         """Is the target square to us to within `tol_deg`, ALLOWING for the
@@ -187,6 +190,8 @@ def ambiguity_ratio(errs) -> float:
     e = [float(x) for x in errs]
     if len(e) < 2:
         return float('nan')
+    if not (math.isfinite(e[0]) and math.isfinite(e[1])):
+        return float('nan')          # an absent error is unknown, not a coin flip
     return (e[0] / e[1]) if e[1] > 0 else 1.0
 
 
@@ -205,8 +210,9 @@ def solve_pnp(obj_pts, img_pts, K, *, dist=None,
     a pinhole, so points either both go through `optics.RefractiveRectifier`
     with the rectified `K`, or neither does. Rectifying one side compares water
     geometry against air geometry and puts the entire error into the pose,
-    quietly. `lock_node` rectifies both sets before calling; a correspondence
-    publisher must say which it sent, which is why the message carries it.
+    quietly. The caller rectifies the image points first (`pnp_node` does, for
+    OPTICS_RAW); a correspondence publisher must say which it sent, which is why
+    the message carries it.
 
     Refuses -- with a reason -- rather than returning a pose it cannot defend.
     """
@@ -315,6 +321,14 @@ def solve_pnp(obj_pts, img_pts, K, *, dist=None,
                           yaw_spread_deg=yaw_spread,
                           pitch_spread_deg=pitch_spread,
                           reason='non-finite pose')
+    # The bar again, on OUR RMS of the pose being published: the first check
+    # read OpenCV's reportedError, and refinement can land above the bar
+    # (122 of 300 noisy boards did, audit vl_4 M1).
+    if best_rms > max_reproj_px:
+        return TargetPose(ok=False, n_points=len(obj), reproj_px=float(best_rms),
+                          ambiguity=ratio, yaw_spread_deg=yaw_spread,
+                          pitch_spread_deg=pitch_spread,
+                          reason='reprojection too large')
 
     # The alternate is the IPPE branch FARTHER from the yaw actually reported,
     # never "index 1": the SQPnP seed and the iterative polish above can walk

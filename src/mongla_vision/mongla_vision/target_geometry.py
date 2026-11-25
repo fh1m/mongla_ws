@@ -21,7 +21,8 @@ exactly that ratio. So the committed table is a DEFAULT, never a hardcoding:
 
     MONGLA_TARGET_GEOMETRY=~/my_targets.yaml      (a file, or a directory
                                                    holding target_geometry.yaml)
-    ~/.mongla/target_geometry.yaml                (picked up with no env var)
+    ~/mongla/deck/target_geometry.yaml          (picked up with no env var;
+    ~/.mongla/target_geometry.yaml               the older place, still read)
 
 this is a target library, not a competition table. The competition groupings
 below are only where the shipped defaults happen to be SOURCED from; they are
@@ -68,10 +69,11 @@ the INSTALLED share, so editing the source copy still needs a colcon build.
 That is what the override files are for.
 
 AND: the committed defaults come from the ORGANISERS' documents, never from
-our simulator. The two SAUVC entries taken from the sim arena spec carry
-`unquoted: true` for that reason. A sim prop's size is our own guess wearing a
-number's clothes.
+our simulator. The two SAUVC entries are read off a rulebook figure and carry
+no `unquoted` key; only a robosub entry sets it. A sim prop's size is our own
+guess wearing a number's clothes.
 """
+import math
 import os
 
 _CACHE = {}
@@ -184,7 +186,10 @@ def _course_widths():
 
 def _override_paths():
     """Where an operator may put OUR pool's prop sizes, lowest priority first."""
-    paths = [os.path.expanduser('~/.mongla/target_geometry.yaml')]
+    # The deck is where the operator keeps this vehicle's files, and where
+    # the shipped YAML tells them to put it (vl_3 F9); ~/.mongla still read.
+    paths = [os.path.expanduser('~/.mongla/target_geometry.yaml'),
+             os.path.expanduser('~/mongla/deck/target_geometry.yaml')]
     env = os.environ.get('MONGLA_TARGET_GEOMETRY', '').strip()
     if env:
         env = os.path.expanduser(env)
@@ -219,15 +224,28 @@ def _merge(table, extra, origin):
     other -- the label you did not re-cut would resolve to 0.0 and the pose path
     would refuse, on a pool day, for a prop you never touched.
     """
-    for key, value in (extra or {}).items():
+    if not extra:
+        return
+    if not isinstance(extra, dict):
+        # Valid YAML that is not a table (a list, a bare number): recorded
+        # like a parse failure, never raised into the lock's start-up.
+        _ERRORS.append((origin, 'not a mapping of label: {width_m: ...} '
+                                '(got %s)' % type(extra).__name__))
+        return
+    for key, value in extra.items():
         if not isinstance(value, dict):
+            _REJECTED.append((key, value, origin))     # `red_pipe: 0.0334`
             continue
         if _is_entry(value):                    # flat: this IS a target
             _put(table, 'custom', key, value, origin)
-        else:                                   # nested: a group of targets
-            for name, entry in value.items():
-                if isinstance(entry, dict):
-                    _put(table, key, name, entry, origin)
+            continue
+        for name, entry in value.items():       # nested: a group of targets
+            if isinstance(entry, dict):
+                _put(table, key, name, entry, origin)
+            else:
+                # `red_pipe: {width: 0.0334}` reads as a group whose member
+                # `width` is no target: the operator's correction, dropped.
+                _REJECTED.append(('%s.%s' % (key, name), entry, origin))
 
 
 def _is_entry(value):
@@ -274,7 +292,8 @@ _REJECTED = []
 
 
 def rejected_overrides():
-    """Overrides ignored for an implausible width, so a node can log them.
+    """Overrides ignored (an implausible width, or an entry that is not a
+    `label: {width_m: ...}` mapping), so a node can log them.
 
     A silently-dropped override looks exactly like an override that was never
     read, which is the single most confusing failure this file could have.
@@ -305,9 +324,9 @@ def _candidate_dirs():
 def width_for(class_name: str, competition: str = '') -> float:
     """True width in metres of what the detector boxes for `class_name`.
 
-    0.0 when unknown — never a guess. `target_pose` already refuses on a
-    non-positive width with a stated reason, so an unlisted class degrades to
-    exactly the behaviour it has today rather than to a confident wrong range.
+    NaN when unknown -- never a guess, and never a 0.0 that reads as a
+    measurement (vl_3 F8). Callers test `w > 0.0`, which NaN fails, so an
+    unlisted class degrades to no pose rather than to a confident wrong range.
 
     `competition` narrows the lookup; empty searches all and requires the name
     to be unambiguous. A class defined differently in two competitions with the
@@ -315,7 +334,7 @@ def width_for(class_name: str, competition: str = '') -> float:
     """
     name = (class_name or '').strip()
     if not name:
-        return 0.0
+        return math.nan
     data = _load()
     comps = ([competition] if competition else list(data))
     hits = []
@@ -324,9 +343,9 @@ def width_for(class_name: str, competition: str = '') -> float:
         if isinstance(entry, dict) and entry.get('width_m'):
             hits.append(float(entry['width_m']))
     if not hits:
-        return 0.0
+        return math.nan
     if len(set(hits)) > 1:
-        return 0.0        # ambiguous across competitions: refuse, do not pick
+        return math.nan   # ambiguous across competitions: refuse, do not pick
     return hits[0]
 
 

@@ -90,8 +90,9 @@ def close_all() -> None:
     launch cannot open.
 
     Registered with `atexit`, so no node has to remember it. Safe to call
-    twice. A worker thread still inside an infer holds `DEVICE_LOCK`, and
-    `close()` waits for it rather than pulling the stream out from under it.
+    twice. A worker thread still inside an infer holds its detector's
+    `_infer_lock`, and `close()` waits for it rather than pulling the stream out
+    from under it.
     """
     global _DEVICE
     for c in list(_CLAIMANTS):
@@ -112,7 +113,8 @@ atexit.register(close_all)
 
 
 def shared_device():
-    """The process's single VDevice. Created on first use, never released.
+    """The process's single VDevice. Created on first use. close_all() releases
+    it at exit.
 
     Not released on close() either: releasing it while a second detector still
     holds a network group configured on it is how you turn a clean shutdown
@@ -168,8 +170,8 @@ FALLBACK_ENV = 'MONGLA_HAILO_FALLBACK'
 # open that fails because another process holds the chip tries the service.
 PREFER_ENV = 'MONGLA_HAILO_PREFER'
 
-# What the last open did, for the start-up log and the health board:
-# 'service', 'direct', or '' before the first open.
+# What the last open did: 'service', 'direct', or '' before the first open.
+# Only the tests read it today; no start-up log or health line reports it yet.
 opened_via = ''
 
 

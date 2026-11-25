@@ -11,7 +11,9 @@ For each camera this turns into `foxglove_msgs/ImageAnnotations` on
   * the lock, coloured by the rung of the ladder holding it, labelled with
     what it holds and its authority;
   * the targets' contours;
-  * the anchor's matched features (its learned points), while it runs.
+  * the anchor's matched features (its learned points), while it runs;
+  * a fading trail behind every track and the lock (`Trails`), and the aim:
+    the image centre joined to the lock with the pixel error it shows.
 
 The flow node's tracked pairs go to `<cam>/flow_annotations` (a segment from
 where each point was on the anchor frame to where it is now), what it read off
@@ -235,7 +237,7 @@ def hud(cam, model, size, arrivals, latency_s, silent_s=None, paused=UNREAD):
     camera), False (silent and not paused: stopped or stalled, an alarm),
     None (no node publishes this camera's detections), or UNREAD."""
     shape = f'{size[0]}x{size[1]}' if size else '--'
-    first = '  '.join(filter(None, (cam, model or 'no model named', shape)))
+    first = '  '.join(filter(None, (cam, model or 'model unknown', shape)))
     if silent_s is not None:
         s = f'{silent_s:.0f} s'
         return [first, {True: f'detector paused {s}: it runs when a mission asks',
@@ -250,13 +252,54 @@ def hud(cam, model, size, arrivals, latency_s, silent_s=None, paused=UNREAD):
     return [first, f'detector {rate}  {late} behind the frame']
 
 
+# How long a trail is remembered: about two seconds of a target's path at the
+# detector's rate, enough to read a drift or a swing, short enough that the
+# picture does not fill with the past.
+TRAIL_S = 2.0
+TRAIL_POINTS = 60
+AIM = (GLASS, 1.5)
+
+
+class Trails:
+    """Where each track and the lock have been, as fading polylines.
+
+    Keyed by track id (or 'lock'); a key not seen for TRAIL_S is forgotten.
+    Pure bookkeeping, so the node and a test drive it the same way."""
+
+    def __init__(self, keep_s: float = TRAIL_S, points: int = TRAIL_POINTS):
+        self.keep_s, self.points, self.paths = keep_s, points, {}
+
+    def note(self, key, x: float, y: float, now: float, rgba) -> None:
+        path = self.paths.setdefault(key, [deque(maxlen=self.points), rgba])
+        path[0].append((now, x, y))
+        path[1] = rgba
+
+    def lines(self, now: float):
+        """[(points, rgba)] for every path with two or more fresh points."""
+        out = []
+        for key in list(self.paths):
+            pts, rgba = self.paths[key]
+            while pts and now - pts[0][0] > self.keep_s:
+                pts.popleft()
+            if not pts:
+                del self.paths[key]
+            elif len(pts) >= 2:
+                out.append(([(x, y) for _, x, y in pts], rgba))
+        return out
+
+
+def _centre(b):
+    return (b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5
+
+
 def _corners(b):
     x1, y1, x2, y2 = b[:4]
     return ((x1, y1), (x2, y1), (x2, y2), (x1, y2))
 
 
 def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
-             contours=None, features=None, size=None, hud=(), alarm=False) -> ImageAnnotations:
+             contours=None, features=None, size=None, hud=(), alarm=False,
+             trails=()) -> ImageAnnotations:
     """One frame's annotations: everything the vision stack holds, each as itself.
 
     Nothing is left off; each thing says what it is. A detection is drawn in
@@ -272,8 +315,16 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     own pixels, which is what the detector publishes, so they land on the
     picture with no scaling. `features` (the anchor's matched points) are in
     the matcher's pixels and are scaled by `size`, the camera's (width, height).
+    `trails`: [(points, rgba)] from `Trails.lines`, drawn under everything.
+    With a lock and a known size, the image centre is crossed and joined to
+    the lock's centre, labelled with the pixel error an alignment closes.
     """
     out = ImageAnnotations(timestamp=stamp)
+    for pts, rgba in trails:
+        out.points.append(PointsAnnotation(
+            timestamp=stamp, type=PointsAnnotation.LINE_STRIP,
+            points=[Point2(x=x, y=y) for x, y in pts],
+            outline_color=_color(rgba[:3] + (0.6,)), thickness=2.0))
     labels = _Labels(stamp, size)
     # Bottom left, under the labels a box near the top carries; top left
     # until the camera has said its size. Placed first so no label covers it.
@@ -309,9 +360,15 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     if contours is not None:
         rgba, th = CONTOUR
         offs, pts = list(contours.offset), list(contours.points)
+        # The producer's pixel frame (zero means the camera's own): scaled to the
+        # camera's size, as the features are below.
+        sx = sy = 1.0
+        if size and contours.image_width and contours.image_height:
+            sx = size[0] / contours.image_width
+            sy = size[1] / contours.image_height
         for i in range(len(offs)):
             a, b = offs[i], offs[i + 1] if i + 1 < len(offs) else len(pts) // 2
-            ring = [(pts[2 * k], pts[2 * k + 1]) for k in range(a, b)]
+            ring = [(pts[2 * k] * sx, pts[2 * k + 1] * sy) for k in range(a, b)]
             if len(ring) >= 3:
                 out.points.append(_loop(stamp, ring, rgba, th))
     if features is not None and features.image_points:
@@ -354,8 +411,8 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     for b in dets:
         out.points.append(_loop(stamp, _corners(b), class_colour(b[4]), 2.5))
     for j, (tid, t) in enumerate(trks):
-        if j in held or (not tid and any(iou(t, b) >= SAME_THING_IOU for b in boxes)):
-            continue                          # named on the box it carries
+        if j in held or any(iou(t, b) >= SAME_THING_IOU for b in boxes):
+            continue                          # named on the box it carries, or on a box another holds
         rgba, th = COASTING
         out.points.append(_loop(stamp, _corners(t), rgba, th))
         words = ' '.join(filter(None, (f'#{tid}' if tid else '', t[4], 'coasting')))
@@ -365,6 +422,18 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
             x1, y1, x2, y2, label, _ = _box(det)
             out.points.append(_loop(stamp, _corners((x1, y1, x2, y2)),
                                     RUNG.get(label, LOCK[0]), LOCK[1]))
+        if size and lock.detections:
+            cx, cy = size[0] * 0.5, size[1] * 0.5
+            lx, ly = _centre(_box(lock.detections[0]))
+            rgba, th = AIM
+            out.points.append(PointsAnnotation(
+                timestamp=stamp, type=PointsAnnotation.LINE_LIST, outline_color=_color(rgba),
+                thickness=th, points=[Point2(x=cx - 14, y=cy), Point2(x=cx + 14, y=cy),
+                                      Point2(x=cx, y=cy - 14), Point2(x=cx, y=cy + 14),
+                                      Point2(x=cx, y=cy), Point2(x=lx, y=ly)]))
+            texts.append(labels.place([(cx + 8, cy + LABEL_PX + 8), (cx + 8, cy - 8)],
+                                      f'err {lx - cx:+.0f} {ly - cy:+.0f} px', rgba,
+                                      LABEL_PX * 0.8))
     out.texts.extend(texts + hud_texts)
     return out
 
@@ -377,7 +446,10 @@ FLOW_LINE_Y = LABEL_PX + 6                 # until the camera has said its size
 
 
 def flow_line_y(size) -> float:
-    return size[1] - 8 - HUD_LINES * (LABEL_PX + 6) if size else FLOW_LINE_Y
+    # Without the size the camera's lines are at the top too (see `annotate`), so the count goes under them.
+    if size:
+        return size[1] - 8 - HUD_LINES * (LABEL_PX + 6)
+    return FLOW_LINE_Y + HUD_LINES * (LABEL_PX + 6)
 
 
 def flow_annotate(tracks, size=None) -> ImageAnnotations:
@@ -597,7 +669,9 @@ def stages(cam, names, publishers) -> list:
     for label, rel, switch, cams in STAGES:
         if cams and cam not in cams:
             continue
-        topics = [n for n in names if n == ns + rel or n.startswith(ns + rel + '_')]
+        # `target_pose_fused` is the pose fuser's topic, not the PnP stage's.
+        topics = [n for n in names if n == ns + rel or (n.startswith(ns + rel + '_')
+                                                        and not n.endswith('_fused'))]
         on = [t for t in topics if publishers(t) > 0]
         out.append({'stage': label, 'on': bool(on), 'topic': on[0] if on else ns + rel,
                     'switch': switch})
@@ -610,13 +684,16 @@ RATE_WINDOW = 30
 # How soon a new viewer's annotations start, and the cost of asking: one
 # subscriber count per published layer, twice a second.
 WATCH_PERIOD_S = 0.5
+# A `paused` ask that has not come back in this long is asked again: a hung
+# detector never answers, and its pause would read "not yet read" for good.
+ASK_TIMEOUT_S = 5.0
 
 
 def main(args=None):
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_parameter_events
-    from rcl_interfaces.msg import ParameterEvent
+    from rcl_interfaces.msg import ParameterEvent, ParameterType
     from rcl_interfaces.srv import GetParameters
     from sensor_msgs.msg import CameraInfo
     from std_msgs.msg import String
@@ -638,7 +715,8 @@ def main(args=None):
             # Each detector's own `paused`, by node: a silent detector that is
             # paused waits for a mission, one that is not is an alarm. Learnt
             # from its parameter events, and asked once when first needed.
-            self.paused, self.asked, self.whose, self.askers = {}, set(), {}, {}
+            # `asked`: node -> when its `paused` was asked for.
+            self.paused, self.asked, self.whose, self.askers = {}, {}, {}, {}
             self.create_subscription(ParameterEvent, '/parameter_events', self._on_params,
                                      qos_profile_parameter_events)
             for cam in cams:
@@ -646,8 +724,9 @@ def main(args=None):
                 latest = dict.fromkeys(LAYERS)
                 latest['arrivals'] = deque(maxlen=RATE_WINDOW)
                 pub = self.create_publisher(ImageAnnotations, f'{ns}/annotations', 5)
+                trails = Trails()
 
-                def draw(latest=latest, pub=pub, cam=cam):
+                def draw(latest=latest, pub=pub, cam=cam, trails=trails):
                     det = latest['detections']
                     if det is None:
                         return
@@ -658,6 +737,15 @@ def main(args=None):
                     # detection, offset by the motion between them.
                     lines = hud(cam, latest['model'], latest['size'], latest['arrivals'],
                                 latest['latency'])
+                    now = time.monotonic()
+                    trks = latest['tracks'] if same_frame(latest['tracks'], stamp) else None
+                    for d in (trks.detections if trks else []):
+                        if d.id:
+                            b = _box(d)
+                            trails.note(d.id, *_centre(b), now, class_colour(b[4]))
+                    for d in (latest['lock'].detections if latest['lock'] else [])[:1]:
+                        b = _box(d)
+                        trails.note('lock', *_centre(b), now, RUNG.get(b[4], LOCK[0]))
                     pub.publish(annotate(
                         stamp, det,
                         latest['tracks'] if same_frame(latest['tracks'], stamp) else None,
@@ -665,7 +753,7 @@ def main(args=None):
                         latest['candidates'] if same_frame(latest['candidates'], stamp) else None,
                         latest['contours'] if same_frame(latest['contours'], stamp) else None,
                         feats if fresh(feats, stamp, FEATURES_MAX_AGE_S) else None,
-                        latest['size'], lines))
+                        latest['size'], lines, trails=trails.lines(now)))
 
                 def on_detections(msg, latest=latest, draw=draw):
                     latest['detections'] = msg
@@ -697,7 +785,7 @@ def main(args=None):
                     if latest.get('since') is None:
                         latest['since'] = now
                     quiet = silence(latest['arrivals'], latest['since'], now)
-                    if quiet is not None:
+                    if quiet is not None and pub.get_subscription_count():
                         paused = self._paused(f'/mongla/vision/{cam}/detections')
                         pub.publish(annotate(msg.header.stamp, size=latest['size'], hud=hud(
                             cam, latest['model'], latest['size'], (), None, silent_s=quiet,
@@ -788,22 +876,30 @@ def main(args=None):
                 return None
             if node in self.paused:
                 return self.paused[node]
-            if node not in self.asked:
+            if node not in self.asked or now - self.asked[node] > ASK_TIMEOUT_S:
                 cli = self.askers.get(node) or self.askers.setdefault(
                     node, self.create_client(GetParameters, f'{node}/get_parameters'))
                 if cli.service_is_ready():
-                    self.asked.add(node)
+                    self.asked[node] = now
 
                     def answered(fut, node=node):
-                        res = fut.result()
-                        if res is not None and res.values:
+                        try:
+                            res = fut.result()
+                        except Exception:             # the call failed: ask again
+                            res = None
+                        # Only a bool is a pause: an undeclared parameter comes back
+                        # NOT_SET, whose bool_value reads as "not paused".
+                        if res is not None and res.values and \
+                                res.values[0].type == ParameterType.PARAMETER_BOOL:
                             self.paused.setdefault(node, res.values[0].bool_value)
                         else:
-                            self.asked.discard(node)      # ask again next frame
+                            self.asked.pop(node, None)      # ask again next frame
                     cli.call_async(GetParameters.Request(names=['paused'])).add_done_callback(answered)
             return UNREAD
 
         def _stages(self):
+            if not self.stages_pub.get_subscription_count():
+                return                        # no viewer: no graph query
             names = [n for n, _ in self.get_topic_names_and_types()]
             table = {c: stages(c, names, self.count_publishers) for c in self.cams}
             self.stages_pub.publish(String(data=json.dumps(table)))

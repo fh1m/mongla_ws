@@ -131,6 +131,11 @@ def assess(cx: float, cy: float, w: float, h: float, fx: float, fy: float,
     if not (fx > 0 and fy > 0) or not (w > 0 and h > 0):
         return Visibility(LOST, float('nan'), 'no intrinsics')
 
+    if not (math.isfinite(cx) and math.isfinite(cy)):
+        # A NaN centre compares False against every bar below, so it would
+        # read as OK. There is no centre to judge, so it is LOST.
+        return Visibility(LOST, float('nan'), 'no centre', float('nan'))
+
     hw, hh = w * 0.5, h * 0.5
     mx = 1.0 - abs(float(cx) - hw) / hw
     my = 1.0 - abs(float(cy) - hh) / hh

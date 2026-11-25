@@ -752,6 +752,7 @@ def test_an_eviction_forgets_the_scores_its_indices_no_longer_name():
     b = CheckpointBank(FakeBackend())
     b._last_scores = {0: 5, 1: 9, 2: 7}
     b._yields = [10, 3, 8]
+    b._best_inl = [10, 3, 8]
     for name in ('_refs', '_sigs', '_labels', '_att', '_depth', '_ann',
                  '_pos', '_scale'):
         setattr(b, name, [None, None, None])
@@ -788,3 +789,31 @@ def test_a_loaded_bank_keeps_its_scales_and_can_evict(tmp_path):
     assert fresh.covers_scale(rich(1), _roi(64, 64))
     fresh.enrol(rich(3), roi=_roi(200, 200), det_conf=0.9, force=True)
     assert len(fresh.scales) == fresh.size == 2
+
+
+def test_healthy_matches_never_read_as_a_degraded_camera():
+    """A reference's best started at its KEYPOINT count (1000) and only rose,
+    so three healthy 200-inlier lookups were judged a collapse and the next
+    enrolment was refused as "camera degraded" (audit 2026-11-24)."""
+    class _Dense:
+        w, h = 320, 240
+
+        def __init__(self):
+            rng = np.random.default_rng(0)
+            self.kp = rng.uniform(0, 300, size=(1000, 2)).astype(np.float32)
+            d = rng.standard_normal((1000, 64)).astype(np.float32)
+            self.desc = d / np.linalg.norm(d, axis=1, keepdims=True)
+
+        def detect(self, gray):
+            return self.kp.copy(), self.desc.copy()
+
+        def match(self, d0, d1, min_cossim):
+            m = np.arange(200)
+            return m, m
+    gray = np.zeros((240, 320), np.uint8)
+    b = CheckpointBank(_Dense(), capacity=64, period_s=0.0)
+    for _ in range(3):
+        b.enrol(gray, roi=None, det_conf=1.0, label='gate')
+    assert b.locate(gray, label='gate').inliers == 200
+    r = b.enrol(gray, roi=None, det_conf=1.0, label='gate')
+    assert 'degraded' not in r.reason, r.reason

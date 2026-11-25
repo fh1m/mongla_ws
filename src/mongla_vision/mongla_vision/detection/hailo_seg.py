@@ -89,13 +89,20 @@ class HailoSegDetector(HailoDetector):
         `assoc_conf`/`conf`. Asking for one raises, so the node rejects the
         parameter instead of reporting a change that did not happen.
         """
-        if floor is not None:
-            raise ValueError(f'{Path(self._path).name} decodes on the host: '
-                             f'there is no NMS floor; set conf or assoc_conf')
+        why = self.nms_refusal(floor, iou)
+        if why:
+            raise ValueError(why)
         if iou is not None:
-            if not 0.0 < float(iou) <= 1.0:
-                raise ValueError(f'nms_iou {iou!r} is outside (0, 1]')
             self._iou = float(iou)
+
+    def nms_refusal(self, floor=None, iou=None) -> str:
+        """Why `update_nms` would refuse, decided before anything changes."""
+        if floor is not None:
+            return (f'{Path(self._path).name} decodes on the host: '
+                    f'there is no NMS floor; set conf or assoc_conf')
+        if iou is not None and not 0.0 < float(iou) <= 1.0:
+            return f'nms_iou {iou!r} is outside (0, 1]'
+        return ''
 
     def _configure_outputs(self) -> None:
         """Read the ten outputs into a `SegLayout`, and ask for UINT8.

@@ -62,7 +62,7 @@ def header_for(rung, *, detection, frame, anchor, held=None):
 
     Each rung answers from a different instant. The follower ran on this frame;
     the anchor ran on whichever frame it last evaluated, up to its own period
-    ago (0.333 s at 3 Hz); the detector finished on whichever frame it last
+    ago (about 0.22 s at the default 4.5 Hz); the detector finished on whichever frame it last
     got through. Publishing all three under the newest header makes every rung
     claim the freshness of the fastest one -- and it does so ONLY on the lower
     rungs, so it looks correct exactly while a detection is present and lies
@@ -199,7 +199,8 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
     def _take_frame(self):
         """The newest frame and detection, or None when there is nothing to do.
 
-        Grey is converted only when a later stage will read it."""
+        Grey was already converted for every camera frame in `_on_img`, so
+        nothing is converted here."""
         if not self._fresh.wait(0.5):
             return None
         self._fresh.clear()
@@ -295,9 +296,9 @@ class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
         #
         # Published only when the anchor actually RE-EVALUATED, or when its
         # ok/not-ok state changed. The loop runs at frame rate and the
-        # anchor at `anchor_hz` (3), so publishing every tick sent ~32
-        # duplicates for every real evaluation -- measured at 96.5 Hz on
-        # the vehicle for a 3 Hz quantity. Each message now corresponds to
+        # anchor at `anchor_hz` (4.5 by default), so publishing every tick sent
+        # many duplicates per real evaluation (96.5 Hz on the vehicle, when the
+        # anchor ran at 3 Hz). Each message now corresponds to
         # one evaluation, which is also what makes its stamp meaningful.
         if self._anchor is not None:
             ok_now = bool(self._anchor_pose is not None

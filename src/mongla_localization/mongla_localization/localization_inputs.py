@@ -37,8 +37,9 @@ MIN_PREDICT_DT_S = 1e-4
 # roughly twice the observed noise floor -- tight enough to exclude a slow
 # yaw, loose enough not to be tripped by the sensor itself.
 STILL_GYRO_RAD_S = 0.02
-# Peak-to-peak of |specific force| over the window. Gravity is included in the
-# reading, so a tilted hull shows a large CONSTANT; only variation is motion.
+# Per-axis peak-to-peak of the body acceleration over the window, gravity
+# removed with the board attitude when there is one (see `_on_imu`). Only
+# variation is motion.
 STILL_ACCEL_SPREAD = 0.25          # m/s^2
 IMU_HZ = 50                        # ATTITUDE and SCALED_IMU2, pinned (measured-bars: 51.6 Hz)
 STILL_WINDOW = IMU_HZ              # 1.0 s
@@ -150,8 +151,9 @@ class LocalizationInputsMixin:
 
     def _on_imu(self, msg: Imu) -> None:
         t = _stamp_s(msg.header)
-        prev, self._last_imu_t = self._last_imu_t, t
+        prev = self._last_imu_t
         if prev is None:
+            self._last_imu_t = t
             return
         dt = t - prev
         if dt <= MIN_PREDICT_DT_S:
@@ -159,8 +161,10 @@ class LocalizationInputsMixin:
             # produce: the mapping moves, so two samples can arrive out of
             # order in host time. Dropping the step is right -- a negative dt
             # integrates the state BACKWARDS and nothing downstream would show
-            # it as anything but drift.
+            # it as anything but drift. The last time kept stays at the last
+            # integrated instant, so the next step does not cover this span twice.
             return
+        self._last_imu_t = t
         if dt > MAX_PREDICT_DT_S:
             self._n['gap'] += 1
             if not self._imu_gap_warned:
