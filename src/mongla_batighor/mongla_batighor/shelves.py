@@ -17,6 +17,7 @@ batighor_8 F2), so what a shelf holds is visible to the network it is on.
 """
 from __future__ import annotations
 
+import importlib
 import os
 from pathlib import Path
 
@@ -24,14 +25,15 @@ def _missions() -> Path:
     """The directory the mission runner loads from (MONGLA_MISSIONS_DIR, else
     the workspace's source tree), asked of the runner itself: `~/missions` is
     only mirrored into it by build_mongla.sh, and on Kutum it was empty while
-    the runner held every mission (2026-11-25)."""
+    the runner held every mission (2026-11-25).
+
+    Looked up when run, not declared: mongla_planner depends on
+    mongla_manager, which depends on this package, so naming it in
+    package.xml is a cycle colcon refuses (the helm runs it for the same
+    reason)."""
     try:
-        from mongla_planner.missions import _find_src_missions_dir
-        found = _find_src_missions_dir()
-        if found is not None:
-            return found
-        import mongla_planner.missions as m
-        return Path(m.__file__).parent
+        m = importlib.import_module('mongla_planner.missions')
+        return m._find_src_missions_dir() or Path(m.__file__).parent
     except ImportError:
         return Path.home() / 'missions'
 
