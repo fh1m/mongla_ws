@@ -55,7 +55,7 @@
         }
       },
       "cameraState": {
-        "distance": 0.95,
+        "distance": 1.6,
         "perspective": true,
         "phi": 55,
         "thetaOffset": 200,
@@ -96,7 +96,8 @@
     "mongla.batighor.Vision!vision": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "e59f891058ad"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

@@ -20,7 +20,8 @@
     "mongla.batighor.Calibrate!calibrate": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "e97298c49226"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

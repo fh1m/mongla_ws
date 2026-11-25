@@ -11,6 +11,13 @@ Public exports:
 The nodes (`camera_node`, `detector_node`, `detector_dual_node`,
 `tracker_node`, `lock_node`, `flow/flow_node`) are entry points, not exports.
 """
+import contextlib
+
+# Refuses a release that is not the active one (B-153). Tools that run this
+# package from source alone have no runtime beside it; the refusal is a
+# SystemExit, which this does not catch.
+with contextlib.suppress(ModuleNotFoundError):
+    import mongla_runtime  # noqa: F401
 
 from .cameras.camera   import Camera, FrameMeta
 from .factory          import make_camera, make_camera_from_profile, BUILDERS

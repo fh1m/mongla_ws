@@ -269,3 +269,26 @@ def test_deploy_passes_when_the_vehicle_holds_only_what_is_committed(tmp_path):
     same = {'pi_downward_1280x720.json': 'committed', 'pi_forward_1280x720.json': 'f'}
     r = _calibration_gate(tmp_path, same, {**same, 'new.json': 'only here'})
     assert r.returncode == 0 and 'OK no calibration' in r.stdout, r.stdout + r.stderr
+
+
+def test_sourcing_env_again_drops_an_old_release(tmp_path):
+    """A shell opened before a deploy kept the old release first on its path, so
+    the whole stack ran old code under a release.json naming the new one (B-153)."""
+    stale = f'{tmp_path}/mongla/releases/old-1/build/mongla_batighor'
+    r = subprocess.run(
+        ['bash', '-c', f'source {KUTUM}/env.sh >/dev/null 2>&1; printf %s "$PYTHONPATH|$PATH"'],
+        env={'HOME': str(tmp_path), 'PATH': f'{tmp_path}/mongla_ws/install/bin:/usr/bin:/bin',
+             'PYTHONPATH': f'{stale}:/opt/keep'},
+        capture_output=True, text=True)
+    pythonpath, path = r.stdout.split('|')
+    assert 'releases' not in pythonpath and '/opt/keep' in pythonpath.split(':'), pythonpath
+    assert 'mongla_ws' not in path and '/usr/bin' in path.split(':'), path
+
+
+def test_the_doctor_reads_which_release_a_process_loaded(tmp_path):
+    fn = re.search(r'^loaded_releases\(\) \{\n.*?\n\}$', (KUTUM / 'doctor.sh').read_text(), re.S | re.M)
+    environ = tmp_path / 'environ'
+    environ.write_bytes(b'HOME=/x\0PYTHONPATH=/h/mongla/releases/old-1/build/a:/h/mongla/releases/new-2/build/b\0')
+    r = subprocess.run(['bash', '-c', fn.group(0) + f'\nloaded_releases {environ}'],
+                       capture_output=True, text=True)
+    assert r.stdout.split() == ['new-2', 'old-1'], r.stdout + r.stderr

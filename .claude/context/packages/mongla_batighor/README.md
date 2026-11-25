@@ -228,7 +228,7 @@ the screens. Animation in Vitals keeps its phase across redraws (a negative dela
 clock) and stops under `prefers-reduced-motion`.
 
 **Keeping the app in step with Kutum.** The app keeps its first copy of a layout, so the
-instruments panel brings them up to date itself: at start, in the desktop app only, it asks
+instruments panel brings them up to date itself: at start, in the desktop app it asks
 `http://<host>:8000/layouts/index.json` on the host it last connected to, fetches each layout,
 and replaces every copy that came from one of Kutum's files and that nobody edited, then reloads
 once (`syncLayouts`, the pure decision is `layoutUpdates`). "Edited" means a value the file
@@ -236,11 +236,11 @@ holds was changed; the defaults the app writes into a panel when it mounts, and 
 operator last chose, are not edits, and are kept under Kutum's values (the console never updated
 while they counted). Where a 3D panel's camera looks is not an edit either: the panel writes it
 back as it renders, so it takes Kutum's camera. A real edit is kept and named in the console log; Revert in the layout's
-menu takes Kutum's. In a browser the app replaces the baseline itself when it loads but keeps
-the working copy it made of the old one, so the panel asks Kutum for every version it has served
-(`/layouts/history/<name>.json`, kept by `serve.py` under `~/.mongla/batighor/layout-history/`
-and seeded from the releases) and replaces a working copy that is an unedited copy of one of
-them (`staleWorking`, B-152). `kutum/deploy.sh` runs the desktop step after a release when the app is
+menu takes Kutum's. Every generated layout carries a revision stamp (`globalVariables.layoutRev`,
+`views.py`), and "edited" holds only within a revision: a working copy made from another one, or
+from none, is replaced in the browser and in the desktop app alike, with the open tab and the
+watched selections kept and the dropped copy stored in the browser as
+`mongla.batighor.replaced.<name>` (`staleWorking`, B-152). `kutum/deploy.sh` runs the desktop step after a release when the app is
 installed on the dev box and Batighor answers; with the stack down it says to run
 `tools/pool/batighor_desktop.py kutum --no-launch` after bringup. On a dense screen the app is started at a scale read from
 the screen's pixels and millimetres (`--force-device-scale-factor`, `--scale` to set it): a 4K

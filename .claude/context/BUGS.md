@@ -1524,19 +1524,28 @@ the version the working copy was made from is gone from the browser, and
 `layoutUpdates`, which compares a working copy with its own baseline, ran
 only in the desktop app (bead b0q).
 
-**Fix.** `serve.py` keeps every version of a layout it serves, by content
-hash, under `~/.mongla/batighor/layout-history/`. At start it also seeds
-them from Kutum's releases (`RELEASE_LAYOUTS`, checked against
-`release.sh`), and it serves them at `/layouts/history/<name>.json`. In a
-browser the instruments panel finds a working copy that is an unedited
-copy of one of those versions. It replaces that copy with the current
-baseline, keeping what the app added, and reloads once (`staleWorking`).
-A copy that matches no version is an operator's edit and is kept. The
-first pass ran before the app had replaced the baseline, so the panel
-looks again at 4, 10 and 20 s. Verified in Chrome on the trial server:
-version A served, the 3D view turned (a working copy), version B served,
-then one load, and the page reloaded itself onto B. Tests:
-`test_serve_and_fetch.py` (kept, served newest first, path refused) and
-`test_panels.py` (stale replaced; an edit and an unknown copy kept).
-Injection: matching any version instead of an unedited one fails it.
+**Fix.** Every generated layout carries a revision stamp
+(`globalVariables.layoutRev`, `views.py`). In a browser and in the desktop
+app, the instruments panel replaces a working copy made from another revision
+or from none, keeps the open tab and the watched selections, keeps the
+dropped copy in the browser (`mongla.batighor.replaced.<name>`) and reloads
+once. A copy of the current revision is the operator's and stays.
 
+The first fix matched the working copy against old versions Kutum had kept.
+It could not work for a copy of a version Kutum never kept, which is what the
+dev browser held: it was reported fixed from a test that planted a kept one.
+
+### B-153: after a deploy, an old shell still launched the old release `SEEN 2026-11-25` **FIXED 2026-11-25**
+
+The release's setup files record its real path (`~/mongla/releases/<id>/build/...`).
+A shell opened while an earlier release was active kept those entries ahead of
+the new one, even after `env.sh` was sourced again. Seen on Kutum: the stack
+relaunched in a long-lived tmux window after a deploy ran the 2026-11-23
+release, while `release.json` and the doctor named the new commit. Found only
+because Batighor served old layouts and a 404 for an endpoint the code has.
+Checks made on Kutum between those two releases may have read the old code.
+
+Fix: `env.sh` drops every path into the workspace or a release before it adds
+the active one, and the doctor FAILs when a running node's `PYTHONPATH` names
+another release. A shell that never sources `env.sh` again is still stale:
+launch from a new shell, and the doctor says so.

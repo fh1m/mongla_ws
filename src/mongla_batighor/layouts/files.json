@@ -4,7 +4,8 @@
     "mongla.batighor.MissionText!text": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "eab9ca0f8f47"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

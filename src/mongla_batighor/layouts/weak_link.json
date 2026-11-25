@@ -32,7 +32,8 @@
     "mongla.batighor.ControlCenter!control": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "f0873aa84a80"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

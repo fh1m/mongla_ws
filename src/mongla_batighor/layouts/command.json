@@ -33,7 +33,8 @@
     }
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "43041953131a"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

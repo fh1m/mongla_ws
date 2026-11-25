@@ -363,6 +363,20 @@ else
   else warn "no deploy stamp -- ~/mongla_ws was not put there by kutum/deploy.sh"; fi
   [ -f "$HOME/mongla_ws/install/setup.bash" ] && ok "workspace built" || fail "$HOME/mongla_ws is not built"
 fi
+# The releases a process has on its PYTHONPATH, given its environ file(s). A
+# running node on any but the active one is old code that looks deployed (B-153).
+loaded_releases() {
+  cat "$@" 2>/dev/null | tr '\0' '\n' | grep '^PYTHONPATH=' | tr ':' '\n' \
+    | grep -oE 'mongla/releases/[^/]+' | sed 's|.*/||' | sort -u
+}
+environs=()
+while read -r pid _; do environs+=("/proc/$pid/environ"); done \
+  < <(ps -u "$(id -un)" -o pid=,args= | grep -E 'install/mongla_[a-z_]+/lib/' | grep -v grep)
+if [ "${#environs[@]}" -gt 0 ] && [ -L "$HOME/mongla_ws" ]; then
+  old="$(loaded_releases "${environs[@]}" | grep -vx "$(basename "$(readlink -f "$HOME/mongla_ws")")" | paste -sd' ' -)"
+  if [ -n "$old" ]; then fail "the running stack loads release $old, not the active one -- stop it and launch from a NEW shell"
+  else ok "the running stack loads the active release"; fi
+fi
 # Everything the package.xml files declare is installed (rosdep reads them).
 if [ -d "$HOME/mongla_ws/src" ] && command -v rosdep >/dev/null; then
   if rd="$(rosdep check --rosdistro jazzy --from-paths "$HOME/mongla_ws/src" --ignore-src 2>&1)"; then

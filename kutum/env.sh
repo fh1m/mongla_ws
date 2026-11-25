@@ -10,6 +10,18 @@
 
 if [ -n "${ZSH_VERSION:-}" ]; then _kutum_sh=zsh; else _kutum_sh=bash; fi
 
+# A release's setup files record its real path, so a shell opened before a
+# deploy keeps the old release ahead of the new one even after this file is
+# sourced again, and everything launched from it runs the old code (B-153).
+# Drop every entry that points into the workspace before adding the active one.
+for _kutum_v in PYTHONPATH AMENT_PREFIX_PATH COLCON_PREFIX_PATH CMAKE_PREFIX_PATH LD_LIBRARY_PATH PATH; do
+  eval "_kutum_p=\${$_kutum_v:-}"
+  [ -n "$_kutum_p" ] || continue
+  _kutum_p="$(printf '%s' "$_kutum_p" | tr ':' '\n' | grep -vE '/(mongla/releases|mongla_ws)/' | paste -sd: -)"
+  eval "export $_kutum_v=\$_kutum_p"
+done
+unset _kutum_v _kutum_p
+
 source "/opt/ros/jazzy/setup.$_kutum_sh"
 [ -f ~/mongla_ws/install/setup.$_kutum_sh ] && source ~/mongla_ws/install/setup.$_kutum_sh
 unset _kutum_sh
