@@ -177,6 +177,7 @@ is how `recommend()` happened.
 - [111. COLOUR IN THE DETECTOR BEATS A HUE READER AFTER IT: AP50 0.237 AGAINST 0.179 (2026-11-23)](#111-colour-in-the-detector-beats-a-hue-reader-after-it-ap50-0237-against-0179-2026-11-23)
 - [112. THE ANCHOR OFF THE LOCK TICK: NO MEASURABLE LOCK-AGE GAIN (142 -> 87 ms RETRACTED, 2026-11-24)](#112-the-anchor-off-the-lock-tick-no-measurable-lock-age-gain-142---87-ms-retracted-2026-11-24) — *taken back*
 - [113. FOUR MORE TEAMS' DATA AND 40 MORE EPOCHS DO NOT TRANSFER: mAP50 0.879 AGAINST 0.882 (2026-11-24)](#113-four-more-teams-data-and-40-more-epochs-do-not-transfer-map50-0879-against-0882-2026-11-24)
+- [114. DROPPING SIDEWAYS FLARES FROM TRAINING MAKES THE MODEL WORSE: flare AP50 0.635 AGAINST 0.680 (2026-11-25)](#114-dropping-sideways-flares-from-training-makes-the-model-worse-flare-ap50-0635-against-0680-2026-11-25)
 <!-- contents:end -->
 
 ---
