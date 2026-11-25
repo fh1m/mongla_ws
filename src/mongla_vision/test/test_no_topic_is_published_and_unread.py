@@ -112,6 +112,14 @@ PUBLISHED_UNREAD = {
         'for a human: the line of the mission\'s file that sent each verb, '
         'latched by the runner (mission.py, MissionText); the MissionText '
         'instrument marks it.',
+    '/hud':
+        'each camera\'s caption (model, rate, lateness, paused or silent), from '
+        'mongla_batighor/overlay.py: the captions under the pictures '
+        '(panels/instruments/extension.js, hudTopic) draw it, and chain.py '
+        'reads it for a paused detector.',
+    '/mongla/batighor/pool_scene':
+        'for a human: the course in 3D, from mongla_batighor/course.py, '
+        'latched; Lichtblick\'s 3D panel draws it (views.py, scene()).',
     '/mongla/batighor/scene':
         'for a human: the demand as an arrow on the hull, from '
         'mongla_batighor/overlay.py (demand_scene), built only while someone '
