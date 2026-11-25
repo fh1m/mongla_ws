@@ -85,7 +85,7 @@ def list_cameras(cal_dir):
             continue
         entry = {**ident, 'calibration': None, 'match': None}
         best, best_match = None, None
-        for f in sorted(glob.glob(os.path.join(cal_dir, '*.json'))):
+        for f in calibration_files(cal_dir):
             try:
                 d = json.load(open(f))
                 medium = d.get('medium', 'air')
@@ -125,6 +125,38 @@ def list_cameras(cal_dir):
         entry['calibration'], entry['match'] = best, best_match
         cams.append(entry)
     return cams
+
+
+DECK_CALIBRATION = os.path.expanduser('~/mongla/deck/calibration')
+
+
+def deck_calibration_dir():
+    """Where a calibration solved or applied on the vehicle is written.
+
+    The deck survives every release (deploy builds a new tree beside the live
+    one), so a fit made on Kutum is not lost to the next deploy, and
+    committing it to the repository stays a choice (owner, bead edm).
+    """
+    return DECK_CALIBRATION
+
+
+def calibration_files(cal_dir):
+    """Every calibration JSON: `cal_dir` first, then the shipped ones.
+
+    One name, one file: the first directory that holds it wins, so a fit
+    re-made on the deck replaces the shipped one of the same name.
+    """
+    seen, out = set(), []
+    dirs = [cal_dir]
+    shipped = default_calibration_dir()
+    if os.path.abspath(shipped) != os.path.abspath(cal_dir):
+        dirs.append(shipped)
+    for d in dirs:
+        for f in sorted(glob.glob(os.path.join(d, '*.json'))):
+            if os.path.basename(f) not in seen:
+                seen.add(os.path.basename(f))
+                out.append(f)
+    return out
 
 
 def default_calibration_dir():
@@ -213,7 +245,7 @@ def library(cal_dir):
     camera in two minutes and recalibrating on competition ground.
     """
     out = []
-    for f in sorted(glob.glob(os.path.join(cal_dir, '*.json'))):
+    for f in calibration_files(cal_dir):
         try:
             d = json.load(open(f))
             K = d.get('camera_matrix') or [[None]]
@@ -222,6 +254,8 @@ def library(cal_dir):
             continue
         out.append({
             'file': os.path.basename(f),
+            'where': ('deck' if os.path.dirname(os.path.abspath(f))
+                      == os.path.abspath(cal_dir) else 'shipped'),
             'applies_to': d.get('applies_to'),
             'medium': d.get('medium', 'air'),
             'captured': d.get('captured'),
@@ -257,7 +291,9 @@ def apply_calibration(cal_dir, src_file, dev, applies_to):
     # not there and got an unhandled FileNotFoundError inside do_POST, which
     # the browser sees as the page hanging -- a failure mode indis-
     # tinguishable from the tool being broken.
-    src = os.path.join(cal_dir, os.path.basename(src_file or ''))
+    name = os.path.basename(src_file or '')
+    src = next((f for f in calibration_files(cal_dir)
+                if os.path.basename(f) == name), os.path.join(cal_dir, name))
     try:
         d = json.load(open(src))
     except Exception as e:

@@ -139,13 +139,13 @@ function initPanel(context) {
       const rows = (st.library || []).map((c) => {
         const b = el("button", { onclick: () => call("apply", { file: c.file }) }, "apply");
         return [el("tr", {},
-          el("td", {}, c.file), el("td", {}, c.medium || ""), el("td", {}, `${c.width}x${c.height}`),
+          el("td", {}, c.file), el("td", {}, c.where || ""), el("td", {}, c.medium || ""), el("td", {}, `${c.width}x${c.height}`),
           el("td", {}, num(c.fx, 1)), el("td", {}, num(c.max_ere_px, 2)), el("td", {}, b)), b];
       });
       applyButtons.length = 0;
       applyButtons.push(...rows.map((r) => r[1]));
       library.replaceChildren(rows.length
-        ? el("table", {}, el("tr", {}, ...["calibration", "medium", "size", "fx", "Max ERE", ""].map((h) => el("th", {}, h))),
+        ? el("table", {}, el("tr", {}, ...["calibration", "store", "medium", "size", "fx", "Max ERE", ""].map((h) => el("th", {}, h))),
           ...rows.map((r) => r[0]))
         : "no calibrations on this vehicle yet");
     }

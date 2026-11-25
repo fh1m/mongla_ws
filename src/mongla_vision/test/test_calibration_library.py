@@ -49,7 +49,10 @@ def _write(d, name, **over):
     return p
 
 
-def test_library_lists_every_saved_calibration(g, tmp_path):
+def test_library_lists_every_saved_calibration(g, tmp_path, monkeypatch):
+    # Only this folder: the shipped calibrations are listed too, after it.
+    (tmp_path / 'shipped').mkdir()
+    monkeypatch.setattr(g, 'default_calibration_dir', lambda: str(tmp_path / 'shipped'))
     d = str(tmp_path)
     _write(d, 'pi_forward_1280x720.json')
     _write(d, 'pi_downward_1280x720_water.json',
@@ -65,7 +68,10 @@ def test_library_lists_every_saved_calibration(g, tmp_path):
     assert e['views'] == 23 and e['max_ere_px'] == pytest.approx(14.47)
 
 
-def test_library_skips_a_corrupt_file_rather_than_dying(g, tmp_path):
+def test_library_skips_a_corrupt_file_rather_than_dying(g, tmp_path, monkeypatch):
+    # Only this folder: the shipped calibrations are listed too, after it.
+    (tmp_path / 'shipped').mkdir()
+    monkeypatch.setattr(g, 'default_calibration_dir', lambda: str(tmp_path / 'shipped'))
     d = str(tmp_path)
     _write(d, 'good_1280x720.json')
     open(os.path.join(d, 'broken.json'), 'w').write('{not json')

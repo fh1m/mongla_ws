@@ -194,3 +194,31 @@ def pytest_runtest_setup(item):
             sys.modules['rclpy'].shutdown()
         except Exception:                                # noqa: BLE001
             pass
+
+
+# --------------------------------------------------------------------------- #
+#  Each test module discovers only its own nodes.                              #
+# --------------------------------------------------------------------------- #
+# Every suite shares one process and, by default, ROS domain 0. A node or a
+# subprocess an earlier module left behind was then on the same discovery
+# traffic as every later one, and the Batighor helm rig and a planner mission
+# test failed setup on CI with a service or action server not found in 20 s
+# (4 of the last 40 runs, 2026-11-24). Two tests already isolated themselves
+# this way (test_the_launched_graph_is_fed, the bench emulator's). Per module,
+# so a module-scoped context and the subprocesses its tests start agree; offset
+# by the pid, so two pytest runs on one machine stay apart. 0, the vehicle's
+# domain, is never used. A test that sets ROS_DOMAIN_ID itself still wins.
+_DOMAIN_SPAN = 99
+_domain_next = [_os.getpid() % _DOMAIN_SPAN]
+
+
+@pytest.fixture(autouse=True, scope='module')
+def _own_ros_domain():
+    old = _os.environ.get('ROS_DOMAIN_ID')
+    _domain_next[0] = _domain_next[0] % _DOMAIN_SPAN + 1
+    _os.environ['ROS_DOMAIN_ID'] = str(_domain_next[0])
+    yield
+    if old is None:
+        _os.environ.pop('ROS_DOMAIN_ID', None)
+    else:
+        _os.environ['ROS_DOMAIN_ID'] = old

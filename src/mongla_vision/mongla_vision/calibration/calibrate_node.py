@@ -278,8 +278,9 @@ class CalibrateNode:
                 super().__init__('mongla_calibrate')
                 p = lambda n, d: self.declare_parameter(n, d).value  # noqa: E731
                 self.device = p('device_path', '')
+                # The deck by default: it outlives every release (bead edm).
                 self.install = os.path.abspath(
-                    p('install', '') or files.default_calibration_dir())
+                    p('install', '') or files.deck_calibration_dir())
                 os.makedirs(self.install, exist_ok=True)
                 exposure, brightness = p('exposure', 50), p('brightness', 150)
                 self.cap = Capture(p('applies_to', 'pi_downward'), p('medium', 'air'),
