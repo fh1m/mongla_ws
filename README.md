@@ -10,7 +10,7 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-5%20440%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![water](https://img.shields.io/badge/water-RoboSub%202025%20%C2%B7%202026%20%7C%20this%20platform%3A%20not%20yet-orange)](docs/evidence/lineage.md) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-5%20835%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![water](https://img.shields.io/badge/water-RoboSub%202025%20%C2%B7%202026%20%7C%20this%20platform%3A%20not%20yet-orange)](docs/evidence/lineage.md) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **Lineage.** The stack this repository began as competed at **RoboSub 2026** (8th of 58,
 6 234 points) on the programme's Pixhawk vehicle, a year after the author's vision stack did
@@ -120,7 +120,7 @@ git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
 ./build_mongla.sh                      # colcon build, eight packages
 source install/setup.bash
 
-# the tests (8 suites, 5 452 of them, ~5 minutes)
+# the tests (8 suites, 5 852 of them, ~5 minutes)
 python3 -m pytest -q                   # all six; a full run rewrites docs/stats.json
 ```
 </details>
@@ -665,16 +665,16 @@ rather than a desk, so they are written to be reused:
 
 | package | what it owns | Python LOC | test files |
 |---|---|---:|---:|
-| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 26 941 | 154 |
-| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 11 038 | 68 |
-| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 8 422 | 51 |
-| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 8 765 | 73 |
-| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors, heading anchor | 4 059 | 32 |
+| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 28 154 | 179 |
+| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 11 174 | 69 |
+| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 8 590 | 54 |
+| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 9 039 | 77 |
+| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors, heading anchor | 4 207 | 33 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
 | [`mongla_runtime`](.claude/context/packages/mongla_runtime/README.md) | how every node runs: executor, clean Ctrl-C, `bringup.yaml`, restarts, realtime | 600 | 5 |
 | [`mongla_batighor`](.claude/context/packages/mongla_batighor/README.md) | Batighor, the operator center: Lichtblick served from Kutum, on our layouts | 267 | 2 |
 
-**378 test files against the source.** The ROS surface really is that small: one action
+**412 test files against the source.** The ROS surface really is that small: one action
 `/mongla/move` carrying one verb per goal, and one topic `/mongla/state` publishing on change,
 where an absent value is `NaN` and never `0.0`.
 
@@ -965,16 +965,16 @@ is how a team finds out at the venue.
 
 <!-- stats:table:begin -->
 ```
-mongla_control       1 271 passed        the verbs, the wire, the refusals
-mongla_vision        1 654 passed        detection, the lock ladder, optics, flow
-mongla_manager         904 passed        the node, bring-up gates, the docs contract
-mongla_planner         498 passed        the CLI, the DSL, the missions
-mongla_localization    403 passed        the filter, retrodiction, course priors
-mongla_runtime          33 passed        how every node runs, restarts and stops
-mongla_batighor        164 passed        the operator center
-test/ (repo-wide)      513 passed        nothing unreachable, the retired stack stays retired
+mongla_control       1 280 passed        the verbs, the wire, the refusals
+mongla_vision        1 823 passed        detection, the lock ladder, optics, flow
+mongla_manager         926 passed        the node, bring-up gates, the docs contract
+mongla_planner         507 passed        the CLI, the DSL, the missions
+mongla_localization    418 passed        the filter, retrodiction, course priors
+mongla_runtime          43 passed        how every node runs, restarts and stops
+mongla_batighor        322 passed        the operator center
+test/ (repo-wide)      516 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
-                     5 440 passed, 0 failed
+                     5 835 passed, 0 failed
 ```
 <!-- stats:table:end -->
 
@@ -994,7 +994,7 @@ Some of those tests are unusual enough to be worth naming:
 ```mermaid
 flowchart LR
     DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file<br/>+ the doc guards on a doc edit"]
-    HOOK --> UNIT["8 suites · 5 440 tests"]
+    HOOK --> UNIT["8 suites · 5 835 tests"]
     UNIT --> GUARD["the drift guards"]
     GUARD --> G1["test_doc_drift<br/>docs vs code"]
     GUARD --> G2["test_srot_protocol_drift<br/>our wire copy vs THEIR headers"]
