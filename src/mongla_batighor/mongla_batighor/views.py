@@ -492,8 +492,8 @@ def localization(v: View):
             (3, v('heading', plot(series('/mongla/state.yaw_deg', 'board heading'),
                                   series('/mongla/localization/heading.data', 'given heading',
                                          True),
-                                  series(f'{d}/floor_grid_deg.heading_deg', 'grid (tile)'),
-                                  series(f'{d}/lane_heading_deg.heading_deg', 'lane line')))),
+                                  series(f'{d}/floor_grid_deg.heading_deg', 'grid mod 90'),
+                                  series(f'{d}/lane_heading_deg.heading_deg', 'lane mod 180')))),
             (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor (tile)'),
                                 series('/mongla/state.depth_m', 'depth m')))))))
 

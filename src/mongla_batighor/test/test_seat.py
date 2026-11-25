@@ -100,3 +100,18 @@ def test_anyone_named_may_tune_but_not_while_a_mission_runs():
 def test_the_camera_is_the_pilots():
     s = Seat(pilot='ana')
     assert s.may_send('ana', 'camera').ok and not s.may_send('raf', 'camera').ok
+
+
+def test_asking_again_does_not_restart_the_countdown():
+    """The helm passes if the pilot says nothing for ANSWER_S. A second press
+    by the same asker restarted that clock, so pressing postponed it for good
+    (audit batighor_2 16)."""
+    s = Seat()
+    s.request('ana', 0.0)
+    s.request('raf', 1.0)
+    again = s.request('raf', 1.0 + ANSWER_S - 1.0)
+    assert again.ok and '1 s' in again.message, again
+    s.heartbeat('raf', ANSWER_S)
+    s.heartbeat('ana', ANSWER_S)
+    s.tick(1.0 + ANSWER_S)
+    assert s.pilot == 'raf'

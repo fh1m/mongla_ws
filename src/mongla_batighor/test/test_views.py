@@ -443,3 +443,10 @@ def test_the_whole_hull_fits_the_tall_attitude_panel():
     cam = views._scene()['cameraState']
     wide = 2 * cam['distance'] * math.tan(math.radians(27 / 2))
     assert wide >= 0.702, f"{wide:.2f} m across for a 0.702 m hull"
+
+
+def test_a_wrapped_heading_says_its_modulus():
+    """The floor grid repeats every 90 deg and a lane line every 180: beside the
+    board's heading they can differ by that much and agree (audit batighor_6 5)."""
+    text = views.render('localization')
+    assert 'grid mod 90' in text and 'lane mod 180' in text

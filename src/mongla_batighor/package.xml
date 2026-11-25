@@ -13,6 +13,7 @@
   <maintainer email="fh1m.dev@gmail.com">Muhammad Fahim Faisal</maintainer>
   <license>MIT</license>
 
+  <exec_depend>diagnostic_msgs</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>foxglove_bridge</exec_depend>
   <exec_depend>foxglove_msgs</exec_depend>

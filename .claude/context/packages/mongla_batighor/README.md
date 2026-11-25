@@ -194,7 +194,7 @@ live camera.
 
 `python3 tools/pool/batighor_desktop.py [host]` on the operator's machine installs Kutum's
 panels, writes every view into `~/.lichtblick-suite/layouts/`, and starts the Lichtblick
-desktop app connected, on the cockpit (`--view <name>` for another). Lichtblick 1.27 imports a
+desktop app connected, on the console as the browser does (`--view <name>` for another). Lichtblick 1.27 imports a
 folder layout once, by file name, and a layout opened from a link carries no file name, so the
 next start imported the folder copy beside it; so no link names a layout, and the app selects
 the view by name (`--defaultLayout`); the default is `batighor`, the console below.
