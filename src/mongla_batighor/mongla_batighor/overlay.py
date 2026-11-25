@@ -235,7 +235,7 @@ def hud(cam, model, size, arrivals, latency_s, silent_s=None, paused=UNREAD):
     camera), False (silent and not paused: stopped or stalled, an alarm),
     None (no node publishes this camera's detections), or UNREAD."""
     shape = f'{size[0]}x{size[1]}' if size else '--'
-    first = '  '.join(filter(None, (cam, model or 'no model named', shape)))
+    first = '  '.join(filter(None, (cam, model or 'model unknown', shape)))
     if silent_s is not None:
         s = f'{silent_s:.0f} s'
         return [first, {True: f'detector paused {s}: it runs when a mission asks',
@@ -380,9 +380,15 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     if contours is not None:
         rgba, th = CONTOUR
         offs, pts = list(contours.offset), list(contours.points)
+        # The producer's pixel frame (zero means the camera's own): scaled to the
+        # camera's size, as the features are below.
+        sx = sy = 1.0
+        if size and contours.image_width and contours.image_height:
+            sx = size[0] / contours.image_width
+            sy = size[1] / contours.image_height
         for i in range(len(offs)):
             a, b = offs[i], offs[i + 1] if i + 1 < len(offs) else len(pts) // 2
-            ring = [(pts[2 * k], pts[2 * k + 1]) for k in range(a, b)]
+            ring = [(pts[2 * k] * sx, pts[2 * k + 1] * sy) for k in range(a, b)]
             if len(ring) >= 3:
                 out.points.append(_loop(stamp, ring, rgba, th))
     if features is not None and features.image_points:
@@ -425,8 +431,8 @@ def annotate(stamp, detections=None, tracks=None, lock=None, candidates=None,
     for b in dets:
         out.points.append(_loop(stamp, _corners(b), class_colour(b[4]), 2.5))
     for j, (tid, t) in enumerate(trks):
-        if j in held or (not tid and any(iou(t, b) >= SAME_THING_IOU for b in boxes)):
-            continue                          # named on the box it carries
+        if j in held or any(iou(t, b) >= SAME_THING_IOU for b in boxes):
+            continue                          # named on the box it carries, or on a box another holds
         rgba, th = COASTING
         out.points.append(_loop(stamp, _corners(t), rgba, th))
         words = ' '.join(filter(None, (f'#{tid}' if tid else '', t[4], 'coasting')))
@@ -722,7 +728,9 @@ def stages(cam, names, publishers) -> list:
     for label, rel, switch, cams in STAGES:
         if cams and cam not in cams:
             continue
-        topics = [n for n in names if n == ns + rel or n.startswith(ns + rel + '_')]
+        # `target_pose_fused` is the pose fuser's topic, not the PnP stage's.
+        topics = [n for n in names if n == ns + rel or (n.startswith(ns + rel + '_')
+                                                        and not n.endswith('_fused'))]
         on = [t for t in topics if publishers(t) > 0]
         out.append({'stage': label, 'on': bool(on), 'topic': on[0] if on else ns + rel,
                     'switch': switch})
@@ -735,13 +743,16 @@ RATE_WINDOW = 30
 # How soon a new viewer's annotations start, and the cost of asking: one
 # subscriber count per published layer, twice a second.
 WATCH_PERIOD_S = 0.5
+# A `paused` ask that has not come back in this long is asked again: a hung
+# detector never answers, and its pause would read "not yet read" for good.
+ASK_TIMEOUT_S = 5.0
 
 
 def main(args=None):
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_parameter_events
-    from rcl_interfaces.msg import ParameterEvent
+    from rcl_interfaces.msg import ParameterEvent, ParameterType
     from rcl_interfaces.srv import GetParameters
     from sensor_msgs.msg import CameraInfo
     from std_msgs.msg import String
@@ -763,7 +774,8 @@ def main(args=None):
             # Each detector's own `paused`, by node: a silent detector that is
             # paused waits for a mission, one that is not is an alarm. Learnt
             # from its parameter events, and asked once when first needed.
-            self.paused, self.asked, self.whose, self.askers = {}, set(), {}, {}
+            # `asked`: node -> when its `paused` was asked for.
+            self.paused, self.asked, self.whose, self.askers = {}, {}, {}, {}
             self.create_subscription(ParameterEvent, '/parameter_events', self._on_params,
                                      qos_profile_parameter_events)
             for cam in cams:
@@ -944,22 +956,30 @@ def main(args=None):
                 return None
             if node in self.paused:
                 return self.paused[node]
-            if node not in self.asked:
+            if node not in self.asked or now - self.asked[node] > ASK_TIMEOUT_S:
                 cli = self.askers.get(node) or self.askers.setdefault(
                     node, self.create_client(GetParameters, f'{node}/get_parameters'))
                 if cli.service_is_ready():
-                    self.asked.add(node)
+                    self.asked[node] = now
 
                     def answered(fut, node=node):
-                        res = fut.result()
-                        if res is not None and res.values:
+                        try:
+                            res = fut.result()
+                        except Exception:             # the call failed: ask again
+                            res = None
+                        # Only a bool is a pause: an undeclared parameter comes back
+                        # NOT_SET, whose bool_value reads as "not paused".
+                        if res is not None and res.values and \
+                                res.values[0].type == ParameterType.PARAMETER_BOOL:
                             self.paused.setdefault(node, res.values[0].bool_value)
                         else:
-                            self.asked.discard(node)      # ask again next frame
+                            self.asked.pop(node, None)      # ask again next frame
                     cli.call_async(GetParameters.Request(names=['paused'])).add_done_callback(answered)
             return UNREAD
 
         def _stages(self):
+            if not self.stages_pub.get_subscription_count():
+                return                        # no viewer: no graph query
             names = [n for n, _ in self.get_topic_names_and_types()]
             table = {c: stages(c, names, self.count_publishers) for c in self.cams}
             self.stages_pub.publish(String(data=json.dumps(table)))

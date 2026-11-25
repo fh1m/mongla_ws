@@ -33,7 +33,9 @@ board denies them until the two bench checks pass -- the U-turn included. The
 vision verbs run in STABILIZE and are not gated (test_sauvc_srot_port.py).
 """
 
+from mongla_planner.client import TaskAbandoned
 from mongla_planner.missions.competition_config import (
+    SAUVC_QUAL_BUDGET_S,
     SAUVC_ALIGN_ERR_PX,
     SAUVC_ALIGN_GAIN,
     SAUVC_APPROACH_GAIN,
@@ -78,11 +80,21 @@ def run(mongla, log=None):
         # height band, and there is no search depth shallower than it that
         # is not closer to a surfacing failure.
         mongla.set_depth(SAUVC_QUAL_PASS_DEPTH_M, timeout=20)
-        confirmed = qualify(mongla, log)
+        # Alone, nothing else bounds the run (bead bx8): cancel at the budget.
+        try:
+            with mongla.task('qualification', deadline_s=SAUVC_QUAL_BUDGET_S):
+                confirmed = qualify(mongla, log)
+        except TaskAbandoned:
+            if log:
+                log(f'[QUAL ] abandoned at the {SAUVC_QUAL_BUDGET_S:.0f} s budget')
     finally:
         # Time stops at the second pass; surfacing after it costs nothing.
-        mongla.surface()
-        mongla.disarm()
+        # Disarm even if surface raises: a hull left armed after a
+        # failed surface is the worse outcome (bead 2s8).
+        try:
+            mongla.surface()
+        finally:
+            mongla.disarm()
     return confirmed
 
 

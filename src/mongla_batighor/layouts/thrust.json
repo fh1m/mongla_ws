@@ -62,7 +62,7 @@
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "body rates"
+      "lichtblickPanelTitle": "body rates, rad/s"
     }
   },
   "globalVariables": {

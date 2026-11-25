@@ -319,11 +319,17 @@ class CheckpointBank(LookupMixin, StoreMixin):
         # key, and it starts at the snap's keypoint count so a brand-new
         # reference is not evicted before it has ever been asked a question.
         self._yields: list[int] = []
+        # Best INLIER count each reference has reached on a lookup, 0 until
+        # one matches. Kept apart from `_yields`, which starts at the
+        # keypoint count so eviction can rank a reference never matched yet:
+        # judged against keypoints, every healthy match read as a collapse.
+        self._best_inl: list[int] = []
         # index -> inliers, from the MOST RECENT locate(). See `health.py`.
         self._last_scores: dict = {}
         # Enrolments refused because the camera, not the scene, was the
-        # problem. Counted so a bank that stops growing can be told apart
-        # from one that is being protected.
+        # problem. Counted here for tests; no shipped node publishes this yet,
+        # so a bank that stops growing is not told apart from one being
+        # protected in the health line.
         self._contaminated_refusals = 0
         # Injection hook for the ported deadlock. Production never sets it;
         # the test does, to watch the bank stay empty forever.
@@ -341,6 +347,7 @@ class CheckpointBank(LookupMixin, StoreMixin):
     def clear(self) -> None:
         self._refs.clear()
         self._yields.clear()
+        self._best_inl.clear()
         self._sigs.clear()
         self._labels.clear()
         self._att.clear()
@@ -470,6 +477,7 @@ class CheckpointBank(LookupMixin, StoreMixin):
             self._evict()
         self._refs.append(a)
         self._yields.append(int(n))
+        self._best_inl.append(0)
         self._sigs.append(self._signature(a._ref_desc))
         self._labels.append(str(label))
         self._att.append(None if attitude is None
@@ -507,6 +515,7 @@ class CheckpointBank(LookupMixin, StoreMixin):
         i = int(np.argmin(self._yields))
         self._refs.pop(i)
         self._yields.pop(i)
+        self._best_inl.pop(i)
         self._sigs.pop(i)
         self._labels.pop(i)
         self._att.pop(i)

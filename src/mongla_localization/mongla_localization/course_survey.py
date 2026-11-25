@@ -27,6 +27,7 @@ value is caught here rather than in the water.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import pathlib
 import sys
@@ -41,7 +42,9 @@ _FIELDS = (('x', 'x_m'), ('y', 'y_m'), ('depth', 'depth_m'), ('bearing', 'bearin
 
 def deck_dir() -> pathlib.Path:
     env = os.environ.get(cm._ENV, '').strip()
-    return pathlib.Path(env).expanduser() if env else cm._HOME
+    # The loader's first place after the env var, or "wrote" names a file a
+    # deck copy shadows (vl_1 #2).
+    return pathlib.Path(env).expanduser() if env else cm._deck()
 
 
 def survey(course: str, prop: str, values: dict, *, detect_class: str = '',
@@ -74,6 +77,8 @@ def survey(course: str, prop: str, values: dict, *, detect_class: str = '',
     for arg, field in _FIELDS:
         v = values.get(arg)
         if v is not None:
+            if not math.isfinite(float(v)):
+                raise ValueError(f'--{arg} is {v!r}; a surveyed value must be a finite number')
             body[field] = float(v)
     if detect_class:
         body['detect_class'] = detect_class
@@ -134,7 +139,8 @@ def main(argv=None) -> int:
     ap.add_argument('--prop')
     ap.add_argument('--x', type=float)
     ap.add_argument('--y', type=float)
-    ap.add_argument('--depth', type=float, help='metres, NEGATIVE below the surface')
+    ap.add_argument('--depth', type=float, help='metres, NEGATIVE below the surface; shown on the Batighor map, '
+                    'not read by a mission')
     ap.add_argument('--bearing', type=float, help='compass bearing the prop face points')
     ap.add_argument('--detect-class', default='')
     ap.add_argument('--width', type=float,

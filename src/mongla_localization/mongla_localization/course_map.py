@@ -242,6 +242,9 @@ def load_course(name: str) -> Course:
         pool['outline'] = _outline_points(rp.get('outline'), path)
         pool['tile_m'] = _opt_float(rp.get('tile_m'))
         pool['shield_max_depth_m'] = _opt_float(rp.get('shield_max_depth_m'))
+        if pool['shield_max_depth_m'] is not None and pool['shield_max_depth_m'] <= 0.0:
+            raise ValueError(f'{path}: pool.shield_max_depth_m is '
+                             f'{pool["shield_max_depth_m"]!r}; it is positive metres below the surface')
         if 'lane_lines' in rp:
             if not isinstance(rp['lane_lines'], bool):
                 raise ValueError(f'{path}: pool.lane_lines is {rp["lane_lines"]!r}; '
@@ -339,6 +342,8 @@ def _opt_float(v):
     f = float(v)
     if math.isnan(f):
         return None
+    if math.isinf(f):
+        raise ValueError(f'course value {v!r} is infinite; write a finite number or leave the key out')
     return f
 
 

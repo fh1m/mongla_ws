@@ -206,10 +206,12 @@ class HeadingMixin:
 
         `bearing_deg` is the compass bearing the prop's FACE points along, which
         is per-COURSE knowledge -- where this gate was installed -- and not a
-        property of the class, so it is passed in rather than read from the
-        committed geometry table::
+        property of the class. A mission with a course file should call
+        `anchor_on()`, which reads the bearing from that one copy. A typed
+        bearing here can disagree with the course file, so use it only when no
+        course is loaded::
 
-            a = mongla.anchor_heading(bearing_deg=270)   # gate faces west
+            a = mongla.anchor_heading(bearing_deg=270)   # typed: gate faces west
             if a.ok:
                 mongla.turn(mongla.absolute_to_relative(90))   # true east
 

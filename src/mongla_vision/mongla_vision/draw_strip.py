@@ -166,7 +166,8 @@ def _draw_err_gauges(strip: np.ndarray, w: int, frame_h: int,
     fs_lbl = 0.32 * sf
 
     frame_w = max(w, 1)      # video frame width == strip render width
-    ex = ey = 0.0
+    # No target is no error, not a zero one (absence renders `--`).
+    ex = ey = float('nan')
     if primary is not None:
         ex = (primary.cx - frame_w / 2.0) / max(frame_w / 2.0, 1.0)
         ey = (primary.cy - max(frame_h, 1) / 2.0) / max(frame_h / 2.0, 1.0)
@@ -297,7 +298,7 @@ def _draw_panels_row(strip: np.ndarray, w: int, frame_h: int,
 
     pil_text(strip, 'CONF', (rx, cy + lbl - 1), fs_lbl, C_DIM)
     confidence_bar(strip, rx, cy + lbl + 1, rw, sp_h,
-                   conf_hist[-1] if conf_hist else 0.0, fs_scale=sf)
+                   conf_hist[-1] if conf_hist else float('nan'), fs_scale=sf)
 
 
 # ── Row 4: Instruments (4 proportional zones) ─────────────────────────────── #

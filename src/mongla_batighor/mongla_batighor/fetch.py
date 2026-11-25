@@ -23,6 +23,8 @@ from pathlib import Path
 from mongla_batighor.pin import HOME, pin, web_dir
 
 _COMPRESS = ('.js', '.wasm', '.css', '.html', '.json', '.svg', '.ttf')
+# A socket that sends nothing for this long is a failed download, not a wait.
+DOWNLOAD_TIMEOUT_S = 60
 
 
 def sha256(path: Path) -> str:
@@ -78,14 +80,21 @@ def main(argv=None) -> int:
     p = pin()
     dest = web_dir(p['version'], a.home)
     if (dest / 'index.html').exists() and a.src is None:
-        print(f'ok  Lichtblick {p["version"]} already at {dest}')
+        print(f'ok  Lichtblick {p["version"]} found at {dest} (not checked again; '
+              'use --from to replace it)')
         return 0
     dest.parent.mkdir(parents=True, exist_ok=True)
     src = a.src
     if src is None:
         src = dest.parent / f'lichtblick-web-{p["version"]}.tar.gz'
         print(f'downloading {p["url"]}')
-        urllib.request.urlretrieve(p['url'], src)
+        try:
+            with urllib.request.urlopen(p['url'], timeout=DOWNLOAD_TIMEOUT_S) as r, \
+                    open(src, 'wb') as f:
+                shutil.copyfileobj(r, f)
+        except OSError:
+            src.unlink(missing_ok=True)
+            raise
     try:
         n = unpack(src, dest, p['sha256'])
     except ValueError as exc:

@@ -92,30 +92,8 @@
       },
       "lichtblickPanelTitle": "attitude"
     },
-    "mongla.batighor.Vision!vision": {},
-    "Plot!authority": {
-      "paths": [
-        {
-          "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.score",
-          "label": "forward",
-          "enabled": true
-        },
-        {
-          "value": "/mongla/vision/downward/lock.detections[0].results[0].hypothesis.score",
-          "label": "downward",
-          "enabled": true
-        }
-      ],
-      "showLegend": true,
-      "legendDisplay": "left",
-      "sidebarDimension": 140,
-      "followingViewWidth": 60,
-      "isSynced": true,
-      "xAxisVal": "timestamp",
-      "minYValue": 0,
-      "maxYValue": 1.05,
-      "lichtblickPanelTitle": "lock authority"
-    }
+    "mongla.batighor.Intent!intent": {},
+    "mongla.batighor.Vision!vision": {}
   },
   "globalVariables": {
     "track": 0
@@ -160,11 +138,11 @@
         },
         "second": {
           "direction": "column",
-          "first": "mongla.batighor.Vision!vision",
-          "second": "Plot!authority",
-          "splitPercentage": 70.0
+          "first": "mongla.batighor.Intent!intent",
+          "second": "mongla.batighor.Vision!vision",
+          "splitPercentage": 45.5
         },
-        "splitPercentage": 52.4
+        "splitPercentage": 50.0
       },
       "splitPercentage": 47.6
     },

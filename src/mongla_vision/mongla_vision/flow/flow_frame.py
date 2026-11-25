@@ -91,7 +91,8 @@ class FlowFrameMixin:
         return False
 
     def _rotation_since_anchor(self, t_now: float) -> float:
-        """|image rotation| since the anchor: the gyro rate at the middle of the interval, times its length.
+        """|image rotation| since the anchor, estimated from one gyro sample at
+        the interval midpoint (not an integral over the interval).
 
         Yaw about the optical axis is what rotates a DOWNWARD image, so the
         yaw channel is the one that matters here -- the same channel the
@@ -366,6 +367,11 @@ class FlowFrameMixin:
             got = floor_depth_at(pts, odom[0], odom[1])
             if got is not None:
                 d, fit, grad = got
+                if not math.isfinite(fit):
+                    # Too few points to measure the floor's spread: their
+                    # range is the measured bound, not zero (vl_11 G3).
+                    ds = [p[2] for p in pts]
+                    fit = (max(ds) - min(ds)) / math.sqrt(12.0)
                 self._floor_sigma_m = math.hypot(fit, grad * odom[2])
                 self._floor_source = 'survey'
                 return d

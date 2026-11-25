@@ -9,7 +9,8 @@ node, and Batighor. Everything here is under `/mongla/vision/calibration/`,
 so one layout serves any camera:
 
   image_raw                  the camera's frames, read here
-  state                      latched JSON, at most 4 Hz and only on change:
+  state                      latched JSON, at most 4 Hz on change and at
+                             least once a second (the page ages it):
                              the step and what it asks for, the live pose,
                              the board's corners, the target box, the
                              least-certain pixel, the fit so far, the solve
@@ -291,7 +292,7 @@ class CalibrateNode:
                         self.get_logger().warning(
                             f'could not set the exposure on {self.device}; '
                             f'auto exposure smears a moving board')
-                self._last = ''
+                self._last, self._last_t = '', 0.0
                 # Which cameras are plugged in, and whether each one's
                 # calibration was taken on that unit: the competition-day
                 # question. A v4l2-ctl per device, so once at start and after
@@ -321,8 +322,12 @@ class CalibrateNode:
                                self.cap.result_path(), self._library())
                 d['cameras'] = self.cameras
                 s = json.dumps(d, sort_keys=True)
-                if force or s != self._last:
-                    self._last = s
+                # Once a second at least, even unchanged: the page ages the
+                # state by its arrival, so a node that stopped reads stopped
+                # instead of a running capture with live buttons (batighor_4 F8).
+                now = time.monotonic()
+                if force or s != self._last or now - self._last_t >= 1.0:
+                    self._last, self._last_t = s, now
                     self.pub_state.publish(String(data=s))
 
             def _undistorted(self):

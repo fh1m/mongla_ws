@@ -35,7 +35,9 @@ the two bench checks pass. That includes the search creep fallback. The vision
 verbs themselves run in STABILIZE and are not gated (test_sauvc_srot_port.py).
 """
 
+from mongla_planner.client import TaskAbandoned
 from mongla_planner.missions.competition_config import (
+    SAUVC_NAV_BUDGET_S,
     SAUVC_ALIGN_ERR_PX,
     SAUVC_ALIGN_GAIN,
     SAUVC_APPROACH_GAIN,
@@ -72,12 +74,23 @@ def run(mongla, log=None):
         mongla.set_depth(SAUVC_SEARCH_DEPTH_M, timeout=30)
         # The board holds heading itself at 500 Hz (STABILIZE for vision, AUTO
         # for moves), which is what keeps the blind-transit line straight.
-        navigate(mongla, log)
+        # Alone, the run has no other deadline: a stuck search would run until
+        # the operator stopped it (bead bx8). The task cancels at the budget.
+        try:
+            with mongla.task('navigation', deadline_s=SAUVC_NAV_BUDGET_S):
+                navigate(mongla, log)
+        except TaskAbandoned:
+            if log:
+                log(f'[NAV  ] abandoned at the {SAUVC_NAV_BUDGET_S:.0f} s budget')
     finally:
         # Surfacing at the end of the run is worth +5 in the rulebook and costs
         # nothing, so it is part of the mission rather than left to buoyancy.
-        mongla.surface()
-        mongla.disarm()
+        # Disarm even if surface raises: a hull left armed after a
+        # failed surface is the worse outcome (bead 2s8).
+        try:
+            mongla.surface()
+        finally:
+            mongla.disarm()
 
 
 def navigate(mongla, log=None):

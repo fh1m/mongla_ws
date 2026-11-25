@@ -230,7 +230,11 @@ def test_every_instrument_reads_only_topics_that_exist_and_small_ones():
         assert bool(topics) != (name in over_http), name
         for topic in topics:
             leaf = topic.rsplit('/', 1)[-1]
+            # An action's feedback topic is published by its server, which is
+            # named by the action, not the topic.
+            action = topic.split('/_action/')[0] if '/_action/' in topic else None
             assert (f"'{topic}'" in src or topic == '/diagnostics'
+                    or (action and f"'{action}'" in src)
                     or re.search(rf"f'[^']*{{ns(?:_out)?}}/{leaf}'", src)), (name, topic)
             for heavy in ('image', 'compressed', 'detections', 'candidates', 'flow_tracks'):
                 assert heavy not in topic, (name, topic)
@@ -523,7 +527,7 @@ def test_the_status_strip_says_what_it_sees_and_marks_the_tabs():
     cells = {k: (v, lvl) for k, v, lvl, *_ in got['cells']}
     assert cells['lock'] == ('forward held', 'live')
     assert cells['health'] == ('1 unknown', 'stale')
-    assert cells['vehicle'] == ('ARMED', 'armed') and cells['depth'][0] == '1.20 m'
+    assert cells['vehicle'] == ('ARMED', 'armed') and cells['depth'][0] == '1.20 m deep'
     assert got['tabs']['Cockpit'] == 'live' and got['tabs']['Vision'] == 'live'
     # A view whose feed has gone quiet (a starved link, 2026-11-23) must not
     # read as calm: the last word stays, with its age, as a warning.

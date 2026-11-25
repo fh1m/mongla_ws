@@ -104,6 +104,14 @@ def rig(tmp_path, monkeypatch):
             time.sleep(0.02)
         return [g[0] for g in mgr.goals]
 
+    def arrived(first):
+        # The first goal's arrival, on its own allowance: a test that then
+        # watches a short window for a second goal (a stop that must not come)
+        # had also to fit the first one in it, and on a loaded jazzy runner
+        # the first took longer than the 2 s window (#272, 2026-11-24).
+        return sent(1, timeout=DISCOVERY_S)[:1] == [first]
+
+    sent.arrived = arrived
     yield Rig((call, sent, mgr, states, tmp_path / 'helm.log'), dets)
     ex.shutdown()
     for n in (helm, mgr, me, *dets.values()):
@@ -146,6 +154,7 @@ def test_a_silent_pilots_running_verb_is_followed_by_stop(rig):
     call, sent, _, states, _ = rig
     call('ana', 'request')
     call('ana', 'command', cmd='move_forward', fields_json='{"duration": 3}')
+    assert sent.arrived('move_forward')
     # No heartbeat: the helm is lost after LOST_S, while the move still runs.
     assert sent(2, timeout=4.5) == ['move_forward', 'stop']
     # The stop is sent first and the freed helm published after it, so the
@@ -160,6 +169,7 @@ def test_a_silent_pilot_never_stops_a_watchers_surface(rig):
     call('ana', 'request')
     call('ana', 'heartbeat')
     call('bo', 'command', cmd='surface')
+    assert sent.arrived('surface')
     assert sent(2, timeout=3.0) == ['surface']
     assert _until(lambda: states and states[-1]['pilot'] == '')
 
@@ -171,6 +181,8 @@ def test_a_beating_pilot_keeps_the_helm_and_nothing_is_stopped(rig):
     for _ in range(8):
         call('ana', 'heartbeat')
         time.sleep(0.2)
+    # After the beats: waiting first would let the pilot go quiet past LOST_S.
+    assert sent.arrived('move_forward')
     assert sent(2, timeout=0.2) == ['move_forward']
     assert states[-1]['pilot'] == 'ana'
 
@@ -199,6 +211,7 @@ def test_a_running_mission_is_not_stopped_when_the_pilot_goes_quiet(rig):
     try:
         call('ana', 'request')
         call('ana', 'command', cmd='move_forward', fields_json='{"duration": 3}')
+        assert sent.arrived('move_forward')
         assert sent(2, timeout=2.0) == ['move_forward']
     finally:
         stop_beating.set()

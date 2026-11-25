@@ -59,6 +59,11 @@ class FlowChecksMixin:
         # the waves' speed as the hull's.
         if getattr(self, '_anchor_caustic', False) and nxt is not None:
             keep = np.asarray(status).reshape(-1).astype(bool)
+            if not keep.any():
+                self._anchor(gray, t)
+                self._refuse('no tracked points survived on a caustic floor: '
+                             'nothing to measure the texture with')
+                return True
             ncc = patch_ncc_median(self._anchor_gray, track,
                                    np.asarray(self._anchor_pts).reshape(-1, 2)[keep],
                                    np.asarray(nxt).reshape(-1, 2)[keep])
@@ -239,7 +244,7 @@ class FlowChecksMixin:
         of two large numbers).
         """
         n_term = min(1.0, n_used / 40.0)
-        d_term = 1.0 - min(1.0, (disp or 0.0) / max(v.net_flow_px, 1e-6)
+        d_term = 1.0 - min(1.0, (disp if disp is not None else math.inf) / max(v.net_flow_px, 1e-6)
                            / max(self._max_disp, 1e-6))
         r_term = 1.0 - min(1.0, v.rot_fraction / max(self._rot_max, 1e-6))
         q = int(round(255.0 * max(0.0, n_term * 0.4 + d_term * 0.3

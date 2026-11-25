@@ -684,6 +684,8 @@ class RIEKF:
         try:
             S_inv = np.linalg.inv(S)
         except np.linalg.LinAlgError:
+            # Counted like any other refusal, so a discarded measurement stays visible.
+            self.rejected += 1
             return False
         nis = float(y @ S_inv @ y)
         if not math.isfinite(nis):

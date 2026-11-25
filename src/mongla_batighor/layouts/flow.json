@@ -53,14 +53,12 @@
         {
           "value": "/mongla/vision/downward/velocity.twist.twist.linear.x",
           "label": "flow vx m/s",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+          "enabled": true
         },
         {
           "value": "/mongla/vision/downward/velocity.twist.twist.linear.y",
           "label": "flow vy m/s",
-          "enabled": true,
-          "timestampMethod": "receiveTime"
+          "enabled": true
         },
         {
           "value": "/mongla/odom.twist.twist.linear.x",
@@ -114,13 +112,13 @@
         },
         {
           "value": "/mongla/vision/downward/floor_height.range",
-          "label": "floor m",
+          "label": "floor (tile)",
           "enabled": true
         }
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 140,
+      "sidebarDimension": 186,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",

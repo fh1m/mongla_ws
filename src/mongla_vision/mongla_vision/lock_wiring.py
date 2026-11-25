@@ -65,7 +65,7 @@ class LockWiringMixin:
         self._K_grid = None    # (w, h) of the grid K is scaled to (`_on_info`)
         # The width comes from the per-class table and nowhere else, so it
         # follows the class through every switch a mission makes. A measured
-        # prop goes in ~/.mongla/target_geometry.yaml under its class. A
+        # prop goes in ~/mongla/deck/target_geometry.yaml under its class. A
         # single width parameter used to win here, and after the mission's
         # first switch it scaled the next prop by the last one's width.
         self._target_w_m = 0.0
@@ -84,7 +84,7 @@ class LockWiringMixin:
                 self.get_logger().warn(
                     f'[LOCK ] no committed width for {self._cls!r} -- '
                     f'no 6-DoF pose is published while it is the target. Fix on the deck without a '
-                    f'rebuild: put the width in ~/.mongla/target_geometry.yaml '
+                    f'rebuild: put the width in ~/mongla/deck/target_geometry.yaml '
                     f'(or set MONGLA_TARGET_GEOMETRY).')
 
     def _setup_pose_inputs(self, ns) -> None:

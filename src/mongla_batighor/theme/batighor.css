@@ -250,6 +250,8 @@ body:has(.mb.vitals) .LichtblickPanelRoot-root > div > header{display:none!impor
 .mb .stale{color:var(--mb-ink-3)}
 .mb .armed{color:var(--mb-red);font-weight:700;letter-spacing:.1em}
 .mb .good{color:var(--mb-teal)}
+/* Intent: what stops the verb, above its goals, one reason a line. */
+.mb .cannot{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-left:3px solid var(--mb-red);background:color-mix(in srgb,var(--mb-red) 10%,transparent)}
 
 /* controls: keys, not links */
 .mb button{font-size:11px;letter-spacing:.08em;text-transform:uppercase;line-height:1;

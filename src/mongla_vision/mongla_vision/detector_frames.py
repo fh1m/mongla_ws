@@ -174,9 +174,12 @@ class DetectorFramesMixin:
             # few lines below. It reported "300 inferences" during a run in
             # which zero inferences happened, which is worse than no
             # counter -- it was the reason a dead detector looked busy.
+            if self._det is not None and age >= 0.0:
+                # The max covers every frame, so a stale worst case is not
+                # hidden. The mean and count stay on fresh frames only.
+                self._stale_max = max(self._stale_max, age)
             if 0.0 <= age < 5.0 and self._det is not None:
                 self._infers += 1
                 self._stale_sum += age
-                self._stale_max = max(self._stale_max, age)
         except AttributeError:
             pass

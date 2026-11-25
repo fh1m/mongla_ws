@@ -8,7 +8,7 @@ layout, chosen from Lichtblick's layout menu, so no one screen is crammed.
 Extending it is one edit here, never a new hand-made layout:
 - a camera added to `seat.CAMERAS` appears in every per-camera view;
 - a new sensor is one series in the view of the aspect it measures;
-- a new aspect is one function in `VIEWS`;
+- a new aspect is one function, added to the tuple that builds `VIEWS`;
 - a new instrument is one entry in `panels/instruments` and one `instrument()`.
 
 `ros2 run mongla_batighor views --write` rewrites the layouts (no argument:
@@ -56,8 +56,8 @@ TITLES = {'fwd': 'forward camera', 'dets': "this frame's detections",
           'anchor_scale': 'anchor scale, over 1 is closer',
           'align': 'pixel error', 'ladder': 'lock ladder', 'calibration': 'velocity scale',
           'quality': 'flow quality and heights', 'vel': 'velocity',
-          'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates',
-          'depthyaw': 'depth', 'bytes': 'bytes per second', 'drops': 'board drops',
+          'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates, rad/s',
+          'depthyaw': 'depth', 'gyro': 'gyro, rad/s', 'bytes': 'bytes per second', 'drops': 'board drops',
           'forward': 'forward camera', 'downward': 'downward camera', 'hull': 'attitude',
           'nav': 'odometry, 3D', 'down': 'downward camera', 'graph': 'nodes and topics: the diamond at the right, "No topics", draws nodes only',
           'topics': 'every topic, its type and rate', 'raw': 'one message, whole',
@@ -81,7 +81,7 @@ def legend_px(lines) -> int:
     """The legend as wide as its longest label, never LEGEND_PX for all.
 
     LEGEND_PX holds a 13-character label whole (160 cut it): about 11.5 px a
-    character and 40 of swatch and padding. A plot labelled "gx" spent the same
+    character and 48 of swatch and padding. A plot labelled "gx" spent the same
     190 px, half a narrow column, on blank legend (2026-11-22)."""
     longest = max((len(s.get('label', '')) for s in lines), default=0)
     return max(112, min(LEGEND_PX, round(48 + 11.5 * longest)))
@@ -375,7 +375,7 @@ def _cameras(v: View, *, synced: bool = False):
 
 
 def cockpit(v: View):
-    """The default: both cameras, control, and what the vehicle sees and feels.
+    """The default: both cameras, control, what the vehicle sees and feels, and what it is trying to do.
 
     Three columns, read left to right: the pictures; the Control Center whole
     (keys, helm, verb, mission, log: at a third of a column ARM and SEND were
@@ -385,15 +385,18 @@ def cockpit(v: View):
                (30, v('control', instrument('ControlCenter'))),
                # The Vehicle card carries the board's six lines under its gauges;
                # at 10 of 21 its last row was cut (Kutum, 2026-11-23).
+               # Intent sits between the vehicle and the vision that serves it: the
+               # verb's goal, whether it closes, what stops it. The lock's
+               # authority history moved to `vision`; Vision still draws each
+               # camera's authority as a bar.
                (33, col((11, row(v('vehicle', instrument('Vehicle')), v('hull', scene()))),
-                        (7, v('vision', instrument('Vision'))),
-                        (3, v('authority', plot(*(series(f'{V}/{c}/lock{RUNG}.score', c) for c in CAMERAS),
-                                             y=(0, 1.05)))))))
+                        (5, v('intent', instrument('Intent'))),
+                        (6, v('vision', instrument('Vision'))))))
 
 
 def vision(v: View):
     """Detection and tracking in depth: every rung, its authority, the pose solved."""
-    fwd, dwn = f'{V}/forward', f'{V}/downward'
+    fwd = f'{V}/forward'
     # Two columns. Now: both cameras' rungs and stages side by side (at a
     # sixth of a column the instrument scrolled and hid the downward camera)
     # over the ladder's history, every row in view. Then: the detectors'
@@ -438,8 +441,8 @@ def flow(v: View):
                           v('tracks', plot(series(f'{d}/distance_debug.data[2]', 'tracks',
                                                   True))))))),
         (38, col(
-            (3, v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s', True),
-                               series(f'{d}/velocity.twist.twist.linear.y', 'flow vy m/s', True),
+            (3, v('velocity', plot(series(f'{d}/velocity.twist.twist.linear.x', 'flow vx m/s'),
+                               series(f'{d}/velocity.twist.twist.linear.y', 'flow vy m/s'),
                                series('/mongla/odom.twist.twist.linear.x', 'filter vx m/s'),
                                series('/mongla/odom.twist.twist.linear.y', 'filter vy m/s')))),
             (3, v('calibration', states(series(f'{d}/flow_calibration.data', 'scale from',
@@ -452,7 +455,7 @@ def flow(v: View):
             # ~160, and on one axis it flattened them onto the floor.
             (3, v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
                                   series(f'{d}/distance_debug.data[1]', 'height m', True),
-                                  series(f'{d}/floor_height.range', 'floor m')))),
+                                  series(f'{d}/floor_height.range', 'floor (tile)')))),
             # What flow subtracts as rotation: the board's ATTITUDE rates on
             # its own clock (node_telemetry.py), x pitch, y roll, z yaw. A
             # turn that leaks into the speed above shows here first.
@@ -490,9 +493,9 @@ def localization(v: View):
             (3, v('heading', plot(series('/mongla/state.yaw_deg', 'board heading'),
                                   series('/mongla/localization/heading.data', 'given heading',
                                          True),
-                                  series(f'{d}/floor_grid_deg.heading_deg', 'floor grid'),
+                                  series(f'{d}/floor_grid_deg.heading_deg', 'grid (tile)'),
                                   series(f'{d}/lane_heading_deg.heading_deg', 'lane line')))),
-            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor m'),
+            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor (tile)'),
                                 series('/mongla/state.depth_m', 'depth m')))))))
 
 
@@ -572,7 +575,8 @@ def mission(v: View):
     what the plan says, what the vehicle is doing about it."""
     return row((36, v('map', instrument('Map'))),
                (34, v('text', instrument('MissionText'))),
-               (30, col((3, v('mission', instrument('Mission'))),
+               (30, col((2, v('intent', instrument('Intent'))),
+                        (3, v('mission', instrument('Mission'))),
                         (2, v('demand', plot(series('/mongla/demand.vector.x', 'surge'),
                                              series('/mongla/demand.vector.y', 'sway')))))))
 
@@ -595,7 +599,7 @@ def downward(v: View):
             (5, v('vision', instrument('Vision'))),
             (4, v('ladder', states(series(f'{d}/lock{RUNG}.class_id', 'downward rung'),
                                    series(f'{V}/active_camera.data', 'live camera', True)))),
-            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor m'),
+            (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor (tile)'),
                                 series('/mongla/state.depth_m', 'depth m')))),
             (3, _pose(v, 'downward')),
             (3, _anchor(v, 'downward')))))

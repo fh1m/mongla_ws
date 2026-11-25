@@ -240,21 +240,36 @@ def masks_for(coeff: np.ndarray, proto_u8: np.ndarray, quant: Quant,
 
     out: List[np.ndarray] = []
     for n in range(coeff.shape[0]):
-        x1, y1, x2, y2 = boxes_net[n]
+        x1, y1, x2, y2 = (float(v) for v in boxes_net[n])
+        bw = max(1, int(round(x2 - x1)))
+        bh = max(1, int(round(y2 - y1)))
+        # The prototype cells the box touches, whole cells, inside the plane.
         px1 = int(np.clip(math.floor(x1 * sx), 0, pw - 1))
         py1 = int(np.clip(math.floor(y1 * sy), 0, ph - 1))
         px2 = int(np.clip(math.ceil(x2 * sx), px1 + 1, pw))
         py2 = int(np.clip(math.ceil(y2 * sy), py1 + 1, ph))
-        bw = max(1, int(round(x2 - x1)))
-        bh = max(1, int(round(y2 - y1)))
         patch = proto_u8[py1:py2, px1:px2].astype(np.float32)
         score = patch.reshape(-1, MASK_DIM) @ coeff[n]
         score = score.reshape(py2 - py1, px2 - px1) - thr[n]
         # Resize the SCORE, not the decision: a bilinear stretch of a 0/1 field
         # has nothing to interpolate between and quantises the boundary to the
-        # prototype's 4 px grid.
-        score = cv2.resize(score, (bw, bh), interpolation=cv2.INTER_LINEAR)
-        out.append((score >= 0.0).astype(np.uint8))
+        # prototype's 4 px grid. It goes to the patch's OWN extent in network
+        # pixels, then the box is cut out of it at its true offset. Stretching
+        # the patch onto the box instead moved the outline by up to a cell,
+        # and by the whole overhang for a box past the canvas edge, whose patch
+        # is clipped while the box is not (audit 2026-11-24, unread files).
+        ox, oy = int(round(px1 / sx)), int(round(py1 / sy))
+        rw = max(1, int(round(px2 / sx)) - ox)
+        rh = max(1, int(round(py2 / sy)) - oy)
+        inside = cv2.resize(score, (rw, rh), interpolation=cv2.INTER_LINEAR) >= 0.0
+        mask = np.zeros((bh, bw), np.uint8)
+        bx, by = int(round(x1)), int(round(y1))
+        c0, r0 = max(0, ox - bx), max(0, oy - by)
+        c1, r1 = min(bw, ox + rw - bx), min(bh, oy + rh - by)
+        if c1 > c0 and r1 > r0:
+            mask[r0:r1, c0:c1] = inside[r0 + by - oy:r1 + by - oy,
+                                        c0 + bx - ox:c1 + bx - ox]
+        out.append(mask)
     return out
 
 

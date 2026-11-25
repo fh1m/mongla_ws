@@ -129,6 +129,7 @@ def test_a_decoded_source_is_encoded_once_and_only_when_watched(monkeypatch):
 def test_the_mailbox_hands_over_the_payload_it_decoded():
     from mongla_vision.cameras.v4l2_mailbox import V4L2MailboxCamera
     cam = object.__new__(V4L2MailboxCamera)
+    cam._stop = __import__('threading').Event()     # open: not closed
     jpg = _jpeg()
     cam._slot = (jpg, 1.0, 7, 1.001)
     cam._served, cam._idx, cam._w, cam._h = 6, 0, 64, 36

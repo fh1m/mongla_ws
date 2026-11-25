@@ -65,6 +65,16 @@ _QUIET = ['--log-level', 'warn']
 
 def generate_launch_description():
     args = [
+        # The live profiles here are the generic 'forward'/'downward', which
+        # no calibration declares, so without these CameraInfo.k is zero and
+        # bearings fall back to a guessed FOV (vl_3 F5). Pass the file
+        # measured at THIS launch's resolution; the vehicle runs vision_pi.
+        DeclareLaunchArgument('fwd_calibration', default_value='',
+                              description='calibration JSON for the forward camera; '
+                                          'empty publishes k=0 and says so'),
+        DeclareLaunchArgument('dwn_calibration', default_value='',
+                              description='calibration JSON for the downward camera; '
+                                          'empty publishes k=0 and says so'),
         DeclareLaunchArgument('fwd_device',   default_value='0',
                               description='/dev/videoN index for the forward camera — LAST-RESORT '
                                           'fallback, only used on a box with no /dev/mongla_cam_* '
@@ -185,7 +195,7 @@ def generate_launch_description():
     ]
 
     def camera(profile: str, device_arg: str, video_arg: str, loop_arg: str,
-               device_path_arg: str, topic_arg: str) -> Node:
+               device_path_arg: str, topic_arg: str, cal_arg: str) -> Node:
         # Source-aware: a non-empty video path runs this camera off a file
         # (source=video_file, profile cleared so camera_node takes the path);
         # empty falls back to the live webcam profile. The node NAME stays the
@@ -213,6 +223,7 @@ def generate_launch_description():
             name=f'mongla_camera_{profile}', output='screen', ros_arguments=_QUIET,
             parameters=[{
                 'profile': prof,
+                'calibration': LaunchConfiguration(cal_arg),
                 'source':  src,
                 'name':    profile,
                 'device':  LaunchConfiguration(device_arg),
@@ -305,9 +316,9 @@ def generate_launch_description():
 
     return LaunchDescription(args + settings + [
         camera('forward',  'fwd_device', 'fwd_video', 'fwd_loop', 'fwd_device_path',
-               'fwd_topic'),
+               'fwd_topic', 'fwd_calibration'),
         camera('downward', 'dwn_device', 'dwn_video', 'dwn_loop', 'dwn_device_path',
-               'dwn_topic'),
+               'dwn_topic', 'dwn_calibration'),
         detector('forward',  'fwd_model', 'fwd_models', 'fwd_classes',
                  'fwd_conf', 'fwd_model_conf'),
         detector('downward', 'dwn_model', 'dwn_models', 'dwn_classes',

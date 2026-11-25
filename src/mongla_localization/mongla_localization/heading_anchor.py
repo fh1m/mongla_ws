@@ -68,7 +68,10 @@ def _wrap180(deg: float) -> float:
 
 def _wrap360(deg: float) -> float:
     d = math.fmod(float(deg), 360.0)
-    return d + 360.0 if d < 0.0 else d
+    if d < 0.0:
+        d += 360.0
+    # A tiny negative input rounds up to exactly 360.0 here, and 360.0 is outside [0, 360).
+    return 0.0 if d >= 360.0 else d
 
 
 def absolute_heading(board_yaw_deg: float, board_world_bearing_deg: float) -> float:

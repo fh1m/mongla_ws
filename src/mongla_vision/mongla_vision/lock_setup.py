@@ -1,5 +1,6 @@
 """LockNode's setup: parameters, the anchor and the bank, and live retuning.
 """
+import math
 import os
 
 from mongla_vision.anchor import loop_closure as _lc
@@ -225,8 +226,12 @@ class LockSetupMixin:
                         f'accelerator ({type(exc).__name__}: {exc}) -- '
                         f'trying an xfeat_*.onnx beside it on the CPU, about 33 ms a frame against '
                         f'11.4 ms on the chip (measured-bars 92).')
-                    alt = sorted(glob.glob(os.path.join(
-                        os.path.dirname(p), 'xfeat_*.onnx')))
+                    alt = []
+                    for r in roots:
+                        alt = sorted(glob.glob(os.path.join(
+                            os.path.expanduser(r), 'xfeat_*.onnx')))
+                        if alt:
+                            break
                     p = alt[0] if alt else ''
                     if not p:
                         raise
@@ -388,8 +393,8 @@ class LockSetupMixin:
             from mongla_vision.target_geometry import width_for
         except ImportError:
             return
-        w = width_for(self._cls) if self._cls else 0.0
-        self._target_w_m = float(w or 0.0)
+        w = width_for(self._cls) if self._cls else math.nan
+        self._target_w_m = w if w > 0.0 else 0.0    # 0.0: no width, the pose refuses
         if self._target_w_m <= 0.0:
             self.get_logger().warn(
                 f'[LOCK ] no committed width for {self._cls!r} -- no 6-DoF '
