@@ -1,6 +1,7 @@
 """The layouts are what views.py generates: one table, so a new sensor or camera
 is one row there, and no hand-made layout drifts from it."""
 import json
+import math
 import re
 from pathlib import Path
 
@@ -433,3 +434,12 @@ def test_the_demand_caption_is_the_size_of_the_pools_names():
     src = (views.LAYOUTS.parent / 'mongla_batighor' / 'course.py').read_text()
     (px,) = _re.findall(r'def text\(x, y, z, words, c, px=([\d.]+)\)', src)
     assert overlay.DEMAND_LABEL_PX == float(px)
+
+
+def test_the_whole_hull_fits_the_tall_attitude_panel():
+    """The cockpit's attitude panel is about 27 degrees wide (45 high, tall and
+    narrow). At 0.95 m the 0.702 m hull ran off both sides of it, and the fix
+    once closed its PR without ever being committed."""
+    cam = views._scene()['cameraState']
+    wide = 2 * cam['distance'] * math.tan(math.radians(27 / 2))
+    assert wide >= 0.702, f"{wide:.2f} m across for a 0.702 m hull"

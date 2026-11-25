@@ -38,6 +38,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `orphan.py` | Every long-running node dies with its parent. |
 | `params_file.py` | The node half of `~/.mongla/bringup.yaml`: a typo in `nodes:` stops the node. |
 | `realtime.py` | Give a process that streams commands a realtime priority and a short lock. |
+| `release.py` | A Mongla process runs the active release or it does not run (B-153). |
 | `spin.py` | One place that decides which rclpy executor a Mongla node spins on. |
 | `tether.py` | Does this process die when the tether is pulled? |
 <!-- modules:end -->

@@ -55,7 +55,7 @@
         }
       },
       "cameraState": {
-        "distance": 0.95,
+        "distance": 1.6,
         "perspective": true,
         "phi": 55,
         "thetaOffset": 200,
@@ -171,7 +171,7 @@
         }
       },
       "cameraState": {
-        "distance": 0.95,
+        "distance": 1.6,
         "perspective": true,
         "phi": 55,
         "thetaOffset": 200,
@@ -1336,7 +1336,7 @@
   },
   "globalVariables": {
     "track": 0,
-    "layoutRev": "946fc6120ae9"
+    "layoutRev": "7df88ad89534"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

@@ -337,7 +337,7 @@ say "5/6  Batighor: the Lichtblick web build the operators' browsers load"
 # The pinned release, checked against its hash (src/mongla_batighor/LICHTBLICK.json),
 # into ~/.mongla/batighor/web/. Run from the source tree: this half can come
 # before the workspace is built.
-PYTHONPATH="$KUTUM/../src/mongla_batighor:$KUTUM/../src/mongla_runtime${PYTHONPATH:+:$PYTHONPATH}" \
+PYTHONPATH="$KUTUM/../src/mongla_batighor${PYTHONPATH:+:$PYTHONPATH}" \
   python3 -m mongla_batighor.fetch \
   || echo "  WARNING: Lichtblick not installed; batighor:=true will say so. Retry with network."
 
