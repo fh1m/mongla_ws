@@ -12,6 +12,24 @@ the motion in them are the fake board's; the pictures and the boxes are real.
 **State: RUNS TODAY on the bench.** Nothing here has seen water. What water must
 decide about it is in [First pool day](first-pool-verification.md).
 
+## How to run it
+
+```bash
+# 1. from the dev box, after any change: put the code on Kutum
+kutum/deploy.sh fh1m@kutum.local
+
+# 2. on Kutum, in a shell opened after that deploy: the stack with Batighor
+ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
+
+# 3. on the operator's laptop, either
+#    a browser at http://kutum.local:8000/          (nothing to install)
+python3 tools/pool/batighor_desktop.py kutum.local   # the Lichtblick desktop app
+```
+
+Both open the same fourteen-tab console. Where `kutum.local` does not resolve, use Kutum's
+address in its place. Ctrl-C on the launch stops and disarms. A second launch while one is
+running is a second owner of the board: stop the first.
+
 The rules every view keeps:
 
 - **Nothing is left off.** A detection, a box below the detector's floor, a track the

@@ -713,6 +713,25 @@ vehicle, with nothing installed on the laptop. A second operator costs Kutum a f
 the real board on the USB-C cable, every plot live. Detector 11 to 18 Hz through the ROS
 graph on the bench; the lock rung is named on the picture, not buried in a log.</sub>
 
+**To run it:**
+
+```bash
+# 1. from the dev box, after any change: put the code on Kutum
+kutum/deploy.sh fh1m@kutum.local
+
+# 2. on Kutum, in a shell opened after that deploy: the stack with Batighor
+ros2 launch mongla_manager bringup.launch.py vision:=true batighor:=true
+
+# 3. on the operator's laptop, either
+#    a browser at http://kutum.local:8000/          (nothing to install)
+python3 tools/pool/batighor_desktop.py kutum.local   # the Lichtblick desktop app
+```
+
+Both open the same console. Where `kutum.local` does not resolve, use Kutum's address in its
+place. `--view <name>` opens the desktop app on one view, and `--one-screen` keeps it to one
+window on a two-screen laptop. A browser tab left open takes a new layout on reload; the
+desktop app takes it at its next start.
+
 **What it is not.** Bondor, the board team's ground station, talks to the board: telemetry
 over the cable and the LoRa bridge. Batighor talks to the stack on Kutum: what the cameras
 see, what the lock holds, what the filter believes, what the planner is about to do. The two
