@@ -430,11 +430,12 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `exposure_us` | `0` |
 | `controls` | `''` |
 
-**`mongla_vision/detector_dual_node.py`** — 5 parameters
+**`mongla_vision/detector_dual_node.py`** — 6 parameters
 
 | parameter | default |
 |---|---|
 | `device` | `-1` |
+| `masks` | `True` |
 | `replay` | `False` |
 | `cameras` | `'forward` |
 | `lock` | `False` |

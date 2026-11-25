@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-VIEWS = ['board_health', 'mongla_layout', 'thrust']
+VIEWS = ['batighor_pilot', 'board_health', 'mongla_layout', 'thrust', 'vitals']
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def desk(tmp_path, monkeypatch):
 
     def get(url):
         if url.endswith('/api/workspaces/mongla/layouts'):
-            return json.dumps({'data': [{'name': v} for v in VIEWS]}).encode()
+            return json.dumps({'data': [{'name': v} for v in mod.served]}).encode()
         return json.dumps(mod.served[url.rsplit('/', 1)[-1].removesuffix('.json')]).encode()
     monkeypatch.setattr(mod, 'get', get)
     monkeypatch.setattr(mod, 'install', lambda base: [])
@@ -38,8 +38,15 @@ def desk(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, 'running', lambda: False)
     monkeypatch.setattr(mod, 'vulkan_flag', lambda: [])  # this machine's GPU is not the test's
     monkeypatch.setenv('GDK_SCALE', '1')        # the desktop scales: no flag of ours
-    mod.launches = []
-    monkeypatch.setattr(mod.subprocess, 'Popen', lambda argv, **_: mod.launches.append(argv))
+    monkeypatch.setattr(mod, 'hyprland', lambda cmd: '')    # this machine's compositor is not the test's
+    mod.launches, mod.placed = [], []
+
+    class Proc:
+        def __init__(self, argv, **_):
+            mod.launches.append(argv)
+            self.pid = 1000 + len(mod.launches)
+    monkeypatch.setattr(mod.subprocess, 'Popen', Proc)
+    monkeypatch.setattr(mod, 'place', lambda pid, screen: mod.placed.append((pid, screen)) or True)
     return mod
 
 
@@ -73,14 +80,87 @@ def test_a_changed_view_is_named_with_how_to_refresh_it(desk, capsys):
     assert 'thrust changed on Kutum' in capsys.readouterr().out
 
 
+def test_vitals_opens_in_a_window_of_its_own_on_the_screen_named(desk, capsys, monkeypatch):
+    """One window per profile: the second screen's window gets its own, or the
+    app hands it to the cockpit's window and opens the cockpit again."""
+    assert desk.main(['h', '--screen', 'eDP-1', '--vitals', 'DP-2']) == 0
+    cockpit, vitals = desk.launches
+    assert '--defaultLayout=batighor_pilot' in cockpit   # the keys and the state are on Vitals
+    assert not any(a.startswith('--user-data-dir') for a in cockpit)
+    assert '--defaultLayout=vitals' in vitals
+    assert f'--user-data-dir={desk.VITALS_PROFILE}' in vitals
+    assert desk.placed == [(1002, 'DP-2'), (1001, 'eDP-1')]
+    # Found, not named: a screen under another, three times wider than tall.
+    duo = [{'name': 'eDP-1', 'width': 3840, 'height': 2160, 'x': 0, 'y': 0, 'physicalWidth': 340},
+           {'name': 'DP-2', 'width': 3840, 'height': 1100, 'x': 0, 'y': 1080, 'physicalWidth': 340},
+           {'name': 'HDMI-A-1', 'width': 1920, 'height': 1080, 'x': 1920, 'y': 0, 'physicalWidth': 480}]
+    monkeypatch.delenv('GDK_SCALE')                  # Hyprland's sizes set the scale
+    assert desk.two_screens(duo) == ('eDP-1', 'DP-2')
+    assert desk.two_screens(duo[::2]) is None
+    desk.launches.clear(); desk.placed.clear()
+    desk.hyprland = lambda cmd: json.dumps(duo)
+    assert desk.main(['h']) == 0
+    assert '--defaultLayout=batighor_pilot' in desk.launches[0]  # keys and state are on Vitals
+    assert '--force-device-scale-factor=2.75' in desk.launches[1]  # Vitals, a quarter larger
+    assert '--defaultLayout=vitals' in desk.launches[1]
+    assert sorted(s for _, s in desk.placed) == ['DP-2', 'eDP-1']
+    desk.launches.clear()
+    assert desk.main(['h', '--one-screen']) == 0
+    assert len(desk.launches) == 1 and '--defaultLayout=mongla_layout' in desk.launches[0]
+    desk.hyprland = lambda cmd: ''
+    monkeypatch.setenv('GDK_SCALE', '1')
+    # A Kutum without the view says so and opens no second window.
+    desk.launches.clear()
+    del desk.served['vitals']
+    capsys.readouterr()
+    assert desk.main(['h', '--vitals', 'DP-2']) == 0
+    assert len(desk.launches) == 1
+    assert 'serves no vitals view' in capsys.readouterr().out
+
+
+def test_a_placed_window_lands_where_its_screen_is_looking_and_is_pressed_once(tmp_path, monkeypatch):
+    """Seen 2026-11-24: a window rule filed the cockpit on the OLED's
+    workspace 7 while the OLED showed 1, so the screen showed the desktop."""
+    spec = importlib.util.spec_from_file_location('_desk4', ROOT / 'tools' / 'pool' / 'batighor_desktop.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    sent = []
+
+    def hypr(cmd):
+        if cmd == 'j/clients':
+            return json.dumps([{'pid': 7, 'address': '0xab', 'fullscreen': 0}])
+        if cmd == 'j/monitors':
+            return json.dumps([{'name': 'eDP-1', 'activeWorkspace': {'id': 1}},
+                               {'name': 'DP-2', 'activeWorkspace': {'id': 90}}])
+        sent.append(cmd)
+        return 'ok'
+    monkeypatch.setattr(mod, 'hyprland', hypr)
+    monkeypatch.setattr(mod.time, 'sleep', lambda s: None)
+    assert mod.place(7, 'eDP-1')
+    assert 'workspace = "1"' in sent[0] and 'address:0xab' in sent[0]
+    assert any('fullscreen' in c for c in sent)
+    assert 'Shift_L' in sent[-1] and 'address:0xab' in sent[-1]
+    # No Hyprland: says so, places nothing.
+    monkeypatch.setattr(mod, 'hyprland', lambda cmd: '')
+    assert not mod.place(7, 'eDP-1', wait_s=0.01)
+
+
 def test_a_dense_screen_starts_the_app_at_a_scale_it_can_be_read_at(desk):
     """A 4K 15-inch panel at device scale 1 drew 12 px type 1 mm tall; at 2
-    the console reads comfortably on it (the desktop app's working scale)."""
+    the owner still read it as tiny (2026-11-24); 2.5 is the working scale."""
     laptop = ('HDMI-A-1 connected 1920x1080+7680+0 (normal) 480mm x 260mm\n'
               'eDP-1 connected primary 3840x2160+0+0 (normal) 340mm x 190mm\n')
-    assert desk.screen_scale(laptop) == 2.0         # 287 dpi against READ_DPI 140
+    assert desk.screen_scale(laptop) == 2.5         # 287 dpi against READ_DPI 120
     assert desk.screen_scale('DP-1 connected 1920x1080+0+0 (normal) 527mm x 296mm') == 1.0
     assert desk.screen_scale('eDP-1 connected 1920x1080+0+0 (normal) 0mm x 0mm') is None
+    # Under Hyprland, from its own sizes, per screen: no xrandr there.
+    duo = json.dumps([{'name': 'eDP-1', 'width': 3840, 'physicalWidth': 340, 'focused': True},
+                      {'name': 'HDMI-A-1', 'width': 1920, 'physicalWidth': 480}])
+    desk.hyprland = lambda cmd: duo
+    assert desk.hyprland_scale('eDP-1') == 2.5 and desk.hyprland_scale('HDMI-A-1') == 1.0
+    assert desk.hyprland_scale(None) == 2.5                      # the focused screen
+    desk.hyprland = lambda cmd: ''
+    assert desk.hyprland_scale('eDP-1') is None
     assert desk.main(['h']) == 0
     assert not any(a.startswith('--force-device-scale-factor') for a in desk.launches[0])
     assert desk.main(['h', '--scale', '2']) == 0

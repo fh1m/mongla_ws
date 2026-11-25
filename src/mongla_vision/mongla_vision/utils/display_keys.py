@@ -88,9 +88,15 @@ def _handle_camera_keys(node: VisionDisplayNode, key: int) -> None:
     if key < 0:
         return
     if key == ord('f'):
-        node._pending_sub_action = 'forward'
+        name = 'forward'
     elif key == ord('d'):
-        node._pending_sub_action = 'downward'
+        name = 'downward'
+    else:
+        return
+    if name not in node._cameras_available:
+        node.get_logger().warning(f'[DISP ] no {name} camera on this host; key ignored')
+        return
+    node._pending_sub_action = name
 
 
 def _handle_video_keys(node: VisionDisplayNode, key: int) -> None:

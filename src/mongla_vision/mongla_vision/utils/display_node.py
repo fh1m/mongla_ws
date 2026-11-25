@@ -108,7 +108,11 @@ _RENDER_W = 1920
 def _start_pipeline(camera: str, model: str, classes: str,
                     conf: float) -> list[subprocess.Popen]:
     """Spawn camera_node + detector_node as child processes."""
-    source = CAMERA_PROFILES.get(camera, {}).get('source', 'webcam')
+    if camera not in CAMERA_PROFILES:
+        # A typo must not start a generic webcam source, which can open an IR device.
+        raise ValueError(f'unknown camera profile {camera!r}. '
+                         f'known: {sorted(CAMERA_PROFILES)}')
+    source = CAMERA_PROFILES[camera].get('source', 'webcam')
     camera_proc = subprocess.Popen([
         'ros2', 'run', 'mongla_vision', 'camera_node',
         '--ros-args',
@@ -395,13 +399,13 @@ class VisionDisplayNode(Node):
 
     def _on_image(self, msg: Image) -> None:
         self._frames_received += 1
-        self._last_frame_t = time.monotonic()
 
         try:
             frame = image_msg.to_array(msg, 'bgr8')
         except Exception as exc:
             self.get_logger().warning(f'[DISP ] image decode failed: {exc!r}')
             return
+        self._last_frame_t = time.monotonic()    # only a frame that decoded
 
         self._fps_count += 1
         now = time.monotonic()

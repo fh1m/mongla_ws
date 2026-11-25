@@ -189,11 +189,12 @@ class LockFramesMixin:
             self.get_logger().warn(
                 f'[LOCK ] detection {why} -- the authority decay is measuring '
                 f'age since ARRIVAL, not since capture. Check use_sim_time.')
-        if best is not None:
-            # Counted per lock; `_publish` zeroes it when the lock is lost.
-            self._confirms = getattr(self, '_confirms', 0) + 1
         held = None if best is not None else self._held_from(weak)
         with self._lock:
+            if best is not None:
+                # Counted per lock; `_publish` zeroes it when the lock is lost.
+                # Under the lock, because `_publish` resets it under the lock.
+                self._confirms = getattr(self, '_confirms', 0) + 1
             self._held_box, self._held_conf = (None, 0.0) if held is None else held
             if held is not None:
                 self._held_t, self._held_header = t, msg.header

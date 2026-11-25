@@ -94,7 +94,7 @@ _PER_CAMERA = ('model_path', 'models', 'active_model', 'classes', 'conf',
 _SHARED = ('device', 'half', 'iou', 'nms_floor', 'nms_iou', 'imgsz', 'max_det',
            'publish_contours',
            'publish_debug_image',
-           'debug_image_hz', 'alignment_deadband', 'paused', 'range_crop')
+           'debug_image_hz', 'alignment_deadband', 'paused', 'range_crop', 'masks')
 
 # The camera half. Same prefixing scheme, same reason: launch cannot address
 # two nodes in one process.
@@ -136,6 +136,8 @@ _DEFAULTS = {
     # raises InvalidParameterTypeException and the whole composed process
     # dies at startup.
     'range_crop': False,
+    # Same type and default as detector_setup.declare_parameter('masks', True).
+    'masks': True,
 }
 
 
@@ -420,7 +422,6 @@ def main():
                     f'[COMP ] {camera}: DETECTOR did NOT come up ({exc}); '
                     f'keeping the eye that works')
                 continue
-            det._cam_name = camera
             # The detector FIRST, so the camera never submits to a half-built
             # sink. `frame_sink=det` is the whole composition -- one Python
             # reference where a topic used to be.

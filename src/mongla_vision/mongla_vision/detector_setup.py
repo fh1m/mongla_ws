@@ -245,6 +245,7 @@ class DetectorSetupMixin:
         self._apply_assoc_conf(det)
         self._det = det  # atomic publish under CPython GIL — _infer_loop sees it next tick
         self._publish_model_classes()   # now the names are known
+        self._publish_vision_info()     # and the model is live, so say so
         # Re-apply a per-model conf override that was set before the model landed
         # (startup or an early live set_conf): _apply_model_conf ran against a None
         # detector then, so replay it now the single model exists.
@@ -420,10 +421,11 @@ class DetectorSetupMixin:
                 f'{", ".join(fixed)}: read once at startup -- set it under '
                 f'`nodes:` in bringup.yaml and restart. Live here: '
                 f'{", ".join(LIVE_PARAMS)}'))
-        # rclpy rejects the whole set when this says no, so the checks that
-        # need nothing applied run first. NMS is the one change a model can
-        # refuse, and across several models it is not all or nothing (see
-        # `_apply_nms`); the changes that cannot fail come last.
+        # rclpy rejects the whole set when this says no, so the refusals are
+        # decided first: the checks that need nothing applied, then the NMS
+        # (the one change only a model can refuse; across models it is not all
+        # or nothing, see _set_nms_live), and only then the changes that
+        # cannot fail.
         why = self._live_refusal(params)
         if why:
             return SetParametersResult(successful=False, reason=why)

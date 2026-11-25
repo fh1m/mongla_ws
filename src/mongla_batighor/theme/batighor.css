@@ -55,6 +55,15 @@ body{background:var(--mb-d0)!important}
   border-bottom:1px solid var(--mb-rule)}
 .LichtblickPanelRoot-root > div > header .MuiTypography-root{font-family:var(--mb-mono)!important;
   font-size:10.5px!important;letter-spacing:.14em;text-transform:uppercase;color:var(--mb-ink-2)!important}
+/* The app bar keeps the time and drops the socket address, the one thing in
+   it an operator never reads. The Vitals window is a dash: no app bar and no
+   panel title bars, nothing on it that is not the vehicle. (The window's own
+   buttons are not the page's: common.js takes the window full screen.)
+   Selectors are the stable halves of Lichtblick 1.31's generated classes. */
+[class*="-sourceName"] > [class*="-textTruncate"],
+[class*="-sourceName"] > span{display:none!important}
+body:has(.mb.vitals) .MuiAppBar-root,
+body:has(.mb.vitals) .LichtblickPanelRoot-root > div > header{display:none!important}
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-thumb{background:var(--mb-rule-lit);border-radius:4px}
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner{background:transparent}
@@ -79,6 +88,27 @@ body{background:var(--mb-d0)!important}
 .mb.status .cell.warn b{color:var(--mb-amber)}
 .mb.status .cell.err b{color:var(--mb-red);font-weight:700}
 .mb.status .cell.stale b{color:var(--mb-ink-3)}
+/* A link's quality as four rising bars beside its numbers: lit to its
+   count in its level's colour, the rest a dim rule. One bar left breathes,
+   so a starving link is seen from across the deck (signalBars). */
+.mb.status .cell b{display:flex;align-items:flex-end;gap:8px}
+.mb.status i.sig{display:inline-flex;align-items:flex-end;gap:2px;height:13px;flex:none}
+.mb.status i.sig span{width:3px;background:var(--mb-rule);border-radius:1px}
+.mb.status i.sig span:nth-child(1){height:25%}
+.mb.status i.sig span:nth-child(2){height:50%}
+.mb.status i.sig span:nth-child(3){height:75%}
+.mb.status i.sig span:nth-child(4){height:100%}
+.mb.status .ok i.sig span{--on:var(--mb-teal)}
+.mb.status .warn i.sig span{--on:var(--mb-amber)}
+.mb.status .err i.sig span{--on:var(--mb-red)}
+.mb.status i.sig.s1 span:nth-child(-n+1),
+.mb.status i.sig.s2 span:nth-child(-n+2),
+.mb.status i.sig.s3 span:nth-child(-n+3),
+.mb.status i.sig.s4 span:nth-child(-n+4){background:var(--on,var(--mb-teal))}
+.mb.status i.sig.s1 span:first-child{animation:mb-breathe 1.2s ease-in-out infinite}
+/* The pilot console's strip: five cells across, so each is wider and taller. */
+.mb.status.watch .cell{padding:6px 22px}
+.mb.status.watch .cell b{font-size:14px}
 
 /* The tabs: room to read them, a glyph each, red under the open one, and a
    dot when the strip says its subject needs an eye. No close button: a tab
@@ -105,6 +135,7 @@ body{background:var(--mb-d0)!important}
 [data-testid="toolbar-tab"][data-mb="live"]::after{background:var(--mb-sea)}
 [data-testid="toolbar-tab"][data-mb="err"]::after{background:var(--mb-red);
   box-shadow:0 0 0 3px rgba(255,42,20,.22)}
+[data-testid="toolbar-tab"][title="Pilot"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%226%22%20y%3D%223%22%20width%3D%224%22%20height%3D%2211%22%20rx%3D%222%22%2F%3E%3Cpath%20d%3D%22M8%203%205%200.5M8%203l3-2.5%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Cockpit"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%228%22%20cy%3D%228%22%20r%3D%225%22%2F%3E%3Cpath%20d%3D%22M8%201v4M8%2011v4M1%208h4M11%208h4%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Map"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M1.5%203.5%205.5%202l5%201.5%204-1.5v10.5l-4%201.5-5-1.5-4%201.5z%20M5.5%202v10.5%20M10.5%203.5V14%22%2F%3E%3C%2Fsvg%3E")}
 [data-testid="toolbar-tab"][title="Mission"]{--mb-glyph:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.4%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%2015V1.5h9.5l-2%203%202%203H3%22%2F%3E%3C%2Fsvg%3E")}
@@ -219,6 +250,18 @@ body{background:var(--mb-d0)!important}
 .mb .keys button.danger b{font-size:clamp(11px,2.2cqi,15px);letter-spacing:.14em}
 .mb .keys button.danger small{font-size:clamp(9px,1.4cqi,11px);font-weight:400;letter-spacing:.06em;
   text-transform:none;opacity:.8}
+/* Keys alone (the ScreenPad): three keys stacked, filling the panel's height,
+   each a thumb-sized target, the words sized by the panel's width. */
+.mb.pad{padding:6px}
+.mb.pad section.pinned{position:static;flex:1 1 auto;min-height:0;box-shadow:none}
+/* Stop, surface and disarm take anyone's press, named or not, so the pad
+   needs no name card; the vehicle's line is the Vehicle panel's beside it.
+   Only the keys stay. */
+.mb.pad section:not(.pinned), .mb.pad section.pinned > .row{display:none}
+.mb.pad .keys{grid-template-columns:1fr;grid-auto-rows:1fr;flex:1 1 auto;min-height:0;gap:8px}
+.mb.pad .keys button.danger{min-height:0;gap:4px}
+.mb.pad .keys button.danger b{font-size:clamp(14px,9cqi,26px)}
+.mb.pad .keys button.danger small{font-size:clamp(10px,4.5cqi,13px)}
 /* The log takes whatever height the panel has left. */
 .mb section.fill{flex:1 1 auto;min-height:96px}
 .mb input, .mb select{font-size:12px;color:var(--mb-ink);background:var(--mb-sunk);
@@ -290,3 +333,50 @@ body{background:var(--mb-d0)!important}
 #app-menu-button > svg{display:none}
 #app-menu-button::before{content:"";width:22px;height:22px;
   background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20512%20512%22%3E%3Ctitle%3EMongla%3C%2Ftitle%3E%3Crect%20x%3D%22248%22%20y%3D%220%22%20width%3D%2216%22%20height%3D%22104%22%20fill%3D%22%23ff6b5e%22%2F%3E%3Cpath%20d%3D%22M256%20102%20410%20256%20256%20410%20102%20256z%22%20fill%3D%22%23ff2a14%22%2F%3E%3C%2Fsvg%3E") center/contain no-repeat}
+
+/* Vitals: the vehicle at a glance, for the screen under the main one. One
+   drawing scaled to its panel; motion only where something moves: water past
+   the hull for the demand, the surface, each ESC by its rpm, a bad line
+   breathing, the hull glowing while armed. */
+.mb.vitals{padding:0;display:flex}
+.mb.vitals .body{flex:1 1 auto;min-height:0;display:flex}
+svg.vitals{width:100%;height:100%;font-family:var(--mb-mono)}
+svg.vitals.stale > :not(text){opacity:.35}
+svg.vitals .lbl{font-size:10px;letter-spacing:.22em;fill:var(--mb-ink-3)}
+svg.vitals .num{font-size:20px;fill:var(--mb-ink)}
+svg.vitals .unit{font-size:11px;fill:var(--mb-ink-3)}
+svg.vitals .big{font-size:40px;fill:var(--mb-ink);letter-spacing:.02em}
+svg.vitals .state{font-size:30px;letter-spacing:.18em;fill:var(--mb-ink-2)}
+svg.vitals .state.armed{fill:var(--mb-red)}
+svg.vitals .state.stale{fill:var(--mb-amber);font-size:20px}
+svg.vitals .mode{font-size:16px;letter-spacing:.2em;fill:var(--mb-sea)}
+svg.vitals .mode.hold{fill:var(--mb-teal)} svg.vitals .mode.surf{fill:var(--mb-amber)}
+svg.vitals .absent{font-size:10px;letter-spacing:.2em;fill:var(--mb-ink-3)}
+svg.vitals .well{fill:var(--mb-sunk);stroke:var(--mb-rule-lit)}
+svg.vitals .water{fill:var(--mb-sea);opacity:.3}
+svg.vitals .wave{fill:none;stroke:var(--mb-sea);stroke-width:1.5;animation:mb-wave 1.6s linear infinite}
+svg.vitals .hullmark{fill:var(--mb-red)}
+svg.vitals .ring{fill:var(--mb-sunk);stroke:var(--mb-rule-lit)}
+svg.vitals .tick{stroke:var(--mb-ink-3)} svg.vitals .tick.long{stroke:var(--mb-ink-2);stroke-width:1.5}
+svg.vitals .unknown{opacity:.3}
+svg.vitals .card{font-size:13px;fill:var(--mb-ink-2)} svg.vitals .card.north{fill:var(--mb-red)}
+svg.vitals .lubber{fill:var(--mb-red)}
+svg.vitals .hull{fill:var(--mb-d3);stroke:var(--mb-sea);stroke-width:1.5}
+svg.vitals .hull.armed{stroke:var(--mb-red)}
+svg.vitals .nose{stroke:var(--mb-ink-2);stroke-width:2;stroke-linecap:round}
+svg.vitals .glow{fill:none;stroke:var(--mb-red);stroke-width:3;opacity:.5;animation:mb-breathe 2.4s ease-in-out infinite}
+svg.vitals .flow{stroke:var(--mb-glass);stroke-width:4;stroke-linecap:round;stroke-dasharray:10 6;animation:mb-flow .6s linear infinite}
+svg.vitals .tip{fill:var(--mb-glass)}
+svg.vitals .esc{fill:var(--mb-sunk);stroke:var(--mb-rule-lit)}
+svg.vitals .blade{fill:var(--mb-sea)}
+svg.vitals .spin{transform-box:fill-box;transform-origin:center;animation:mb-spin 1s linear infinite}
+svg.vitals .hl{font-size:11px;fill:var(--mb-ink-2)}
+svg.vitals .hl.err{fill:var(--mb-red)} svg.vitals .hl.warn{fill:var(--mb-amber)}
+svg.vitals .nav{font-size:10px;letter-spacing:.18em} svg.vitals .nav.ok{fill:var(--mb-teal)}
+svg.vitals .nav.warn{fill:var(--mb-amber)}
+svg.vitals .alarm{animation:mb-breathe 1.2s ease-in-out infinite}
+@keyframes mb-wave{to{transform:translateX(-24px)}}
+@keyframes mb-flow{to{stroke-dashoffset:-16}}
+@keyframes mb-spin{to{transform:rotate(360deg)}}
+@keyframes mb-breathe{50%{opacity:.25}}
+@media (prefers-reduced-motion: reduce){svg.vitals *{animation:none!important}}
