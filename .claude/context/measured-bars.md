@@ -9508,3 +9508,37 @@ It fails (0.879).** Flare recall stays at 0.51. Decision: the incumbent stays th
 the shipping candidate, and the next lever for the flare is the labelling convention across
 sources (bead wk5), not volume.
 
+
+## 114. DROPPING SIDEWAYS FLARES FROM TRAINING MAKES THE MODEL WORSE: flare AP50 0.635 AGAINST 0.680 (2026-11-25)
+
+**Why it was run.** 2,859 of the 50,371 SAUVC training images carry a flare box wider than
+tall: rotated frames from two teams' published augmentations, and the vehicle never rolls
+90 degrees (bead wk5).
+
+**Method.** As in section 102: the same held-out team's test split (237 images), yolov8n,
+COCO start, 20 epochs, 640, batch 16, seed 0. One change: every training image with a
+sideways flare box dropped. Training 3 h 39 min on an RTX 2060.
+
+**Bar, written before training** (`mongla_data/holdout/sauvc-finals/BAR.md`): pass at
+held-out flare AP50 0.75 or more with gate and drum within 0.02 of the baseline; fail under
+0.68, or gate or drum down more than 0.02.
+
+| held-out | gate AP50 | flare AP50 | drum AP50 | mAP50 | mAP50-95 |
+|---|---|---|---|---|---|
+| baseline | 0.992 | 0.680 | 0.975 | 0.882 | 0.563 |
+| upright only | 0.989 | 0.635 | 0.973 | 0.866 | 0.579 |
+
+At the same fixed cutoffs, same pictures, IoU 0.5 (`side_by_side.py` beside the bar):
+
+| model, cutoff | gates found of 123 | flares found of 204 | false flares | empty frames with a box, of 45 |
+|---|---|---|---|---|
+| baseline, 0.25 | 85 | 162 | 57 | 5 |
+| upright, 0.25 | 78 | 149 | 89 | 2 |
+| baseline, 0.45 | 79 | 143 | 43 | 0 |
+| upright, 0.45 | 71 | 128 | 39 | 1 |
+
+**Result.** FAIL. The baseline yolov8n stays the best SAUVC detector; the upright weights
+are not shipped or compiled. Removing those frames also removed their gates and their
+other flares, so this does not show the rotated frames were harmless, only that dropping
+whole images costs more than it gains. One seed. Neither model is on the vehicle: the
+vehicle's models are the development harnesses in `src/mongla_vision/models/`.
