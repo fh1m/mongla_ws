@@ -72,7 +72,7 @@ from mongla_vision.flow.flow_math import (
     HeightFromDivergence,
 )
 from .flow_constants import (_GYRO_GAIN_FITTED_ON, _GYRO_GAIN_X_DEFAULT,
-                             _GYRO_GAIN_Y_DEFAULT)
+                             _GYRO_GAIN_Y_DEFAULT, HEIGHT_STALE_S)
 from .flow_setup import FlowSetupMixin
 from .flow_checks import FlowChecksMixin
 from .flow_floor import FlowFloorMixin
@@ -446,10 +446,17 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         Depth is negative below the surface here, so descending makes it more
         negative and `-d(depth)/dt` is positive going down -- which is the sign
         that makes a descent GROW the image, matching the divergence.
+
+        None once the newest depth is older than HEIGHT_STALE_S: the history
+        keeps its last samples when depth stops, and a speed differenced from
+        them is not this moment's (audit vl_12 F12-9). The stamps are host
+        monotonic (flow_setup._on_state).
         """
         if len(self._depth_hist) < 4:
             return None
         (t0, d0), (t1, d1) = self._depth_hist[0], self._depth_hist[-1]
+        if time.monotonic() - t1 > HEIGHT_STALE_S:
+            return None
         span = t1 - t0
         if span < 0.2:
             return None
