@@ -21,7 +21,7 @@ typed. The rules of the token are `seat.py`; this node adds the vehicle:
     live one for the pilot -- the same operation as the DSL's `use_camera`:
     the latched `/mongla/vision/active_camera`, the other detector paused.
     The bridge gives browsers no parameter access of their own
-    (`bringup.launch.py` BRIDGE_LIMITS), so these are the only way;
+    (`launch/batighor.launch.py`, BRIDGE_LIMITS), so these are the only way;
   * `link` takes one browser's queueing lag and sets the cameras' viewer
     stream by `link.py`'s policy: halved while any browser lags, stepped back
     after a calm spell. Anyone, named or not: it drives nothing, and the
@@ -551,7 +551,7 @@ class HelmNode(Node):
         res = fut.result()
         top = param_value(res.values[0]) if res is not None and res.values else None
         if not isinstance(top, (int, float)) or isinstance(top, bool) or top <= 0:
-            self._log(event=f'{path} has no viewer stream rate to set')
+            self._log(event=f'{path} gave no usable stream_rate_hz (absent, not a positive number, or the read failed)')
             return
         self._stream[path]['top'] = float(top)
         self._stream_rate(path, quiet)

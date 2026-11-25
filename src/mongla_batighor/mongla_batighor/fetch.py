@@ -5,8 +5,8 @@
 
 The tarball must match the hash in LICHTBLICK.json, or nothing is written.
 Source maps are left out (130 of 173 MB, and only a debugger reads them),
-and every text asset gets a gzip copy beside it so a weak link loads about a
-quarter of the bytes.
+and every text asset of a type in `_COMPRESS` and over 1 KB gets a gzip copy
+beside it, so a weak link loads about a quarter of the bytes.
 """
 from __future__ import annotations
 

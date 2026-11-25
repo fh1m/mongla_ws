@@ -15,6 +15,10 @@ mapped onto the host (`ClockMap`). That last map is fitted from arrival pairs,
 so the IMU's age is its latency ABOVE the fitted offset, not an absolute
 one-way delay; the row says so.
 
+A video-file bench (`fwd_video:=` or `dwn_video:=` on `vision_dual.launch.py`)
+has no capture clock: its frames are stamped when they are read, so their age
+is about 0 and is not a capture age.
+
 A stage that sends no stamp has a rate and no age, and a stage the board does
 not send at all is listed with the ask that would produce it. Absence is
 `None` in the JSON and `--` on the panel, never 0.
