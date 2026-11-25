@@ -1721,9 +1721,12 @@ function layoutUpdates(records, served, now) {
     const L = r && r.layout;
     const name = L && typeof L.from === "string" ? L.from.replace(/\.json$/, "") : null;
     if (!name || !(name in served)) continue;
-    if (JSON.stringify(L.baseline && L.baseline.data) === JSON.stringify(served[name])) continue;
     let data = served[name];
-    if (L.working) {
+    const old_rev = L.working && olderRev(L.working.data, data);
+    if (!old_rev && JSON.stringify(L.baseline && L.baseline.data) === JSON.stringify(data)) continue;
+    if (old_rev) {
+      data = takeKutums(L.working.data, L.working.data, data);
+    } else if (L.working) {
       const old = L.baseline && L.baseline.data;
       if (!unedited(old, L.working.data)) { edited.push(name); continue; }
       data = takeKutums(old, L.working.data, data);
@@ -1748,25 +1751,36 @@ function takeKutums(old, work, data) {
     if (id.startsWith("Tab!") && Number.isInteger(w.activeTabIdx) && w.activeTabIdx < (cfg[id].tabs || []).length) cfg[id].activeTabIdx = w.activeTabIdx;
   }
   const vars = work && work.globalVariables;
-  return { ...data, configById: cfg, ...(vars && data.globalVariables ? { globalVariables: { ...data.globalVariables, ...vars } } : {}) };
+  const mine = data.globalVariables;
+  return { ...data, configById: cfg, ...(vars && mine ? { globalVariables: { ...mine, ...vars, ...(mine.layoutRev ? { layoutRev: mine.layoutRev } : {}) } } : {}) };
+}
+
+// True when `work` was made from another revision of Kutum's `data` (views.py
+// stamps `layoutRev`; a copy with none is older than the stamp).
+function olderRev(work, data) {
+  const rev = (d) => d && d.globalVariables && d.globalVariables.layoutRev;
+  return Boolean(rev(data)) && rev(work) !== rev(data);
 }
 
 // In a browser, Lichtblick replaces a layout's baseline with Kutum's on load
-// and keeps the working copy it made of the old one, so the console goes on
-// drawing the old layout (bead b0q). A working copy that is an unedited copy
-// of a version Kutum served before (`history`, serve.py) is replaced by the
-// current baseline with what the app added kept; one that matches no
-// version is an operator's edit and is kept. Pure; exported for the test.
-function staleWorking(records, history) {
+// and keeps its working copy over it, so the console goes on drawing an old
+// layout (B-152). A working copy made from another revision is dropped, with
+// the open tab and the watched selections kept. A copy of the current
+// revision is an operator's and stays. Pure; exported for the test.
+function staleWorking(records) {
   const update = [];
   for (const r of records) {
     const L = r && r.layout;
-    if (!L || !L.working || !L.baseline || unedited(L.baseline.data, L.working.data)) continue;
-    const old = (history[L.name] || []).find((h) => unedited(h, L.working.data));
-    if (!old) continue;
-    update.push({ ...r, layout: { ...L, baseline: { ...L.baseline, data: takeKutums(old, L.working.data, L.baseline.data) }, working: undefined } });
+    if (!L || !L.working || !L.baseline || !olderRev(L.working.data, L.baseline.data)) continue;
+    update.push({ ...r, layout: { ...L, baseline: { ...L.baseline, data: takeKutums(L.working.data, L.working.data, L.baseline.data) }, working: undefined } });
   }
   return update;
+}
+
+// Nothing of an operator's is lost without a copy: the dropped one stays in
+// this browser under this key, one per layout.
+function keepCopy(L) {
+  try { localStorage.setItem(`mongla.batighor.replaced.${L.name}`, JSON.stringify(L.working.data)); } catch { /* full or blocked */ }
 }
 
 const idb = (req) => new Promise((ok, no) => { req.onsuccess = () => ok(req.result); req.onerror = () => no(req.error); });
@@ -1869,19 +1883,14 @@ async function syncBrowserLayouts() {
   if (!db.objectStoreNames.contains("layouts")) { db.close(); return false; }
   const store = () => db.transaction("layouts", "readwrite").objectStore("layouts");
   const records = await idb(store().getAll());
-  const history = {};
-  for (const r of records) {
-    const L = r && r.layout;
-    if (!L || !L.working || !L.baseline || unedited(L.baseline.data, L.working.data) || !/^[A-Za-z0-9_-]+$/.test(L.name || "")) continue;
-    try { history[L.name] = await (await fetch(`${location.origin}/layouts/history/${L.name}.json`, { cache: "no-store" })).json(); } catch { /* none */ }
-  }
-  const update = staleWorking(records, history);
+  const update = staleWorking(records);
+  for (const r of records) if (update.some((u) => u.layout.name === r.layout?.name)) keepCopy(r.layout);
   for (const r of update) await idb(store().put(r));
   db.close();
   if (!update.length) return false;
   console.info(`[batighor] ${update.length} layout(s) taken from Kutum: ${update.map((r) => r.layout.name).join(", ")}`);
   // Guarded, so a copy the app rewrites cannot reload it forever.
-  const mark = update.map((r) => r.layout.name).join(",");
+  const mark = update.map((r) => `${r.layout.name}@${r.layout.baseline.data.globalVariables.layoutRev}`).join(",");
   try {
     if (sessionStorage.getItem(KEY) === mark) return false;
     sessionStorage.setItem(KEY, mark);
@@ -1892,7 +1901,7 @@ async function syncBrowserLayouts() {
 
 module.exports = {
   healthNow, managerHeard, vitalsOf, signalBars, WATCH_CELLS, captionOf, foldCaption, fitText, NAV_WHY_CHARS,
-  attitudeOf, depthRate, vitalsSvg, chainBoxes, chainSvg, classesOf, staleWorking,
+  attitudeOf, depthRate, vitalsSvg, chainBoxes, chainSvg, classesOf, staleWorking, layoutUpdates,
   activate(extensionContext) {
     syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {

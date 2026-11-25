@@ -96,7 +96,8 @@
     "mongla.batighor.Vision!vision": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "6b8a24d34530"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

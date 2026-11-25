@@ -17,6 +17,7 @@
   <depend>mongla_control</depend>
   <depend>mongla_interfaces</depend>
   <depend>mongla_localization</depend>
+  <exec_depend>mongla_runtime</exec_depend>
   <depend>mongla_manager</depend>
   <depend>vision_msgs</depend>
 

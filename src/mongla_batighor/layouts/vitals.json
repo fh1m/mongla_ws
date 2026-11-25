@@ -5,7 +5,8 @@
     "mongla.batighor.Map!map": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "d766ba7c8128"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

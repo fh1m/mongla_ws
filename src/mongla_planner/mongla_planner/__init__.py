@@ -23,6 +23,7 @@ lives here -- separating "the AUV is running" from "what should it do"
 keeps imports one-way and lets us swap planners without touching the
 manager.
 """
+import mongla_runtime  # noqa: F401  (refuses a release that is not the active one, B-153)
 
 from .client     import MonglaClient, MoveFailed, MoveRejected, MoveTimeout
 from .mongla_dsl import MonglaMission

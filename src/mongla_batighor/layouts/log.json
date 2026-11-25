@@ -9,7 +9,8 @@
     "mongla.batighor.HelmLog!helm_log": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "636ec95ece39"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

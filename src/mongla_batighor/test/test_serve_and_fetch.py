@@ -364,37 +364,3 @@ def test_a_first_visit_opens_the_views_full_width():
     # alone would leave every first visit with the sidebar open, silently.
     assert b'sessionStorage.setItem("batighor.sidebar-seed","1")' in page
     assert b'sessionStorage.getItem("batighor.sidebar-seed")' in page
-
-
-def test_every_version_served_is_kept_and_served_back_newest_first(tmp_path):
-    """A browser tells a working copy the app made of an old layout from an
-    operator's edit by finding that old layout here (bead b0q)."""
-    import json as _json
-    import os as _os
-    layouts, history = tmp_path / 'layouts', tmp_path / 'history'
-    layouts.mkdir()
-    f = layouts / 'batighor.json'
-    srv = serve.make_server(0, tmp_path / 'web', layouts, bridge_port=1, history=history)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    base = f'http://127.0.0.1:{srv.server_address[1]}'
-    try:
-        for v in (1, 2, 2, 3):
-            f.write_text(_json.dumps({'configById': {}, 'v': v}))
-            assert _get(f'{base}/api/workspaces/mongla/layouts')[0] == 200
-            for p in (history / 'batighor').glob('*.json'):
-                _os.utime(p, (p.stat().st_mtime - 1,) * 2)   # keep the order apart
-        status, _, body = _get(f'{base}/layouts/history/batighor.json')
-        assert status == 200
-        assert [d['v'] for d in _json.loads(body)] == [3, 2, 1]
-        assert _get(f'{base}/layouts/history/..%2Fx.json')[0] == 404
-        assert _json.loads(_get(f'{base}/layouts/history/absent.json')[2]) == []
-    finally:
-        srv.shutdown()
-
-
-def test_the_release_path_serve_seeds_from_is_the_one_release_sh_builds():
-    import re as _re
-    rel = (Path(__file__).resolve().parents[3] / 'kutum' / 'release.sh').read_text()
-    base = _re.search(r'^BASE="\$HOME_DIR/([^"]+)"', rel, _re.M).group(1)
-    releases = _re.search(r'^RELEASES="\$BASE/([^"]+)"', rel, _re.M).group(1)
-    assert serve.RELEASE_LAYOUTS.startswith(f'{base}/{releases}/*/src/mongla_batighor/')

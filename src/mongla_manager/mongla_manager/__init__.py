@@ -4,3 +4,4 @@ The Python `MonglaClient`, the `mongla` CLI and the mission scripts that USE
 the action server live in `mongla_planner`. This package is the server side:
 the manager node, how it finds the board, and the operator tools.
 """
+import mongla_runtime  # noqa: F401  (refuses a release that is not the active one, B-153)

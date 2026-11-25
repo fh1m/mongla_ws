@@ -61,7 +61,8 @@
     "mongla.batighor.Mission!mission": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "3d042cdc466d"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

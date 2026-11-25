@@ -1335,7 +1335,8 @@
     "mongla.batighor.Status!status": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "946fc6120ae9"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

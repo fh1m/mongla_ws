@@ -45,7 +45,8 @@
     "mongla.batighor.Link!link": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "9ab369a5c309"
   },
   "userNodes": {
     "mongla-detections-per-frame": {

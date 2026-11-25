@@ -11,6 +11,7 @@ Public exports:
 The nodes (`camera_node`, `detector_node`, `detector_dual_node`,
 `tracker_node`, `lock_node`, `flow/flow_node`) are entry points, not exports.
 """
+import mongla_runtime  # noqa: F401  (refuses a release that is not the active one, B-153)
 
 from .cameras.camera   import Camera, FrameMeta
 from .factory          import make_camera, make_camera_from_profile, BUILDERS

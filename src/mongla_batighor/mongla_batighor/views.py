@@ -18,6 +18,7 @@ exit 1 naming each stale one);
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -856,8 +857,14 @@ def build(name: str) -> dict:
     else:
         v = View()
         tree = VIEWS[name](v)
-    return {'configById': v.config, 'globalVariables': {'track': 0}, 'userNodes': USER_SCRIPTS,
+    data = {'configById': v.config, 'globalVariables': {'track': 0}, 'userNodes': USER_SCRIPTS,
             'playbackConfig': {'speed': 1}, 'layout': tree}
+    # A browser or desktop app keeps its own working copy over a new layout.
+    # The stamp is how the instruments panel knows a copy was made from an
+    # older one and replaces it (B-152).
+    data['globalVariables']['layoutRev'] = hashlib.sha256(
+        json.dumps(data, sort_keys=True).encode()).hexdigest()[:12]
+    return data
 
 
 def render(name: str) -> str:

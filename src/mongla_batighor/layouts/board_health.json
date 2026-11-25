@@ -67,7 +67,8 @@
     "mongla.batighor.Kutum!kutum": {}
   },
   "globalVariables": {
-    "track": 0
+    "track": 0,
+    "layoutRev": "908341b847d7"
   },
   "userNodes": {
     "mongla-detections-per-frame": {
