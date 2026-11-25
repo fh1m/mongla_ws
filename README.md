@@ -720,6 +720,14 @@ answer different questions, and neither commits to the other's repository.
 
 <p align="center"><img src="docs/imgs/readme/batighor-cockpit.webp" alt="Batighor's cockpit view: forward and downward cameras with detections and the lock drawn over them, the Control Center with STOP, SURFACE and DISARM pinned at the top, the vehicle's compass and depth gauge, the hull in 3D, and the Vision instrument showing each camera's lock ladder." width="100%"></p>
 
+**One console, fourteen tabs**: Cockpit, Mission, Helm, Navigation, Vision, Flow, Thrust,
+Health, Link, Log, Files, Tune, Calibrate and Inspect, with a status strip over all of them.
+With a second screen under the first, the pilot console keeps the pictures and the keys above
+and the vehicle's vitals below. The helm takes a verb typed whole, in the `mongla` CLI's
+grammar. Mission shows what the vehicle is trying to do against where it is, Files shows the
+missions and the deck as Kutum holds them (read only), and the pool, the props and the hull
+are one 3D scene.
+
 ### The decisions that were made for the person on the pool deck
 
 - **STOP, SURFACE and DISARM are pinned.** Always one row of three keys, always on screen,
@@ -738,7 +746,7 @@ answer different questions, and neither commits to the other's repository.
   (`views.py`), and a test fails if a topic the stack publishes shows up nowhere.
 
 <details>
-<summary><b>The other views</b> (thirteen layouts, one tab each)</summary>
+<summary><b>Some of the other views</b></summary>
 
 <p align="center"><img src="docs/imgs/readme/batighor-map.webp" alt="The map view: a pool outline with the floor soundings, the gate, bin and flare as dashed amber nominal props, and Mongla drawn hollow amber by its start." width="100%"></p>
 
@@ -747,8 +755,8 @@ the ones you have not (listed, never put at the origin), and the hull on it.
 
 <p align="center"><img src="docs/imgs/readme/batighor-chain.webp" alt="The chain view: both cameras beside a table of how old each stage's data is, frame to detect to track to lock, with p50 and p95 in milliseconds, and below it the frame-to-command plot, empty until a vision verb drives." width="100%"></p>
 
-**Chain**: photons to thrust, each stage's age as p50 and p95. It also lists what the board
-does not send yet, each with the firmware ask that would fix it.
+**Inspect** (the chain): photons to thrust, each stage's age as p50 and p95. It also lists
+what the board does not send yet, each with the firmware ask that would fix it.
 
 <p align="center"><img src="docs/imgs/readme/batighor-localization.webp" alt="The localization view: the map, usable and why not, aiding, position, sigma, velocity from flow against the filter, heading from each source, and floor height against depth." width="100%"></p>
 
@@ -764,8 +772,7 @@ and the height it is trusting.
 **Health**: every subsystem graded. Red means look now, and only errors and an armed
 vehicle get it.
 
-The rest: **mission** (the running mission's text with the line that sent the verb marked),
-**thrust**, **link**, **flow**, **calibrate**, and **weak_link** for a slow connection.
+Also **weak_link**, a layout for a slow connection.
 
 </details>
 
