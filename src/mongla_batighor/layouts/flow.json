@@ -123,6 +123,32 @@
       "isSynced": true,
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "flow quality and heights"
+    },
+    "Plot!derotation": {
+      "paths": [
+        {
+          "value": "/mongla/imu_rates.vector.x",
+          "label": "pitch rad/s",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu_rates.vector.y",
+          "label": "roll rad/s",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/imu_rates.vector.z",
+          "label": "yaw rad/s",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 174,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "derotation"
     }
   },
   "globalVariables": {
@@ -156,10 +182,15 @@
       "second": {
         "direction": "column",
         "first": "StateTransitions!calibration",
-        "second": "Plot!quality",
-        "splitPercentage": 50.0
+        "second": {
+          "direction": "column",
+          "first": "Plot!quality",
+          "second": "Plot!derotation",
+          "splitPercentage": 50.0
+        },
+        "splitPercentage": 33.3
       },
-      "splitPercentage": 33.3
+      "splitPercentage": 25.0
     },
     "splitPercentage": 62.0
   }

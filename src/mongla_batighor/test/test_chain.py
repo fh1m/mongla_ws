@@ -123,7 +123,8 @@ def test_nobody_watching_costs_no_subscription():
         sub = viewer.create_subscription(String, chain.TOPIC, lambda m: None, 10)
         ex.add_node(viewer)
         spin(1.0)
-        assert len(list(node.subscriptions)) == len(chain.stages(('downward',)))
+        # Each stage, and the camera's caption (why its detector is quiet).
+        assert len(list(node.subscriptions)) == len(chain.stages(('downward',))) + 1
         viewer.destroy_subscription(sub)
         spin(1.0)
         assert list(node.subscriptions) == []
@@ -155,3 +156,21 @@ def test_one_message_has_no_rate_and_a_wall_step_keeps_the_window():
     for i, wall in enumerate((1000.0, 1000.1, 900.2, 900.3)):   # wall steps back
         m.note('x', None, wall, at_s=50.0 + 0.1 * i)
     assert m.summary(50.35)['x']['hz'] == pytest.approx(10.0, rel=0.01)
+
+
+def test_a_paused_detector_is_idle_and_a_dead_one_is_not():
+    """The overlay's caption is the one answer to "why is this detector
+    quiet": fresh and `paused`, detect and track are idle with that reason;
+    any other state, a stale caption, or none, leaves them with no reason
+    (the alarm). Other stages keep their standing reason."""
+    paused = {'state': 'paused'}
+    caps = {'forward': (paused, 100.0), 'downward': ({'state': 'silent'}, 100.0)}
+    assert chain.idle_of('detect:forward', '', caps, 101.0) == chain.PAUSED
+    assert chain.idle_of('track:forward', '', caps, 101.0).endswith(chain.PAUSED)
+    assert chain.idle_of('detect:downward', '', caps, 101.0) == ''      # died, not paused
+    assert chain.idle_of('detect:forward', '', caps,
+                         100.0 + chain.CAPTION_FRESH_S + 0.1) == ''      # stale caption
+    assert chain.idle_of('detect:forward', '', {}, 101.0) == ''           # no overlay
+    assert chain.idle_of('lock:forward', '', caps, 101.0) == ''           # not its stage
+    assert chain.idle_of('command', 'until a vision verb drives', caps, 101.0) \
+        == 'until a vision verb drives'

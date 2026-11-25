@@ -51,6 +51,11 @@
           "value": "/mongla/vision/forward/target_pose_fused.range_m",
           "label": "range m",
           "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_near.range_m",
+          "label": "near m",
+          "enabled": true
         }
       ],
       "showLegend": true,
@@ -66,6 +71,11 @@
         {
           "value": "/mongla/vision/forward/target_pose.bearing_deg",
           "label": "bearing deg",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_near.bearing_deg",
+          "label": "near deg",
           "enabled": true
         },
         {
@@ -86,22 +96,33 @@
       "paths": [
         {
           "value": "/mongla/vision/downward/anchor_decomposition.vector.x",
-          "label": "rotation",
-          "enabled": true
-        },
-        {
-          "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
-          "label": "scale",
+          "label": "rotation rad",
           "enabled": true
         }
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 140,
+      "sidebarDimension": 186,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "anchor (XFeat)"
+      "lichtblickPanelTitle": "anchor rotation (XFeat)"
+    },
+    "Plot!anchor_scale": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
+          "label": "scale ratio",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 174,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "anchor scale, over 1 is closer"
     },
     "Plot!align": {
       "paths": [
@@ -120,6 +141,11 @@
         {
           "value": "/mongla/vision/forward/target_pose.reproj_px",
           "label": "reproj px",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_near.reproj_px",
+          "label": "near px",
           "enabled": true
         }
       ],
@@ -143,6 +169,9 @@
       },
       "lichtblickPanelTitle": "forward camera"
     },
+    "mongla.batighor.Caption!forward_caption": {
+      "camera": "forward"
+    },
     "Image!downward": {
       "imageMode": {
         "imageTopic": "/mongla/vision/downward/stream/compressed",
@@ -154,6 +183,9 @@
         "synchronize": true
       },
       "lichtblickPanelTitle": "downward camera"
+    },
+    "mongla.batighor.Caption!downward_caption": {
+      "camera": "downward"
     }
   },
   "globalVariables": {
@@ -172,8 +204,18 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "Image!forward",
-      "second": "Image!downward",
+      "first": {
+        "direction": "column",
+        "first": "Image!forward",
+        "second": "mongla.batighor.Caption!forward_caption",
+        "splitPercentage": 93.0
+      },
+      "second": {
+        "direction": "column",
+        "first": "Image!downward",
+        "second": "mongla.batighor.Caption!downward_caption",
+        "splitPercentage": 93.0
+      },
       "splitPercentage": 50.0
     },
     "second": {
@@ -202,7 +244,12 @@
           },
           "second": {
             "direction": "column",
-            "first": "Plot!anchor",
+            "first": {
+              "direction": "row",
+              "first": "Plot!anchor",
+              "second": "Plot!anchor_scale",
+              "splitPercentage": 50.0
+            },
             "second": "Plot!align",
             "splitPercentage": 50.0
           },

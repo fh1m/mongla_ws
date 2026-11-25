@@ -12,6 +12,9 @@
       },
       "lichtblickPanelTitle": "downward camera"
     },
+    "mongla.batighor.Caption!down_caption": {
+      "camera": "downward"
+    },
     "Plot!align": {
       "paths": [
         {
@@ -73,26 +76,79 @@
       "xAxisVal": "timestamp",
       "lichtblickPanelTitle": "heights (depth negative down)"
     },
-    "Plot!anchor": {
+    "Plot!target_range": {
       "paths": [
         {
-          "value": "/mongla/vision/downward/anchor_decomposition.vector.x",
-          "label": "rotation",
+          "value": "/mongla/vision/downward/target_pose_fused.range_m",
+          "label": "range m",
           "enabled": true
         },
         {
-          "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
-          "label": "scale",
+          "value": "/mongla/vision/downward/target_pose_near.range_m",
+          "label": "near m",
           "enabled": true
         }
       ],
       "showLegend": true,
       "legendDisplay": "left",
-      "sidebarDimension": 140,
+      "sidebarDimension": 128,
       "followingViewWidth": 60,
       "isSynced": true,
       "xAxisVal": "timestamp",
-      "lichtblickPanelTitle": "anchor (XFeat)"
+      "lichtblickPanelTitle": "target range"
+    },
+    "Plot!pose": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/target_pose.bearing_deg",
+          "label": "bearing deg",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/downward/target_pose_near.bearing_deg",
+          "label": "near deg",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 174,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "target pose"
+    },
+    "Plot!anchor": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/anchor_decomposition.vector.x",
+          "label": "rotation rad",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 186,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "anchor rotation (XFeat)"
+    },
+    "Plot!anchor_scale": {
+      "paths": [
+        {
+          "value": "/mongla/vision/downward/anchor_decomposition.vector.y",
+          "label": "scale ratio",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 174,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "anchor scale, over 1 is closer"
     }
   },
   "globalVariables": {
@@ -111,7 +167,12 @@
     "direction": "row",
     "first": {
       "direction": "column",
-      "first": "Image!down",
+      "first": {
+        "direction": "column",
+        "first": "Image!down",
+        "second": "mongla.batighor.Caption!down_caption",
+        "splitPercentage": 93.0
+      },
       "second": "Plot!align",
       "splitPercentage": 80.0
     },
@@ -124,12 +185,27 @@
         "second": {
           "direction": "column",
           "first": "Plot!floor",
-          "second": "Plot!anchor",
-          "splitPercentage": 50.0
+          "second": {
+            "direction": "column",
+            "first": {
+              "direction": "row",
+              "first": "Plot!target_range",
+              "second": "Plot!pose",
+              "splitPercentage": 50.0
+            },
+            "second": {
+              "direction": "row",
+              "first": "Plot!anchor",
+              "second": "Plot!anchor_scale",
+              "splitPercentage": 50.0
+            },
+            "splitPercentage": 50.0
+          },
+          "splitPercentage": 33.3
         },
-        "splitPercentage": 40.0
+        "splitPercentage": 30.8
       },
-      "splitPercentage": 33.3
+      "splitPercentage": 27.8
     },
     "splitPercentage": 62.0
   }

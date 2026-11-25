@@ -1,0 +1,174 @@
+{
+  "configById": {
+    "Image!fwd": {
+      "imageMode": {
+        "imageTopic": "/mongla/vision/forward/stream/compressed",
+        "annotations": {
+          "/mongla/vision/forward/annotations": {
+            "visible": true
+          }
+        },
+        "synchronize": true
+      },
+      "lichtblickPanelTitle": "forward camera"
+    },
+    "mongla.batighor.Caption!fwd_caption": {
+      "camera": "forward"
+    },
+    "Plot!align": {
+      "paths": [
+        {
+          "value": "/mongla/move/_action/feedback.feedback.err_x_px",
+          "label": "align x px",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        },
+        {
+          "value": "/mongla/move/_action/feedback.feedback.err_y_px",
+          "label": "align y px",
+          "enabled": true,
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 163,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "pixel error"
+    },
+    "mongla.batighor.Vision!vision": {},
+    "StateTransitions!ladder": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/lock.detections[0].results[0].hypothesis.class_id",
+          "label": "forward rung"
+        },
+        {
+          "value": "/mongla/vision/active_camera.data",
+          "label": "live camera",
+          "timestampMethod": "receiveTime"
+        }
+      ],
+      "isSynced": false,
+      "xAxisRange": 60,
+      "lichtblickPanelTitle": "lock ladder"
+    },
+    "Plot!target_range": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/target_pose_fused.range_m",
+          "label": "range m",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 128,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "target range"
+    },
+    "Plot!pose": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/target_pose.bearing_deg",
+          "label": "bearing deg",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_near.bearing_deg",
+          "label": "near deg",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 174,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "target pose"
+    },
+    "Plot!anchor": {
+      "paths": [
+        {
+          "value": "/mongla/vision/forward/anchor_decomposition.vector.x",
+          "label": "rotation",
+          "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/anchor_decomposition.vector.y",
+          "label": "scale",
+          "enabled": true
+        }
+      ],
+      "showLegend": true,
+      "legendDisplay": "left",
+      "sidebarDimension": 140,
+      "followingViewWidth": 60,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "lichtblickPanelTitle": "anchor (XFeat)"
+    },
+    "Table!dets": {
+      "topicPath": "/mongla/vision/forward/detections.detections",
+      "lichtblickPanelTitle": "this frame's detections"
+    }
+  },
+  "globalVariables": {
+    "track": 0
+  },
+  "userNodes": {
+    "mongla-detections-per-frame": {
+      "name": "detections per frame",
+      "sourceCode": "import { Input } from \"./types\";\n\n// How many boxes each camera's detector gave on its latest frame: a count\n// that drops to zero while the picture runs is a detector that lost the target.\nexport const inputs = [\"/mongla/vision/forward/detections\", \"/mongla/vision/downward/detections\"];\nexport const output = \"/studio_script/mongla_detections_per_frame\";\n\nconst last = { forward: 0, downward: 0 };\n\nexport default function script(\n  event: Input<\"/mongla/vision/forward/detections\"> | Input<\"/mongla/vision/downward/detections\">,\n): { forward: number; downward: number } {\n  const cam = event.topic.includes(\"/forward/\") ? \"forward\" : \"downward\";\n  last[cam] = event.message.detections.length;\n  return { ...last };\n}\n"
+    }
+  },
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": {
+      "direction": "column",
+      "first": {
+        "direction": "column",
+        "first": "Image!fwd",
+        "second": "mongla.batighor.Caption!fwd_caption",
+        "splitPercentage": 93.0
+      },
+      "second": "Plot!align",
+      "splitPercentage": 80.0
+    },
+    "second": {
+      "direction": "column",
+      "first": "mongla.batighor.Vision!vision",
+      "second": {
+        "direction": "column",
+        "first": "StateTransitions!ladder",
+        "second": {
+          "direction": "column",
+          "first": {
+            "direction": "row",
+            "first": "Plot!target_range",
+            "second": "Plot!pose",
+            "splitPercentage": 50.0
+          },
+          "second": {
+            "direction": "column",
+            "first": "Plot!anchor",
+            "second": "Table!dets",
+            "splitPercentage": 42.9
+          },
+          "splitPercentage": 30.0
+        },
+        "splitPercentage": 28.6
+      },
+      "splitPercentage": 17.6
+    },
+    "splitPercentage": 62.0
+  }
+}

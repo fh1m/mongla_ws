@@ -1488,3 +1488,55 @@ measurement taken through it stands.
 **Fix.** `letterbox` converts BGR to RGB as it resizes.
 `test_hailo_channel_order.py` holds it. Timing figures measured before the
 fix carry the caveat in measured-bars (the photon-to-detection row).
+
+### B-151: a paused detector left the Vision view's picture blank, though the overlay marked every frame `SEEN 2026-11-25` **FIXED 2026-11-25**
+
+**What.** In Chrome against Kutum, with both detectors paused until a mission
+asks, the Vision view's two cameras said "Waiting for synchronized
+annotations" and showed no picture. The overlay did publish one
+`ImageAnnotations` per frame on the frame's stamp, as its fix of 2026-11-22 intended,
+but each was empty.
+
+**Why.** Lichtblick 1.30.0 files a synchronised annotation under each shape's
+own `timestamp` (its `ImageAnnotations` normaliser walks circles, points and
+texts) and never reads the message's top-level one. An empty message files
+nothing, so no frame is ever complete. The same blank followed any frame the
+detector ran on and found nothing in. The test that held the earlier fix
+asserted the empty message, so it could not fail on this.
+
+**Fix.** `overlay.annotate` ends every frame with at least one shape: when it
+has nothing to draw, one empty point set on the frame's stamp, which draws
+nothing. `test_overlay.py` asserts the mark and that every shape of an
+empty-handed frame carries the frame's stamp; injection: without the mark both
+fail. Seen in Chrome: both pictures show while their detectors are paused.
+
+### B-152: a browser kept drawing a layout Kutum had replaced `SEEN 2026-11-25` **FIXED 2026-11-25**
+
+**What.** In Chrome against Kutum, after a layout changed on Kutum and the
+page was reloaded twice, the Cockpit still drew the old 3D settings
+(captions at 0.3 scale, the stray odometry line). The browser's store held
+Kutum's new baseline and, over it, a working copy made from the old one.
+
+**Why.** Lichtblick keeps a working copy over a new baseline, and in a
+browser it replaces the baseline on load. A working copy comes from any
+interaction that writes into the layout; turning a 3D view is enough. So
+the version the working copy was made from is gone from the browser, and
+`layoutUpdates`, which compares a working copy with its own baseline, ran
+only in the desktop app (bead b0q).
+
+**Fix.** `serve.py` keeps every version of a layout it serves, by content
+hash, under `~/.mongla/batighor/layout-history/`. At start it also seeds
+them from Kutum's releases (`RELEASE_LAYOUTS`, checked against
+`release.sh`), and it serves them at `/layouts/history/<name>.json`. In a
+browser the instruments panel finds a working copy that is an unedited
+copy of one of those versions. It replaces that copy with the current
+baseline, keeping what the app added, and reloads once (`staleWorking`).
+A copy that matches no version is an operator's edit and is kept. The
+first pass ran before the app had replaced the baseline, so the panel
+looks again at 4, 10 and 20 s. Verified in Chrome on the trial server:
+version A served, the 3D view turned (a working copy), version B served,
+then one load, and the page reloaded itself onto B. Tests:
+`test_serve_and_fetch.py` (kept, served newest first, path refused) and
+`test_panels.py` (stale replaced; an edit and an unknown copy kept).
+Injection: matching any version instead of an unedited one fails it.
+

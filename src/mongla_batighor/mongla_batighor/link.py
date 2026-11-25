@@ -9,11 +9,12 @@ seconds old with the stack healthy (the pictures ~1.5 MB/s, the link measured
 what the cameras' `stream` topics run at. Only the viewers' copy: detection
 reads `image_raw`, so perception never slows for a slow laptop.
 
-The policy is the one a congested network has used for forty years: halve at
-once on lag, add back a step only after a calm spell. Halving is held for
-`HOLD_S` so a queue that is already full has time to drain before it is
-judged again; a step up waits `CALM_S` after the last lag any browser
-reported, so one fast browser cannot undo what a slow one needed.
+The policy is the one a congested network has used for forty years: halve on
+lag, add back a step only after a calm spell. Halving is held for `HOLD_S`
+after the last cut, and a lag above `LAG_HIGH_S` inside that hold is ignored,
+so a queue that is already full has time to drain before it is judged again.
+A step up waits `CALM_S` after the last lag of `LAG_LOW_S` or more that any
+browser reported, so one fast browser cannot undo what a slow one needed.
 
 One stream serves every screen, so the slowest screen sets it for all: a
 stale vehicle on one screen is worse than a 7.5 Hz picture on the others.

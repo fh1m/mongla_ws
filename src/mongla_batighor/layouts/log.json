@@ -6,7 +6,7 @@
       "topicToRender": "/rosout",
       "lichtblickPanelTitle": "every node's log"
     },
-    "mongla.batighor.ControlCenter!control": {}
+    "mongla.batighor.HelmLog!helm_log": {}
   },
   "globalVariables": {
     "track": 0
@@ -23,7 +23,7 @@
   "layout": {
     "direction": "row",
     "first": "RosOut!rosout",
-    "second": "mongla.batighor.ControlCenter!control",
+    "second": "mongla.batighor.HelmLog!helm_log",
     "splitPercentage": 68.0
   }
 }

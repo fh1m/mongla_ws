@@ -45,3 +45,20 @@ def test_every_import_is_declared():
         missing += [f'{pkg}: {k}' for k in sorted(need - _declared(pkg))]
     assert not missing, ('imported but not in package.xml, so rosdep never installs '
                          'it:\n  ' + '\n  '.join(missing))
+
+
+def test_the_packages_can_be_built_in_some_order():
+    """colcon refuses the whole workspace on a cycle, and nothing but a clean
+    build says so: an incremental build on a dev box orders around it
+    (mongla_batighor -> planner -> manager -> batighor, caught only by CI)."""
+    graph = {x.parent.name: {d for d in _declared(x.parent.name) if (ROOT / 'src' / d).is_dir()}
+             for x in (ROOT / 'src').glob('*/package.xml')}
+    assert len(graph) >= 8, f'found only {sorted(graph)}'
+    while True:
+        ready = [p for p, deps in graph.items() if not deps & set(graph)]
+        if not ready:
+            break
+        for p in ready:
+            del graph[p]
+    assert not graph, 'a dependency cycle among: ' + ', '.join(
+        f'{p} -> {sorted(d & set(graph))}' for p, d in sorted(graph.items()))

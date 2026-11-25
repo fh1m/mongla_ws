@@ -52,7 +52,8 @@ TITLES = {'fwd': 'forward camera', 'dets': "this frame's detections",
           'track_xy': 'the chosen track, centre px', 'per_frame': 'detections per frame',
           'raw_helm': 'helm request, typed whole', 'scripts': 'user scripts', 'pad': 'pad: one short step per press, seated pilot only',
           'baro': 'baro', 'target_range': 'target range',
-          'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'anchor (XFeat)',
+          'authority': 'lock authority', 'pose': 'target pose', 'anchor': 'anchor rotation (XFeat)',
+          'anchor_scale': 'anchor scale, over 1 is closer',
           'align': 'pixel error', 'ladder': 'lock ladder', 'calibration': 'velocity scale',
           'quality': 'flow quality and heights', 'vel': 'velocity',
           'floor': 'heights (depth negative down)', 'floorcam': 'downward camera, the floor read', 'power': 'battery', 'rates': 'body rates, rad/s',
@@ -145,33 +146,62 @@ def align(x_label: str, y_label: str, *more: dict) -> tuple:
                 *more)
 
 
-def scene() -> tuple:
-    """Lichtblick's 3D panel, following the vehicle in the odometry frame."""
-    return '3D', {'followTf': 'mongla', 'followMode': 'follow-position',
-                  # The odometry, and the demand as an arrow on the hull (overlay.py).
-                  'topics': {'/mongla/odom': {'visible': True},
-                             '/mongla/batighor/scene': {'visible': True}},
-                  # The hull says where the body is; seven frame names drawn
-                  # on one point say nothing. Preloading acts on a recording
-                  # only, and the panel alerts without it once /tf exists.
-                  'scene': {'backgroundColor': '#05070c', 'labelScaleFactor': 0.3,
-                            'transforms': {'showLabel': False, 'enablePreloading': True}},
-                  # From behind and above, the way a pilot looks at a
-                  # vehicle. At 2.2 m a 45-degree view of a wide panel is
-                  # 3.4 m across and the 0.7 m hull filled a fifth of it;
-                  # at 1.3 m it is 2 m, room for the hull and the demand.
-                  # 0.95 m: at 1.3 the hull read small in the cockpit's
-                  # corner (owner, 2026-11-22); the demand arrow still fits.
-                  'cameraState': {'distance': 0.95, 'perspective': True, 'phi': 55,
-                                  'thetaOffset': 200, 'targetOffset': [0, 0, 0],
-                                  'target': [0, 0, 0], 'targetOrientation': [0, 0, 0, 1],
-                                  'fovy': 45, 'near': 0.01, 'far': 5000},
-                  # The hull, hung on the body frame /tf moves (model.py). A
-                  # root path, so it resolves against Kutum whatever its name.
-                  'layers': {'hull': {'visible': True, 'label': 'Mongla',
-                                      'layerId': 'foxglove.Urdf', 'instanceId': 'hull',
-                                      'sourceType': 'url', 'url': '/model/mongla.urdf',
-                                      'order': 1}}}
+def scene(pool: bool = False) -> tuple:
+    """Lichtblick's 3D panel, following the vehicle in the odometry frame.
+
+    `pool`: the pilot's one 3D view, pulled back to show Mongla in the pool:
+    the course in 3D (course.pool_scene: outline, floor grid, every placed
+    prop at its depth), the track it has run and the demand. Close in, as the
+    cockpit's corner has it, the hull filled the panel and the pool was off
+    it (owner, 2026-11-24)."""
+    cfg = _scene()
+    if pool:
+        cfg['topics']['/mongla/batighor/pool_scene'] = {'visible': True}
+        cfg['cameraState'] = {**cfg['cameraState'], 'distance': POOL_VIEW_M, 'phi': 50}
+    return '3D', cfg
+
+
+# From behind and above at this range a 45-degree view is about 6 m across:
+# the props within a few metres and the track, with the hull still read.
+POOL_VIEW_M = 6.0
+
+
+def _scene() -> dict:
+    return {'followTf': 'mongla', 'followMode': 'follow-position',
+            # The track and the demand as an arrow on the hull (overlay.py).
+            # Not /mongla/odom: the hull is placed by the same pose through
+            # /tf, and the odometry's metre-long arrow ran off the panel as
+            # a stray line (Chrome, 2026-11-25).
+            'topics': {'/mongla/batighor/scene': {'visible': True}},
+            # The hull says where the body is; seven frame names drawn
+            # on one point say nothing. Preloading acts on a recording
+            # only, and the panel alerts without it once /tf exists.
+            # labelScaleFactor 1: a text's font_size is its size on screen.
+            # At 0.3 the demand's 22 px caption drew at about 6 px and the
+            # pool's 14 px names at about 4 px, unreadable (Chrome, 2026-11-25).
+            'scene': {'backgroundColor': '#05070c', 'labelScaleFactor': 1.0,
+                      # No frame-to-parent line: Lichtblick draws one, 2 px
+                      # yellow, from the hull to its odometry frame's origin,
+                      # a stray line across the panel. The axes at half scale:
+                      # at 1 they dwarfed the hull (bead 318.3).
+                      'transforms': {'showLabel': False, 'enablePreloading': True,
+                                     'lineWidth': 0, 'axisScale': 0.5}},
+            # From behind and above, the way a pilot looks at a
+            # vehicle. At 2.2 m a 45-degree view of a wide panel is
+            # 3.4 m across and the 0.7 m hull filled a fifth of it;
+            # at 1.3 m it is 2 m, room for the hull and the demand.
+            # 0.95 m: at 1.3 the hull read small in the cockpit's
+            # corner (owner, 2026-11-22); the demand arrow still fits.
+            'cameraState': {'distance': 0.95, 'perspective': True, 'phi': 55,
+                            'thetaOffset': 200, 'targetOffset': [0, 0, 0],
+                            'target': [0, 0, 0], 'targetOrientation': [0, 0, 0, 1],
+                            'fovy': 45, 'near': 0.01, 'far': 5000},
+            # The hull, hung on the body frame /tf moves (model.py). A
+            # root path, so it resolves against Kutum whatever its name.
+            'layers': {'hull': {'visible': True, 'label': 'Mongla',
+                                'layerId': 'foxglove.Urdf', 'instanceId': 'hull',
+                                'sourceType': 'url', 'url': '/model/mongla.urdf',
+                                'order': 1}}}
 
 
 # The site's palette (docs/assets/site.css), for Lichtblick's own panels: red
@@ -240,9 +270,21 @@ def teleop() -> tuple:
                       'rightButton': {'field': 'angular-z', 'value': -1}}
 
 
-def instrument(name: str) -> tuple:
-    """One of ours (panels/instruments, panels/control, panels/calibrate)."""
-    return PANEL + name, {}
+def instrument(name: str, **config) -> tuple:
+    """One of ours (panels/instruments, panels/control, panels/calibrate);
+    `config` is what the panel reads as its initial state (Caption: camera)."""
+    return PANEL + name, config
+
+
+# A caption strip's share of a camera's column: one line of type, under the
+# picture rather than drawn into it (owner, 2026-11-24).
+CAPTION = 7
+
+
+def seen(v: 'View', name: str, cam: str, panel: tuple) -> dict:
+    """A camera panel with its caption under it: the camera's and the
+    detector's state (overlay.caption, on <camera>/hud)."""
+    return col((100 - CAPTION, v(name, panel)), (CAPTION, v(f'{name}_caption', instrument('Caption', camera=cam))))
 
 
 # -- where it goes ----------------------------------------------------------
@@ -305,9 +347,31 @@ def _ladder_lines() -> list:
 CAMERA_COLUMN = 37
 
 
+def _pose(v: View, cam: str):
+    """One camera's target pose: the fused range beside the bearing from both
+    solvers. The tight solve (`target_pose`) and the near one
+    (`target_pose_near`, its reprojection gate opened for a board that fills
+    the frame) are drawn together, never merged: where they disagree is the
+    evidence (vision_pi.launch.py, solver_near)."""
+    c = f'{V}/{cam}'
+    return row(v('target_range', plot(series(f'{c}/target_pose_fused.range_m', 'range m'),
+                                      series(f'{c}/target_pose_near.range_m', 'near m'))),
+               v('pose', plot(series(f'{c}/target_pose.bearing_deg', 'bearing deg'),
+                              series(f'{c}/target_pose_near.bearing_deg', 'near deg'))))
+
+
+def _anchor(v: View, cam: str):
+    """The anchor's in-plane rotation (radians) and its scale against
+    enrolment (a ratio, over 1 is closer): one plot each, since on one axis
+    the ratio near 1 flattened the rotation (audit batighor_7 F2)."""
+    a = f'{V}/{cam}/anchor_decomposition.vector'
+    return row(v('anchor', plot(series(f'{a}.x', 'rotation rad'))),
+               v('anchor_scale', plot(series(f'{a}.y', 'scale ratio'))))
+
+
 def _cameras(v: View, *, synced: bool = False):
     extra = {'downward': ['flow_annotations', 'floor_annotations']}
-    return col(*(v(c, camera(c, *extra.get(c, []), synced=synced)) for c in CAMERAS))
+    return col(*(seen(v, c, c, camera(c, *extra.get(c, []), synced=synced)) for c in CAMERAS))
 
 
 def cockpit(v: View):
@@ -332,7 +396,7 @@ def cockpit(v: View):
 
 def vision(v: View):
     """Detection and tracking in depth: every rung, its authority, the pose solved."""
-    fwd, dwn = f'{V}/forward', f'{V}/downward'
+    fwd = f'{V}/forward'
     # Two columns. Now: both cameras' rungs and stages side by side (at a
     # sixth of a column the instrument scrolled and hid the downward camera)
     # over the ladder's history, every row in view. Then: the detectors'
@@ -350,15 +414,17 @@ def vision(v: View):
                                    y=(0, 1.05)))))
     numbers = col(
         (5, v('detectors', instrument('Detectors'))),
-        (3, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
+        (3, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'),
+                                       series(f'{fwd}/target_pose_near.range_m', 'near m'))),
                 v('pose', plot(series(f'{fwd}/target_pose.bearing_deg', 'bearing deg'),
+                               series(f'{fwd}/target_pose_near.bearing_deg', 'near deg'),
                                series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),
-        (3, v('anchor', plot(series(f'{dwn}/anchor_decomposition.vector.x', 'rotation'),
-                             series(f'{dwn}/anchor_decomposition.vector.y', 'scale')))),
+        (3, _anchor(v, 'downward')),
         (3, v('align', align('align x px', 'align y px',
-                             series(f'{fwd}/target_pose.reproj_px', 'reproj px')))))
+                             series(f'{fwd}/target_pose.reproj_px', 'reproj px'),
+                             series(f'{fwd}/target_pose_near.reproj_px', 'near px')))))
     right = row(now, numbers)
-    return row((CAMERA_COLUMN, col(*(v(c, camera(c, synced=True)) for c in CAMERAS))),
+    return row((CAMERA_COLUMN, col(*(seen(v, c, c, camera(c, synced=True)) for c in CAMERAS))),
                (100 - CAMERA_COLUMN, right))
 
 
@@ -389,7 +455,13 @@ def flow(v: View):
             # ~160, and on one axis it flattened them onto the floor.
             (3, v('quality', plot(series(f'{d}/flow_quality.data', 'quality', True),
                                   series(f'{d}/distance_debug.data[1]', 'height m', True),
-                                  series(f'{d}/floor_height.range', 'floor (tile)')))))))
+                                  series(f'{d}/floor_height.range', 'floor (tile)')))),
+            # What flow subtracts as rotation: the board's ATTITUDE rates on
+            # its own clock (node_telemetry.py), x pitch, y roll, z yaw. A
+            # turn that leaks into the speed above shows here first.
+            (3, v('derotation', plot(series('/mongla/imu_rates.vector.x', 'pitch rad/s'),
+                                     series('/mongla/imu_rates.vector.y', 'roll rad/s'),
+                                     series('/mongla/imu_rates.vector.z', 'yaw rad/s')))))))
 
 def localization(v: View):
     """Navigation: where the filter puts the vehicle on the pool, and why.
@@ -476,7 +548,7 @@ def chain(v: View):
     """Photons to thrust: each stage's rate and age, beside what the cameras see."""
     # The ages are computed by chain.py (seen minus stamp, per stage), so they
     # are one table in the Chain instrument, not plots of raw stamps.
-    return row((CAMERA_COLUMN, col(*(v(c, camera(c)) for c in CAMERAS))),
+    return row((CAMERA_COLUMN, col(*(seen(v, c, c, camera(c)) for c in CAMERAS))),
                (100 - CAMERA_COLUMN, col(
                    (7, v('chain', instrument('Chain'))),
                    # Each vision command's frame age when it left (bead a2c):
@@ -521,7 +593,7 @@ def downward(v: View):
         # flow and the floor read do not answer every frame, so they are the
         # Flow view's. Here the boxes sit on their own frame, the panel as
         # tall as the 16:9 picture, and under it the error an alignment closes.
-        (62, col((80, v('down', camera('downward', synced=True))),
+        (62, col((80, seen(v, 'down', 'downward', camera('downward', synced=True))),
                  (20, v('align', align('align x px', 'align y px'))))),
         (38, col(
             (5, v('vision', instrument('Vision'))),
@@ -529,8 +601,8 @@ def downward(v: View):
                                    series(f'{V}/active_camera.data', 'live camera', True)))),
             (3, v('floor', plot(series(f'{d}/floor_height.range', 'floor (tile)'),
                                 series('/mongla/state.depth_m', 'depth m')))),
-            (3, v('anchor', plot(series(f'{d}/anchor_decomposition.vector.x', 'rotation'),
-                                 series(f'{d}/anchor_decomposition.vector.y', 'scale')))))))
+            (3, _pose(v, 'downward')),
+            (3, _anchor(v, 'downward')))))
 
 
 def forward(v: View):
@@ -540,13 +612,14 @@ def forward(v: View):
     markers and anything met head-on are flown from here."""
     f = f'{V}/forward'
     return row(
-        (62, col((80, v('fwd', camera('forward', synced=True))),
+        (62, col((80, seen(v, 'fwd', 'forward', camera('forward', synced=True))),
                  (20, v('align', align('align x px', 'align y px'))))),
         (38, col(
             (3, v('vision', instrument('Vision'))),
             (4, v('ladder', states(series(f'{f}/lock{RUNG}.class_id', 'forward rung'),
                                    series(f'{V}/active_camera.data', 'live camera', True)))),
-            (3, v('target_range', plot(series(f'{f}/target_pose_fused.range_m', 'range m')))),
+            (3, _pose(v, 'forward')),
+            (3, _anchor(v, 'forward')),
             (4, v('dets', table(f'{f}/detections.detections'))))))
 
 
@@ -594,11 +667,11 @@ def pilot(v: View):
     attitude, and the pool with Mongla on it. The keys and the vehicle's
     state are on Vitals; helm, verbs and missions have their own tabs (the
     console's Helm and Mission), so none of them crowds the pictures."""
-    return col((64, row(v('forward', camera('forward')),
-                        v('downward', camera('downward', 'flow_annotations', 'floor_annotations')))),
-               (36, row((40, v('vision', instrument('Vision'))),
-                        (25, v('hull', scene())),
-                        (35, v('map', instrument('Map'))))))
+    return col((64, row(seen(v, 'forward', 'forward', camera('forward')),
+                        seen(v, 'downward', 'downward', camera('downward', 'flow_annotations', 'floor_annotations')))),
+               (36, row((32, v('vision', instrument('Vision'))),
+                        (44, v('pool', scene(pool=True))),
+                        (24, v('mission', instrument('Mission'))))))
 
 
 def vitals(v: View):
@@ -607,13 +680,14 @@ def vitals(v: View):
     while the eyes stay on the cameras above. Left, the keys, tall enough for
     a thumb; then the Vitals drawing (depth, heading, the demand as water past
     the hull, each ESC turning, arming, mode, packs, position and the board's
-    six lines); then where Mongla is in the pool and how it sits. Each thing
-    once: a first build repeated the vehicle's state as lamps, traces and a
-    card side by side (seen on the ScreenPad, 2026-11-24)."""
+    six lines); then where Mongla is in the pool, north up. Each thing once:
+    a first build repeated the vehicle's state as lamps, traces and a card
+    side by side, and a 3D hull here and above both showed a zoomed-in hull
+    and nothing else (seen on the Duo, 2026-11-24). The one 3D view is the
+    pilot's, on the big screen."""
     return row((11, v('keys', instrument('Keys'))),
-               (51, v('vitals', instrument('Vitals'))),
-               (22, v('map', instrument('Map'))),
-               (16, v('hull', scene())))
+               (59, v('vitals', instrument('Vitals'))),
+               (30, v('map', instrument('Map'))))
 
 
 def tune(v: View):
@@ -634,13 +708,19 @@ def tune(v: View):
                                                      'autoFormatOnSave': True}))))
 
 
-def helm(v: View):
+def helm(v: View, center: str = 'ControlCenter'):
     """Driving by hand: the Control Center, Lichtblick's pad for short steps,
     and the helm's request typed whole (prefilled with stop), for when a
-    button is not enough to see what the helm answers. All through the seat."""
-    return row((50, v('control', instrument('ControlCenter'))),
-               (50, col((5, row(v('pad', teleop()), v('hull', scene()))),
+    button is not enough to see what the helm answers. All through the seat.
+    The hull is Vitals' and the cockpit's, not repeated here."""
+    return row((50, v('control', instrument(center))),
+               (50, col((5, v('pad', teleop())),
                         (3, v('raw_helm', call('stop', AMBER, 'any helm request, typed as JSON'))))))
+
+
+def command(v: View):
+    """The helm for the screen above Vitals: its keys are on Vitals."""
+    return helm(v, 'Command')
 
 
 def calibrate(v: View):
@@ -653,32 +733,42 @@ def calibrate(v: View):
 
 def weak_link(v: View):
     """For a slow connection: the small previews, and the vehicle's numbers."""
-    return row((CAMERA_COLUMN, col(*(v(c, camera(c, stream='preview')) for c in CAMERAS))),
+    return row((CAMERA_COLUMN, col(*(seen(v, c, c, camera(c, stream='preview')) for c in CAMERAS))),
                (25, v('vehicle', instrument('Vehicle'))),
                (38, v('control', instrument('ControlCenter'))))
 
 
 def inspect(v: View):
-    """Everything on the wire, for when a number looks wrong: the graph of
-    nodes and topics, every topic with its type and rate, and the vehicle's
-    state message whole, field by field. Lichtblick's own panels; parameters
+    """Everything on the wire, for when a number looks wrong: the chain from
+    photons to thrust drawn stage by stage, every topic with its type and
+    rate, and the vehicle's state message whole, field by field. Parameters
     stay closed to a browser (batighor.launch.py, BRIDGE_LIMITS)."""
-    # The graph runs wide (every node and topic in one band): at half the
-    # screen it drew 800 px of hairline, unreadable (2026-11-23), so it gets
-    # the whole width and the two tables share the row under it.
-    return col((58, v('graph', ('TopicGraph', {}))),
+    # The chain drawn, where Lichtblick's topic graph was: that put ~90 nodes
+    # and topics in one band, unreadable even across a 3824 px screen
+    # (2026-11-24, bead 318.2). Grouped by stage, each box says its rate and
+    # age, and what the board does not send is drawn as the gap it is.
+    return col((58, v('chain', instrument('Chain'))),
                (42, row((50, v('topics', ('SourceInfo', {}))),
                         (50, v('raw', ('RawMessages', {'topicPath': '/mongla/state',
                                                        'diffEnabled': False,
                                                        'expansion': 'all'}))))))
 
 
+def files(v: View):
+    """The missions and the deck as Kutum holds them, read only (shelves.py):
+    what a run will execute and start with, without a shell on the vehicle.
+    Beside it, the mission running now, line by line."""
+    return row((64, v('files', instrument('Files'))),
+               (36, v('text', instrument('MissionText'))))
+
+
 def log_(v: View):
     """What every node says, newest last: the ROS log at info and above, beside
-    the Control Center's own record of who asked for what."""
+    the helm's own record of who asked for what (its keys and verbs are the
+    Helm tab's, not repeated here)."""
     return row((68, v('rosout', ('RosOut', {'searchTerms': [], 'minLogLevel': 2,
                                             'topicToRender': '/rosout'}))),
-               (32, v('control', instrument('ControlCenter'))))
+               (32, v('helm_log', instrument('HelmLog'))))
 
 
 # What the stack publishes and no view shows, each with the reason. A topic
@@ -686,9 +776,6 @@ def log_(v: View):
 NOT_SHOWN = {
     'image_raw': 'the raw frame; every view shows the same frame as stream/compressed',
     'image_debug': "the detector's own drawn frame; the browser draws over the camera's JPEG",
-    'classes_filter': "the allowlist; the Control Center shows it (helm_state, detector settings)",
-    'model_classes': 'what the model can emit, for the mission DSL to check a course against',
-    'imu_rates': 'the body rates again at the board rate, for the filter; /mongla/imu is plotted',
     'distance_control': 'a command to the flow distance bracket, not an observation',
     'video_seek_frame': "a replay command from the display node",
     'video_seek_rel': "a replay command from the display node",
@@ -699,25 +786,32 @@ VIEWS = {f.__name__.rstrip('_'): f for f in (cockpit, mission, map_, vision, flo
                                              thrust, board_health, board_link, chain,
                                              forward, downward, vehicle, tune, helm,
                                              calibrate, weak_link, inspect, log_,
-                                             pilot, vitals)}
+                                             pilot, vitals, command, files)}
 FILE = {'cockpit': 'mongla_layout'}            # the default keeps the name links use
 
 # The console: every view as a tab of one layout, in the order a run is read.
 # Each view stays its own layout too (links and the layout menu name them);
 # here they are one place, and only the open tab's panels subscribe.
 CONSOLE = 'batighor'
-TABS = [('cockpit', 'Cockpit'), ('map', 'Map'), ('mission', 'Mission'), ('vision', 'Vision'),
-        ('flow', 'Flow'), ('localization', 'Localization'), ('thrust', 'Thrust'),
-        ('board_health', 'Health'), ('board_link', 'Link'), ('chain', 'Chain'),
-        ('forward', 'Forward'), ('downward', 'Downward'), ('vehicle', 'Vehicle'),
-        ('helm', 'Helm'), ('tune', 'Tune'), ('calibrate', 'Calibrate'), ('inspect', 'Inspect'),
-        ('log', 'Log')]
+# One tab per aspect, and no two tabs showing the same thing: 18 tabs did not
+# fit one row at the working scale and their labels ran together, and five
+# of them repeated another (2026-11-24). The rest stay layouts of their own,
+# in the layout menu: map (the Mission tab has the map), chain (Inspect
+# draws it; this one sets it beside the cameras), forward and downward (one
+# camera at full height; Vision has both), and vehicle (Lichtblick's own
+# gauges, a cross-check on ours).
+TABS = [('cockpit', 'Cockpit'), ('mission', 'Mission'), ('helm', 'Helm'),
+        ('localization', 'Navigation'), ('vision', 'Vision'), ('flow', 'Flow'),
+        ('thrust', 'Thrust'), ('board_health', 'Health'), ('board_link', 'Link'),
+        ('log', 'Log'), ('files', 'Files'), ('tune', 'Tune'), ('calibrate', 'Calibrate'),
+        ('inspect', 'Inspect')]
 # The same console for the main screen when Vitals has the screen under it:
 # Pilot first, and no Cockpit tab and no status strip, since the keys and the
 # vehicle's state are on Vitals already. The tab bar stays: it is the index
 # to every view.
 PILOT_CONSOLE = 'batighor_pilot'
-PILOT_TABS = [('pilot', 'Pilot')] + [t for t in TABS if t[0] != 'cockpit']
+PILOT_TABS = [('pilot', 'Pilot')] + [('command', 'Helm') if t[0] == 'helm' else t
+                                     for t in TABS if t[0] != 'cockpit']
 CONSOLES = {CONSOLE: TABS, PILOT_CONSOLE: PILOT_TABS}
 
 

@@ -32,11 +32,14 @@ The rules every view keeps:
 On a laptop with a second screen under its panel (the Zenbook Duo's ScreenPad), the desktop
 app opens two windows by itself (`tools/pool/batighor_desktop.py`, `--one-screen` for one).
 Above, the **pilot** console: the tab bar is the index to every view, and its first tab,
-Pilot, gives the pictures the screen: both cameras side by side across the top, and under
-them what holds the target, the hull and the pool with Mongla on it. Below, **Vitals**: the
-three keys, and the vehicle drawn to be read from the corner of an eye, depth, heading,
-thrust, ESCs, arming, mode, packs, position and the board's lines, beside the map and the
-hull. Nothing is on both screens: the keys and the vehicle's state live below, so the
+Pilot, gives the pictures the screen: both cameras side by side across the top, each with
+a one-line caption under it (state, rate, lateness, model), and under them what holds the
+target, the one 3D view (the pool from the course file with Mongla and its recent track in
+it, the pool drawn by its start until the filter is anchored) and the mission. Below,
+**Vitals**: the three keys, and the vehicle drawn to be read from the corner of an eye,
+depth, heading, thrust, ESCs, arming, mode, packs, position, attitude as a horizon, the
+last minute of depth with its rate, and the board's lines, beside the map. Nothing is on both
+screens: the keys, the vehicle's state and the map live below, so the
 pilot console has no Cockpit tab, and its strip (Watch) keeps only the mission, the verb, the
 lock and the two links, each link as four bars that fall as its drops or its lag grow, the
 last bar breathing.
@@ -53,7 +56,8 @@ vehicle's numbers and attitude over the Vision panel and the lock authority it h
 - **Control Center**: STOP, SURFACE and DISARM first and pinned, for anyone, one press,
   one row of three keys sized by the panel's width, each saying under its name what
   it does (hold here; go up, stay up; motors off). Below them the helm (a name, then
-  Request, Give, Release), arming behind two ticks, every verb with its own fields,
+  Request, Give, Release), arming behind two ticks, every verb with its own fields or typed
+  as the CLI takes it (`$ move_forward --duration 3`),
   missions, and the log: every press at the helm (the last 200 lines, kept on Kutum and
   sent whole to a browser that joins late) merged by time with every node's warnings and
   errors from `/rosout` (a node that repeats itself, digits aside, keeps one line with a
@@ -67,7 +71,9 @@ vehicle's numbers and attitude over the Vision panel and the lock authority it h
   the full sentence on hover.
 - **Vision**: per camera, the lock ladder's rungs (detection, held, follow, anchor,
   lost) lit in the rung's colour, the identity held and its authority, the model and
-  its epoch, and every perception stage: lit when a node publishes it, struck through
+  its epoch, the classes the model emits beside the mission's filter (in red when the
+  filter names a class the model never emits, which would otherwise read as an empty
+  frame every frame), and every perception stage: lit when a node publishes it, struck through
   when not, with the bringup switch beside it (`lock:=true`).
 - **Over each camera**: every box in its class's colour with its score and track,
   the stats at the bottom left (camera, model, size; the detector's rate and how far
@@ -108,7 +114,9 @@ panel over the ladder's history, every row in view; and the Detectors panel (the
 live camera and each detector's settings) over one plot per quantity, each titled with what it
 is: the lock's authority, the target's range in metres, its bearing and yaw in
 degrees, the anchor's rotation and scale, and the pixel errors (a vision verb's
-alignment and the solver's reprojection).
+alignment and the solver's reprojection). Bearing and reprojection come from both
+solvers, the tight one and the near one whose gate is opened for a board that fills
+the frame, drawn together and never merged: where they disagree is the evidence.
 
 ## Flow (`flow`)
 
@@ -118,7 +126,8 @@ The downward camera as a speed sensor. Each tracked point is a segment from wher
 was on the anchor frame to where it is now; the plots are the flow's velocity beside
 the filter's, the distance travelled, where the velocity scale came from (here
 `uncalibrated`, said in words), the quality with the heights, and the number of
-tracks on an axis of its own.
+tracks on an axis of its own. Under them, the board's turn rates that flow subtracts
+as rotation: a turn that leaks into the speed shows there first.
 
 ## Localization (`localization`)
 
@@ -176,8 +185,8 @@ page has the rule.
 `downward` is everything under the hull, for the bins, the floor markers and any
 target below: the downward camera across the top at its 16:9 shape, synchronised with its boxes, the alignment error under it, and
 beside it the Vision panel, the downward camera's ladder and which camera is live, a
-vision verb's pixel error, the floor height against depth, and the anchor's rotation
-and scale.
+vision verb's pixel error, the floor height against depth, the target's range and its
+bearing from both solvers, and the anchor's rotation and scale.
 
 ![The calibrate view: two empty camera panels for the raw and undistorted calibration pictures, and the Calibrate panel saying no calibration is running, with the command that starts one.](../../../docs/imgs/batighor/calibrate.webp)
 
@@ -186,13 +195,26 @@ and gives the command that starts one.
 
 ## Inspect and Log
 
-`inspect` is for a question no view was built for: Lichtblick's topic graph across the
-whole width (every node and topic as the bridge sees them), and under it the source's
-topics with their rates beside the raw message on any topic, `/mongla/state` first.
+`inspect` is for a question no view was built for: the chain from photons to thrust
+drawn stage by stage across the whole width (each box its rate and age; a silent stage
+red unless it has a reason, such as a detector paused until a mission asks; what the
+board does not send dashed, with its ask), and under it the source's topics with their
+rates beside the raw message on any topic, `/mongla/state` first. Lichtblick's topic
+graph was here and put about 90 nodes and topics in one unreadable band.
 
 `log` is the whole record at full height: every node's `/rosout` at info and above, in
 Lichtblick's own log panel with its level and text filters, beside the Control Center,
 whose log keeps only the helm and the warnings.
+
+## Files (`files`)
+
+The missions and the deck as Kutum holds them, read only, beside the mission running now
+line by line: what a run will execute and start with, without a shell on the vehicle. The
+missions shelf is the directory the mission runner loads from (its own rule, asked of it),
+the deck is `~/mongla/deck`. Only text files are listed, newest first, nothing whose path
+has a name starting with `.`, nothing over 256 KB, and a path that resolves outside its
+shelf is refused with that reason (`shelves.py`). Nothing is ever written. Batighor has no
+login, so whatever a shelf holds is visible to the network Kutum is on.
 
 ## What the pictures do not show
 

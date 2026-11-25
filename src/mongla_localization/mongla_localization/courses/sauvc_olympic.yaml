@@ -134,3 +134,51 @@ props:
            inside it without touching any side, after Navigation. NO model
            emits a class for it: reachable only from this position until one
            does."
+
+# Where the rulebook says each prop MAY be, for an operator's map: zones, not
+# positions, so nothing that steers reads them (course_map.ZONE_KEYS); the
+# props above stay unset until surveyed. `source: rulebook` is a distance the
+# text states; `source: figure` is read off the arena figure, which is marked
+# "not to scale", at the pool's own scale (50 m over its length, 25 m over its
+# width). The starting zone's centre sits 1.2 m off the starting-side wall in
+# the figure, so a distance "from the side of the arena" is x + 1.2 here.
+zones:
+  pool_walls:
+    area: [[-1.2, -31.8], [23.8, 18.2]]
+    source: figure
+    note: "The 50 x 25 m pool. The starting zone sits 31.8 m along it from the
+           qualification end in the figure."
+  qualification_arenas:
+    area: [[-1.2, -31.8], [23.8, -21.8]]
+    source: figure
+    note: "The 10 m strip of three qualification lanes, wall start to a gate
+           ~10 m out hanging from the surface."
+  starting_zone:
+    area: [[-0.7, -0.7], [0.7, 0.7]]
+    source: rulebook
+    note: "140 x 140 cm on the surface; submerge before leaving it."
+  orange_flare_zone:
+    area: [[2.8, -21.8], [6.8, 18.2]]
+    source: rulebook
+    note: "The orange flare stands anywhere 4-8 m from the starting side,
+           before the gate. Touching it aborts the attempt."
+  gate_line:
+    line: [[10.8, -17.4], [10.8, 18.2]]
+    source: rulebook
+    note: "The gate, 150 cm wide, stands anywhere on this line ~12 m from the
+           starting side, on the 2 m floor."
+  bump_flare_band:
+    area: [[11.3, -21.8], [17.1, 18.2]]
+    source: figure
+    note: "Red, yellow and blue bump flares, 80 cm tall: the rulebook says
+           anywhere in the main arena; the figure draws them in this band."
+  target_mat:
+    area: [[20.2, -9.8], [22.2, -1.8]]
+    source: figure
+    note: "The 8 x 2 m green mat with the four drums, on the floor at the far
+           side; its size is the rulebook's, its place the figure's."
+  surfacing_square:
+    area: [[4.7, -22.4], [6.7, -20.4]]
+    source: figure
+    note: "The 2 x 2 m floating frame, at the main arena's edge next to the
+           qualification gates. +20 for surfacing inside it after Navigation."

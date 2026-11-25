@@ -2,10 +2,11 @@
 //
 // Plain DOM and SVG, no build; panels.py puts CAMERAS and panels/common.js
 // above this file, and theme/batighor.css gives the look. Each instrument
-// names only the topics it draws, all of them small (never an image or a
-// detection stream), and redraws at most ten times a second and only when
-// something changed, plus once a second so an age keeps counting. Opening
-// one costs the vehicle almost nothing.
+// names only the topics it draws. None is an image. Most are small, but the
+// vision lock is a detection array sent once per frame, so every message is
+// folded into state as it arrives. Drawing is capped: at most ten times a
+// second, and only when something changed, plus once a second so an age keeps
+// counting. Opening one costs the vehicle almost nothing.
 //
 // To add an instrument: one entry in INSTRUMENTS (its topics, how to fold a
 // message into its state, how to draw it), and `instrument('<Name>')` in
@@ -28,8 +29,23 @@ const FRESH_S = 2;          // the navigation plan view keeps two minutes of tra
 const SVG = "http://www.w3.org/2000/svg";
 
 const lockTopic = (c) => `/mongla/vision/${c}/lock`;
+const hudTopic = (c) => `/mongla/vision/${c}/hud`;
 const seeingTopic = (c) => `/mongla/vision/${c}/seeing`;
 const modelTopic = (c) => `/mongla/vision/${c}/vision_info`;
+// What the running model can emit and what the mission filters for, both
+// latched by the detector (detector_publish.py, detector_node.py).
+const classesTopic = (c) => `/mongla/vision/${c}/model_classes`;
+const filterTopic = (c) => `/mongla/vision/${c}/classes_filter`;
+const names = (s) => String(s == null ? "" : s).split(",").map((x) => x.trim()).filter(Boolean);
+
+// A filter naming a class the model never emits is a mission steering on
+// nothing: the detector logs it and reports an empty frame, every frame
+// (CLAUDE.md, the models are development harnesses). Pure; exported.
+function classesOf(emits, filter) {
+  if (emits == null) return null;
+  const e = names(emits), f = names(filter);
+  return { emits: e, filter: f, missing: f.filter((x) => !e.includes(x)) };
+}
 const STAGES_TOPIC = "/mongla/batighor/stages";     // overlay.py, once a second
 const ageS = (t) => (t ? (Date.now() - t) / 1000 : Infinity);
 // When the message being folded arrived. A fold stamps what it keeps with
@@ -152,8 +168,11 @@ const HALO = (u) => ({ stroke: "var(--mb-d0)", "stroke-width": 2.5 * u, "paint-o
 function poolMap(course, pose, track, fixes, target, opts) {
   const C = course || {}, P = C.pool || {}, O = opts || {};
   const props = C.props || [];
+  // The rulebook's zones (course.py): where a prop may be, never steered by.
+  const zones = (C.zones || []).filter((z) => (z.points || []).length === 2);
   const here = pose && fin(pose.x) && fin(pose.y) ? pose : null;
   const pts = [...(P.outline || []).map(([x, y]) => ({ x, y })), ...(P.floor || []).map(([x, y]) => ({ x, y })),
+    ...zones.flatMap((z) => z.points.map(([x, y]) => ({ x, y }))),
     ...props.map((p) => ({ x: p.x_m, y: p.y_m })), ...(here ? track : []), ...(here ? fixes : []),
     ...(here ? [here] : []), ...(target ? [target] : [])].filter((p) => fin(p.x) && fin(p.y));
   if (!pts.length) return null;
@@ -168,7 +187,10 @@ function poolMap(course, pose, track, fixes, target, opts) {
   // height the names were 7 px (Kutum, 2026-11-23). Without it, a square
   // drawn as if 300 px wide.
   const px = O.px && O.px.w > 0 && O.px.h > 0 ? O.px : null;
-  const m = px ? Math.max((span + 2 * pad) / px.w, (span + 2 * pad) / px.h) : (span + 2 * pad) / 300;
+  // Each axis by its own extent: the longer side used for both left the
+  // 50 x 25 m olympic pool a third of a wide panel (2026-11-24).
+  const sE = Math.max(e1 - e0, 4) + 2 * pad, sN = Math.max(n1 - n0, 4) + 2 * pad;
+  const m = px ? Math.max(sE / px.w, sN / px.h) : (span + 2 * pad) / 300;
   const hw = px ? (m * px.w) / 2 : span / 2 + pad, hh = px ? (m * px.h) / 2 : span / 2 + pad;
   n0 = cn - hh; n1 = cn + hh; e0 = ce - hw; e1 = ce + hw;
   const W = e1 - e0;
@@ -182,6 +204,26 @@ function poolMap(course, pose, track, fixes, target, opts) {
   const kids = [];
   for (let g = Math.ceil(e0 / step) * step; g <= e1; g += step) kids.push(svg("line", { x1: g, y1: -n1, x2: g, y2: -n0, stroke: "var(--mb-rule)", "stroke-width": u }));
   for (let g = Math.ceil(n0 / step) * step; g <= n1; g += step) kids.push(svg("line", { x1: e0, y1: -g, x2: e1, y2: -g, stroke: "var(--mb-rule)", "stroke-width": u }));
+  // Zones under everything else, dashed amber and labelled small: an area
+  // as its box, a line as itself; "(figure)" when only the rulebook's
+  // not-to-scale figure places it.
+  for (const z of zones) {
+    const [[a0, b0], [a1, b1]] = z.points;
+    const dash = `${4 * u},${3 * u}`, ink = "var(--mb-amber)";
+    kids.push(z.kind === "line"
+      ? svg("line", { x1: b0, y1: -a0, x2: b1, y2: -a1, stroke: ink, "stroke-width": 1.5 * u, "stroke-dasharray": dash, opacity: 0.8 })
+      : svg("rect", { x: Math.min(b0, b1), y: -Math.max(a0, a1), width: Math.abs(b1 - b0), height: Math.abs(a1 - a0),
+        fill: "rgba(248,135,1,0.05)", stroke: ink, "stroke-width": u, "stroke-dasharray": dash, opacity: 0.8 }));
+    // Named inside its north-west corner, and only where the box holds the
+    // name (about 6 px a character at 10 px): centred, the olympic pool's
+    // eight names piled into one blur on a small map (2026-11-24).
+    const words = z.name.replace(/_/g, " ") + (z.source === "rulebook" ? "" : " (figure)");
+    const room = z.kind === "line" ? Infinity : Math.abs(b1 - b0);
+    if (words.length * 6 * u <= room && (z.kind === "line" || Math.abs(a1 - a0) >= 14 * u)) {
+      kids.push(svg("text", { x: Math.min(b0, b1) + 3 * u, y: -Math.max(a0, a1) + 11 * u, "font-size": 10 * u, fill: ink,
+        opacity: 0.85, ...HALO(u) }, svg("title", {}, z.note || ""), words));
+    }
+  }
   if ((P.outline || []).length >= 3) {
     kids.push(svg("polygon", { points: P.outline.map(([x, y]) => `${y},${-x}`).join(" "), fill: "rgba(90,141,255,0.06)", stroke: "var(--mb-sea)", "stroke-width": 1.5 * u }));
   }
@@ -608,6 +650,72 @@ const STATUS_TOPICS = ["/mongla/state", "/mongla/mission_alive", "/mongla/missio
 // What the pilot console's strip keeps: the rest is on Vitals, below.
 const WATCH_CELLS = ["mission", "verb", "lock", "link", "to kutum"];
 
+// A camera's caption, from the overlay's `<camera>/hud` (overlay.caption):
+// what the strip under the picture says. Pure: exported for the test. The
+// rate's last half minute is kept for the sparkline; a caption older than
+// CAPTION_STALE_S is the overlay gone quiet, said, never the last word kept
+// as if current.
+const CAPTION_STALE_S = 3, RATE_KEEP_S = 30;
+const CAPTION_WORDS = {
+  running: "detecting", paused: "paused", silent: "silent", none: "no detector", unread: "silent",
+};
+function captionOf(s, cam, now) {
+  const c = s.caps && s.caps[cam];
+  if (!c) return { cam, state: "unheard", word: "no overlay", level: "stale", rates: [] };
+  const ageS = (now - c.at) / 1000;
+  const rates = (c.rates || []).filter(([t]) => now - t <= RATE_KEEP_S * 1000);
+  if (ageS > CAPTION_STALE_S) {
+    return { cam, state: "stale", word: `overlay silent ${num(ageS, 0)} s`, level: "stale", model: c.m.model, rates };
+  }
+  const m = c.m;
+  const level = m.alarm ? "err" : m.state === "paused" ? "warn" : "ok";
+  const why = m.state === "paused" ? `${num(m.silent_s, 0)} s, runs when a mission asks`
+    : m.state === "running" ? "" : m.state === "none" ? "nothing publishes its detections"
+      : `${num(m.silent_s, 0)} s, NOT paused`;
+  return { cam, state: m.state, word: CAPTION_WORDS[m.state] || m.state, level, why, model: m.model || "",
+    size: m.size ? `${m.size[0]}x${m.size[1]}` : "--", rate: m.rate_hz, late: m.late_ms, rates };
+}
+
+function foldCaption(s, m, cam, at) {
+  let c;
+  try { c = JSON.parse(m.data); } catch { return; }
+  s.caps = s.caps || {};
+  const was = s.caps[cam] || { rates: [] };
+  const rates = was.rates.filter(([t]) => at - t <= RATE_KEEP_S * 1000);
+  if (fin(c.rate_hz)) rates.push([at, c.rate_hz]);
+  else if (c.state !== "running") rates.push([at, 0]);
+  s.caps[cam] = { m: c, at, rates };
+}
+
+// The rate's last half minute as a line, on its own peak; nothing heard,
+// nothing drawn.
+function rateSpark(rates, now) {
+  if (rates.length < 2) return null;
+  const peak = Math.max(1, ...rates.map(([, r]) => r));
+  const pts = rates.map(([t, r]) => `${num(100 - (now - t) / (RATE_KEEP_S * 10), 1)},${num(18 - 16 * r / peak, 1)}`);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 100 20");
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("class", "spark");
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  line.setAttribute("points", pts.join(" "));
+  svg.append(line);
+  return svg;
+}
+
+function captionStrip(g, now) {
+  const chip = (k, v) => el("span", { class: "chip" }, el("small", {}, k), el("b", {}, v));
+  return el("div", { class: `cap ${g.level}` },
+    el("span", { class: "cam" }, el("i", { class: "eye" }), g.cam),
+    el("span", { class: "state" }, el("i", { class: "dot" }), g.word.toUpperCase(),
+      g.why ? el("em", {}, g.why) : null),
+    g.model !== undefined ? chip("model", g.model || "none named") : null,
+    g.state === "running" ? chip("rate", `${num(g.rate, 0)} Hz`) : null,
+    g.state === "running" ? chip("behind", `${num(g.late, 0)} ms`) : null,
+    typeof document !== "undefined" ? rateSpark(g.rates, now) : null,
+    g.size ? chip("frame", g.size) : null);
+}
+
 // -- the table -----------------------------------------------------------
 
 // The status strip's cells and the console's tab marks, from one fold. Pure:
@@ -788,6 +896,32 @@ function phase(ms) { return `animation-delay:-${Date.now() % ms}ms`; }
 const HEALTH_FILL = { ok: "var(--mb-teal)", warn: "var(--mb-amber)", err: "var(--mb-red)", stale: "var(--mb-ink-3)" };
 
 // Pure, for the test: what the drawing says, from the folded state.
+// Roll and pitch in degrees from /mongla/imu: body FRD, world NED (the
+// board's convention, node_telemetry), so roll + is starboard down and pitch
+// + is nose up. A covariance of -1 is "no orientation", which is null here.
+function attitudeOf(m) {
+  const q = m && m.orientation, c = m && m.orientation_covariance;
+  if (!q || (c && c[0] < 0) || ![q.w, q.x, q.y, q.z].every(fin)) return null;
+  const { w, x, y, z } = q, D = 180 / Math.PI;
+  return { roll: Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) * D,
+    pitch: Math.asin(Math.max(-1, Math.min(1, 2 * (w * y - z * x)))) * D };
+}
+
+// The last DEPTH_TRACE_S of depth below the surface, for the trace and rate.
+const DEPTH_TRACE_S = 60;
+function noteDepth(s, depth_m, at) {
+  if (!fin(depth_m)) return;
+  const h = (s.dh = s.dh || []);
+  h.push([at, -depth_m]);
+  while (h.length && (at - h[0][0]) / 1000 > DEPTH_TRACE_S) h.shift();
+}
+// Metres a second, + going down, over the last 2 s; NaN with under 1 s heard.
+function depthRate(h, now) {
+  const r = (h || []).filter(([t]) => (now - t) / 1000 <= 2);
+  if (r.length < 2 || (r[r.length - 1][0] - r[0][0]) / 1000 < 1) return NaN;
+  return (r[r.length - 1][1] - r[0][1]) / ((r[r.length - 1][0] - r[0][0]) / 1000);
+}
+
 function vitalsOf(s, now) {
   const v = s.v || {};
   const stale = !s.vAt || (now - s.vAt) / 1000 > FRESH_S;
@@ -804,12 +938,101 @@ function vitalsOf(s, now) {
     surge: d.x, sway: d.y, health, rpm, peak: Math.max(1000, ...rpm.map((r) => Math.abs(r))),
     pack: s.pAt && (now - s.pAt) / 1000 <= FRESH_S && s.pack ? s.pack.voltage : NaN,
     rail: v.battery_voltage,
+    att: s.aAt && (now - s.aAt) / 1000 <= FRESH_S ? s.att : null,
+    trace: stale ? [] : (s.dh || []).map(([t, d]) => [(t - now) / 1000, d]),
+    rate: stale ? NaN : depthRate(s.dh, now),
     // Where the filter puts the hull, and whether it says to trust it.
     nav: s.locAt && (now - s.locAt) / 1000 <= FRESH_S && s.loc ? {
       x: s.loc.x_m, y: s.loc.y_m, sigma: s.loc.sigma_xy_m, frame: s.loc.frame,
       usable: !!s.loc.usable, why: s.loc.reason || s.loc.aiding || "",
     } : null,
   };
+}
+
+// The navigation reason's room on the Vitals drawing: from x 400 to the
+// divider at 672 less a margin, 250 units at 11 px mono, which renders at
+// about 7.2 units a character (38 ran past it on the ScreenPad, 2026-11-24).
+const NAV_WHY_CHARS = 34;
+// A string cut to `n` characters, the cut marked; whole if it fits.
+function fitText(s, n) {
+  s = String(s || "");
+  return s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}\u2026`;
+}
+
+// The chain drawn: two camera lanes (frame, detect, track, lock) meeting at
+// the frame-to-command stage, then the demand and the board's half along the
+// bottom, right to left. One box per stage of chain.py's message, placed by
+// its key; what the board does not send is a dashed box naming its ask, so
+// the gap is on the drawing, not only in a list (bead 318.2: the raw topic
+// graph flattened ~90 nodes into one unreadable band).
+const CHAIN_AT = {
+  "frame:forward": [1, 0], "detect:forward": [2, 0], "track:forward": [3, 0], "lock:forward": [4, 0],
+  "frame:downward": [1, 1], "detect:downward": [2, 1], "track:downward": [3, 1], "lock:downward": [4, 1],
+  command: [5, 0.5], demand: [5, 2], "board loop": [4, 2], mixer: [3, 2], rpm: [2, 2], imu: [1, 2],
+  "camera trigger": [0, 0.5],
+};
+const CHAIN_LINKS = [
+  ["camera trigger", "frame:forward"], ["camera trigger", "frame:downward"],
+  ["frame:forward", "detect:forward"], ["detect:forward", "track:forward"], ["track:forward", "lock:forward"],
+  ["frame:downward", "detect:downward"], ["detect:downward", "track:downward"], ["track:downward", "lock:downward"],
+  ["lock:forward", "command"], ["lock:downward", "command"], ["command", "demand"],
+  ["demand", "board loop"], ["board loop", "mixer"], ["mixer", "rpm"],
+];
+// Each stage as a box: where, what it says, and its state. `live` is heard
+// in the window; `idle` is silent with a stated reason (a detector paused
+// until a mission asks, a command until a vision verb drives); `silent` is
+// silent with none, the alarm; `absent` is not sent by the board at all.
+function chainBoxes(c) {
+  const out = [];
+  if (!c) return out;
+  for (const k of c.order || []) {
+    const r = c.stages[k], at = CHAIN_AT[k];
+    if (!r || !at) continue;
+    const quiet = !(r.n > 0) || (fin(r.last_s) && r.last_s > 2);
+    const state = !quiet ? "live" : r.idle ? "idle" : "silent";
+    out.push({ key: k, at, label: r.label, state, hz: fin(r.hz) && r.n > 1 ? r.hz : null,
+      p50: quiet ? null : r.age_ms_p50, p95: quiet ? null : r.age_ms_p95, why: r.idle || r.ask || "" });
+  }
+  for (const n of c.not_sent || []) {
+    const at = CHAIN_AT[n.label];
+    if (at) out.push({ key: n.label, at, label: n.label, state: "absent", hz: null, p50: null, p95: null, why: n.ask });
+  }
+  return out;
+}
+
+const CHAIN_W = 120, CHAIN_H = 54, CHAIN_DX = 132, CHAIN_DY = 78;
+function chainSvg(boxes) {
+  const where = {};
+  for (const b of boxes) where[b.key] = [8 + b.at[0] * CHAIN_DX, 8 + b.at[1] * CHAIN_DY];
+  const worst = Math.max(1, ...boxes.map((b) => (fin(b.p50) ? b.p50 : 0)));
+  const s = svg("svg", { class: "chain", viewBox: `0 0 ${8 + 6 * CHAIN_DX} ${8 + 2 * CHAIN_DY + CHAIN_H + 8}` },
+    svg("defs", {}, svg("marker", { id: "chain-head", viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, orient: "auto" },
+      svg("path", { d: "M0,0 L8,4 L0,8 z", class: "head" }))));
+  for (const [a, b] of CHAIN_LINKS) {
+    if (!where[a] || !where[b]) continue;
+    const [ax, ay] = where[a], [bx, by] = where[b];
+    // Edge to edge: across a row from side to side, down from bottom to top.
+    let x1 = ax + CHAIN_W, y1 = ay + CHAIN_H / 2, x2 = bx, y2 = by + CHAIN_H / 2;
+    if (bx < ax) { x1 = ax; x2 = bx + CHAIN_W; }
+    else if (bx === ax) { x1 = x2 = ax + CHAIN_W / 2; y1 = ay + CHAIN_H; y2 = by; }
+    s.append(svg("line", { x1, y1, x2, y2, class: "link", "marker-end": "url(#chain-head)" }));
+  }
+  for (const b of boxes) {
+    const [x, y] = where[b.key];
+    const words = b.state === "live" ? [fin(b.hz) ? `${num(b.hz, 1)} Hz` : "heard", fin(b.p50) ? `${num(b.p50, 0)} / ${num(b.p95, 0)} ms` : ""]
+      : b.state === "idle" ? ["idle", fitText(b.why, 19)]
+        : b.state === "absent" ? ["not sent", fitText(b.why.split(":")[0], 19)]
+          : ["SILENT", "no reason given"];
+    const g = svg("g", { class: `stage ${b.state}` },
+      svg("title", {}, `${b.label}: ${b.why || b.state}`),
+      svg("rect", { x, y, width: CHAIN_W, height: CHAIN_H, rx: 3 }),
+      svg("text", { x: x + 8, y: y + 15, class: "name" }, fitText(b.label, 18)),
+      svg("text", { x: x + 8, y: y + 32, class: "big" }, words[0]),
+      svg("text", { x: x + 8, y: y + 46, class: "small" }, words[1]));
+    if (fin(b.p50)) g.append(svg("rect", { x, y: y + CHAIN_H - 3, width: Math.max(2, (CHAIN_W * b.p50) / worst), height: 3, class: "age" }));
+    s.append(g);
+  }
+  return s;
 }
 
 function vitalsSvg(g) {
@@ -884,10 +1107,16 @@ function vitalsSvg(g) {
     ...(g.nav && fin(g.nav.x) ? [
       T(560, 148, `N ${g.nav.x >= 0 ? " " : ""}${g.nav.x.toFixed(2)}`, { class: "num" }),
       T(560, 170, `E ${g.nav.y >= 0 ? " " : ""}${g.nav.y.toFixed(2)}`, { class: "num" }),
-      T(560, 186, fin(g.nav.sigma) ? `\u00b1${g.nav.sigma.toFixed(2)} m ${g.nav.frame}` : g.nav.frame, { class: "unit" }),
+      // Right-aligned to the drawing's edge: "odom_ned" ran past it.
+      T(652, 186, fin(g.nav.sigma) ? `\u00b1${g.nav.sigma.toFixed(2)} m ${g.nav.frame}` : g.nav.frame,
+        { class: "unit", "text-anchor": "end" }),
     ] : [T(560, 150, g.nav ? "no position yet" : "no filter", { class: "absent" })]),
-    g.nav && T(400, 280, g.nav.usable ? "NAVIGATION USABLE" : `NAVIGATION: ${g.nav.why}`.slice(0, 44),
-      { class: g.nav.usable ? "nav ok" : "nav warn" }),
+    // Usable is one line; not usable says so, then why, cut to the width
+    // (the whole sentence on hover): one line of both ran off the edge.
+    ...(!g.nav ? [] : g.nav.usable ? [T(400, 284, "NAVIGATION USABLE", { class: "nav ok" })] : [
+      T(400, 276, "NAVIGATION NOT USABLE", { class: "nav warn" }),
+      svg("text", { x: 400, y: 291, class: "unit why" }, svg("title", {}, g.nav.why), fitText(g.nav.why, NAV_WHY_CHARS)),
+    ]),
   ];
   // One spinner per ESC the board reports; speed and sense from its rpm.
   const escs = g.rpm.length ? g.rpm.map((r, i) => {
@@ -899,13 +1128,45 @@ function vitalsSvg(g) {
   }) : [T(400, 256, "ESCs not announced", { class: "lbl" })];
   // The board's six lines along the bottom; a bad one breathes.
   const health = g.health.map(([label, lvl, msg], i) => {
-    const x = 14 + i * 108;
+    const x = 14 + i * 128;
     return svg("g", {}, svg("title", {}, msg),
       svg("circle", { cx: x + 6, cy: 306, r: 5, fill: HEALTH_FILL[lvl], class: lvl === "err" || lvl === "warn" ? "alarm" : "", style: phase(1200) }),
       T(x + 16, 311, label, { class: `hl ${lvl}` }));
   });
-  return svg("svg", { viewBox: "0 0 660 322", class: `vitals${g.stale ? " stale" : ""}`, preserveAspectRatio: "xMidYMid meet" },
-    ...depth, ...compass, ...words, ...escs, ...health);
+  // The right column: attitude as a horizon, and depth as a trace with its
+  // rate. Neither is on the main screen.
+  const ax = 735, ay = 98, AR = 50, K = AR / 30;     // 30 deg of pitch to the rim
+  const att = g.att;
+  const horizon = [
+    T(ax, 26, "ATTITUDE", { class: "lbl", "text-anchor": "middle" }),
+    svg("defs", {}, svg("clipPath", { id: "mb-ball" }, svg("circle", { cx: ax, cy: ay, r: AR }))),
+    svg("circle", { cx: ax, cy: ay, r: AR, class: "ring" }),
+    att ? svg("g", { "clip-path": "url(#mb-ball)" },
+      svg("g", { transform: `rotate(${-att.roll} ${ax} ${ay}) translate(0 ${Math.max(-AR, Math.min(AR, att.pitch * K))})` },
+        svg("rect", { x: ax - 2 * AR, y: ay, width: 4 * AR, height: 2 * AR, class: "sea" }),
+        svg("line", { x1: ax - 2 * AR, y1: ay, x2: ax + 2 * AR, y2: ay, class: "horizon" }),
+        ...[-20, -10, 10, 20].map((d) => svg("line", { x1: ax - (d % 20 ? 8 : 14), y1: ay - d * K, x2: ax + (d % 20 ? 8 : 14), y2: ay - d * K, class: "rung" }))))
+      : T(ax, ay + 4, "NO ATTITUDE", { class: "absent", "text-anchor": "middle" }),
+    svg("path", { d: `M${ax - 30} ${ay} h18 l6 6 l6 -6 h18`, class: "wings" }),
+    // Either side of the centre: from the ball's edges, "R -1.0" ran into "P +0.6".
+    T(ax - 5, 172, att ? `R ${att.roll >= 0 ? "+" : ""}${att.roll.toFixed(1)}\u00b0` : "R --", { class: "unit att", "text-anchor": "end" }),
+    T(ax + 5, 172, att ? `P ${att.pitch >= 0 ? "+" : ""}${att.pitch.toFixed(1)}\u00b0` : "P --", { class: "unit att" }),
+  ];
+  const tx0 = 690, tx1 = 780, ty0 = 200, ty1 = 254;
+  const deepest = Math.max(1, ...g.trace.map(([, d]) => d));
+  const tp = g.trace.map(([s, d]) => `${(tx1 + (s / DEPTH_TRACE_S) * (tx1 - tx0)).toFixed(1)},${(ty0 + (Math.max(0, d) / deepest) * (ty1 - ty0)).toFixed(1)}`);
+  const trace = [
+    T(tx0, 192, `DEPTH ${DEPTH_TRACE_S} s`, { class: "lbl" }),
+    svg("rect", { x: tx0, y: ty0, width: tx1 - tx0, height: ty1 - ty0, class: "well" }),
+    tp.length > 1 ? svg("polyline", { points: tp.join(" "), class: "trace" })
+      : T((tx0 + tx1) / 2, (ty0 + ty1) / 2 + 4, "no depth heard", { class: "absent", "text-anchor": "middle" }),
+    T(tx1, ty1 + 12, `${deepest.toFixed(1)} m`, { class: "unit", "text-anchor": "end" }),
+    T(tx0, 284, !fin(g.rate) ? "-- m/s" : Math.abs(g.rate) < 0.02 ? "holding" :
+      `${g.rate > 0 ? "\u2193" : "\u2191"} ${Math.abs(g.rate).toFixed(2)} m/s`, { class: `num rate${fin(g.rate) && Math.abs(g.rate) >= 0.02 ? " moving" : ""}` }),
+  ];
+  return svg("svg", { viewBox: "0 0 790 322", class: `vitals${g.stale ? " stale" : ""}`, preserveAspectRatio: "xMidYMid meet" },
+    svg("line", { x1: 672, y1: 14, x2: 672, y2: 290, class: "divider" }),
+    ...depth, ...compass, ...words, ...escs, ...horizon, ...trace, ...health);
 }
 
 const INSTRUMENTS = {
@@ -935,13 +1196,31 @@ const INSTRUMENTS = {
     },
   },
 
+  Caption: {
+    title: "Caption",
+    kind: "caption",
+    topics: [...CAMERAS.map((c) => hudTopic(c))],
+    fold(s, topic, m) {
+      const cam = CAMERAS.find((c) => topic === hudTopic(c));
+      if (cam) foldCaption(s, m, cam, heard());
+    },
+    draw(s) {
+      const now = Date.now();
+      // The layout names the camera; a caption placed by hand with none
+      // says each camera's, one line each.
+      const cams = s.cfg && CAMERAS.includes(s.cfg.camera) ? [s.cfg.camera] : CAMERAS;
+      return cams.map((c) => captionStrip(captionOf(s, c, now), now));
+    },
+  },
+
   Vitals: {
     title: "Vitals",
     kind: "vitals",
     topics: ["/mongla/state", "/mongla/demand", "/mongla/esc_rpm", "/mongla/thruster_pack", "/diagnostics",
-      "/mongla/localization/state"],
+      "/mongla/localization/state", "/mongla/imu"],
     fold(s, topic, m) {
-      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); }
+      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteDepth(s, m.depth_m, s.vAt); }
+      else if (topic === "/mongla/imu") { s.att = attitudeOf(m); s.aAt = heard(); }
       else if (topic === "/mongla/localization/state") { s.loc = m; s.locAt = heard(); }
       else if (topic === "/mongla/demand") { s.demand = m.vector; s.dAt = heard(); }
       else if (topic === "/mongla/esc_rpm") { s.rpm = Array.from(m.data || []); s.rAt = heard(); }
@@ -972,9 +1251,11 @@ const INSTRUMENTS = {
   },
   Vision: {
     title: "Vision",
-    topics: [...CAMERAS.flatMap((c) => [lockTopic(c), seeingTopic(c), modelTopic(c)]), "/mongla/vision/active_camera", STAGES_TOPIC],
+    topics: [...CAMERAS.flatMap((c) => [lockTopic(c), seeingTopic(c), modelTopic(c), classesTopic(c), filterTopic(c)]),
+      "/mongla/vision/active_camera", STAGES_TOPIC],
     fold(s, topic, m) {
       s.lock = s.lock || {}; s.lockAt = s.lockAt || {}; s.seeing = s.seeing || {}; s.model = s.model || {};
+      s.emits = s.emits || {}; s.filter = s.filter || {};
       if (topic === "/mongla/vision/active_camera") { s.active = m.data; return; }
       if (topic === STAGES_TOPIC) { try { s.stages = JSON.parse(m.data); s.stagesAt = heard(); } catch { /* keep */ } return; }
       for (const c of CAMERAS) {
@@ -983,6 +1264,8 @@ const INSTRUMENTS = {
         // The detector's own word for which model runs (latched), with its epoch:
         // a mission's model switch shows as the epoch moving.
         if (topic === modelTopic(c)) s.model[c] = `${m.database_location || "--"}  epoch ${m.database_version}`;
+        if (topic === classesTopic(c)) s.emits[c] = m.data;
+        if (topic === filterTopic(c)) s.filter[c] = m.data;
       }
     },
     draw(s) {
@@ -1005,6 +1288,13 @@ const INSTRUMENTS = {
         cam.push(el("div", { class: "bar" }, el("b", { style: `width:${stale || !fin(authority) ? 0 : 100 * Math.min(1, authority)}%;background:${RUNG_COLOUR[rung] || "var(--mb-sea)"}` })));
         const notes = [(s.model || {})[c] && `model ${s.model[c]}`, (s.seeing || {})[c] && `seeing ${s.seeing[c]}`].filter(Boolean);
         if (notes.length) cam.push(el("div", { class: "note" }, notes.join("   ")));
+        const k = classesOf((s.emits || {})[c], (s.filter || {})[c]);
+        if (k) {
+          cam.push(el("div", { class: "note" }, `emits ${k.emits.join(", ") || "nothing: no model loaded"}`));
+          cam.push(el("div", { class: k.missing.length ? "err" : "note" },
+            k.missing.length ? `filter names ${k.missing.join(", ")}: this model never emits it`
+              : `filter ${k.filter.join(", ") || "none, every class"}`));
+        }
         // What runs on this camera; an off stage carries the switch that turns
         // it on. The overlay node counts publishers: a topic the graph lists
         // is not a stage that runs (a subscriber alone lists it too).
@@ -1176,6 +1466,15 @@ const INSTRUMENTS = {
 
   // The plan beside the map: the mission's file as the runner published it,
   // and the line of it that sent the verb running now (mission.MissionText).
+  Files: {
+    title: "Files",
+    kind: "files",
+    topics: [],
+    head: () => filesPanel(),
+    fold() {},
+    draw: () => [],
+  },
+
   MissionText: {
     title: "Mission text",
     topics: ["/mongla/mission/source", "/mongla/mission/line", "/mongla/mission_alive"],
@@ -1265,7 +1564,7 @@ const INSTRUMENTS = {
       if (!c) return [el("div", { class: "note" }, "no /mongla/batighor/chain: is the chain meter running?")];
       const rows = (c.order || []).map((k) => c.stages[k]);
       const worst = Math.max(1, ...rows.map((r) => (fin(r.age_ms_p95) ? r.age_ms_p95 : 0)));
-      const out = [el("div", { class: "note" }, `age when seen, p50 / p95 over ${num(c.window_s, 0)} s`)];
+      const out = [chainSvg(chainBoxes(c)), el("div", { class: "note" }, `age when seen, p50 / p95 over ${num(c.window_s, 0)} s`)];
       for (const r of rows) {
         // n > 0 with no rate is one message in the window: heard, not silent.
         const quiet = !(r.n > 0) || (fin(r.last_s) && r.last_s > 2);
@@ -1332,7 +1631,8 @@ function makePanel(spec) {
         localStorage.setItem("mb.vitals.sidebar", "closed");
       } catch { /* no storage: leave the sidebar as it is */ }
     }, 1500);
-    const s = {};
+    // The panel's config from the layout (views.instrument(name, **config)).
+    const s = { cfg: context.initialState || {} };
     let dirty = true;
     // A control built once (spec.head): a redrawn button can lose its click.
     if (spec.head) root.append(spec.head(s, () => { dirty = true; }));
@@ -1402,7 +1702,10 @@ function said(base, work) {
 
 function unedited(base, work) {
   const cfg = (d) => (d && d.configById) || {};
-  const { configById: bc, ...bRest } = base || {}, { configById: wc, ...wRest } = work || {};
+  // Global variables are selections made while watching (the track the
+  // Detectors panel follows), like the open tab: not the layout's design.
+  const { configById: bc, globalVariables: bg, ...bRest } = base || {};
+  const { configById: wc, globalVariables: wg, ...wRest } = work || {};
   if (!said(bRest, wRest)) return false;
   return Object.entries(cfg(base)).every(([id, c]) => {
     if (!(id in cfg(work))) return false;
@@ -1423,38 +1726,119 @@ function layoutUpdates(records, served, now) {
     if (L.working) {
       const old = L.baseline && L.baseline.data;
       if (!unedited(old, L.working.data)) { edited.push(name); continue; }
-      // Kutum's layout, with what the app added kept beneath it: its
-      // defaults, any setting made in a key the file never wrote, and the
-      // tab that was open.
-      const was = (L.working.data && L.working.data.configById) || {};
-      const oldCfg = (old && old.configById) || {};
-      const cfg = { ...(data.configById || {}) };
-      for (const id of Object.keys(cfg)) {
-        const w = was[id];
-        if (!w || typeof w !== "object") continue;
-        const added = Object.fromEntries(Object.entries(w).filter(([k]) => !(k in (oldCfg[id] || {}))));
-        cfg[id] = { ...added, ...cfg[id] };
-        if (id.startsWith("Tab!") && Number.isInteger(w.activeTabIdx) && w.activeTabIdx < (cfg[id].tabs || []).length) cfg[id].activeTabIdx = w.activeTabIdx;
-      }
-      data = { ...data, configById: cfg };
+      data = takeKutums(old, L.working.data, data);
     }
     update.push({ ...r, layout: { ...L, baseline: { data, savedAt: now }, working: undefined } });
   }
   return { update, edited };
 }
 
+// Kutum's layout `data`, with what the app added to `old` in `work` kept
+// beneath it: its defaults, any setting made in a key the file never wrote,
+// the tab that was open and the selections made while watching.
+function takeKutums(old, work, data) {
+  const was = (work && work.configById) || {};
+  const oldCfg = (old && old.configById) || {};
+  const cfg = { ...(data.configById || {}) };
+  for (const id of Object.keys(cfg)) {
+    const w = was[id];
+    if (!w || typeof w !== "object") continue;
+    const added = Object.fromEntries(Object.entries(w).filter(([k]) => !(k in (oldCfg[id] || {}))));
+    cfg[id] = { ...added, ...cfg[id] };
+    if (id.startsWith("Tab!") && Number.isInteger(w.activeTabIdx) && w.activeTabIdx < (cfg[id].tabs || []).length) cfg[id].activeTabIdx = w.activeTabIdx;
+  }
+  const vars = work && work.globalVariables;
+  return { ...data, configById: cfg, ...(vars && data.globalVariables ? { globalVariables: { ...data.globalVariables, ...vars } } : {}) };
+}
+
+// In a browser, Lichtblick replaces a layout's baseline with Kutum's on load
+// and keeps the working copy it made of the old one, so the console goes on
+// drawing the old layout (bead b0q). A working copy that is an unedited copy
+// of a version Kutum served before (`history`, serve.py) is replaced by the
+// current baseline with what the app added kept; one that matches no
+// version is an operator's edit and is kept. Pure; exported for the test.
+function staleWorking(records, history) {
+  const update = [];
+  for (const r of records) {
+    const L = r && r.layout;
+    if (!L || !L.working || !L.baseline || unedited(L.baseline.data, L.working.data)) continue;
+    const old = (history[L.name] || []).find((h) => unedited(h, L.working.data));
+    if (!old) continue;
+    update.push({ ...r, layout: { ...L, baseline: { ...L.baseline, data: takeKutums(old, L.working.data, L.baseline.data) }, working: undefined } });
+  }
+  return update;
+}
+
 const idb = (req) => new Promise((ok, no) => { req.onsuccess = () => ok(req.result); req.onerror = () => no(req.error); });
 
-async function syncLayouts() {
-  if (typeof location === "undefined" || location.protocol !== "file:" || typeof indexedDB === "undefined") return;
-  const KEY = "mongla.batighor.layoutSync";
-  // Kutum is whoever the app last connected to; Batighor serves on 8000 there.
+// Batighor's own address: the page's origin in a browser (Kutum serves it),
+// and in the desktop app whoever it last connected to, on 8000 there.
+async function kutumBase() {
+  if (typeof location !== "undefined" && /^https?:$/.test(location.protocol)) return location.origin;
+  if (typeof indexedDB === "undefined") return null;
   const recents = await idb(indexedDB.open("lichtblick-recents"));
   const list = (await idb(recents.transaction("recents").objectStore("recents").getAll())).flat();
   recents.close();
   const url = list.map((x) => x && x.extra && x.extra.url).find((u) => typeof u === "string" && u.startsWith("ws"));
-  if (!url) return;
-  const base = `http://${new URL(url).hostname}:8000/layouts/`;
+  return url ? `http://${new URL(url).hostname}:8000` : null;
+}
+
+// The Files panel: the missions and the deck on Kutum, read only
+// (shelves.py). Built once in `head`, so a click is never lost to a redraw.
+function filesPanel() {
+  const list = el("div", { class: "files-list" });
+  const view = el("pre", { class: "files-view" }, "pick a file");
+  const title = el("div", { class: "files-title note" }, "");
+  let base = null, picked = null;
+  const show = async (shelf, path) => {
+    picked = `${shelf}/${path}`;
+    title.textContent = `${shelf}/${path}  (read only)`;
+    for (const b of list.querySelectorAll("button")) b.classList.toggle("on", b.dataset.key === picked);
+    try {
+      const r = await fetch(`${base}/files/${encodeURIComponent(shelf)}/${path.split("/").map(encodeURIComponent).join("/")}`, { cache: "no-store" });
+      view.textContent = r.ok ? await r.text() : `not shown: ${(await r.text()).trim()}`;
+    } catch (e) { view.textContent = `Kutum did not answer: ${e}`; }
+  };
+  const load = async () => {
+    base = base || await kutumBase().catch(() => null);
+    if (!base) { list.replaceChildren(el("div", { class: "note" }, "no Kutum to ask: connect first")); return; }
+    try {
+      const shelves = await (await fetch(`${base}/files/index.json`, { cache: "no-store" })).json();
+      list.replaceChildren(...Object.entries(shelves).flatMap(([shelf, files]) => [
+        el("div", { class: "lbl" }, `${shelf} (${files.length})`),
+        ...(files.length ? files.map((f) => el("button", { class: `file${`${shelf}/${f.path}` === picked ? " on" : ""}`,
+          "data-key": `${shelf}/${f.path}`, "aria-label": f.path,
+          title: `${f.path}: ${num(f.size / 1024, 1)} KB, ${new Date(f.mtime * 1000).toLocaleString()}`,
+          onclick: () => show(shelf, f.path) }, f.path))
+          : [el("div", { class: "note" }, "empty or not on this machine")]),
+      ]));
+    } catch (e) { list.replaceChildren(el("div", { class: "note" }, `Kutum did not answer: ${e}`)); }
+  };
+  load();
+  return el("div", { class: "files" },
+    el("div", { class: "files-side" }, el("button", { class: "file refresh", onclick: () => { load(); if (picked) show(...picked.split(/\/(.*)/s, 2)); } }, "refresh"), list),
+    el("div", { class: "files-main" }, title, view));
+}
+
+async function syncLayouts() {
+  if (typeof location === "undefined" || typeof indexedDB === "undefined") return;
+  if (/^https?:$/.test(location.protocol)) {
+    // The app replaces a baseline with Kutum's some seconds after this runs
+    // (seen in Chrome, 2026-11-25: the first pass found the working copy
+    // still matching the old baseline), so look again until it has.
+    for (const wait of BROWSER_SYNC_S) {
+      await new Promise((ok) => setTimeout(ok, wait * 1000));
+      if (await syncBrowserLayouts()) return;
+    }
+    // Nothing stale left: a later deploy in this tab may reload it again.
+    try { sessionStorage.removeItem("mongla.batighor.staleWorking"); } catch { /* none */ }
+    return;
+  }
+  if (location.protocol !== "file:") return;
+  const KEY = "mongla.batighor.layoutSync";
+  const kutum = await kutumBase();
+  if (!kutum) return;
+  const base = `${kutum}/layouts/`;
   const names = await (await fetch(base + "index.json", { cache: "no-store" })).json();
   const served = {};
   for (const n of names) served[n] = await (await fetch(`${base}${encodeURIComponent(n)}.json`, { cache: "no-store" })).json();
@@ -1476,8 +1860,39 @@ async function syncLayouts() {
   location.reload();
 }
 
+// The browser's half of the sync: drop working copies made of an old layout.
+// True when it reloaded the page.
+const BROWSER_SYNC_S = [0, 4, 6, 10];
+async function syncBrowserLayouts() {
+  const KEY = "mongla.batighor.staleWorking";
+  const db = await idb(indexedDB.open("lichtblick-layouts"));
+  if (!db.objectStoreNames.contains("layouts")) { db.close(); return false; }
+  const store = () => db.transaction("layouts", "readwrite").objectStore("layouts");
+  const records = await idb(store().getAll());
+  const history = {};
+  for (const r of records) {
+    const L = r && r.layout;
+    if (!L || !L.working || !L.baseline || unedited(L.baseline.data, L.working.data) || !/^[A-Za-z0-9_-]+$/.test(L.name || "")) continue;
+    try { history[L.name] = await (await fetch(`${location.origin}/layouts/history/${L.name}.json`, { cache: "no-store" })).json(); } catch { /* none */ }
+  }
+  const update = staleWorking(records, history);
+  for (const r of update) await idb(store().put(r));
+  db.close();
+  if (!update.length) return false;
+  console.info(`[batighor] ${update.length} layout(s) taken from Kutum: ${update.map((r) => r.layout.name).join(", ")}`);
+  // Guarded, so a copy the app rewrites cannot reload it forever.
+  const mark = update.map((r) => r.layout.name).join(",");
+  try {
+    if (sessionStorage.getItem(KEY) === mark) return false;
+    sessionStorage.setItem(KEY, mark);
+  } catch { return false; }
+  location.reload();
+  return true;
+}
+
 module.exports = {
-  healthNow, managerHeard, vitalsOf, signalBars, WATCH_CELLS,
+  healthNow, managerHeard, vitalsOf, signalBars, WATCH_CELLS, captionOf, foldCaption, fitText, NAV_WHY_CHARS,
+  attitudeOf, depthRate, vitalsSvg, chainBoxes, chainSvg, classesOf, staleWorking,
   activate(extensionContext) {
     syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {

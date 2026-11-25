@@ -136,7 +136,7 @@ def test_no_plot_mixes_units():
     """A plot has one axis. Depth (-0.5 m) beside the battery (12.4 V) drew
     depth as a flat line at the floor (board_health, desktop app 2026-11-12);
     the pose plot did the same with metres, degrees and pixels."""
-    unit = re.compile(r'(?<![\w/])(m/s|m|V|deg|px|Hz|%|rpm|bytes/s)(?![\w/])')
+    unit = re.compile(r'(?<![\w/])(m/s|m|V|deg|rad|ratio|px|Hz|%|rpm|bytes/s)(?![\w/])')
     for name in views.VIEWS:
         for k, c in views.build(name)['configById'].items():
             if k.startswith('Plot!'):
@@ -380,3 +380,56 @@ def test_a_fused_pose_plot_reads_only_what_the_fuse_fills():
     for name in views.VIEWS:
         for field in re.findall(r'target_pose_fused\.(\w+)', json.dumps(views.build(name))):
             assert field in filled, (name, field)
+
+
+def test_the_two_screens_share_no_panel_and_hold_one_3d_view():
+    """Above, the pilot's tab; below, Vitals. A hull on each, both close in,
+    showed nothing either needed, and the map, keys and state were each on
+    both at one time or another (owner, 2026-11-24)."""
+    kinds = {name: [pid.split('!')[0] for pid in views.build(name)['configById']]
+             for name in ('pilot', 'vitals')}
+    assert not set(kinds['pilot']) & set(kinds['vitals'])
+    assert (kinds['pilot'] + kinds['vitals']).count('3D') == 1
+    (cfg,) = [c for p, c in views.build('pilot')['configById'].items() if p.startswith('3D!')]
+    assert '/mongla/batighor/pool_scene' in cfg['topics']
+    assert cfg['cameraState']['distance'] >= 4             # the pool, not the hull alone
+
+
+def test_no_two_tabs_of_a_console_are_the_same_view_twice():
+    """Forward, Downward, Chain and Vision all showed the cameras; Map and
+    Mission both the pool with the mission (2026-11-24)."""
+    for name, tabs in views.CONSOLES.items():
+        assert len({v for v, _ in tabs}) == len(tabs) <= 14, name
+        both = [t for v, t in tabs if all(f'/{c}/stream' in json.dumps(views.build(v)['configById'])
+                                          for c in ('forward', 'downward'))]
+        assert len(both) <= 2, (name, both)      # the first tab, and Vision in depth
+        maps = [t for v, t in tabs if f'{views.PANEL}Map!' in json.dumps(views.build(v)['configById'])]
+        assert len(maps) <= 1 + (name == views.CONSOLE), (name, maps)
+
+
+def test_a_3d_view_draws_its_text_at_its_own_size_and_no_stray_odometry():
+    """Every 3D view: labelScaleFactor 1, so the demand's caption and the
+    pool's names are drawn at the font_size overlay.py and course.py give
+    them (at 0.3 they were 6 px and 4 px); no /mongla/odom arrow, which
+    repeats the hull's pose; and no frame-to-parent line, the yellow one
+    that ran from the hull off the panel."""
+    import json as _json
+    found = 0
+    for f in views.LAYOUTS.glob("*.json"):
+        for k, cfg in _json.loads(f.read_text())['configById'].items():
+            if k.startswith('3D!'):
+                found += 1
+                assert cfg['scene']['labelScaleFactor'] == 1.0, (f.name, k)
+                assert '/mongla/odom' not in cfg.get('topics', {}), (f.name, k)
+                assert cfg['scene']['transforms']['lineWidth'] == 0, (f.name, k)
+    assert found
+
+
+def test_the_demand_caption_is_the_size_of_the_pools_names():
+    """One size for every caption in the 3D scenes: larger, the demand's
+    covered the hull in the pool view (Chrome, 2026-11-25)."""
+    import re as _re
+    from mongla_batighor import overlay
+    src = (views.LAYOUTS.parent / 'mongla_batighor' / 'course.py').read_text()
+    (px,) = _re.findall(r'def text\(x, y, z, words, c, px=([\d.]+)\)', src)
+    assert overlay.DEMAND_LABEL_PX == float(px)
