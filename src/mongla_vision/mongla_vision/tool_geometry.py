@@ -68,7 +68,9 @@ def offset_m(tool: str):
     e = _load().get(str(tool or '').strip())
     if not e:
         return None
-    return (float(e.get('x', 0.0)), float(e.get('y', 0.0)), float(e.get('z', 0.0)))
+    if not all(k in e for k in ('x', 'y', 'z')):
+        return None       # a missing number is absent, not a measured zero (vl_3 F7)
+    return (float(e['x']), float(e['y']), float(e['z']))
 
 
 def is_measured(tool: str) -> bool:
@@ -80,14 +82,22 @@ def is_measured(tool: str) -> bool:
     warning that matters unprintable.
     """
     e = _load().get(str(tool or '').strip())
-    return bool(e) and not bool(e.get('unmeasured', False))
+    return (bool(e) and not bool(e.get('unmeasured', False))
+            and all(k in e for k in ('x', 'y', 'z')))
+
+
+def tool_camera(tool: str) -> str:
+    """The camera whose optical frame the tool's offset is measured in, or ''."""
+    e = _load().get(str(tool or '').strip()) or {}
+    return str(e.get('camera', '') or '')
 
 
 def known_tools():
     return sorted(_load())
 
 
-def pixel_offset(tool: str, *, fx: float, fy: float, range_m: float):
+def pixel_offset(tool: str, *, fx: float, fy: float, range_m: float,
+                 camera: str = ''):
     """Signed (du, dv) px the target must sit at to be on the TOOL's axis.
 
     Returns None when it cannot be computed -- unknown or unmeasured tool, no
@@ -98,6 +108,11 @@ def pixel_offset(tool: str, *, fx: float, fy: float, range_m: float):
     """
     off = offset_m(tool)
     if off is None or not is_measured(tool) or not (fx > 0.0 and fy > 0.0):
+        return None
+    # The offset is in ONE camera's optical frame; applied in the other
+    # camera's image it is a wrong correction, not a small one (vl_3 F1).
+    own = tool_camera(tool)
+    if camera and own and camera != own:
         return None
     if not (range_m and math.isfinite(range_m) and range_m > 1e-3):
         return None

@@ -591,9 +591,15 @@ def main() -> int:
         flags=cv2.CALIB_USE_INTRINSIC_GUESS)
     sigma_fx = float(np.asarray(sd_int).ravel()[0])
     print("\n-- conditioning --")
-    print(f"  board tilt spanned: {tilts.min():.1f} .. {tilts.max():.1f} deg "
-          f"(median {np.median(tilts):.1f})")
-    tilt_ok = tilts.max() >= 25.0 and (tilts.max() - tilts.min()) >= 15.0
+    if tilts.size == 0:
+        # No view gave a pose, so there is no tilt to summarise. Say so rather than
+        # raise after the solve, which would lose the calibration.
+        print("  board tilt: no view gave a pose")
+        tilt_ok = False
+    else:
+        print(f"  board tilt spanned: {tilts.min():.1f} .. {tilts.max():.1f} deg "
+              f"(median {np.median(tilts):.1f})")
+        tilt_ok = tilts.max() >= 25.0 and (tilts.max() - tilts.min()) >= 15.0
     print(f"    {'OK' if tilt_ok else 'TOO LITTLE TILT -- fx and distance stay confounded'}"
           f"   (want max >= 25 deg, range >= 15 deg)")
     print(f"  sigma(fx) from OpenCV: +/- {sigma_fx:.2f} px "
@@ -680,8 +686,8 @@ def main() -> int:
         'grid': [cols, rows], 'square_m': square,
         'board_bow_p2p_mm': float(1000 * (z.max() - z.min())),
         # Key names must match camera_node._load_calibration, which reads
-        # 'hfov_deg_air'. It uses .get(..., 0.0), so a mismatch does not crash
-        # -- it silently logs HFOV=0.0 forever.
+        # 'hfov_deg_air'. A mismatch does not crash: camera_node reads the
+        # missing lens angle as NaN and logs HFOV=nan.
         **{f"{key.split('_')[0]}_deg_{key.split('_')[1]}": float(val)
            for key, val in v.items()},
         # The medium is not metadata, it is part of the answer. An in-water
@@ -753,6 +759,10 @@ def main() -> int:
         os.makedirs(install_dir, exist_ok=True)
         name = calibration_filename(applies_to, w, h, medium)
         dest = os.path.join(install_dir, name)
+        if os.path.exists(dest):
+            # Never overwrite a calibration without keeping the old one, as
+            # the apply path does (vl_5 F4).
+            os.replace(dest, dest + '.bak-' + time.strftime('%Y%m%d-%H%M%S'))
         with open(dest, 'w') as fh:
             json.dump(out, fh, indent=2)
         print(f"installed {dest}")

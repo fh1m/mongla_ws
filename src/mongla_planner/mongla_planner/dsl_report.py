@@ -82,13 +82,17 @@ class ReportMixin:
         and the picture of how the task ended travel together.
         """
         import time as _t
+        from rclpy.qos import QoSProfile, ReliabilityPolicy
         from sensor_msgs.msg import Image
+        # Best effort, as the detector publishes it (mongla_vision.qos
+        # DEBUG_IMAGE): a reliable request never matches that offer (vl_9 M7).
+        DEBUG_IMAGE = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
         cam = camera or self.camera
         node = self.client.node
         got = {}
         sub = node.create_subscription(
             Image, f'/mongla/vision/{cam}/image_debug',
-            lambda m: got.setdefault('img', m), 1)
+            lambda m: got.setdefault('img', m), DEBUG_IMAGE)
         try:
             deadline = _t.monotonic() + float(timeout)
             while 'img' not in got and _t.monotonic() < deadline:

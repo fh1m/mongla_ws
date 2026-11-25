@@ -88,6 +88,11 @@ class _Stub:
         return types.SimpleNamespace(info=lambda m: None,
                                      warn=self.warned.append)
 
+    def _calibration_pairing(self, cal):
+        # No camera behind a stub: the unit cannot be read, so the pairing
+        # check stands aside (test_a_calibration_binds_only_its_own_camera).
+        return 'unknown', ('', '')
+
 
 @pytest.fixture
 def cal_file():
@@ -239,4 +244,6 @@ def test_a_calibration_that_names_its_profile_is_used_as_given():
     s._calib = load(s)
     assert s._calib['K'][0] == pytest.approx(
         _cal_named('pi_forward_1280x720.json')['camera_matrix'][0][0])
-    assert not s.warned
+    # Used, but never quietly: this fit's max ERE is 14.5 px against its own
+    # 1.0 px bar (audit vl_6 F8), and that is the only thing said about it.
+    assert len(s.warned) == 1 and 'did not pass its own bar' in s.warned[0]

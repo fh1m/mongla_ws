@@ -108,7 +108,8 @@ class Telemetry:
 
     Missing numerics are NaN and missing strings empty, matching MonglaState's
     "no data" convention. ``rpm`` is per-thruster (ESC_TELEMETRY);
-    ``leak``/``water_temp_c`` come from `NAMED_VALUE_FLOAT`.
+    ``leak`` is the SYS_STATUS leak health bit, else the deprecated
+    `NAMED_VALUE_FLOAT('LEAK')`, else None; ``water_temp_c`` is `NAMED_VALUE_FLOAT`.
     """
     armed:           bool  = False
     mode:            str   = ''
@@ -118,7 +119,9 @@ class Telemetry:
     roll_deg:        float = math.nan
     pitch_deg:       float = math.nan
     rpm:             tuple = field(default_factory=tuple)
-    leak:            bool  = False
+    # None until the board says: dry and not looking are different facts
+    # (srot_health.sys_status_leak), and a lamp that read False as dry lied.
+    leak:            Optional[bool] = None
     water_temp_c:    float = math.nan
     link_alive:      bool  = False
     # `battery_voltage` above stays the MAIN (PM1) pack so MonglaState is

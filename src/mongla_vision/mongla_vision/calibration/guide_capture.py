@@ -41,8 +41,9 @@ GRID = 3
 #     skew = min(1, 2*|pi/2 - angle(up_left, up_right, down_right)|)
 # which is sensitive to exactly the symmetric tilt the diagonals cannot see.
 #
-# The band edges come from that mapping, and the top band stops at ~45 deg
-# On purpose. calib.io's guidance is explicit: use up to +/-45 degrees,
+# The band edges come from that mapping. The top band has NO ceiling in
+# code: it starts at ~33 deg, and the page tells the operator to stop at ~45,
+# on purpose. calib.io's guidance is explicit: use up to +/-45 degrees,
 # because "tilting more is usually not a good idea as feature localization
 # accuracy suffers and can become biased". Asking for "as steep as you can"
 # is asking for a worse calibration.
@@ -176,8 +177,13 @@ def set_camera(dev, exposure, brightness):
     for k, v in (('auto_exposure', 1),
                  ('exposure_time_absolute', exposure),
                  ('brightness', brightness)):
-        r = subprocess.run(['v4l2-ctl', '-d', str(dev),
-                            '-c', f'{k}={v}'], capture_output=True)
+        try:
+            r = subprocess.run(['v4l2-ctl', '-d', str(dev),
+                                '-c', f'{k}={v}'], capture_output=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            # No v4l2-ctl, or a device that stopped answering: False, as the
+            # caller's warning expects, never a raise out of the node (vl_5 F8).
+            return False
         ok = ok and r.returncode == 0
     return ok
 
@@ -263,25 +269,42 @@ def detect_loop(st, det_w):
                     gray, (st.cols, st.rows), c)[0])
             except Exception:
                 sharp = None
-        oks = sharp is None or sharp <= MAX_SHARPNESS_PX
+        # Unmeasured is not sharp: a view the gate could not read is not
+        # taken (vl_5 F3).
+        oks = sharp is not None and sharp <= MAX_SHARPNESS_PX
         with st.lock:
             st.sharp = sharp
         if okc and okt and not oks:
             held_since = None
             prog = 0.0
-            msg = (f'too blurred ({sharp:.1f} px, want <{MAX_SHARPNESS_PX:.0f})'
-                   f' -- hold still, or add light')
+            msg = ('blur could not be measured -- hold still' if sharp is None
+                   else f'too blurred ({sharp:.1f} px, want <{MAX_SHARPNESS_PX:.0f})'
+                        f' -- hold still, or add light')
         elif okc and okt:
             held_since = held_since or time.time()
             prog = min(1.0, (time.time() - held_since) / HOLD_S)
             msg = 'hold it...'
             if prog >= 1.0:
-                fn = os.path.join(st.outdir, f'cal_{i:03d}.png')
-                cv2.imwrite(fn, f)
                 held_since = None
                 prog = 0.0
+                # Written and counted under the lock, and only for the step
+                # read above: a skip, undo or reset during this pass moved
+                # st.i, and the frame belongs to a pose no longer asked for.
+                # A failed write is not "got it" (vl_5 F10).
                 with st.lock:
+                    if st.i != i:
+                        continue
+                    fn = os.path.join(st.outdir, f'cal_{i:03d}.png')
+                    if not cv2.imwrite(fn, f):
+                        st.msg = f'could not write {fn}: disk full or no permission'
+                        continue
                     st.i += 1
+                    # Past views already on disk: a resume after a skip
+                    # starts at the gap, and the next step must not write
+                    # over a later capture (vl_5 F9).
+                    while os.path.exists(os.path.join(
+                            st.outdir, f'cal_{st.i:03d}.png')):
+                        st.i += 1
                     msg = 'got it'
         else:
             held_since = None

@@ -152,12 +152,20 @@ function initPanel(context) {
     for (const b of applyButtons) b.disabled = !named;
   }
 
+  let stAt = 0;
+  const STALE_MS = 3000;
+  // Unref'd where the host has it, so a headless test can exit.
+  const ager = setInterval(() => { if (st && Date.now() - stAt > STALE_MS) { st = null; draw(); } }, 1000);
+  if (ager && ager.unref) ager.unref();
   context.subscribe([{ topic: STATE }]);
   context.watch("currentFrame");
   context.onRender = (renderState, done) => {
     for (const ev of renderState.currentFrame || []) {
-      try { st = JSON.parse(ev.message.data); } catch { /* keep the last */ }
+      try { st = JSON.parse(ev.message.data); stAt = Date.now(); } catch { /* keep the last */ }
     }
+    // The node republishes at least once a second; older is a stopped node,
+    // whose latched last state must not read as a capture still running.
+    if (st && Date.now() - stAt > STALE_MS) st = null;
     draw();
     done();
   };

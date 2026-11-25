@@ -150,6 +150,15 @@ class PnPNode(Node):
         out.target_label = msg.target_label
         out.ok = False
         out.reason = reason
+        # A refusal has no measurement. The float fields default to 0.0 in the
+        # message, which reads as "perfect fit", "certain" and "on top of the
+        # target", so they are set to the values that refuse.
+        out.reproj_px = float('inf')
+        out.ambiguity = 1.0
+        for name in ('yaw_deg', 'pitch_deg', 'roll_deg', 'range_m',
+                     'yaw_spread_deg', 'pitch_spread_deg', 'off_axis_deg',
+                     'alt_yaw_deg', 'bearing_deg'):
+            setattr(out, name, float('nan'))
         self._pub.publish(out)
 
     def _on_corr(self, msg):

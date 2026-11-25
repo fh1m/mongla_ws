@@ -78,8 +78,12 @@ def run(mongla, log=None):
             mongla.note('flares', 'skipped: SAUVC_FLARES_ENABLED is off '
                         '(flare detection range unmeasured)', success=False)
     finally:
-        mongla.surface()
-        mongla.disarm()
+        # Disarm even if surface raises: a hull left armed after a
+        # failed surface is the worse outcome (bead 2s8).
+        try:
+            mongla.surface()
+        finally:
+            mongla.disarm()
 
 
 def _navigation(mongla, log):

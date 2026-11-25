@@ -220,12 +220,18 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `tracker_type` | `ocsort` | Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack |
 | `flow` | `false` | Start flow_node on the downward camera (velocity, and calc_distance start/stop). |
 | `pool_depth_m` | `nan` | Water depth in metres. REQUIRED with flow:=true -- the node refuses to publish without it. |
+| `pool_depth_min_m` | `nan` | Shallowest floor depth, metres (the sigma). |
+| `pool_depth_max_m` | `nan` | Deepest floor depth, metres (the sigma). |
+| `tile_m` | `0.0` | Floor tile pitch, metres; 0 = off. |
+| `lane_lines` | `false` | Read the lane line as a heading bound. |
 | `hud_distance` | `true` | HUD pre-arms the distance panel. |
 
 ### `mongla_vision/vision_dual.launch.py`
 
 | argument | default | what it does |
 |---|---|---|
+| `fwd_calibration` | `` | calibration JSON for the forward camera; empty publishes k=0 and says so |
+| `dwn_calibration` | `` | calibration JSON for the downward camera; empty publishes k=0 and says so |
 | `fwd_device` | `0` | /dev/videoN index for the forward camera — LAST-RESORT fallback, only used on a box with no /dev/mongla_cam_* symlink (dev box). On the vehicle the port-stable symlink wins automatically (see device_path below). |
 | `dwn_device` | `4` | /dev/videoN index for the downward camera (dev-box fallback; the vehicle symlink wins automatically) |
 | `fwd_device_path` | `` | override device for forward (empty = auto /dev/mongla_cam_forward) |
@@ -424,11 +430,12 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `exposure_us` | `0` |
 | `controls` | `''` |
 
-**`mongla_vision/detector_dual_node.py`** — 5 parameters
+**`mongla_vision/detector_dual_node.py`** — 6 parameters
 
 | parameter | default |
 |---|---|
 | `device` | `-1` |
+| `masks` | `True` |
 | `replay` | `False` |
 | `cameras` | `'forward` |
 | `lock` | `False` |

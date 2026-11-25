@@ -466,6 +466,10 @@ class SetupMixin:
         from sensor_msgs.msg import BatteryState
         self.thruster_pack_publisher = self.create_publisher(
             BatteryState, '/mongla/thruster_pack', 10)
+        # Leak, kill and the barometer, decoded once (node_telemetry.safety_of),
+        # on their own topic for the same reason.
+        from mongla_interfaces.msg import MonglaSafety
+        self.safety_publisher = self.create_publisher(MonglaSafety, '/mongla/safety', 10)
 
         # Body-frame angular rates for the downward optical-flow distance
         # estimator (rotation compensation). Vector3Stamped: x=pitch_rate,

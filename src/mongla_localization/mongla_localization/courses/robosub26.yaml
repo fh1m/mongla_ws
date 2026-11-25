@@ -65,7 +65,7 @@ props:
   bin:
     detect_class: bin
     measured: false
-    note: "Downward camera task. depth_m is the transit depth, not the drop
+    note: "Downward camera task. depth_m is the transit depth for the map (no mission reads it), not the drop
            depth -- the descent is a vision axis."
 
   torpedo:

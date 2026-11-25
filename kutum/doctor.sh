@@ -68,7 +68,7 @@ if [ -L "$HOME/.mongla" ] && [ "$(readlink -f "$HOME/.mongla")" = "$(readlink -f
 else warn "deck: ~/.mongla is not a link to ~/mongla/deck -- run kutum/setup.sh (the user half)"; fi
 
 # Batighor's web app (src/mongla_batighor): the pinned Lichtblick build.
-lbv="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$(dirname "${BASH_SOURCE[0]}")/../src/mongla_batighor/LICHTBLICK.json" 2>/dev/null)"
+lbv="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$KUTUM/../src/mongla_batighor/LICHTBLICK.json" 2>/dev/null)"
 if [ -f "$HOME/.mongla/batighor/web/$lbv/index.html" ]; then ok "Batighor: Lichtblick $lbv installed"
 else warn "Batighor: Lichtblick ${lbv:-?} not installed -- the operator center answers 503 (ros2 run mongla_batighor fetch)"; fi
 

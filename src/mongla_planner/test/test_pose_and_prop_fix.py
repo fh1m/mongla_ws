@@ -161,7 +161,7 @@ def test_the_LARGEST_box_sets_the_range_not_the_most_confident():
     """Size is what range is read off. A small confident box is a worse range
     than a large doubtful one -- same rule as `identity.pick_structure`."""
     from mongla_vision.target_geometry import width_for
-    if width_for('gate') <= 0.0:
+    if not width_for('gate') > 0.0:
         pytest.skip('no gate width in the table')
     boxes = [('gate', 0, 0, 20.0, 10, 0.99), ('gate', 0, 0, 80.0, 10, 0.30)]
     z, _ = MonglaMission.range_to(_ranger(boxes), 'gate')
@@ -176,7 +176,7 @@ def test_an_unknown_class_has_no_range():
 
 def test_a_class_with_no_box_has_no_range():
     from mongla_vision.target_geometry import width_for
-    if width_for('gate') <= 0.0:
+    if not width_for('gate') > 0.0:
         pytest.skip('no gate width in the table')
     assert MonglaMission.range_to(_ranger([]), 'gate') is None
 

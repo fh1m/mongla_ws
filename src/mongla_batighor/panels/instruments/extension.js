@@ -225,22 +225,29 @@ function poolMap(course, pose, track, fixes, target, opts) {
       kids.push(svg("line", { x1: here.y, y1: -here.x, x2: here.y + 2 * v.vy, y2: -(here.x + 2 * v.vx), stroke: v.ink, "stroke-width": 1.5 * u, "stroke-linecap": "round" }));
       kids.push(svg("circle", { cx: here.y + 2 * v.vy, cy: -(here.x + 2 * v.vx), r: 1.5 * u, fill: v.ink }));
     }
-    const yaw = fin(here.yaw) ? here.yaw : 0;
+    const headed = fin(here.yaw);
+    const yaw = headed ? here.yaw : 0;
     const hull = [[10, 0], [-6, 5], [-3, 0], [-6, -5]].map(([f, r]) => {
       const n = here.x + u * (f * Math.cos(yaw) - r * Math.sin(yaw)), e = here.y + u * (f * Math.sin(yaw) + r * Math.cos(yaw));
       return `${e},${-n}`;
     });
-    kids.push(svg("polygon", here.placed
+    // No heading, no hull: a hull at 0 would point north, against "heading --".
+    if (!headed) kids.push(svg("circle", { cx: here.y, cy: -here.x, r: 3 * u, fill: here.placed ? "none" : "var(--mb-red)", stroke: here.placed ? "var(--mb-amber)" : "var(--mb-d0)", "stroke-width": u }));
+    else kids.push(svg("polygon", here.placed
       ? { points: hull.join(" "), fill: "none", stroke: "var(--mb-amber)", "stroke-width": 1.5 * u }
       : { points: hull.join(" "), fill: "var(--mb-red)", stroke: "var(--mb-d0)", "stroke-width": u }));
     if (here.placed) kids.push(text(here.y + 8 * u, -here.x + 12 * u, "by its start", "var(--mb-amber)"));
     if (target) kids.push(svg("line", { x1: here.y, y1: -here.x, x2: target.y, y2: -target.x, stroke: "var(--mb-red)", "stroke-width": u, "stroke-dasharray": `${4 * u},${3 * u}` }));
   }
   if (target) {
-    const r = fin(target.tol) && target.tol > 0 ? target.tol : 6 * u;
-    kids.push(svg("circle", { cx: target.y, cy: -target.x, r, fill: "none", stroke: "var(--mb-red)", "stroke-width": 1.5 * u }));
-    kids.push(svg("line", { x1: target.y - r, y1: -target.x, x2: target.y + r, y2: -target.x, stroke: "var(--mb-red)", "stroke-width": u }));
-    kids.push(svg("line", { x1: target.y, y1: -target.x - r, x2: target.y, y2: -target.x + r, stroke: "var(--mb-red)", "stroke-width": u }));
+    // Drawn only for a tolerance that was given: a made-up radius reads as the arrival circle.
+    const toleranced = fin(target.tol) && target.tol > 0;
+    const r = toleranced ? target.tol : 0;
+    if (toleranced) {
+      kids.push(svg("circle", { cx: target.y, cy: -target.x, r, fill: "none", stroke: "var(--mb-red)", "stroke-width": 1.5 * u }));
+      kids.push(svg("line", { x1: target.y - r, y1: -target.x, x2: target.y + r, y2: -target.x, stroke: "var(--mb-red)", "stroke-width": u }));
+      kids.push(svg("line", { x1: target.y, y1: -target.x - r, x2: target.y, y2: -target.x + r, stroke: "var(--mb-red)", "stroke-width": u }));
+    }
     kids.push(text(target.y + r + 3 * u, -target.x, "go_to", "var(--mb-red)"));
   }
   // The scale and north, where an operator looks for them.
@@ -444,7 +451,9 @@ function foldDiagnostics(s, m) {
   s.health = s.health || [];
   for (const st of m.status || []) {
     const i = s.health.findIndex((h) => h.name === st.name);
-    const row = { name: st.name, level: typeof st.level === "number" ? st.level : Number(st.level), message: st.message, at: heard() };
+    const parsed = Number(st.level);
+    // A level that does not parse is unknown (3), not dropped from the count.
+    const row = { name: st.name, level: typeof st.level === "number" ? st.level : Number.isFinite(parsed) ? parsed : 3, message: st.message, at: heard() };
     if (i < 0) s.health.push(row); else s.health[i] = row;
   }
 }
@@ -543,6 +552,62 @@ function shouldReport(s, now) {
   return true;
 }
 
+// A link's quality as four bars, from the number that says it: three
+// thresholds, at or under the first is four bars, over the last is one; no
+// number is no bars, never four. Lag in seconds (the strip's warn at 0.5 and
+// error at 2 are the second and third edges); the board's drops in percent
+// (warn over 1). Exported for the test.
+const LAG_BARS = [0.15, 0.5, 2], DROP_BARS = [0.1, 0.5, 1];
+function signalBars(x, edges) {
+  if (!fin(x)) return 0;
+  return 4 - edges.filter((e) => x > e).length;
+}
+
+// One status cell: its name, its value, and, for a link, the bars.
+function statusCell([k, val, lvl, bars]) {
+  const meter = bars === undefined ? null
+    : el("i", { class: `sig s${bars}`, title: `${bars} of 4` }, el("span"), el("span"), el("span"), el("span"));
+  return el("div", { class: `cell ${lvl}` }, el("small", {}, k), el("b", {}, meter, val));
+}
+
+// The strip's fold, and what every strip does each draw besides its cells:
+// mark the console's tabs, and report this screen's lag to the helm, which
+// sets the viewers' video for the slowest screen (link.py). Whichever strip
+// a console carries (Status, or Watch on the pilot console) does both: a
+// console with neither had no tab marks and never reported its lag.
+function statusFold(s, topic, m) {
+  if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteLag(s, heard(), sent() || (m.header && m.header.stamp)); }
+  else if (topic === "/mongla/batighor/helm_state") { try { const h = JSON.parse(m.data); s.video = h.video; s.videoBy = h.video_by || ""; } catch { /* keep */ } }
+  else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
+  else if (topic === "/mongla/mission/task") { try { s.task = JSON.parse(m.data); } catch { /* keep */ } }
+  else if (topic === "/mongla/doing") { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
+  else if (topic === "/diagnostics") foldDiagnostics(s, m);
+  else if (topic === "/mongla/localization/state") { s.loc = m; s.locAt = heard(); }
+  else if (topic === "/mongla/board_link") { s.link = m; s.linkAt = heard(); }
+  else {
+    const c = CAMERAS.find((x) => topic === lockTopic(x));
+    if (c) { s.locks = s.locks || {}; s.locks[c] = { m, at: heard() }; }
+  }
+}
+
+function statusDuties(s, tabs) {
+  if (typeof callAny === "function" && shouldReport(s, Date.now())) {
+    callAny("/mongla/batighor/helm", { who: "", op: "link", cmd: "", mission: "", confirms: [],
+      fields_json: JSON.stringify({ lag_s: Math.round(s.lag * 1000) / 1000, screen: SCREEN }) }).catch(() => { /* no helm */ });
+  }
+  if (typeof document !== "undefined" && document.querySelectorAll) {
+    for (const tab of document.querySelectorAll('[data-testid="toolbar-tab"]')) {
+      const lvl = tabs[tab.getAttribute("title")] || "";
+      if (tab.dataset.mb !== lvl) tab.dataset.mb = lvl;
+    }
+  }
+}
+
+const STATUS_TOPICS = ["/mongla/state", "/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics",
+  "/mongla/localization/state", "/mongla/board_link", "/mongla/batighor/helm_state"];
+// What the pilot console's strip keeps: the rest is on Vitals, below.
+const WATCH_CELLS = ["mission", "verb", "lock", "link", "to kutum"];
+
 // -- the table -----------------------------------------------------------
 
 // The status strip's cells and the console's tab marks, from one fold. Pure:
@@ -559,7 +624,7 @@ function statusOf(s, now) {
   cells.push(["vehicle", v && !fresh ? `${armedWord}  ${num(age(s.vAt), 1)} s old` : armedWord,
     !v ? "stale" : !fresh ? "warn" : v.armed ? "armed" : "ok"]);
   cells.push(["mode", v ? v.mode || "--" : "--", ""]);
-  cells.push(["depth", v && fin(v.depth_m) ? `${num(-v.depth_m, 2)} m` : "--", ""]);
+  cells.push(["depth", v && fin(v.depth_m) ? `${num(-v.depth_m, 2)} m deep` : "--", ""]);
   cells.push(["heading", v ? `${num(v.yaw_deg, 0)} deg` : "--", ""]);
   cells.push(["battery", v ? `${num(v.battery_voltage, 1)} V` : "--", ""]);
   const running = age(s.aliveAt) < MISSION_ALIVE_S;
@@ -586,13 +651,15 @@ function statusOf(s, now) {
   const worst = !rows.length ? -1 : errs ? 2 : warns ? 1 : unknown ? 3 : 0;
   cells.push(["health", worst < 0 ? "--" : said || "all ok", worst < 0 ? "stale" : LEVEL[worst]]);
   const l = s.link && age(s.linkAt) < 3 ? s.link : null;
-  cells.push(["link", l ? `${num(100 * l.bytes_per_s / (l.capacity_bytes_per_s || NaN), 0)} %  drops ${num(l.board_drop_pct, 1)} %` : "--", !l ? "stale" : l.board_drop_pct > 1 ? "warn" : "ok"]);
+  cells.push(["link", l ? `${num(100 * l.bytes_per_s / (l.capacity_bytes_per_s || NaN), 0)} %  drops ${num(l.board_drop_pct, 1)} %` : "--", !l ? "stale" : l.board_drop_pct > 1 ? "warn" : "ok",
+    l ? signalBars(l.board_drop_pct, DROP_BARS) : 0]);
   // This screen's link to Kutum, apart from the board's line above: the lag
   // and the scale the helm put the viewers' video at for it (link.py).
   // The lag is measured on the state's arrival; with the state silent it is unknown.
   const lag = fresh ? s.lag : NaN;
   const lagLvl = !fin(lag) ? "stale" : lag > 2 ? "err" : lag > 0.5 ? "warn" : "ok";
-  cells.push(["to kutum", fin(lag) ? `lag ${num(lag, 2)} s  ${videoWords(s.video, s.videoBy)}` : "--", lagLvl]);
+  cells.push(["to kutum", fin(lag) ? `lag ${num(lag, 2)} s  ${videoWords(s.video, s.videoBy)}` : "--", lagLvl,
+    signalBars(lag, LAG_BARS)]);
   tabs.Cockpit = v && v.armed ? "live" : "";
   tabs.Thrust = v && v.armed ? "live" : "";
   tabs.Mission = running ? "live" : "";
@@ -603,46 +670,285 @@ function statusOf(s, now) {
   return { cells, tabs };
 }
 
+// -- intent: what Mongla is trying to do, how far it is, whether it gets there
+//
+// Built only from what the vehicle already says: the verb and the fields its
+// sender set (/mongla/doing), the Move action's feedback (the board's own
+// progress, or a vision verb's pixel error), the state, the filter, the
+// lock, the task clock and the manager's health grades. A goal is shown with
+// its target, where the vehicle is, the error, and the verb's own tolerance
+// where the verb has one (err_px, tolerance_m). Nothing here invents a band.
+// The verdict is the error's own history over the last STALL_S, with both
+// numbers shown, so an operator can judge the word. STALL_S is a display
+// window, not a vehicle threshold.
+const STALL_S = 3;
+const MOTION = new Set(["go_to", "vision_align", "vision_move"]);
+const wrap180 = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
+
+// The goals of the verb running now, as numbers. Pure; exported for the test.
+function goalsOf(d, f, s) {
+  const v = s.v || {}, fb = s.fb || {};
+  const pos = s.odom && s.odom.pose && s.odom.pose.pose && s.odom.pose.pose.position;
+  const out = [];
+  const progress = fb.phase === d.verb && fin(fb.current_value);
+  if (d.verb === "set_depth") out.push({ what: "depth", want: f.target, now: v.depth_m, err: v.depth_m - f.target, unit: "m" });
+  if (d.verb === "surface") out.push({ what: "depth", want: 0, now: v.depth_m, err: v.depth_m, unit: "m" });
+  if (d.verb === "turn") out.push({ what: "heading", want: f.target, now: v.yaw_deg, err: wrap180(v.yaw_deg - f.target), unit: "deg" });
+  if (d.verb === "go_to") {
+    const e = pos ? Math.hypot(pos.x - f.x_m, pos.y - f.y_m) : NaN;
+    out.push({ what: "distance to point", want: `${num(f.x_m, 2)}, ${num(f.y_m, 2)}`,
+      now: pos ? `${num(pos.x, 2)}, ${num(pos.y, 2)}` : NaN, err: e, band: f.tolerance_m, unit: "m" });
+  }
+  if (d.verb === "vision_align" || d.verb === "vision_move") {
+    const ex = fb.err_x_px, ey = fb.err_y_px;
+    const axes = [ex, ey].filter(fin);
+    const worst = axes.length ? Math.max(...axes.map(Math.abs)) : NaN;
+    out.push({ what: "pixel error (worst axis)", want: 0, now: fin(ex) || fin(ey) ? `x ${num(ex, 0)}  y ${num(ey, 0)}` : NaN,
+      err: worst, band: f.err_px, unit: "px" });
+  }
+  if (progress) out.push({ what: "board's progress", want: 100, now: 100 * fb.current_value, err: 100 * (1 - fb.current_value), unit: "%", progress: true });
+  return out;
+}
+
+// Why the verb cannot reach its goal, from evidence only. Pure; exported.
+function cannotOf(d, f, s, now) {
+  const why = [], v = s.v || {}, spec = VERBS[d.verb] || {};
+  const age = (t) => (t ? (now - t) / 1000 : Infinity);
+  const moves = spec.board || MOTION.has(d.verb);
+  if (age(s.vAt) > 2) why.push(`no /mongla/state for ${fin(age(s.vAt)) ? num(age(s.vAt), 0) + " s" : "ever"}: every number here is old`);
+  else if (moves && v.armed === false && d.verb !== "surface") why.push("disarmed: the board moves nothing");
+  const rows = healthNow(s, now);
+  const baro = rows.find((r) => r.name === "barometer" || r.name.endsWith(": barometer"));
+  if (spec.board && d.verb !== "surface" && baro && baro.level === 2)
+    why.push(`barometer unhealthy (${baro.message}): the board refuses AUTO, and every board verb runs in AUTO`);
+  if (d.verb === "vision_align" || d.verb === "vision_move") {
+    const cam = f.camera || "forward";
+    const { rung } = rungOf((s.lock || {})[cam]);
+    const la = age((s.lockAt || {})[cam]);
+    if (la > 1) why.push(`${cam} lock silent ${fin(la) ? num(la, 1) + " s" : "since start"}: nothing to steer on`);
+    else if (rung === "lost") why.push(`${cam} lock is lost: the verb steers on nothing`);
+  }
+  if (d.verb === "go_to" && s.odomAt && age(s.odomAt) > 2) why.push(`no /mongla/odom for ${num(age(s.odomAt), 0)} s: the point is steered on an old estimate`);
+  const task = (s.tasks || []).find((t) => t.state === "running");
+  if (task && fin(task.deadline_s) && task.elapsed_s + age(task.at) > task.deadline_s) why.push(`task ${task.task} is past its deadline`);
+  return why;
+}
+
+// Is the error closing? The oldest and newest error inside STALL_S, so the
+// verdict is two numbers anyone can check. Pure; exported for the test.
+function verdictOf(g, hist, now) {
+  const e = Math.abs(g.err);
+  if (!fin(e)) return { word: "unknown", cls: "stale", say: "no measurement" };
+  if (fin(g.band) && e <= g.band) return { word: "inside", cls: "good", say: `within ${num(g.band, 2)} ${g.unit}` };
+  const win = (hist || []).filter((h) => (now - h.t) / 1000 <= STALL_S && fin(h.e));
+  if (!win.length || (now - win[0].t) / 1000 < STALL_S * 0.66) return { word: "starting", cls: "", say: "under 2 s of history" };
+  const a = win[0].e, b = win[win.length - 1].e;
+  const span = num((win[win.length - 1].t - win[0].t) / 1000, 1);
+  if (b < a) return { word: "closing", cls: "live", say: `${num(a, 2)} to ${num(b, 2)} ${g.unit} in ${span} s` };
+  return { word: "not closing", cls: "warn", say: `${num(a, 2)} to ${num(b, 2)} ${g.unit} in ${span} s` };
+}
+
+function intentDraw(s, now) {
+  const d = s.doing && s.doing.now;
+  const live = ageS(s.aliveAt) < MISSION_ALIVE_S && s.missionName;
+  const task = (s.tasks || []).find((t) => t.state === "running");
+  const head = el("div", { class: "row" }, el("span", { class: "note" }, "mission"),
+    live ? el("b", { class: "live" }, s.missionName) : el("span", {}, "none"),
+    task ? el("span", {}, `task ${task.task}`) : null);
+  if (!d) return [head, el("div", { class: "note" }, s.doing ? "idle: no verb running, so no goal" : "no /mongla/doing: is the manager running?")];
+  const spec = VERBS[d.verb] || { defaults: {} };
+  const f = { ...(spec.defaults || {}), ...(d.fields || {}) };
+  const out = [head, el("div", { class: "row" }, el("b", { class: "live" }, d.verb),
+    el("span", { class: "note" }, spec.board ? "on the board" : "on Kutum"),
+    el("span", {}, fieldsText(d.fields) || "defaults"))];
+  const why = cannotOf(d, f, s, now);
+  if (why.length) out.push(el("div", { class: "cannot" }, el("b", { class: "err" }, "cannot"), ...why.map((w) => el("span", { class: "err" }, w))));
+  const goals = goalsOf(d, f, s);
+  if (!goals.length) out.push(el("div", { class: "note" }, `${d.verb} reports no measurable goal: it is timed, or a one-shot`));
+  for (const g of goals) {
+    const vd = verdictOf(g, (s.hist || {})[g.what], now);
+    const fmt = (x) => (typeof x === "string" ? x : num(x, g.unit === "px" || g.unit === "%" ? 0 : 2));
+    out.push(el("h3", {}, el("span", {}, g.what)));
+    out.push(kv(["want", `${fmt(g.want)} ${g.unit}`], ["now", `${fmt(g.now)} ${g.unit}`],
+      ["error", `${fmt(Math.abs(g.err))} ${g.unit}${fin(g.band) ? ` of ${num(g.band, 2)} allowed` : ""}`],
+      ["verdict", `${vd.word}: ${vd.say}`, why.length && vd.word !== "inside" ? "err" : vd.cls]));
+    const full = g.progress ? 100 : fin(g.band) ? 4 * g.band : NaN;
+    const frac = g.progress ? g.now / 100 : fin(full) ? 1 - Math.min(1, Math.abs(g.err) / full) : NaN;
+    if (fin(frac)) out.push(el("div", { class: "bar" }, el("b", { style: `width:${Math.max(0, Math.min(100, 100 * frac))}%` })));
+  }
+  return out;
+}
+
+// -- Vitals: the vehicle at a glance, drawn to be read from the corner of an eye
+// A redraw replaces the drawing, which restarts a CSS animation; a negative
+// delay taken from the clock puts each one back where it was, so the water
+// keeps flowing across redraws instead of stuttering at every message.
+function phase(ms) { return `animation-delay:-${Date.now() % ms}ms`; }
+
+const HEALTH_FILL = { ok: "var(--mb-teal)", warn: "var(--mb-amber)", err: "var(--mb-red)", stale: "var(--mb-ink-3)" };
+
+// Pure, for the test: what the drawing says, from the folded state.
+function vitalsOf(s, now) {
+  const v = s.v || {};
+  const stale = !s.vAt || (now - s.vAt) / 1000 > FRESH_S;
+  const d = s.dAt && (now - s.dAt) / 1000 <= FRESH_S ? s.demand || {} : {};
+  const rows = healthNow(s, now);
+  const health = BOARD_LINES.map(([label, key]) => {
+    const r = rows.find((x) => x.name === key || x.name.endsWith(`: ${key}`));
+    return [label, r ? LEVEL[Math.min(r.level, 3)] : "stale", r ? r.message : "not graded yet"];
+  });
+  const rpm = s.rAt && (now - s.rAt) / 1000 <= FRESH_S ? s.rpm || [] : [];
+  return {
+    stale, ageS: s.vAt ? (now - s.vAt) / 1000 : NaN,
+    armed: !!v.armed, mode: v.mode || "", yaw: v.yaw_deg, below: fin(v.depth_m) ? -v.depth_m : NaN,
+    surge: d.x, sway: d.y, health, rpm, peak: Math.max(1000, ...rpm.map((r) => Math.abs(r))),
+    pack: s.pAt && (now - s.pAt) / 1000 <= FRESH_S && s.pack ? s.pack.voltage : NaN,
+    rail: v.battery_voltage,
+    // Where the filter puts the hull, and whether it says to trust it.
+    nav: s.locAt && (now - s.locAt) / 1000 <= FRESH_S && s.loc ? {
+      x: s.loc.x_m, y: s.loc.y_m, sigma: s.loc.sigma_xy_m, frame: s.loc.frame,
+      usable: !!s.loc.usable, why: s.loc.reason || s.loc.aiding || "",
+    } : null,
+  };
+}
+
+function vitalsSvg(g) {
+  const T = (x, y, txt, a = {}) => svg("text", { x, y, ...a }, txt);
+  // Depth: a water column from the surface to 3 m (deeper, to the vehicle).
+  const floor = Math.max(3, fin(g.below) ? g.below : 0);
+  const top = 46, bot = 236, colY = fin(g.below) ? top + ((bot - top) * Math.max(0, g.below)) / floor : null;
+  const wave = "M0 0 q6 -4 12 0 t12 0 t12 0 t12 0 t12 0";
+  const depth = [
+    T(47, 26, "DEPTH", { class: "lbl", "text-anchor": "middle" }),
+    svg("rect", { x: 34, y: top, width: 26, height: bot - top, rx: 3, class: "well" }),
+    colY !== null && svg("rect", { x: 34, y: top, width: 26, height: colY - top, class: "water" }),
+    svg("g", { transform: `translate(30 ${top})` },
+      svg("path", { d: wave, class: "wave", style: phase(1600) })),
+    colY !== null ? svg("path", { d: `M24 ${colY} l10 -6 v12 z`, class: "hullmark" })
+      : T(47, (top + bot) / 2, "NO DEPTH HEARD", { class: "absent", "text-anchor": "middle",
+        transform: `rotate(-90 47 ${(top + bot) / 2})` }),
+    T(47, 266, fin(g.below) ? g.below.toFixed(2) : "--", { class: "num", "text-anchor": "middle" }),
+    T(47, 282, "m", { class: "unit", "text-anchor": "middle" }),
+  ];
+  // Heading up, as from inside: the ring turns, the hull stays; a red mark
+  // is where the nose points.
+  const cx = 250, cy = 150, R = 112;
+  const ring = [];
+  for (let a = 0; a < 360; a += 10) {
+    const r = (a * Math.PI) / 180, long = a % 30 === 0;
+    ring.push(svg("line", { x1: cx + (R - (long ? 12 : 6)) * Math.sin(r), y1: cy - (R - (long ? 12 : 6)) * Math.cos(r),
+      x2: cx + R * Math.sin(r), y2: cy - R * Math.cos(r), class: long ? "tick long" : "tick" }));
+  }
+  for (const [a, n] of [[0, "N"], [90, "E"], [180, "S"], [270, "W"]]) {
+    const r = (a * Math.PI) / 180;
+    ring.push(T(cx + (R - 26) * Math.sin(r), cy - (R - 26) * Math.cos(r) + 5, n,
+      { class: a === 0 ? "card north" : "card", "text-anchor": "middle",
+        transform: `rotate(${fin(g.yaw) ? g.yaw : 0} ${cx + (R - 26) * Math.sin(r)} ${cy - (R - 26) * Math.cos(r)})` }));
+  }
+  // The hull: 702 x 176 mm, nose up. Demand as water pushed past it.
+  const L = 128, W = 32, hx = cx - W / 2, hy = cy - L / 2;
+  const arrow = (x1, y1, x2, y2) => svg("line", { x1, y1, x2, y2, class: "flow", style: phase(600), "marker-end": "url(#mb-tip)" });
+  const thrust = [];
+  if (fin(g.surge) && Math.abs(g.surge) > 0.02) {
+    const len = 70 * Math.min(1, Math.abs(g.surge));
+    thrust.push(g.surge > 0 ? arrow(cx, hy - 4, cx, hy - 4 - len) : arrow(cx, hy + L + 4, cx, hy + L + 4 + len));
+  }
+  if (fin(g.sway) && Math.abs(g.sway) > 0.02) {
+    const len = 70 * Math.min(1, Math.abs(g.sway)), sx = g.sway > 0 ? hx + W + 4 : hx - 4;
+    thrust.push(arrow(sx, cy, sx + Math.sign(g.sway) * len, cy));
+  }
+  const compass = [
+    svg("defs", {}, svg("marker", { id: "mb-tip", viewBox: "0 0 10 10", refX: 5, refY: 5, markerWidth: 5, markerHeight: 5, orient: "auto-start-reverse" },
+      svg("path", { d: "M0 0 L10 5 L0 10 z", class: "tip" }))),
+    svg("circle", { cx, cy, r: R, class: "ring" }),
+    svg("g", { transform: `rotate(${fin(g.yaw) ? -g.yaw : 0} ${cx} ${cy})`, class: fin(g.yaw) ? "" : "unknown" }, ...ring),
+    svg("path", { d: `M${cx} ${cy - R - 2} l-7 -12 h14 z`, class: "lubber" }),
+    g.armed && svg("rect", { x: hx - 6, y: hy - 6, width: W + 12, height: L + 12, rx: (W + 12) / 2, class: "glow", style: phase(2400) }),
+    svg("rect", { x: hx, y: hy, width: W, height: L, rx: W / 2, class: g.armed ? "hull armed" : "hull" }),
+    svg("line", { x1: cx, y1: hy + 10, x2: cx, y2: hy + 26, class: "nose" }),
+    ...thrust,
+    !fin(g.surge) && T(cx, cy + R + 30, "thrust: the board's own move", { class: "lbl", "text-anchor": "middle" }),
+  ];
+  // The words: what it is, which way, on what.
+  const state = g.stale ? (fin(g.ageS) ? `STATE ${Math.round(g.ageS)} s OLD` : "NO STATE") : g.armed ? "ARMED" : "DISARMED";
+  const words = [
+    T(400, 62, state, { class: `state ${g.stale ? "stale" : g.armed ? "armed" : ""}` }),
+    T(400, 92, g.mode ? g.mode.replace("_", " ") : "mode --", { class: `mode ${/AUTO|DEPTH/.test(g.mode) ? "hold" : g.mode === "SURFACE" ? "surf" : ""}` }),
+    T(400, 126, "HEADING", { class: "lbl" }),
+    T(400, 166, fin(g.yaw) ? `${Math.round(((g.yaw % 360) + 360) % 360)}°` : "--", { class: "big" }),
+    T(400, 196, "THRUSTER PACK", { class: "lbl" }), T(530, 196, "RAIL", { class: "lbl" }),
+    T(400, 222, fin(g.pack) ? `${g.pack.toFixed(1)} V` : "-- V", { class: "num" }),
+    T(530, 222, fin(g.rail) ? `${g.rail.toFixed(1)} V` : "-- V", { class: "num" }),
+    // Position, north and east in the filter's frame (pool once anchored).
+    T(560, 126, "POSITION", { class: "lbl" }),
+    ...(g.nav && fin(g.nav.x) ? [
+      T(560, 148, `N ${g.nav.x >= 0 ? " " : ""}${g.nav.x.toFixed(2)}`, { class: "num" }),
+      T(560, 170, `E ${g.nav.y >= 0 ? " " : ""}${g.nav.y.toFixed(2)}`, { class: "num" }),
+      T(560, 186, fin(g.nav.sigma) ? `\u00b1${g.nav.sigma.toFixed(2)} m ${g.nav.frame}` : g.nav.frame, { class: "unit" }),
+    ] : [T(560, 150, g.nav ? "no position yet" : "no filter", { class: "absent" })]),
+    g.nav && T(400, 280, g.nav.usable ? "NAVIGATION USABLE" : `NAVIGATION: ${g.nav.why}`.slice(0, 44),
+      { class: g.nav.usable ? "nav ok" : "nav warn" }),
+  ];
+  // One spinner per ESC the board reports; speed and sense from its rpm.
+  const escs = g.rpm.length ? g.rpm.map((r, i) => {
+    const x = 410 + i * 28, y = 252, f = Math.abs(r) / g.peak;
+    const blades = svg("g", { class: f > 0.01 ? "spin" : "",
+      style: f > 0.01 ? `animation-duration:${(0.3 + 1.7 * (1 - f)).toFixed(2)}s;animation-direction:${r < 0 ? "reverse" : "normal"};${phase(1000)}` : "" },
+      svg("path", { d: `M${x} ${y - 9} L${x + 3} ${y} L${x - 3} ${y} z M${x} ${y + 9} L${x - 3} ${y} L${x + 3} ${y} z`, class: "blade" }));
+    return svg("g", {}, svg("circle", { cx: x, cy: y, r: 11, class: "esc" }), blades);
+  }) : [T(400, 256, "ESCs not announced", { class: "lbl" })];
+  // The board's six lines along the bottom; a bad one breathes.
+  const health = g.health.map(([label, lvl, msg], i) => {
+    const x = 14 + i * 108;
+    return svg("g", {}, svg("title", {}, msg),
+      svg("circle", { cx: x + 6, cy: 306, r: 5, fill: HEALTH_FILL[lvl], class: lvl === "err" || lvl === "warn" ? "alarm" : "", style: phase(1200) }),
+      T(x + 16, 311, label, { class: `hl ${lvl}` }));
+  });
+  return svg("svg", { viewBox: "0 0 660 322", class: `vitals${g.stale ? " stale" : ""}`, preserveAspectRatio: "xMidYMid meet" },
+    ...depth, ...compass, ...words, ...escs, ...health);
+}
+
 const INSTRUMENTS = {
   // The strip above the console's tabs: what an operator must never have to
   // look for, on every tab, and a mark on each tab whose subject needs an eye.
   Status: {
     title: "Status",
     kind: "status",
-    topics: ["/mongla/state", "/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics",
-      "/mongla/localization/state", "/mongla/board_link", "/mongla/batighor/helm_state",
-      ...CAMERAS.map(lockTopic)],
-    fold(s, topic, m) {
-      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); noteLag(s, heard(), sent() || (m.header && m.header.stamp)); }
-      else if (topic === "/mongla/batighor/helm_state") { try { const h = JSON.parse(m.data); s.video = h.video; s.videoBy = h.video_by || ""; } catch { /* keep */ } }
-      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
-      else if (topic === "/mongla/mission/task") { try { s.task = JSON.parse(m.data); } catch { /* keep */ } }
-      else if (topic === "/mongla/doing") { try { s.doing = JSON.parse(m.data); } catch { /* keep */ } }
-      else if (topic === "/diagnostics") foldDiagnostics(s, m);
-      else if (topic === "/mongla/localization/state") { s.loc = m; s.locAt = heard(); }
-      else if (topic === "/mongla/board_link") { s.link = m; s.linkAt = heard(); }
-      else {
-        const c = CAMERAS.find((x) => topic === lockTopic(x));
-        if (c) { s.locks = s.locks || {}; s.locks[c] = { m, at: heard() }; }
-      }
-    },
+    topics: [...STATUS_TOPICS, ...CAMERAS.map(lockTopic)],
+    fold: statusFold,
     draw(s) {
       const { cells, tabs } = statusOf(s, Date.now());
-      // Every 2 s, this screen's lag to the helm, which sets the viewers'
-      // video for the slowest screen (link.py). Through any mounted panel;
-      // no helm, no report, and nothing else depends on it.
-      if (typeof callAny === "function" && shouldReport(s, Date.now())) {
-        callAny("/mongla/batighor/helm", { who: "", op: "link", cmd: "", mission: "", confirms: [],
-          fields_json: JSON.stringify({ lag_s: Math.round(s.lag * 1000) / 1000, screen: SCREEN }) }).catch(() => { /* no helm */ });
-      }
-      if (typeof document !== "undefined" && document.querySelectorAll) {
-        for (const tab of document.querySelectorAll('[data-testid="toolbar-tab"]')) {
-          const lvl = tabs[tab.getAttribute("title")] || "";
-          if (tab.dataset.mb !== lvl) tab.dataset.mb = lvl;
-        }
-      }
-      return cells.map(([k, val, lvl]) => el("div", { class: `cell ${lvl}` }, el("small", {}, k), el("b", {}, val)));
+      statusDuties(s, tabs);
+      return cells.map(statusCell);
     },
+  },
+
+  Watch: {
+    title: "Watch",
+    kind: "status watch",
+    topics: [...STATUS_TOPICS, ...CAMERAS.map(lockTopic)],
+    fold: statusFold,
+    draw(s) {
+      const { cells, tabs } = statusOf(s, Date.now());
+      statusDuties(s, tabs);
+      return cells.filter(([k]) => WATCH_CELLS.includes(k)).map(statusCell);
+    },
+  },
+
+  Vitals: {
+    title: "Vitals",
+    kind: "vitals",
+    topics: ["/mongla/state", "/mongla/demand", "/mongla/esc_rpm", "/mongla/thruster_pack", "/diagnostics",
+      "/mongla/localization/state"],
+    fold(s, topic, m) {
+      if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); }
+      else if (topic === "/mongla/localization/state") { s.loc = m; s.locAt = heard(); }
+      else if (topic === "/mongla/demand") { s.demand = m.vector; s.dAt = heard(); }
+      else if (topic === "/mongla/esc_rpm") { s.rpm = Array.from(m.data || []); s.rAt = heard(); }
+      else if (topic === "/mongla/thruster_pack") { s.pack = m; s.pAt = heard(); }
+      else foldDiagnostics(s, m);
+    },
+    draw(s) { return [vitalsSvg(vitalsOf(s, Date.now()))]; },
   },
 
   Vehicle: {
@@ -780,6 +1086,46 @@ const INSTRUMENTS = {
   // The decision layer: the mission, the task it is in and its clock, the
   // verb the manager runs now with what was asked of it, and how each recent
   // one ended (refusals too), whoever sent it.
+  // What Mongla is trying to do now: the verb's goal against where the
+  // vehicle is, whether the error is closing, and what stops it (intentOf).
+  Intent: {
+    title: "Intent",
+    topics: ["/mongla/doing", "/mongla/move/_action/feedback", "/mongla/state", "/mongla/odom",
+      ...CAMERAS.map(lockTopic), "/mongla/mission/task", "/mongla/mission_alive", "/diagnostics"],
+    fold(s, topic, m) {
+      s.lock = s.lock || {}; s.lockAt = s.lockAt || {};
+      if (topic === "/mongla/doing") {
+        try {
+          s.doing = JSON.parse(m.data);
+          const n = s.doing.now, key = n ? `${n.verb}@${n.since}` : "";
+          if (key !== s.goalKey) { s.goalKey = key; s.hist = {}; s.fb = null; }
+        } catch { /* keep */ }
+      } else if (topic === "/mongla/move/_action/feedback") s.fb = m.feedback || m;
+      else if (topic === "/mongla/state") { s.v = m; s.vAt = heard(); }
+      else if (topic === "/mongla/odom") { s.odom = m; s.odomAt = heard(); }
+      else if (topic === "/mongla/mission_alive") { s.missionName = m.data; s.aliveAt = heard(); }
+      else if (topic === "/diagnostics") foldDiagnostics(s, m);
+      else if (topic === "/mongla/mission/task") {
+        try {
+          const t = JSON.parse(m.data); t.at = heard();
+          s.tasks = [t, ...(s.tasks || []).filter((x) => x.task !== t.task)].slice(0, 8);
+        } catch { /* keep */ }
+      } else for (const c of CAMERAS) if (topic === lockTopic(c)) { s.lock[c] = m; s.lockAt[c] = heard(); }
+      // Each goal's error, kept for the verdict's window.
+      const d = s.doing && s.doing.now;
+      if (!d) return;
+      const spec = VERBS[d.verb] || {};
+      const t = heard();
+      s.hist = s.hist || {};
+      for (const g of goalsOf(d, { ...(spec.defaults || {}), ...(d.fields || {}) }, s)) {
+        const h = (s.hist[g.what] = s.hist[g.what] || []);
+        if (!h.length || t - h[h.length - 1].t >= 100) h.push({ t, e: Math.abs(g.err) });
+        while (h.length && (t - h[0].t) / 1000 > STALL_S) h.shift();
+      }
+    },
+    draw: (s) => intentDraw(s, Date.now()),
+  },
+
   Mission: {
     title: "Mission",
     topics: ["/mongla/mission_alive", "/mongla/mission/task", "/mongla/doing", "/diagnostics"],
@@ -975,6 +1321,17 @@ function makePanel(spec) {
   return (context) => {
     if (typeof context.setDefaultPanelTitle === "function") context.setDefaultPanelTitle(spec.title);
     const root = mount(context, spec.kind);
+    // The Vitals window is a dash, not a workbench: its first start closes
+    // the app's left sidebar, once per profile, so the operator can open it
+    // again and it stays open.
+    if (spec.kind === "vitals") setTimeout(() => {
+      try {
+        if (localStorage.getItem("mb.vitals.sidebar")) return;
+        const b = document.querySelector('[data-testid="left-sidebar-button"]');
+        if (b && /^Hide/.test(b.getAttribute("aria-label") || "")) b.click();
+        localStorage.setItem("mb.vitals.sidebar", "closed");
+      } catch { /* no storage: leave the sidebar as it is */ }
+    }, 1500);
     const s = {};
     let dirty = true;
     // A control built once (spec.head): a redrawn button can lose its click.
@@ -1120,7 +1477,7 @@ async function syncLayouts() {
 }
 
 module.exports = {
-  healthNow, managerHeard,
+  healthNow, managerHeard, vitalsOf, signalBars, WATCH_CELLS,
   activate(extensionContext) {
     syncLayouts().catch((e) => console.warn(`[batighor] layout sync: ${e}`));
     for (const [name, spec] of Object.entries(INSTRUMENTS)) {
@@ -1128,6 +1485,9 @@ module.exports = {
     }
   },
   rungOf,
+  goalsOf,
+  cannotOf,
+  verdictOf,
   poolMap,
   drawMap,
   statusOf,

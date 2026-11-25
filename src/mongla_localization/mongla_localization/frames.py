@@ -82,7 +82,7 @@ def load(path: Optional[pathlib.Path] = None) -> Offsets:
     names = ('downward_cam', 'forward_cam', 'baro')
     # A misspelt name would load as "not measured", and the offset someone
     # taped would be silently unused.
-    for where, have, allowed in (('the top level', data, ('imu_to', 'measured')),
+    for where, have, allowed in (('the top level', data, ('imu_to',)),
                                  ('imu_to', imu_to, names)):
         unknown = sorted(set(have) - set(allowed))
         if unknown:

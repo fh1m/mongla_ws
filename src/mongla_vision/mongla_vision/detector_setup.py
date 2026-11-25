@@ -2,6 +2,7 @@
 
 A model swap on the day is one `set_model`; everything that swap touches is here.
 """
+import threading
 import os
 from typing import List, Optional
 from mongla_vision.detection.factory   import make_detector
@@ -17,6 +18,10 @@ LIVE_PARAMS = ('active_model', 'assoc_conf', 'classes', 'conf', 'masks',
                 'max_det', 'model_conf', 'nms_floor', 'nms_iou', 'paused')
 
 class DetectorSetupMixin:
+    # Held while the primary and its secondaries are swapped, and while the
+    # worker reads them, so one frame never mixes two models' pairs. Class
+    # level, so a node built without __init__ (the tests) has one too.
+    _swap_lock = threading.Lock()
     """Methods of `DetectorNode`; see `detector_node.py` for the node."""
 
     def _declare_parameters(self) -> None:
@@ -152,7 +157,7 @@ class DetectorSetupMixin:
                 f"per pair against 95 Hz for one. Deliberate, not free.")
         return self._extra_names
 
-    def _merge_extra(self, frame, detections: list) -> list:
+    def _merge_extra(self, frame, detections: list, extras=None) -> tuple:
         """Run each secondary model on the same frame and merge the results.
 
         Class IDS are reminted from labels when models are merged, and only
@@ -167,11 +172,13 @@ class DetectorSetupMixin:
         # `getattr`, not `self._extra`: a node built by a harness that
         # bypasses both init paths has no such attribute, and an AttributeError
         # here would surface as an inference failure rather than as itself.
-        if not getattr(self, '_extra', None):
+        if extras is None:
+            extras = getattr(self, '_extra', None)
+        if not extras:
             return detections, []
         from .detection.messages import remint_class_ids
         out, low = list(detections), []
-        for det in self._extra:
+        for det in extras:
             # Caught here, not counted: the failure counter rebuilds the
             # PRIMARY detector, and a secondary model's fault must not tear
             # down a primary that just succeeded.
@@ -238,6 +245,7 @@ class DetectorSetupMixin:
         self._apply_assoc_conf(det)
         self._det = det  # atomic publish under CPython GIL — _infer_loop sees it next tick
         self._publish_model_classes()   # now the names are known
+        self._publish_vision_info()     # and the model is live, so say so
         # Re-apply a per-model conf override that was set before the model landed
         # (startup or an early live set_conf): _apply_model_conf ran against a None
         # detector then, so replay it now the single model exists.
@@ -333,11 +341,20 @@ class DetectorSetupMixin:
         if not takers:
             return ('no loaded model has a Hailo NMS to set (a .pt model reads '
                     '`iou` at construction; relaunch to change it)')
+        # Every model's own refusal first, so a rejected set moves none of
+        # them (vl_9 M5). Only HailoRT refusing mid-apply can still leave the
+        # earlier models changed, and that is said.
         for det in takers:
+            why = det.nms_refusal(floor=floor, iou=iou) if hasattr(
+                det, 'nms_refusal') else ''
+            if why:
+                return why
+        for i, det in enumerate(takers):
             try:
                 det.update_nms(floor=floor, iou=iou)
             except ValueError as exc:
-                return str(exc)
+                return (f'{exc} ({i} of {len(takers)} models already took it)'
+                        if i else str(exc))
         return ''
 
     def _resolve_model_key(self, name: str) -> Optional[str]:
@@ -404,10 +421,11 @@ class DetectorSetupMixin:
                 f'{", ".join(fixed)}: read once at startup -- set it under '
                 f'`nodes:` in bringup.yaml and restart. Live here: '
                 f'{", ".join(LIVE_PARAMS)}'))
-        # rclpy rejects the whole set when this says no, so the checks that
-        # need nothing applied run first. NMS is the one change a model can
-        # refuse, and across several models it is not all or nothing (see
-        # `_apply_nms`); the changes that cannot fail come last.
+        # rclpy rejects the whole set when this says no, so the refusals are
+        # decided first: the checks that need nothing applied, then the NMS
+        # (the one change only a model can refuse; across models it is not all
+        # or nothing, see _set_nms_live), and only then the changes that
+        # cannot fail.
         why = self._live_refusal(params)
         if why:
             return SetParametersResult(successful=False, reason=why)
@@ -444,14 +462,15 @@ class DetectorSetupMixin:
                     continue
                 name, extra_names = _split_active(name)
                 key = self._resolve_model_key(name)
-                self._det = self._registry[key]
-                self._active_name = key
+                with self._swap_lock:      # a frame sees one pair (vl_9 M4)
+                    self._det = self._registry[key]
+                    self._active_name = key
+                    self._set_extra(extra_names)
                 # The class filter belongs to "the" model: a live `classes`
                 # set must survive the switch, as conf and max_det do, or
                 # the classes the operator excluded come back (vl_10 F12).
                 if self._det is not None:
                     self._det.update_allowlist(self._pending_allowlist)
-                self._set_extra(extra_names)
                 self._publish_vision_info()
                 self._publish_model_classes()
                 self.get_logger().info(

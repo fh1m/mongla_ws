@@ -52,6 +52,21 @@ float32 battery_voltage
 
 Published when something changes, plus a slow heartbeat.
 
+## `MonglaSafety.msg`: leak, kill and the barometer, on `/mongla/safety`
+
+```
+std_msgs/Header header    # the same header as the /mongla/state it was published with
+int8    leak              # SAFETY_UNKNOWN 0 / SAFETY_CLEAR 1 / SAFETY_TRIPPED 2
+int8    kill_switch       # UNKNOWN with no second-board link (the firmware sends 0 then)
+int8    baro              # CLEAR = fault code 0; TRIPPED = any other code
+string  baro_text         # the fault code as words, '' when unknown
+```
+
+Their own message, not fields on `MonglaState`: a bag replays against today's definition, so a
+field added to a recorded message leaves every earlier bag undecodable (0 of 39534 state
+messages, 2026-11-22). Both messages are frozen by `test_recorded_messages_keep_their_shape.py`.
+A tri-state's default is UNKNOWN (0), never clear.
+
 **A missing number is `NaN`, never `0.0`.** That is a safety rule, not a style choice: zero
 depth is a *reading* — it means the surface — so a consumer cannot tell an absent sensor from a
 surfaced vehicle if absence is written as zero. The same rule holds on the board, which

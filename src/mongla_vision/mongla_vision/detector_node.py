@@ -437,6 +437,12 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
                 f'gone, not the frame. Rebuilding the detector. Last: {exc!r}')
             self._rebuild_detector()
             return
+        if n < _INFER_FAIL_EXIT:
+            # Between the rebuild and the exit tier: say so on every failure,
+            # so the log does not go quiet while the node is still failing.
+            self.get_logger().error(
+                f'[DET  ] inference still failing ({n}/{_INFER_FAIL_EXIT}): {exc!r}')
+            return
         if n >= _INFER_FAIL_EXIT:
             self.get_logger().fatal(
                 f'[DET  ] {n} consecutive inference failures and a rebuild did '
@@ -458,10 +464,22 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
                                     '(registry mode) -- will exit instead')
             return
         old, self._det = self._det, None
+        # Closed, not just dropped: the worker that called this still holds
+        # a reference, so `del` freed nothing and the device stayed open
+        # while its replacement asked for it (vl_9 M2).
         try:
-            del old
-        except Exception:                       # noqa: BLE001
-            pass
+            if hasattr(old, 'close'):
+                old.close()
+        except Exception as exc:                # noqa: BLE001
+            self.get_logger().warning(f'[DET  ] closing the old detector: {exc!r}')
+        del old
+        # The live settings, not the launch ones (vl_9 M1).
+        kw = dict(kw)
+        for name in ('conf', 'max_det'):
+            try:
+                kw[name] = type(kw[name])(self.get_parameter(name).value)
+            except Exception:                   # noqa: BLE001
+                pass
         try:
             self._load_single_model_async(**kw)
             if self._det is not None:
@@ -548,7 +566,8 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
             self._report_seeing(frame)
             t0 = time.monotonic()
             self._note_frame_age(header)
-            det = self._det  # atomic ref read under CPython GIL
+            with self._swap_lock:   # the primary and its secondaries, one pair
+                det, extras = self._det, getattr(self, '_extra', None)
             if det is None:
                 continue  # model still loading — drop frame, keep queue drained
             out = self._run_detector(det, frame)
@@ -562,7 +581,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
                 if crop_state is not None and crop_state.active:
                     weak = [replace(d, xyxy=crop_state.to_full(d.xyxy))
                             for d in weak]
-            detections, low = self._merge_extra(infer_frame, detections)
+            detections, low = self._merge_extra(infer_frame, detections, extras)
             if low and crop_state is not None and crop_state.active:
                 low = [replace(d, xyxy=crop_state.to_full(d.xyxy)) for d in low]
             weak = weak + low
@@ -585,7 +604,9 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
                     detections_to_array(detections + weak, header)
                     if weak else det_msg)
             except Exception:
-                return  # node being destroyed; exit thread cleanly
+                if not rclpy.ok() or self._stopping.is_set():
+                    return  # node being destroyed; exit thread cleanly
+                raise       # a live node: the guard logs and restarts (vl_9 H1)
             self._publish_contours(frame, detections, header)
             self._publish_debug_image(frame, detections, header, primary)
 

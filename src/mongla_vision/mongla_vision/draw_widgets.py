@@ -9,7 +9,6 @@ Widget catalogue
   sparkline(img, x, y, w, h, values, color)   rolling line chart (no axes)
   confidence_bar(img, x, y, w, h, conf)        horizontal fill bar 0-1
   altimeter_depth(img, x, y, w, h, depth_m)   vertical tape depth gauge
-  battery_bar(img, x, y, w, h, voltage, ...)   segmented battery indicator
   mini_compass(img, cx, cy, r, heading_deg)    compact compass rose + needle
   heading_tape(img, x, y, w, h, yaw_deg)       horizontal compass tape
   video_progress(img, x, y, w, h, cur, total, fps, paused)  playback bar
@@ -56,6 +55,16 @@ def needle_gauge(img: np.ndarray,
                  fs_scale: float = 1.0) -> None:
     """Horizontal needle meter showing signed error."""
     if w < 10 or h < 4:
+        return
+    if not np.isfinite(value):
+        # No value is not a centred needle: a green +0.00 reads as "aligned".
+        cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
+        cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
+        fs = 0.30 * fs_scale
+        if label:
+            pil_text(img, label, (x, y - 2), fs, C_DIM)
+        vw, _ = pil_text_size('--', fs)
+        pil_text(img, '--', (x + w - vw, y - 2), fs, C_DIM)
         return
     value = float(np.clip(value, vmin, vmax))
     span  = max(vmax - vmin, 1e-6)
@@ -110,7 +119,7 @@ def sparkline(img: np.ndarray,
         cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
         cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1)
 
-    pts = list(values)
+    pts = [float(v) for v in values if np.isfinite(v)]
     if len(pts) < 2:
         return
 
@@ -138,6 +147,13 @@ def confidence_bar(img: np.ndarray,
                    fs_scale: float = 1.0) -> None:
     """Horizontal fill bar 0-1 with colour-coded confidence level."""
     if w < 6 or h < 4:
+        return
+    if not np.isfinite(conf):
+        cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
+        cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
+        fs = 0.28 * fs_scale
+        tw, _ = pil_text_size('--', fs)
+        pil_text(img, '--', (max(x + 2, x + w - tw - 2), y + h - 2), fs, C_DIM)
         return
     conf  = float(np.clip(conf, 0.0, 1.0))
     color = C_OK if conf > 0.70 else (C_AMBER if conf > 0.40 else C_ERR)
@@ -331,9 +347,10 @@ def video_progress(img: np.ndarray,
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BG, -1)
     cv2.rectangle(img, (x, y), (x + w, y + h), C_BORDER, 1, cv2.LINE_AA)
 
+    known  = total_frames > 0          # 0: the container did not say
     total  = max(total_frames, 1)
-    fps    = max(fps, 1.0)
-    frac   = float(np.clip(cur_frame / total, 0.0, 1.0))
+    fps    = max(fps, 1.0) if np.isfinite(fps) else 30.0
+    frac   = float(np.clip(cur_frame / total, 0.0, 1.0)) if known else 0.0
     fill_w = int(frac * (w - 2))
 
     bar_color = C_AMBER if paused else C_ACCENT
@@ -346,7 +363,8 @@ def video_progress(img: np.ndarray,
         return f'{m:02d}:{s:02d}'
 
     state = '||' if paused else '>'
-    lbl   = f'{state} {_fmt(cur_frame)} / {_fmt(total_frames)}  {int(frac * 100)}%'
+    lbl   = (f'{state} {_fmt(cur_frame)} / {_fmt(total_frames)}  {int(frac * 100)}%'
+             if known else f'{state} {_fmt(cur_frame)} / --')
     fs    = 0.28 * fs_scale
     tw, _ = pil_text_size(lbl, fs)
     lx    = x + (w - tw) // 2

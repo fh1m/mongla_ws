@@ -107,6 +107,25 @@ def tune_value(name: str, raw: str):
     return value, ''
 
 
+TELEOP_TOPIC = '/mongla/batighor/teleop'
+TELEOP_SAY_S = 3.0
+# One press: a second of thrust at a gentle gain, or a fifteen-degree pivot.
+# Short enough that a released key stops the vehicle within a step.
+TELEOP_STEP_S, TELEOP_GAIN, TELEOP_YAW_DEG = 1.0, 40.0, 15.0
+
+
+def teleop_step(linear_x: float, angular_z: float):
+    """(cmd, fields_json) for the pad's press, or None when no key is held.
+    Surge wins over yaw when both are held."""
+    if linear_x > 0.5 or linear_x < -0.5:
+        cmd = 'move_forward' if linear_x > 0 else 'move_back'
+        return cmd, json.dumps({'duration': TELEOP_STEP_S, 'gain': TELEOP_GAIN})
+    if angular_z > 0.5 or angular_z < -0.5:
+        cmd = 'yaw_left' if angular_z > 0 else 'yaw_right'
+        return cmd, json.dumps({'target': TELEOP_YAW_DEG})
+    return None
+
+
 def build_goal(cmd: str, fields_json: str):
     """A `Move.Goal` for one verb, or the reason there is none.
 
@@ -181,11 +200,15 @@ class HelmNode(Node):
             String, '/mongla/batighor/helm_state', LATCHED)
         self.pub_log = self.create_publisher(String, '/mongla/batighor/log', 50)
         self.pub_tail = self.create_publisher(String, LOG_TAIL, LATCHED)
+        self._record = threading.Lock()     # `_log` runs on the list thread as well
         self._tail = self._read_tail()
         self.pub_tail.publish(String(data=json.dumps(self._tail)))
         self.create_subscription(String, '/mongla/mission_alive',
                                  self._on_mission_alive, 10)
         self.create_service(Helm, '/mongla/batighor/helm', self._on_request)
+        from geometry_msgs.msg import Twist
+        self.create_subscription(Twist, TELEOP_TOPIC, self._on_teleop, 10)
+        self._teleop_said = 0.0
         self.create_timer(0.2, self._tick)
         self.missions = []
         threading.Thread(target=self._list_missions, daemon=True).start()
@@ -213,8 +236,9 @@ class HelmNode(Node):
         self.pub_log.publish(String(data=line))
         with open(self.log_path, 'a') as f:
             f.write(line + '\n')
-        self._tail = (self._tail + [line])[-HISTORY_LINES:]
-        self.pub_tail.publish(String(data=json.dumps(self._tail)))
+        with self._record:
+            self._tail = (self._tail + [line])[-HISTORY_LINES:]
+            self.pub_tail.publish(String(data=json.dumps(self._tail)))
 
     def _read_tail(self):
         try:
@@ -226,6 +250,32 @@ class HelmNode(Node):
         for what in self.seat.events:
             self._log(event=what)
         self.seat.events.clear()
+
+    def _on_teleop(self, msg):
+        """Lichtblick's pad: one short step per press, as the seated pilot.
+
+        The pad cannot say who pressed it, so it drives only while a pilot
+        holds the seat and is beating, only between the pilot's own verbs (a
+        held key sends the next step when the last has ended) and never
+        under a mission. Anything else is refused once every few seconds in
+        the log, not silently."""
+        step = teleop_step(msg.linear.x, msg.angular.z)
+        if step is None:
+            return
+        cmd, fields = step
+        pilot, now = self.seat.pilot, time.monotonic()
+        why = ('nobody holds the helm' if not pilot
+               else f'mission {self._mission_running()} runs' if self._mission_running()
+               else '')
+        if why:
+            if now - self._teleop_said > TELEOP_SAY_S:
+                self._teleop_said = now
+                self._log(event=f'pad {cmd} refused: {why}', ok=False)
+            return
+        if any(who == pilot for who, _ in self.hand_goals.values()):
+            return                      # the last step still runs
+        v = self._command(pilot, cmd, fields, [])
+        self._log(operator=pilot, event=f'pad: {cmd} {fields}: {v.message}', ok=v.ok)
 
     def _mission_running(self) -> str:
         name, heard = self.mission_heard
@@ -316,7 +366,7 @@ class HelmNode(Node):
             return Verdict(False, 'the manager is not answering /mongla/move')
         fut = self.move.send_goal_async(goal)
         fut.add_done_callback(lambda f: self._accepted(f, who, cmd))
-        return Verdict(True, f'{cmd} sent')
+        return Verdict(True, f'{cmd} sent to the manager (it may still refuse it: see the log)')
 
     def _accepted(self, fut, who, cmd):
         handle = fut.result()
@@ -342,9 +392,13 @@ class HelmNode(Node):
         # depends on mongla_manager, which launches this package, so an
         # import would be a cycle colcon refuses.
         try:
-            out = subprocess.run(['ros2', 'run', 'mongla_planner', 'mission', '--list'],
-                                 capture_output=True, text=True, timeout=30).stdout
-            self.missions = sorted(l.strip() for l in out.splitlines() if l.strip())
+            run = subprocess.run(['ros2', 'run', 'mongla_planner', 'mission', '--list'],
+                                 capture_output=True, text=True, timeout=30)
+            if run.returncode:
+                self._log(event=f'could not list the missions: exit {run.returncode}: '
+                                f'{run.stderr.strip()[-200:]}')
+                return
+            self.missions = sorted(l.strip() for l in run.stdout.splitlines() if l.strip())
         except (OSError, subprocess.TimeoutExpired) as exc:
             self._log(event=f'could not list the missions: {exc!r}')
 
@@ -361,7 +415,7 @@ class HelmNode(Node):
             return Verdict(False, f'mission {running} is already running')
         # The child keeps its own copy of the file; the helm's is closed here,
         # or every run would hold one descriptor open for the helm's life.
-        with open(self.log_path.parent / f'mission_{int(time.time())}_{name}.log', 'w') as out:
+        with open(self.log_path.parent / f'mission_{time.time_ns()}_{name}.log', 'w') as out:
             proc = subprocess.Popen(['ros2', 'run', 'mongla_planner', 'mission', name],
                                     stdout=out, stderr=subprocess.STDOUT,
                                     start_new_session=True)
@@ -376,8 +430,11 @@ class HelmNode(Node):
                                       f'stop or disarm it from here instead')
             return Verdict(False, 'no mission is running')
         # Ctrl-C, exactly: the runner's abort path cancels, stops and disarms.
-        os.killpg(self.mission[2].pid, signal.SIGINT)
-        return Verdict(True, f'mission {self.mission[0]} interrupted')
+        try:
+            os.killpg(self.mission[2].pid, signal.SIGINT)
+        except ProcessLookupError:          # it exited since the poll above
+            return Verdict(False, 'no mission is running')
+        return Verdict(True, f'SIGINT sent to mission {self.mission[0]}')
 
     # -- the detectors -------------------------------------------------
     def _poll(self):
@@ -397,6 +454,8 @@ class HelmNode(Node):
         res = fut.result()
         if res is not None and len(res.values) == len(POLLED):
             self.tuning[cam] = {n: param_value(v) for n, v in zip(POLLED, res.values)}
+        else:
+            self.tuning.pop(cam, None)      # no answer: do not show the old values as current
 
     def _set_param(self, who, cam, name, value):
         fut = self._set[cam].call_async(
@@ -552,6 +611,7 @@ class HelmNode(Node):
         if self.mission and self.mission[2].poll() is not None:
             name, who, proc = self.mission
             self.mission = None
+            self.mission_heard = ('', 0.0)  # its last beat is not a mission running now
             self._log(operator=who, event=f'mission {name} ended, exit code {proc.returncode}')
         pilot = self.seat.pilot
         if self.seat.tick(time.monotonic()):

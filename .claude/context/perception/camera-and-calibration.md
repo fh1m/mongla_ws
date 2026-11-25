@@ -214,6 +214,16 @@ we measure **HFOV 73.1°**.
 
 ---
 
+**Key point: a camera uses only a calibration measured on the unit plugged in.**
+`camera_node` reads the connected camera's USB id from sysfs and compares it with
+the id the calibration recorded at capture. Recorded and different: not used,
+size-only CameraInfo (k=0) and a warning to calibrate this unit. Not recorded: used,
+with a warning that the pairing is unverified. The vehicle's pairing (owner,
+2026-11-24): forward is the Fantech C30 (`1d6c:0103`), downward the Sonix global
+shutter (`0c45:636d`). Both shipped files need a retake: the forward one is the
+Fantech's own but fails its bar (max ERE 14.5 px against 1.0), and the downward
+one recorded no id and was never assessed (bead filed 2026-11-24).
+
 ## 8. THE LIBRARY: every calibration is kept, and re-appliable
 
 `src/mongla_vision/config/calibration/` is the vehicle's permanent store.

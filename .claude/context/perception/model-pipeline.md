@@ -132,3 +132,6 @@ COCO start, 20 epochs, seed 0. measured-bars 102 has every in-pool source.
   differently, so this split cannot separate water from labelling convention.
 - The next lever for the flare is the data, not the family: the flare is a thin coloured pole,
   and the held-out team's flare boxes are recalled at 0.53 (v8n) and 0.63 (11n).
+- **More of the same data does not move it (2026-11-24, measured-bars 113).** Four more
+  teams' sets and 40 more epochs scored 0.879 against 0.882, with flare at 0.674. The next
+  attempt changes what a flare box covers across sources (bead wk5), not how many there are.

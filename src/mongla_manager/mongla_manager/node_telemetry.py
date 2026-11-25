@@ -25,6 +25,25 @@ def _thruster_v(fc) -> float:
     thr = fc.get_batteries().get(_sp.BATTERY_ID_THRUSTER)
     return float(thr['voltage']) if thr else math.nan
 
+
+def safety_of(fc):
+    """(leak, kill, baro, baro_text) off the board's decoded telemetry, each a
+    MonglaSafety SAFETY_* tri-state; UNKNOWN wherever the board has not said."""
+    from mongla_control.fc.srot_protocol import baro_health_text
+    tel = getattr(fc, 'telemetry', lambda: None)()
+    from mongla_interfaces.msg import MonglaSafety
+    u, c, x = MonglaSafety.SAFETY_UNKNOWN, MonglaSafety.SAFETY_CLEAR, MonglaSafety.SAFETY_TRIPPED
+
+    def tri(v):
+        return u if v is None else (x if v else c)
+    if tel is None:
+        return u, u, u, ''
+    code = getattr(tel, 'baro_health', math.nan)
+    known = code is not None and math.isfinite(code)
+    return (tri(getattr(tel, 'leak', None)), tri(getattr(tel, 'kill_switch', None)),
+            (c if int(code) == 0 else x) if known else u,
+            baro_health_text(code) if known else '')
+
 class TelemetryMixin:
     # A board sample older than this is not the state we are publishing, so
     # fall back rather than stamp a fresh message with a stale capture time.
@@ -552,7 +571,7 @@ class TelemetryMixin:
             f'out {self._tel(tel.depth_out, "{:+.2f}")} | '
             f'WTEMP {self._tel(tel.water_temp_c, "{:.1f}", "C")} | '
             f'MAGACC {self._tel(tel.mag_accuracy, "{:.0f}")} | '
-            f'LEAK {"WET" if tel.leak else "dry"} | '
+            f'LEAK {"--" if tel.leak is None else ("WET" if tel.leak else "dry")} | '
             f'KILL {_kill_text(tel.kill_switch)}')
         self.get_logger().info(f'[SROT ] RPM  {rpm}')
         if tel.esc_temp_c:
@@ -651,3 +670,8 @@ class TelemetryMixin:
         pack.percentage = pack.temperature = math.nan
         pack.present = math.isfinite(pack.voltage)
         self.thruster_pack_publisher.publish(pack)
+        from mongla_interfaces.msg import MonglaSafety
+        safety = MonglaSafety()
+        safety.header = msg.header
+        safety.leak, safety.kill_switch, safety.baro, safety.baro_text = safety_of(self.fc)
+        self.safety_publisher.publish(safety)

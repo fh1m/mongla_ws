@@ -63,7 +63,7 @@ SEARCH = ('src', 'tools', 'missions')
 _EXEMPT_EXACT = {'main', 'setup', 'teardown', 'generate_launch_description',
                  # http.server.BaseHTTPRequestHandler's own hooks, called by
                  # the server for each request (mongla_batighor/serve.py)
-                 'do_GET', 'do_HEAD', 'log_message'}
+                 'do_GET', 'log_message'}
 _EXEMPT_PREFIX = ('test_', '__')
 # `on_` and `_on_` were exempt here and must not be. A ROS callback is PASSED
 # as a reference to `create_subscription`, `create_timer` or `add_on_set_

@@ -61,8 +61,12 @@ def run(mongla, log=None):
     finally:
         # surface() is the last motion: any board verb after it re-enters AUTO
         # and holds the hull at depth.
-        mongla.surface()
-        mongla.disarm()
+        # Disarm even if surface raises: a hull left armed after a
+        # failed surface is the worse outcome (bead 2s8).
+        try:
+            mongla.surface()
+        finally:
+            mongla.disarm()
 
 
 def _turn_round(mongla):

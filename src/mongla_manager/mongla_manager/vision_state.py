@@ -388,7 +388,7 @@ class VisionState(ChoiceMixin):
         if m is None or not getattr(m, 'ok', False):
             return None
         return pixel_offset(tool, fx=float(K[0]), fy=float(K[4]),
-                            range_m=float(m.range_m))
+                            range_m=float(m.range_m), camera=str(self._camera or ''))
 
     def obliquity_deg(self, max_age_s: float = 1.0, class_name: str = ''):
         """Worst-case angle between the target's face and our axis, or None.

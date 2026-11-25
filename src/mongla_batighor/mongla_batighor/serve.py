@@ -178,7 +178,10 @@ def app_link(host: str, bridge_port: int, layout: str) -> str:
     start-up: its copy replaced the one already selected, the app fell back to
     the first layout, and a second visit opened the wrong one.
     """
-    name = host.rsplit(':', 1)[0] if host.count(':') == 1 else host
+    if host.startswith('['):                # [IPv6] with an optional port
+        name = host[:host.index(']') + 1]
+    else:
+        name = host.rsplit(':', 1)[0] if host.count(':') == 1 else host
     ws = f'ws://{name}:{bridge_port}'
     return (f'/app/?ds=foxglove-websocket&ds.url={quote(ws, safe="")}'
             f'&workspace={panels.WORKSPACE}&layout={quote(layout, safe="")}')
@@ -265,7 +268,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == '/app' or url.path.startswith('/app/'):
             if not (self.web / 'index.html').exists():
                 return self._text(HTTPStatus.SERVICE_UNAVAILABLE,
-                                  f'Lichtblick is not installed at {self.web}.\n'
+                                  'Lichtblick is not installed on this machine.\n'
                                   # The newline on its own: the command
                                   # linter reads this line as an operator's.
                                   'Run: ros2 run mongla_batighor fetch'
@@ -326,7 +329,12 @@ class Handler(BaseHTTPRequestHandler):
         for f in sorted(self.layouts.glob('*.json')):
             when = datetime.fromtimestamp(int(f.stat().st_mtime), timezone.utc).replace(
                 microsecond=tag).isoformat()
-            data = json.loads(f.read_text())
+            try:
+                data = json.loads(f.read_text())
+            except (OSError, ValueError) as exc:
+                print(f'[batighor] WARNING: layout {f.name} skipped: {exc}',
+                      file=sys.stderr, flush=True)
+                continue
             if origin:
                 data = absolute(data, origin)
             out.append({'id': f.stem, 'layoutId': f.stem, 'name': f.stem,
@@ -392,7 +400,7 @@ def make_server(port: int, web: Path, layouts: Path, bridge_port: int,
     exts = panels.extensions(panels_dir) if panels_dir and panels_dir.is_dir() else {}
     try:
         bundle = panels.api_bundle(web)
-    except ValueError as exc:
+    except (ValueError, OSError) as exc:
         print(f'[batighor] WARNING: no panels from Kutum: {exc}', file=sys.stderr, flush=True)
         bundle = None
     if bundle:

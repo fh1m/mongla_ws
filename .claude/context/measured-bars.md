@@ -176,6 +176,7 @@ is how `recommend()` happened.
 - [110. ONE HAILO COMPILE, TIMED: 53.8 min, OF WHICH THE GPU OPTIMISE IS 24.5 (2026-11-22)](#110-one-hailo-compile-timed-538-min-of-which-the-gpu-optimise-is-245-2026-11-22)
 - [111. COLOUR IN THE DETECTOR BEATS A HUE READER AFTER IT: AP50 0.237 AGAINST 0.179 (2026-11-23)](#111-colour-in-the-detector-beats-a-hue-reader-after-it-ap50-0237-against-0179-2026-11-23)
 - [112. THE ANCHOR OFF THE LOCK TICK: NO MEASURABLE LOCK-AGE GAIN (142 -> 87 ms RETRACTED, 2026-11-24)](#112-the-anchor-off-the-lock-tick-no-measurable-lock-age-gain-142---87-ms-retracted-2026-11-24) — *taken back*
+- [113. FOUR MORE TEAMS' DATA AND 40 MORE EPOCHS DO NOT TRANSFER: mAP50 0.879 AGAINST 0.882 (2026-11-24)](#113-four-more-teams-data-and-40-more-epochs-do-not-transfer-map50-0879-against-0882-2026-11-24)
 <!-- contents:end -->
 
 ---
@@ -9483,3 +9484,27 @@ Bar, written before the re-runs: every worker run below every tick run on both c
 fails; the paired median difference is +7.2 ms forward and +0.1 ms downward. The worker has no
 measurable effect on lock age. Both arms grow slower run to run, for a reason not yet found.
 The worker stays, for what its tests show (the tick never waits on a locate), not for speed.
+
+## 113. FOUR MORE TEAMS' DATA AND 40 MORE EPOCHS DO NOT TRANSFER: mAP50 0.879 AGAINST 0.882 (2026-11-24)
+
+The bar was written before training (`mongla_data/holdout/sauvc-finals-wide/BAR.md`,
+2026-11-23, beads 5ew and qqd). Same held-out team and split as section 112's predecessor
+(`pool_holdout.py --holdout sauvc-finals__v7`, 237 test images, 327 held-out copies dropped by
+hash), with 14 training sources instead of 10. Run: yolov8n, started from the incumbent's
+`best.pt`, 40 more epochs, imgsz 640, batch 16, seed 0. More data and more epochs are confounded
+on purpose: the incumbent is the reference, not a controlled arm.
+
+Both models were scored in one session with `yolo detect val split=test imgsz=640`. The
+incumbent re-scores to its recorded 0.882 exactly, so the scorer is the one the bar was written
+against.
+
+| model | mAP50 | gate | flare | drum | mAP50-95 |
+|---|---|---|---|---|---|
+| incumbent (10 sources, 20 epochs) | 0.882 | 0.992 | 0.680 | 0.975 | 0.563 |
+| wide (14 sources, +40 epochs) | 0.879 | 0.988 | 0.674 | 0.974 | 0.569 |
+
+Bar: replace at 0.902, or at flare 0.75 with gate and drum within 0.02; **fail below 0.882.
+It fails (0.879).** Flare recall stays at 0.51. Decision: the incumbent stays the teacher and
+the shipping candidate, and the next lever for the flare is the labelling convention across
+sources (bead wk5), not volume.
+
