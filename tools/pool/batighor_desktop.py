@@ -18,8 +18,8 @@ The app imports a layout file once, by file name (its `from`), and keeps
 its own copy; a later change to the file never reaches that copy. The
 instruments panel keeps that copy in step instead: on every app start it
 takes each view from Kutum's server (`syncLayouts` in
-`panels/instruments`), keeping a view the operator edited (Revert in the
-layout's menu takes Kutum's). So the views the app shows are Kutum's, not
+`panels/instruments`), keeping a view the operator edited unless Kutum's has a
+new revision since (`layoutRev`, B-152). So the views the app shows are Kutum's, not
 this folder's, once it has connected to Kutum. A link
 that names a layout saves a copy with no `from`, so the next start imports
 the file again beside it: two of each in the menu. So no link names a
@@ -401,8 +401,7 @@ def main(argv=None) -> int:
     # Deleting the app's copy does not help: the instruments panel takes
     # Kutum's again at the next start. It is the panel that refreshes it.
     for name in changed:
-        print(f'ok  {name} changed on Kutum; the app takes it at its next start '
-              f'(unless you edited it: Revert in the layout\'s menu)')
+        print(f'ok  {name} changed on Kutum; the app takes it at its next start')
     if a.no_launch:
         return 0
     app = shutil.which('lichtblick')
