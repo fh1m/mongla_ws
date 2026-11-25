@@ -110,7 +110,7 @@
       <div class="tape" aria-hidden="true"><i></i><em>0</em><em>30 cm</em></div>
       <b>1.09 cm</b><span>worst error over a 30 cm slide, against a tape measure. The red sliver on the tape is that error, to scale.</span>
     </div>
-    <div class="f"><span class="silk">Tests</span><b>5 440</b><span>passing, none failing</span></div>
+    <div class="f"><span class="silk">Tests</span><b>5 835</b><span>passing, none failing</span></div>
     <div class="s"><span class="silk">Status</span><b>Rig tested</b><span>The SROT board, Kutum and the downward camera, fixed together and moved by hand against a tape: flow reads 98.5 % of a 30 cm slide with gains fitted on the rig (the hull re-fits them), the camera-to-gyro offset is measured in the flight mode, and the heading holds 0.001 °/min at rest. One step from water.</span></div>
     <div class="g warn"><span class="silk">In water</span><b>0 dives</b><span>The current platform, this stack on the SROT board and Kutum in the Mongla hull, has never been in water. Its predecessors competed at RoboSub 2025 and 2026 (<a href="https://github.com/fh1m/mongla_ws/blob/main/docs/evidence/lineage.md">lineage</a>).</span></div>
   </div>
@@ -1928,6 +1928,11 @@
     much authority it has, the pool map with the hull drawn live on it, the filter, the thrust,
     and the helm that sends verbs. Each view answers one question, and an absent value reads
     <span class="num">--</span>, never a zero.</p>
+  <p class="col quiet">Fourteen tabs under one status strip, or, with a second screen under the
+    first, pictures and keys above and the vehicle's vitals below. It shows what the vehicle is
+    trying to do against where it is, takes a verb typed as on the command line, reads the
+    missions and the deck as Kutum holds them, and puts the pool, the props and the hull in one
+    3D scene.</p>
   <figure class="shots">
    <figcaption class="shots__lede"><span class="silk">Batighor <i>//</i> on the bench, 2026-11-24</span>
      Kutum running the whole stack on recorded pool footage (<b>replay</b>), the board on the
@@ -1949,7 +1954,7 @@
     <figure><img src="imgs/batighor/live/board_health.webp" alt="The health view: every diagnostic row from the manager, Kutum and the board, with its level" loading="lazy" width="1200" height="675" style="aspect-ratio:16/9">
      <figcaption><span class="silk">health</span>Every diagnostic row from the board, the manager and Kutum, with its level.</figcaption></figure>
     <figure><img src="imgs/batighor/live/chain.webp" alt="The chain view: the age of each stage from frame to lock, and frame to command" loading="lazy" width="1200" height="675" style="aspect-ratio:16/9">
-     <figcaption><span class="silk">chain</span>Frame to detection to track to lock, each with its rate and its age, p50 and p95.</figcaption></figure>
+     <figcaption><span class="silk">inspect</span>Frame to detection to track to lock, each with its rate and its age, p50 and p95.</figcaption></figure>
    </div>
   </figure>
  </div>
@@ -1983,7 +1988,7 @@
     <div><span class="silk">Blind</span><b>175</b><span>frames held with no detector</span></div>
     <div><span class="silk">Velocity</span><b>1.09 cm</b><span>worst error, 30 cm slide</span></div>
     <div><span class="silk">Mesh</span><b>0.9 mm</b><span>hull tessellation in the viewer</span></div>
-    <div class="wide"><span class="silk silk--lit">Suites</span><b>5 440</b><span>passing across 8 suites; 0 failed</span></div>
+    <div class="wide"><span class="silk silk--lit">Suites</span><b>5 835</b><span>passing across 8 suites; 0 failed</span></div>
   </div>
   <p class="col quiet" style="margin-top:34px">Each of these lives in a ledger with its method, its
     conditions and the bar it had to clear — and the tests read that file, so a number cannot drift
