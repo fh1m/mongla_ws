@@ -396,7 +396,7 @@ def cockpit(v: View):
 
 def vision(v: View):
     """Detection and tracking in depth: every rung, its authority, the pose solved."""
-    fwd, dwn = f'{V}/forward', f'{V}/downward'
+    fwd = f'{V}/forward'
     # Two columns. Now: both cameras' rungs and stages side by side (at a
     # sixth of a column the instrument scrolled and hid the downward camera)
     # over the ladder's history, every row in view. Then: the detectors'
