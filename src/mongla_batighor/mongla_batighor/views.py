@@ -354,7 +354,8 @@ def _pose(v: View, cam: str):
     the frame) are drawn together, never merged: where they disagree is the
     evidence (vision_pi.launch.py, solver_near)."""
     c = f'{V}/{cam}'
-    return row(v('target_range', plot(series(f'{c}/target_pose_fused.range_m', 'range m'))),
+    return row(v('target_range', plot(series(f'{c}/target_pose_fused.range_m', 'range m'),
+                                      series(f'{c}/target_pose_near.range_m', 'near m'))),
                v('pose', plot(series(f'{c}/target_pose.bearing_deg', 'bearing deg'),
                               series(f'{c}/target_pose_near.bearing_deg', 'near deg'))))
 
@@ -413,7 +414,8 @@ def vision(v: View):
                                    y=(0, 1.05)))))
     numbers = col(
         (5, v('detectors', instrument('Detectors'))),
-        (3, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'))),
+        (3, row(v('target_range', plot(series(f'{fwd}/target_pose_fused.range_m', 'range m'),
+                                       series(f'{fwd}/target_pose_near.range_m', 'near m'))),
                 v('pose', plot(series(f'{fwd}/target_pose.bearing_deg', 'bearing deg'),
                                series(f'{fwd}/target_pose_near.bearing_deg', 'near deg'),
                                series(f'{fwd}/target_pose_fused.yaw_deg', 'yaw deg'))))),

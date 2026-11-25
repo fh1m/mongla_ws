@@ -61,6 +61,11 @@
           "value": "/mongla/vision/forward/target_pose_fused.range_m",
           "label": "range m",
           "enabled": true
+        },
+        {
+          "value": "/mongla/vision/forward/target_pose_near.range_m",
+          "label": "near m",
+          "enabled": true
         }
       ],
       "showLegend": true,
