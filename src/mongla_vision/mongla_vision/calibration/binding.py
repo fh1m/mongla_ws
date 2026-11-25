@@ -36,13 +36,21 @@ _SUBDIR = os.path.join('config', 'calibration')
 
 
 def _candidate_dirs():
-    """Installed share first, then the source tree.
+    """The deck first, then the installed share, then the source tree.
 
-    Both, because the node runs from the install tree on the vehicle and the
+    The deck (`~/mongla/deck/calibration`) is where a fit made on the vehicle
+    is written; it outlives releases, and searched first it is never shadowed
+    by the shipped file of the same name (bead edm).
+
+
+    The share and the source tree both, because the node runs from the install tree on the vehicle and the
     tests read the source tree -- and a resolver that works in only one of
     those is how a config comes to reach nothing.
     """
     dirs = []
+    deck = os.path.expanduser('~/mongla/deck/calibration')
+    if os.path.isdir(deck):
+        dirs.append(deck)
     try:
         from ament_index_python.packages import get_package_share_directory
         dirs.append(os.path.join(

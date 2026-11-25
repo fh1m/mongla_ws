@@ -83,10 +83,11 @@ if [[ "$MODE" == "--rollback" ]]; then
   exit $?
 fi
 
-# A calibration solved or applied on the vehicle is written into the live
-# release (calibrate_node installs into the source tree), and the release this
-# deploy stages has only the committed files, so the vehicle's would be
-# replaced without a word and the cameras would come up on the old lens.
+# A calibration solved or applied on the vehicle now goes to the deck
+# (~/mongla/deck/calibration), which no release replaces and the cameras
+# search first. A release made before that may still hold one in its source
+# tree, and the release this deploy stages has only the committed files, so
+# that one would be replaced without a word: refuse until it is copied here.
 CAL=src/mongla_vision/config/calibration
 LIVE_REAL="$(r 'readlink -f ~/mongla_ws 2>/dev/null || true')"
 if [[ -n "$LIVE_REAL" ]]; then

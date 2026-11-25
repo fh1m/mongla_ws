@@ -226,14 +226,21 @@ one recorded no id and was never assessed (bead filed 2026-11-24).
 
 ## 8. THE LIBRARY: every calibration is kept, and re-appliable
 
-`src/mongla_vision/config/calibration/` is the vehicle's permanent store.
-**Warning: on Kutum that folder belongs to the live release.** A calibration
-solved or applied there is written into `~/mongla/releases/<id>/`, and the next
-release is built from the dev box. `kutum/deploy.sh` therefore refuses while
-the vehicle holds a calibration this tree does not; copy it back and commit it
-first.
-Every calibration this project has produced lives there, ships with the
-package, and is listed in Batighor's **Calibrate** panel with the
+Two stores, searched in this order:
+
+| store | what is in it | survives a deploy |
+|---|---|---|
+| `~/mongla/deck/calibration/` | every fit solved or applied **on the vehicle** | yes: no release replaces the deck |
+| `src/mongla_vision/config/calibration/` | the calibrations committed to the repository, shipped with the package | it is the release |
+
+The cameras (`binding.calibration_for_profile`) look in the deck first, so a
+fit made on Kutum is never shadowed by the shipped file of the same name.
+Committing a deck fit to the repository stays a choice: copy it into the
+source tree and commit it (bead edm, owner 2026-11-24). `kutum/deploy.sh` still
+refuses while an older release holds a calibration in its source tree that
+this tree does not, because that one would be lost.
+
+Every calibration in either store is listed in Batighor's **Calibrate** panel with the
 fields an operator actually picks by — medium, resolution, fx, view count,
 Max ERE, the camera it was taken on, and when.
 
