@@ -36,6 +36,20 @@ from mongla_vision import qos
 from mongla_vision.utils.check_pipeline import _class_of
 
 
+def ratios(state):
+    """(ID stability, predicted ratio), each NaN when there was nothing to
+    count: with no tracks, 0.0 % read as a measured 0 % reuse (audit vl_16
+    VL16-04)."""
+    def share(n, d):
+        return state[n] / state[d] if state[d] > 0 else float('nan')
+    return share('reused_ids', 'id_frames'), share('predicted_tracks', 'total_tracks')
+
+
+def pct(x):
+    """A share as a percentage, or `--` when it was not measured."""
+    return '--' if x != x else f'{x * 100:.1f}%'
+
+
 def failures_of(state, msg_hz, min_track_hz, require_class=''):
     """Why the run fails, or [] when it passes.
 
@@ -141,18 +155,15 @@ def main(argv=None):
     elapsed   = time.monotonic() - t0
     msg_hz    = state['msg_count'] / max(elapsed, 0.01)
     total_ids = len(state['all_ids'])
-    stability = (state['reused_ids'] / state['id_frames']
-                 if state['id_frames'] > 0 else 0.0)
-    pred_ratio = (state['predicted_tracks'] / state['total_tracks']
-                  if state['total_tracks'] > 0 else 0.0)
+    stability, pred_ratio = ratios(state)
 
     print()
     print("=== tracker_check results ===")
     print(f"  tracks topic hz  : {msg_hz:.2f}  (required >= {args.min_track_hz})")
     print(f"  frames with tracks: {state['track_frames']} / {state['msg_count']}")
     print(f"  unique track IDs  : {total_ids}")
-    print(f"  ID stability      : {stability*100:.1f}%  (% of ID appearances that reused a prior ID)")
-    print(f"  predicted ratio   : {pred_ratio*100:.1f}%  (Kalman-only frames; higher = more gaps)")
+    print(f"  ID stability      : {pct(stability)}  (% of ID appearances that reused a prior ID)")
+    print(f"  predicted ratio   : {pct(pred_ratio)}  (Kalman-only frames; higher = more gaps)")
     if state['classes']:
         top = state['classes'].most_common(5)
         print(f"  classes tracked   : {dict(top)}")

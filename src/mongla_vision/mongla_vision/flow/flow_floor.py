@@ -93,7 +93,7 @@ class FlowFloorMixin:
                 self._tile_warned = True
                 self.get_logger().warning(
                     f'[FLOW ] the FLOOR says {self._tile_height:.2f} m, the '
-                    f'pool_depth path says {self._last_height:.2f} m -- '
+                    f'{getattr(self, "_floor_source", "depth")} height says {self._last_height:.2f} m -- '
                     f'{chk.reason} (median of {chk.samples} pairs, confidence '
                     f'{chk.confidence:.2f}). The floor needs no pool_depth_m '
                     f'and is preferred -- check pool_depth_m and the tile_m '

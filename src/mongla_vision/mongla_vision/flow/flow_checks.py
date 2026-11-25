@@ -144,8 +144,8 @@ class FlowChecksMixin:
                     f'[FLOW ] HEIGHT DISAGREES by {d:.0%}: the image says '
                     f'{self._h_optical.height_m:.2f} m (from {self._h_optical.n_samples} '
                     f'samples of flow divergence vs barometer rate), the '
-                    f'pool_depth path says {self._last_height:.2f} m. Height '
-                    f'multiplies EVERY velocity here -- check pool_depth_m '
+                    f'{getattr(self, "_floor_source", "depth")} height says {self._last_height:.2f} m. '
+                    f'Height multiplies EVERY velocity here -- check that source '
                     f'before trusting any distance.')
 
     def _cross_check_yaw(self, t: float, dt: float) -> None:
